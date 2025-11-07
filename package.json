@@ -1,9 +1,9 @@
 {
-  "name": "university-portal",
+  "name": "auth-gateway",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "npx dotenv -e .env.local next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",

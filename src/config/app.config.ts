@@ -1,6 +1,6 @@
 /**
  * Application Configuration
- * Centralized configuration for the application
+ * Centralized configuration for application
  */
 
 export const appConfig = {

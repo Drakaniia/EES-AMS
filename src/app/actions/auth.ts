@@ -38,4 +38,3 @@ export async function loginAction(data: LoginFormData) {
     };
   }
 }
-

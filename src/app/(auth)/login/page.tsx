@@ -7,7 +7,7 @@ import { Footer } from "@/components/layouts/footer";
 
 export const metadata: Metadata = {
   title: "Login | Bukidnon State University",
-  description: "Sign in to the Bukidnon State University Portal",
+  description: "Sign in to Bukidnon State University Portal",
 };
 
 // Helper function to get asset URLs
