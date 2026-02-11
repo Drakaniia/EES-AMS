@@ -1,45 +1,17 @@
 {
-  "name": "auth-gateway",
-  "version": "0.1.0",
+  "name": "attendease-workspace",
+  "version": "1.0.0",
   "private": true,
+  "description": "AttendEase - Attendance Management System",
   "scripts": {
-    "dev": "npx dotenv -e .env.local next dev --turbopack",
-    "build": "next build --turbopack",
-    "start": "next start",
-    "lint": "eslint",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "dev": "cd server && cargo tauri dev",
+    "build": "cd client && bun run build && cd ../server && cargo tauri build",
+    "install:client": "cd client && bun install",
+    "install:all": "bun run install:client",
+    "lint": "cd client && bun run lint",
+    "clean": "cd client && rmdir /s /q dist node_modules 2>nul & cd ../server && cargo clean"
   },
-  "dependencies": {
-    "@hookform/resolvers": "^5.2.2",
-    "@radix-ui/react-select": "^2.2.6",
-    "@radix-ui/react-slot": "^1.2.3",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "framer-motion": "^12.23.24",
-    "lucide-react": "^0.545.0",
-    "next": "15.5.4",
-    "next-auth": "^5.0.0-beta.29",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "react-hook-form": "^7.65.0",
-    "tailwind-merge": "^3.3.1",
-    "tailwind-variants": "^3.1.1",
-    "tailwindcss-animate": "^1.0.7",
-    "zod": "^4.1.12"
-  },
-  "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20.19.20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.5.4",
-    "prettier": "^3.6.2",
-    "shadcn-ui": "^0.9.5",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  },
-  "packageManager": "pnpm@10.20.0+sha512.cf9998222162dd85864d0a8102e7892e7ba4ceadebbf5a31f9c2fce48dfce317a9c53b9f6464d1ef9042cba2e02ae02a9f7c143a2b438cd93c91840f0192b9dd"
+  "keywords": ["tauri", "attendance", "education"],
+  "author": "",
+  "license": "MIT"
 }

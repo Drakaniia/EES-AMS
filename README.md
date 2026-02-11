@@ -1,40 +1,85 @@
-# Auth Gateway
+# EES-AMS - AttendEase Attendance Management System
 
-Central authentication gateway for Bukidnon State University Portal system.
+A modern, cross-platform attendance management system built with Tauri (Rust backend) and React (TypeScript frontend).
+
+## Project Structure
+
+```
+EES-AMS/
+├── client/          # Frontend React application
+├── server/          # Backend Rust/Tauri application
+└── package.json     # Workspace scripts
+```
 
 ## Features
 
-- Centralized login for all university portals
-- Role-based authentication (Student, Faculty, Parent, Admin)
-- Secure token-based authentication
-- Responsive design with Tailwind CSS
-- Modern UI with Framer Motion animations
+- **Class Management**: Create and manage classes with sections and school years
+- **Student Management**: Add students with unique IDs and assign them to classes
+- **Attendance Recording**: Record daily attendance with multiple status options (present, absent, late, excused)
+- **Dashboard Statistics**: View real-time attendance statistics and trends
+- **Google Sheets Sync**: Automatic synchronization with Google Sheets for backup and reporting
+- **Offline-First**: Works offline and syncs when connection is available
+- **Cross-Platform**: Runs on Windows, macOS, and Linux
+
+## Tech Stack
+
+### Frontend (client/)
+- React 18 with TypeScript
+- Tailwind CSS v4 for styling
+- Vite for build tooling
+- Bun as package manager
+
+### Backend (server/)
+- Rust with Tauri 2.0 framework
+- JSON file storage for data persistence
+- OAuth2 for Google authentication
+- Async/await with Tokio runtime
+
+## Prerequisites
+
+- **Bun** (for client package management)
+- **Rust 1.70+** (install from https://rustup.rs/)
+- **Node.js 18+** (optional, if using npm instead of Bun)
+
+## Installation
+
+1. Install workspace dependencies:
+```bash
+bun run install:all
+```
 
 ## Development
 
+Run the application in development mode:
 ```bash
-pnpm dev
+bun run dev
 ```
 
 ## Build
 
+Build for production:
 ```bash
-pnpm build
+bun run build
 ```
 
-## Environment Variables
+## Linting
 
-Create `.env.local`:
-
-```env
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_STUDENT_URL=http://localhost:3002
-NEXT_PUBLIC_FACULTY_URL=http://localhost:3003
-NEXT_PUBLIC_ADMIN_URL=http://localhost:3004
-NEXT_PUBLIC_PARENT_URL=http://localhost:3005
-NEXT_PUBLIC_ASSETS_URL=http://localhost:3001
+Run ESLint on the client code:
+```bash
+bun run lint
 ```
 
-## Architecture
+## Cleaning
 
-This auth gateway serves as the single entry point for authentication across all university portals. After successful login, users are redirected to their respective portal dashboards.
+Remove build artifacts and dependencies:
+```bash
+bun run clean
+```
+
+## License
+
+MIT License
+
+## See Also
+
+- [Client README](client/README.md) for detailed frontend information
