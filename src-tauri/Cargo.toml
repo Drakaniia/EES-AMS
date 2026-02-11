@@ -1,0 +1,33 @@
+[package]
+name = "attendease"
+version = "0.0.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-shell = "2.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+oauth2 = "4.4"
+tokio = { version = "1", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }
+urlencoding = "2.1"
+async-trait = "0.1"
+ts-rs = "9.0"
+
+[profile.dev]
+incremental = true 
+
+[profile.release]
+codegen-units = 1 # Compile slower but better optimized
+lto = true # Link time optimization
+strip = true # Strip symbols from binary
+panic = "abort" # Abort on panic

@@ -1,0 +1,12 @@
+// Command Handlers Module
+// Application-level handlers that coordinate between Tauri commands and domain services
+
+pub mod class_handler;
+pub mod student_handler;
+pub mod attendance_handler;
+pub mod google_handler;
+
+pub use class_handler::ClassHandler;
+pub use student_handler::StudentHandler;
+pub use attendance_handler::AttendanceHandler;
+pub use google_handler::GoogleHandler;
