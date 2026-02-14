@@ -96,6 +96,60 @@ pub async fn student_delete(
     state.student_handler.delete_student(id).await
 }
 
+#[tauri::command]
+pub async fn student_import_from_excel(
+    file_path: String,
+    class_id: Option<i64>,
+    state: State<'_, AppState>,
+) -> crate::application::handlers::student_handler::ImportResult {
+    use crate::infrastructure::importer::StudentImporter;
+    
+    let importer = StudentImporter::new();
+    
+    match importer.import_from_excel(&file_path, class_id) {
+        Ok(result) => {
+            // After successful import, create students in the database
+            let mut created_count = 0;
+            let mut db_errors = Vec::new();
+            
+            for student_data in &result.imported_students {
+                let input = crate::application::handlers::student_handler::CreateStudentFromSF1Input {
+                    lrn: student_data.lrn.clone(),
+                    last_name: student_data.last_name.clone(),
+                    first_name: student_data.first_name.clone(),
+                    middle_name: student_data.middle_name.clone(),
+                    gender: student_data.gender.clone(),
+                    birthday: student_data.birthday.clone(),
+                    age: student_data.age,
+                    mother_name: student_data.mother_name.clone(),
+                    father_name: student_data.father_name.clone(),
+                    guardian_name: student_data.guardian_name.clone(),
+                    address: student_data.address.clone(),
+                    class_id: student_data.class_id,
+                };
+                
+                match state.student_handler.create_student_from_sf1(input).await {
+                    Ok(_) => created_count += 1,
+                    Err(e) => db_errors.push(format!("Failed to create student: {}", e.error.unwrap_or_default())),
+                }
+            }
+            
+            crate::application::handlers::student_handler::ImportResult {
+                success_count: created_count,
+                error_count: result.error_count + db_errors.len(),
+                errors: [result.errors, db_errors].concat(),
+                imported_students: Vec::new(),
+            }
+        }
+        Err(e) => crate::application::handlers::student_handler::ImportResult {
+            success_count: 0,
+            error_count: 1,
+            errors: vec![format!("Import failed: {}", e)],
+            imported_students: Vec::new(),
+        }
+    }
+}
+
 // ========================================
 // Attendance Commands
 // ========================================
@@ -186,3 +240,38 @@ pub async fn google_get_sync_status(
 ) -> crate::application::handlers::google_handler::ApiResponse<crate::application::handlers::google_handler::SyncStatus> {
     state.google_handler.get_sync_status().await
 }
+
+// ========================================
+// File System Commands
+// ========================================
+
+#[tauri::command]
+pub async fn fs_write_file(path: String, contents: Vec<u8>) -> Result<(), String> {
+    use std::io::Write;
+    use std::fs::File;
+    
+    match std::fs::create_dir_all(std::path::Path::new(&path).parent().unwrap()) {
+        Ok(_) => {},
+        Err(e) => return Err(format!("Failed to create directory: {}", e)),
+    }
+    
+    match File::create(path).and_then(|mut f| f.write_all(&contents)) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Failed to write file: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn fs_remove_file(path: String) -> Result<(), String> {
+    match std::fs::remove_file(path) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Failed to remove file: {}", e)),
+    }
+}
+
+// ========================================
+// Update Commands
+// ========================================
+
+pub use crate::application::handlers::update_handler::UpdateInfo;
+pub use crate::application::handlers::update_handler::UpdateStatus;

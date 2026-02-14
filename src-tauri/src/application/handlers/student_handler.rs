@@ -13,6 +13,30 @@ pub struct CreateStudentInput {
     pub class_id: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CreateStudentFromSF1Input {
+    pub lrn: Option<String>,
+    pub last_name: String,
+    pub first_name: String,
+    pub middle_name: Option<String>,
+    pub gender: Option<String>,
+    pub birthday: Option<String>,
+    pub age: Option<i32>,
+    pub mother_name: Option<String>,
+    pub father_name: Option<String>,
+    pub guardian_name: Option<String>,
+    pub address: Option<String>,
+    pub class_id: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImportResult {
+    pub success_count: usize,
+    pub error_count: usize,
+    pub errors: Vec<String>,
+    pub imported_students: Vec<crate::domain::entities::student::Student>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T> {
     pub success: bool,
@@ -99,5 +123,36 @@ impl<S: StudentService> StudentHandler<S> {
 
     pub async fn delete_student(&self, id: i64) -> ApiResponse<()> {
         ApiResponse::from_domain_result(self.service.delete_student(id).await)
+    }
+
+    pub async fn create_student_from_sf1(&self, input: CreateStudentFromSF1Input) -> ApiResponse<i64> {
+        // Generate student_id from LRN or create a default one
+        let student_id = input.lrn.clone().unwrap_or_else(|| {
+            // Generate a temporary ID that will be replaced
+            format!("TEMP_{}", chrono::Utc::now().timestamp_nanos())
+        });
+        
+        match self
+            .service
+            .create_student_from_sf1(
+                input.lrn,
+                student_id,
+                input.last_name,
+                input.first_name,
+                input.middle_name,
+                input.gender,
+                input.birthday,
+                input.age,
+                input.mother_name,
+                input.father_name,
+                input.guardian_name,
+                input.address,
+                input.class_id,
+            )
+            .await
+        {
+            Ok(student) => ApiResponse::success_with_id(student.id),
+            Err(e) => ApiResponse::error(e.to_string()),
+        }
     }
 }

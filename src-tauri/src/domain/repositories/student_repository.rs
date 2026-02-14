@@ -16,6 +16,24 @@ pub trait StudentRepository: Send + Sync {
         class_id: Option<i64>,
     ) -> DomainResult<i64>;
 
+    /// Create a new student from SF1 data
+    async fn create_from_sf1(
+        &self,
+        student_id: String,
+        lrn: Option<String>,
+        last_name: String,
+        first_name: String,
+        middle_name: Option<String>,
+        gender: Option<String>,
+        birthday: Option<String>,
+        age: Option<i32>,
+        mother_name: Option<String>,
+        father_name: Option<String>,
+        guardian_name: Option<String>,
+        address: Option<String>,
+        class_id: Option<i64>,
+    ) -> DomainResult<i64>;
+
     /// Get a student by ID
     async fn get_by_id(&self, id: i64) -> DomainResult<Student>;
 
@@ -33,6 +51,9 @@ pub trait StudentRepository: Send + Sync {
 
     /// Check if a student_id already exists
     async fn student_id_exists(&self, student_id: &str) -> DomainResult<bool>;
+
+    /// Check if an LRN already exists
+    async fn lrn_exists(&self, lrn: &str) -> DomainResult<bool>;
 
     /// Get count of students in a class
     async fn count_by_class(&self, class_id: i64) -> DomainResult<i32>;

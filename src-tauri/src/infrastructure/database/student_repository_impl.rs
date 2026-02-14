@@ -21,8 +21,17 @@ impl StudentRepositoryImpl {
         Student {
             id: record.id,
             student_id: record.student_id.clone(),
-            first_name: record.first_name.clone(),
+            lrn: record.lrn.clone(),
             last_name: record.last_name.clone(),
+            first_name: record.first_name.clone(),
+            middle_name: record.middle_name.clone(),
+            gender: record.gender.clone(),
+            birthday: record.birthday.clone(),
+            age: record.age,
+            mother_name: record.mother_name.clone(),
+            father_name: record.father_name.clone(),
+            guardian_name: record.guardian_name.clone(),
+            address: record.address.clone(),
             class_id: record.class_id,
             created_at: record.created_at.clone(),
             updated_at: record.updated_at.clone(),
@@ -52,8 +61,17 @@ impl StudentRepository for StudentRepositoryImpl {
         let student = StudentRecord {
             id,
             student_id: student_id.clone(),
+            lrn: None,
             first_name,
             last_name,
+            middle_name: None,
+            gender: None,
+            birthday: None,
+            age: None,
+            mother_name: None,
+            father_name: None,
+            guardian_name: None,
+            address: None,
             class_id,
             created_at: now.clone(),
             updated_at: now,
@@ -123,6 +141,59 @@ impl StudentRepository for StudentRepositoryImpl {
     async fn student_id_exists(&self, student_id: &str) -> DomainResult<bool> {
         let data = self.db.get_data().lock().unwrap();
         Ok(data.students.iter().any(|s| s.student_id == student_id))
+    }
+
+    async fn create_from_sf1(
+        &self,
+        student_id: String,
+        lrn: Option<String>,
+        last_name: String,
+        first_name: String,
+        middle_name: Option<String>,
+        gender: Option<String>,
+        birthday: Option<String>,
+        age: Option<i32>,
+        mother_name: Option<String>,
+        father_name: Option<String>,
+        guardian_name: Option<String>,
+        address: Option<String>,
+        class_id: Option<i64>,
+    ) -> DomainResult<i64> {
+        let mut data = self.db.get_data().lock().unwrap();
+
+        let now = chrono::Utc::now().to_rfc3339();
+        data.counters.students += 1;
+        let id = data.counters.students;
+
+        let student = StudentRecord {
+            id,
+            student_id,
+            lrn,
+            last_name,
+            first_name,
+            middle_name,
+            gender,
+            birthday,
+            age,
+            mother_name,
+            father_name,
+            guardian_name,
+            address,
+            class_id,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+
+        data.students.push(student);
+        drop(data);
+        
+        self.db.save()?;
+        Ok(id)
+    }
+
+    async fn lrn_exists(&self, lrn: &str) -> DomainResult<bool> {
+        let data = self.db.get_data().lock().unwrap();
+        Ok(data.students.iter().any(|s| s.lrn.as_ref() == Some(&lrn.to_string())))
     }
 
     async fn count_by_class(&self, class_id: i64) -> DomainResult<i32> {
