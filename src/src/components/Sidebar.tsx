@@ -106,16 +106,16 @@ const Sidebar: FC<SidebarProps> = ({ currentPage, onNavigate }) => {
                         <div className="flex items-center gap-3 mb-3">
                             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
                                 <span className="text-sm text-white font-semibold">
-                                    {userProfile.displayName.charAt(0).toUpperCase()}
+                                    {userProfile.display_name.charAt(0).toUpperCase()}
                                 </span>
                             </div>
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm text-white font-medium truncate">
-                                    {userProfile.displayName}
+                                    {userProfile.display_name}
                                 </p>
-                                {userProfile.organization && (
+                                {userProfile.organization_name && (
                                     <p className="text-xs text-gray-400 truncate">
-                                        {userProfile.organization.name}
+                                        {userProfile.organization_name}
                                     </p>
                                 )}
                             </div>

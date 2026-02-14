@@ -1,18 +1,25 @@
 import { useState, useEffect } from 'react';
 import { tauriAPI } from '../lib/tauri';
 
+interface UpdateStatus {
+  available: boolean;
+  current_version: string;
+  latest_version?: string;
+  body?: string;
+}
+
 interface UpdateService {
   checkForUpdates: () => Promise<void>;
   downloadAndInstall: () => Promise<void>;
   restart: () => Promise<void>;
-  updateStatus: any;
+  updateStatus: UpdateStatus | null;
   isUpdating: boolean;
   updateProgress: string;
   error: string | null;
 }
 
 export const useUpdateService = (): UpdateService => {
-  const [updateStatus, setUpdateStatus] = useState<any>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateProgress, setUpdateProgress] = useState('');
   const [error, setError] = useState<string | null>(null);

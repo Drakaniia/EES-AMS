@@ -24,7 +24,7 @@ export interface UserProfile {
 export const DEPED_ORGANIZATION: Organization = {
   domain: "deped.gov.ph",
   name: "Department of Education",
-  type: "government',
+  type: "government",
   logo: ""
 };
 

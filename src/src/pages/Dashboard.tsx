@@ -80,31 +80,31 @@ const Dashboard: FC = () => {
 {/* Header */}
             <div className="space-y-4">
                 {/* User Profile Card */}
-                {userProfile && userProfile.organization && (
+                {userProfile && (
                     <div className="glass rounded-2xl p-6">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4">
                                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
                                     <span className="text-xl text-white font-semibold">
-                                        {userProfile.displayName.charAt(0).toUpperCase()}
+                                        {userProfile.display_name.charAt(0).toUpperCase()}
                                     </span>
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-semibold text-white">{userProfile.displayName}</h2>
+                                    <h2 className="text-xl font-semibold text-white">{userProfile.display_name}</h2>
                                     <p className="text-gray-400">{userProfile.email}</p>
                                     <div className="flex items-center gap-2 mt-2">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                            userProfile.organization.type === 'government' 
+                                            userProfile.organization_type === 'government' 
                                                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                                : userProfile.organization.type === 'educational'
+                                                : userProfile.organization_type === 'educational'
                                                 ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                                                 : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
                                         }`}>
-                                            {userProfile.organization.name}
+                                            {userProfile.organization_name}
                                         </span>
-                                        {userProfile.schoolName && (
+                                        {userProfile.school_name && (
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-500/20 text-gray-400 border border-gray-500/30">
-                                                {userProfile.schoolName}
+                                                {userProfile.school_name}
                                             </span>
                                         )}
                                     </div>
