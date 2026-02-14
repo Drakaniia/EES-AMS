@@ -1,3 +1,0 @@
-#!/bin/sh
-echo "Testing minimal hook"
-exit 0
