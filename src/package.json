@@ -12,6 +12,7 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
     "@tauri-apps/api": "^2.10.1",
+    "firebase": "^12.9.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwindcss": "^4.1.18"

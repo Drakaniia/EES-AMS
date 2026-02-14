@@ -4,14 +4,17 @@
   "private": true,
   "description": "AttendEase - Attendance Management System",
   "scripts": {
-    "dev": "cd server && cargo tauri dev",
-    "build": "cd client && bun run build && cd ../server && cargo tauri build",
-    "install:client": "cd client && bun install",
-    "install:all": "bun run install:client",
-    "lint": "cd client && bun run lint",
-    "clean": "cd client && rmdir /s /q dist node_modules 2>nul & cd ../server && cargo clean"
+    "dev": "cd src-tauri && cargo tauri dev",
+    "dev:frontend": "cd src && bun run dev",
+    "dev:backend": "cd src-tauri && cargo watch -x run",
+    "build": "cd src-tauri && cargo tauri build",
+    "install": "cd src && bun install"
   },
-  "keywords": ["tauri", "attendance", "education"],
+  "keywords": [
+    "tauri",
+    "attendance",
+    "education"
+  ],
   "author": "",
   "license": "MIT"
 }

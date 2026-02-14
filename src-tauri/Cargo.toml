@@ -13,6 +13,8 @@ tauri-build = { version = "2.0.0", features = [] }
 [dependencies]
 tauri = { version = "2.0.0", features = [] }
 tauri-plugin-shell = "2.0.0"
+tauri-plugin-updater = "2.0.0"
+tauri-plugin-process = "2.0.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
@@ -22,6 +24,14 @@ chrono = { version = "0.4", features = ["serde"] }
 urlencoding = "2.1"
 async-trait = "0.1"
 ts-rs = "9.0"
+calamine = "0.25"
+anyhow = "1.0"
+firestore-db-and-auth = "0.12"
+firestore = "0.37"
+dotenv = "0.15"
+
+[dev-dependencies]
+tempfile = "3.8"
 
 [profile.dev]
 incremental = true 
