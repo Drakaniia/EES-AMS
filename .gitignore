@@ -1,0 +1,51 @@
+# Generated files
+/target/
+/src-tauri/target/
+/dist/
+/build/
+
+# Environment variables
+.env*
+!.env.example
+
+# Firebase credentials
+firebase-service-account.json
+*.key
+
+# Tauri specific
+/src-tauri/target/src-tauri-generated/
+/src-tauri/cargo-apk/
+/src-tauri/target/bundle/
+
+# Node modules
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database/data files
+data/
+*.db
+*.sqlite
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Excel test files (keep examples)
+*.xls
+*.xlsx
+!assets/student-list/*.xls
+!assets/student-list/*.xlsx

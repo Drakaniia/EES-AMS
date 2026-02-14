@@ -6,9 +6,28 @@ A modern, cross-platform attendance management system built with Tauri (Rust bac
 
 ```
 EES-AMS/
-├── client/          # Frontend React application
-├── server/          # Backend Rust/Tauri application
-└── package.json     # Workspace scripts
+├── src/              # Frontend React application
+│   ├── components/   # Reusable UI components
+│   ├── pages/        # Route pages
+│   ├── services/     # Frontend API services
+│   └── types/        # TypeScript types
+├── src-tauri/        # Backend Rust/Tauri application
+│   ├── src/
+│   │   ├── domain/           # Domain layer (business logic)
+│   │   │   ├── entities/     # Domain entities
+│   │   │   ├── services/     # Domain services
+│   │   │   ├── repositories/ # Repository traits
+│   │   │   └── errors/       # Domain errors
+│   │   ├── infrastructure/   # Infrastructure layer
+│   │   │   ├── database/     # Data persistence
+│   │   │   ├── external/     # External services (Google API)
+│   │   │   └── config/       # Configuration
+│   │   └── application/      # Application layer
+│   │       ├── commands/     # Tauri IPC commands
+│   │       └── handlers/     # Request handlers
+│   ├── Cargo.toml
+│   └── tauri.conf.json
+└── package.json
 ```
 
 ## Features
@@ -23,63 +42,53 @@ EES-AMS/
 
 ## Tech Stack
 
-### Frontend (client/)
+### Frontend (src/)
 - React 18 with TypeScript
-- Tailwind CSS v4 for styling
+- Tailwind CSS for styling
 - Vite for build tooling
-- Bun as package manager
 
-### Backend (server/)
+### Backend (src-tauri/)
 - Rust with Tauri 2.0 framework
+- Clean Architecture (Domain/Infrastructure/Application layers)
 - JSON file storage for data persistence
 - OAuth2 for Google authentication
 - Async/await with Tokio runtime
+- ts-rs for TypeScript type generation
 
 ## Prerequisites
 
-- **Bun** (for client package management)
+- **Bun** (package manager and runtime)
 - **Rust 1.70+** (install from https://rustup.rs/)
-- **Node.js 18+** (optional, if using npm instead of Bun)
 
 ## Installation
 
-1. Install workspace dependencies:
 ```bash
-bun run install:all
+bun install
 ```
 
 ## Development
 
-Run the application in development mode:
+Run the full application (recommended):
 ```bash
 bun run dev
 ```
 
+Frontend-only development (faster UI iterations):
+```bash
+bun run dev:frontend
+```
+
+Backend-only development (requires `cargo-watch`):
+```bash
+bun run dev:backend
+```
+
 ## Build
 
-Build for production:
 ```bash
 bun run build
-```
-
-## Linting
-
-Run ESLint on the client code:
-```bash
-bun run lint
-```
-
-## Cleaning
-
-Remove build artifacts and dependencies:
-```bash
-bun run clean
 ```
 
 ## License
 
 MIT License
-
-## See Also
-
-- [Client README](client/README.md) for detailed frontend information
