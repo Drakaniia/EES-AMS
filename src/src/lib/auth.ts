@@ -21,8 +21,13 @@ export const authService = {
       await this.updateUserProfile(user.uid, { lastLogin: new Date() });
       
       return await this.getUserProfile(user);
-    } catch (error) {
-      throw new Error(`Sign in failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+} catch (error) {
+      const err = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Sign in error:', err, error);
+      const signInError = new Error(`Sign in failed: ${err}`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (signInError as any).cause = error;
+      throw signInError;
     }
   },
 
@@ -42,7 +47,8 @@ export const authService = {
       
       return profile;
     } catch (error) {
-      throw new Error(`Sign up failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+       
+      throw { message: `Sign up failed: ${error instanceof Error ? error.message : 'Unknown error'}`, originalError: error };
     }
   },
 
@@ -50,7 +56,8 @@ export const authService = {
     try {
       await signOut(auth);
     } catch (error) {
-      throw new Error(`Sign out failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+       
+      throw { message: `Sign out failed: ${error instanceof Error ? error.message : 'Unknown error'}`, originalError: error };
     }
   },
 
@@ -64,7 +71,8 @@ export const authService = {
       };
       await setDoc(profileRef, profileData);
     } catch (error) {
-      throw new Error(`Failed to create user profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+       
+      throw { message: `Failed to create user profile: ${error instanceof Error ? error.message : 'Unknown error'}`, originalError: error };
     }
   },
 
@@ -88,7 +96,8 @@ export const authService = {
         return profile;
       }
     } catch (error) {
-      throw new Error(`Failed to get user profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+       
+      throw { message: `Failed to get user profile: ${error instanceof Error ? error.message : 'Unknown error'}`, originalError: error };
     }
   },
 
@@ -100,7 +109,8 @@ export const authService = {
         lastLogin: serverTimestamp()
       });
     } catch (error) {
-      throw new Error(`Failed to update user profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+       
+      throw { message: `Failed to update user profile: ${error instanceof Error ? error.message : 'Unknown error'}`, originalError: error };
     }
   },
 

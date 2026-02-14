@@ -1,6 +1,8 @@
 // Student Handler
 // Application-level handler for student operations
 
+#![allow(dead_code)]
+
 use crate::domain::services::StudentService;
 use crate::domain::entities::student::Student;
 use serde::{Deserialize, Serialize};
@@ -37,6 +39,13 @@ pub struct ImportResult {
     pub imported_students: Vec<crate::domain::entities::student::Student>,
 }
 
+impl ImportResult {
+    #[allow(dead_code)]
+    pub fn from(result: Self) -> Result<Self, String> {
+        Ok(result)
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T> {
     pub success: bool,
@@ -67,6 +76,7 @@ impl<T> ApiResponse<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn success_empty() -> Self {
         ApiResponse {
             success: true,
@@ -75,6 +85,8 @@ impl<T> ApiResponse<T> {
             error: None,
         }
     }
+
+
 
     pub fn error(msg: String) -> Self {
         ApiResponse {
@@ -129,7 +141,7 @@ impl<S: StudentService> StudentHandler<S> {
         // Generate student_id from LRN or create a default one
         let student_id = input.lrn.clone().unwrap_or_else(|| {
             // Generate a temporary ID that will be replaced
-            format!("TEMP_{}", chrono::Utc::now().timestamp_nanos())
+            format!("TEMP_{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0))
         });
         
         match self

@@ -1,5 +1,7 @@
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use tauri_plugin_updater::UpdaterExt;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,7 +28,7 @@ pub async fn check_for_updates(app_handle: tauri::AppHandle) -> Result<UpdateSta
                     available: true,
                     current_version: update.current_version.clone(),
                     latest_version: Some(update.version.clone()),
-                    body: Some(update.body.clone()),
+                    body: update.body.clone(),
                 }),
                 Ok(None) => Ok(UpdateStatus {
                     available: false,
@@ -47,20 +49,22 @@ pub async fn download_and_install_update(app_handle: tauri::AppHandle) -> Result
         Ok(updater) => {
             match updater.check().await {
                 Ok(Some(update)) => {
+                    let app_handle_clone = app_handle.clone();
                     // Download and install the update with progress tracking
-                    match update.download_and_install(|progress_event| -> () {
-                        let progress = format!("Progress: {:?}", progress_event);
-                        
-                        // Emit progress event to frontend
-                        let _ = app_handle.emit("update-progress", progress);
-                    }).await {
+                    match update.download_and_install(
+                        move |bytes_downloaded, total_size| {
+                            let progress = format!("Downloaded {} bytes of {:?}", bytes_downloaded, total_size);
+                            // Emit progress event to frontend
+                            let _ = app_handle_clone.emit("update-progress", progress);
+                        },
+                        || {
+                            // on_download_finish callback
+                        }
+                    ).await {
                         Ok(_) => {
-                            // Close the update connection
-                            let _ = update.close();
                             Ok("Update downloaded and installed successfully".to_string())
                         },
                         Err(e) => {
-                            let _ = update.close();
                             Err(format!("Failed to download/install update: {}", e))
                         }
                     }
@@ -76,5 +80,6 @@ pub async fn download_and_install_update(app_handle: tauri::AppHandle) -> Result
 #[tauri::command]
 pub async fn restart_app(app_handle: tauri::AppHandle) -> Result<String, String> {
     app_handle.restart();
+    #[allow(unreachable_code)]
     Ok("Restarting application...".to_string())
 }

@@ -7,7 +7,6 @@ pub mod student;
 pub mod sync_status;
 pub mod user;
 
-pub use attendance::{Attendance, AttendanceStatus};
+pub use attendance::Attendance;
 pub use class::Class;
 pub use student::Student;
-pub use sync_status::SyncStatus;

@@ -5,10 +5,11 @@ use crate::domain::errors::{DomainError, DomainResult};
 use crate::infrastructure::database::schema::DatabaseSchema;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
+#[derive(Clone)]
 pub struct JsonDatabase {
-    pub data: Mutex<DatabaseSchema>,
+    pub data: Arc<Mutex<DatabaseSchema>>,
     db_path: PathBuf,
 }
 
@@ -28,7 +29,7 @@ impl JsonDatabase {
         };
 
         let db = JsonDatabase {
-            data: Mutex::new(data),
+            data: Arc::new(Mutex::new(data)),
             db_path,
         };
 
@@ -36,8 +37,8 @@ impl JsonDatabase {
         Ok(db)
     }
 
-    pub fn get_data(&self) -> &Mutex<DatabaseSchema> {
-        &self.data
+    pub fn get_data(&self) -> Arc<Mutex<DatabaseSchema>> {
+        Arc::clone(&self.data)
     }
 
     pub fn save(&self) -> DomainResult<()> {

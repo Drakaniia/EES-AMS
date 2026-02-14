@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "description": "AttendEase - Attendance Management System",
-  "scripts": {
-    "dev": "cd src-tauri && cargo tauri dev",
+"scripts": {
+    "dev": "cd src-tauri && npx @tauri-apps/cli@latest dev",
     "dev:frontend": "cd src && bun run dev",
     "dev:backend": "cd src-tauri && cargo watch -x run",
-    "build": "cd src-tauri && cargo tauri build",
+    "build": "cd src-tauri && npx @tauri-apps/cli@latest build",
     "install": "cd src && bun install",
     "prepare": "husky"
   },

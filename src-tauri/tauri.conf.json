@@ -7,7 +7,7 @@
     "frontendDist": "../src/dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "cd ../src && bun run dev",
-    "beforeBuildCommand": "cd ../src && bun run build"
+    "beforeBuildCommand": "cd ../src && pnpm build"
   },
   "app": {
     "windows": [
@@ -30,7 +30,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis", "deb", "appimage", "dmg", "app"],
+    "targets": [
+      "msi",
+      "nsis",
+      "deb",
+      "appimage",
+      "dmg",
+      "app"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -53,7 +60,9 @@
   "plugins": {
     "updater": {
       "active": true,
-      "endpoints": ["https://api.attendease.app/updates/{{target}}/{{current_version}}"],
+      "endpoints": [
+        "https://api.attendease.app/updates/{{target}}/{{current_version}}"
+      ],
       "dialog": false,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDBERjhEQzYzMTA5NEQ5Rjk3MApSV1dRWlJ4YUhFbHJpNnJ5b2JtM3d0TnFpVTZ3Q0Z5TnBjU09pQmFZUHZ3bXdnZDlVbHlGQXJrR3V5eTAK"
     }

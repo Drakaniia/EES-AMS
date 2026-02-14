@@ -12,5 +12,4 @@ pub use class_handler::ClassHandler;
 pub use student_handler::StudentHandler;
 pub use attendance_handler::AttendanceHandler;
 pub use google_handler::GoogleHandler;
-pub use auth_handler::AuthHandler;
-pub use update_handler::*;
+// pub use auth_handler::AuthHandler;

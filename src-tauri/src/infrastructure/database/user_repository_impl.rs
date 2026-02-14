@@ -1,12 +1,15 @@
 // Infrastructure implementation for UserRepository
+#![allow(dead_code)]
+
 use async_trait::async_trait;
 use std::path::PathBuf;
 use std::fs;
 use serde_json;
-use chrono::{DateTime, Utc, serde::ts_seconds_option};
+use chrono::Utc;
 use crate::domain::repositories::UserRepository;
 use crate::domain::entities::user::{User, UserProfile};
 
+#[derive(Clone)]
 pub struct UserRepositoryImpl {
     data_dir: PathBuf,
 }

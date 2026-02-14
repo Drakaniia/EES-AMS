@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::domain::repositories::UserRepository;
 use crate::domain::entities::user::{User, UserProfile, RegisterRequest};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};

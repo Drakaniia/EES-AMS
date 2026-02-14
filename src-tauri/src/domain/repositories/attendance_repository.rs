@@ -3,9 +3,10 @@
 
 use async_trait::async_trait;
 use crate::domain::entities::attendance::{Attendance, AttendanceStatus, AttendanceStats};
-use crate::domain::errors::{DomainError, DomainResult};
+use crate::domain::errors::DomainResult;
 
 #[async_trait]
+#[allow(dead_code)]
 pub trait AttendanceRepository: Send + Sync {
     /// Record or update attendance for a student
     async fn record(

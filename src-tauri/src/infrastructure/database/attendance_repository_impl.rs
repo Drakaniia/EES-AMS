@@ -8,6 +8,7 @@ use crate::domain::errors::{DomainError, DomainResult};
 use crate::infrastructure::database::schema::AttendanceRecord;
 use crate::infrastructure::database::JsonDatabase;
 
+#[derive(Clone)]
 pub struct AttendanceRepositoryImpl {
     db: JsonDatabase,
 }
@@ -30,6 +31,7 @@ impl AttendanceRepositoryImpl {
         }
     }
 
+    #[allow(dead_code)]
     fn entity_to_record(entity: &Attendance) -> AttendanceRecord {
         AttendanceRecord {
             id: entity.id,
@@ -54,7 +56,8 @@ impl AttendanceRepository for AttendanceRepositoryImpl {
         status: AttendanceStatus,
         notes: Option<String>,
     ) -> DomainResult<i64> {
-        let mut data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let mut data = db_arc.lock().unwrap();
         
         if let Some(existing) = data.attendance.iter_mut().find(|a| {
             a.student_id == student_id && a.class_id == class_id && a.date == date
@@ -91,7 +94,8 @@ impl AttendanceRepository for AttendanceRepositoryImpl {
     }
 
     async fn get_by_id(&self, id: i64) -> DomainResult<Attendance> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         data.attendance.iter()
             .find(|a| a.id == id)
             .map(Self::record_to_entity)
@@ -99,7 +103,8 @@ impl AttendanceRepository for AttendanceRepositoryImpl {
     }
 
     async fn get_by_class_and_date(&self, class_id: i64, date: &str) -> DomainResult<Vec<Attendance>> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         let records: Vec<Attendance> = data.attendance.iter()
             .filter(|a| a.class_id == class_id && a.date == date)
             .map(Self::record_to_entity)
@@ -108,7 +113,8 @@ impl AttendanceRepository for AttendanceRepositoryImpl {
     }
 
     async fn get_unsynced(&self) -> DomainResult<Vec<Attendance>> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         let records: Vec<Attendance> = data.attendance.iter()
             .filter(|a| !a.synced)
             .map(Self::record_to_entity)
@@ -117,7 +123,8 @@ impl AttendanceRepository for AttendanceRepositoryImpl {
     }
 
     async fn get_unsynced_by_class(&self, class_id: i64) -> DomainResult<Vec<Attendance>> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         let records: Vec<Attendance> = data.attendance.iter()
             .filter(|a| !a.synced && a.class_id == class_id)
             .map(Self::record_to_entity)
@@ -130,7 +137,8 @@ impl AttendanceRepository for AttendanceRepositoryImpl {
             return Ok(());
         }
 
-        let mut data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let mut data = db_arc.lock().unwrap();
         for record in data.attendance.iter_mut() {
             if record_ids.contains(&record.id) {
                 record.synced = true;
@@ -143,7 +151,8 @@ impl AttendanceRepository for AttendanceRepositoryImpl {
     }
 
     async fn get_stats(&self, class_id: i64, date: &str) -> DomainResult<AttendanceStats> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         
         let total_students = data.students.iter()
             .filter(|s| s.class_id == Some(class_id))
@@ -173,16 +182,18 @@ impl AttendanceRepository for AttendanceRepositoryImpl {
         start_date: &str,
         end_date: &str,
     ) -> DomainResult<Vec<Attendance>> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         let records: Vec<Attendance> = data.attendance.iter()
-            .filter(|a| a.student_id == student_id && a.date >= start_date && a.date <= end_date)
+            .filter(|a| a.student_id == student_id && a.date.as_str() >= start_date && a.date.as_str() <= end_date)
             .map(Self::record_to_entity)
             .collect();
         Ok(records)
     }
 
     async fn exists(&self, student_id: i64, class_id: i64, date: &str) -> DomainResult<bool> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         Ok(data.attendance.iter()
             .any(|a| a.student_id == student_id && a.class_id == class_id && a.date == date))
     }

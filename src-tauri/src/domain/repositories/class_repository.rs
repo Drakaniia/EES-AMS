@@ -3,7 +3,7 @@
 
 use async_trait::async_trait;
 use crate::domain::entities::class::Class;
-use crate::domain::errors::{DomainError, DomainResult};
+use crate::domain::errors::DomainResult;
 
 #[async_trait]
 pub trait ClassRepository: Send + Sync {

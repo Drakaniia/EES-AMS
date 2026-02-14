@@ -24,6 +24,7 @@ pub struct ApiResponse<T> {
 }
 
 impl<T> ApiResponse<T> {
+    #[allow(dead_code)]
     pub fn success(data: T) -> Self {
         ApiResponse {
             success: true,
@@ -42,6 +43,7 @@ impl<T> ApiResponse<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn success_empty() -> Self {
         ApiResponse {
             success: true,
@@ -84,7 +86,7 @@ impl<S: ClassService> ClassHandler<S> {
         }
     }
 
-    pub async fn get_all_classes(&self) -> ApiResponse<crate::domain::entities::class::Class> {
+    pub async fn get_all_classes(&self) -> ApiResponse<Vec<crate::domain::entities::class::Class>> {
         ApiResponse::from_domain_result(self.service.get_all_classes().await)
     }
 

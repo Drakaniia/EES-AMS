@@ -7,7 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Attendance from './pages/Attendance'
 import Classes from './pages/Classes'
 import Students from './pages/Students'
-import ProfileSettings from './pages/ProfileSettings'
+import Settings from './pages/Settings'
 import AuthScreen from './pages/AuthScreen'
 
 type Page = 'dashboard' | 'attendance' | 'classes' | 'students' | 'settings'
@@ -27,7 +27,7 @@ function AppContent() {
       case 'students':
         return <Students />
       case 'settings':
-        return <ProfileSettings />
+        return <Settings />
       default:
         return <Dashboard />
     }

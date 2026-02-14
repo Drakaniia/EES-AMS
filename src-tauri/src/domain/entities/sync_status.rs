@@ -1,6 +1,8 @@
 // Domain Entity: SyncStatus
 // Represents the current synchronization status
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 

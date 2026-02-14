@@ -1,4 +1,6 @@
 // Domain entity for User
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -16,7 +18,9 @@ pub struct User {
     pub employee_id: String,
     pub organization_type: String,
     pub organization_name: String,
+    #[ts(type = "string")]
     pub created_at: DateTime<Utc>,
+    #[ts(type = "string")]
     pub last_login: DateTime<Utc>,
     pub is_active: bool,
 }
@@ -33,7 +37,9 @@ pub struct UserProfile {
     pub employee_id: String,
     pub organization_type: String,
     pub organization_name: String,
+    #[ts(type = "string")]
     pub created_at: DateTime<Utc>,
+    #[ts(type = "string")]
     pub last_login: DateTime<Utc>,
 }
 

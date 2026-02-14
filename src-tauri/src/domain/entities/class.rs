@@ -17,6 +17,7 @@ pub struct Class {
 }
 
 impl Class {
+    #[allow(dead_code)]
     pub fn new(
         id: i64,
         name: String,
@@ -34,6 +35,7 @@ impl Class {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update(
         &mut self,
         name: Option<String>,
@@ -52,6 +54,7 @@ impl Class {
         self.updated_at = chrono::Utc::now().to_rfc3339();
     }
 
+    #[allow(dead_code)]
     pub fn display_name(&self) -> String {
         match &self.section {
             Some(section) => format!("{} - {}", self.name, section),

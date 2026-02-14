@@ -85,6 +85,8 @@ export interface ApiResponse<T = unknown> {
     error?: string;
 }
 
+
+
 // Tauri API - mimics the Electron API structure
 export const tauriAPI = {
     class: {
@@ -103,7 +105,7 @@ export const tauriAPI = {
             return { success: false, error: response.error };
         },
 
-        getAll: async (): Promise<ApiResponse<Class[]>> => {
+getAll: async (): Promise<ApiResponse<Class[]>> => {
             return await invoke<ApiResponse<Class[]>>('class_get_all');
         },
 
@@ -157,8 +159,14 @@ google: {
         startAuth: async (): Promise<ApiResponse<string>> => {
             const response = await invoke<ApiResponse<string>>('google_start_auth');
             if (response.success && response.data) {
-                // Open auth URL in default browser
-                window.open(response.data, '_blank');
+                // Open auth URL using Tauri shell command
+                try {
+                    await invoke('open_url', { url: response.data });
+                } catch (error) {
+                    console.error('Failed to open browser:', error);
+                    // Fallback to window.open
+                    window.open(response.data, '_blank');
+                }
             }
             return response;
         },
@@ -177,6 +185,10 @@ google: {
 
         getSyncStatus: async (): Promise<ApiResponse<SyncStatus>> => {
             return await invoke<ApiResponse<SyncStatus>>('google_get_sync_status');
+        },
+
+        syncWithData: async (data: unknown): Promise<ApiResponse<boolean>> => {
+            return await invoke<ApiResponse<boolean>>('google_sync_data', { data });
         },
     },
 

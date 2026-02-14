@@ -50,6 +50,7 @@ pub struct Attendance {
 }
 
 impl Attendance {
+    #[allow(dead_code)]
     pub fn new(
         id: i64,
         student_id: i64,
@@ -70,10 +71,12 @@ impl Attendance {
         }
     }
 
+    #[allow(dead_code)]
     pub fn mark_as_synced(&mut self) {
         self.synced = true;
     }
 
+    #[allow(dead_code)]
     pub fn update_status(&mut self, status: AttendanceStatus, notes: Option<String>) {
         self.status = status;
         self.notes = notes;

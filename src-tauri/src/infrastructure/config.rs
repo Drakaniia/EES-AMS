@@ -1,6 +1,8 @@
 // Configuration Module
 // Application configuration management
 
+#![allow(dead_code)]
+
 use std::env;
 
 pub struct AppConfig {

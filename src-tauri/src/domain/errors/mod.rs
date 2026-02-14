@@ -14,6 +14,8 @@ pub enum DomainError {
     ValidationError(String),
     BusinessRuleViolation(String),
     InfrastructureError(String),
+    ConfigurationError(String),
+    ExternalServiceError(String),
 }
 
 impl fmt::Display for DomainError {
@@ -24,6 +26,8 @@ impl fmt::Display for DomainError {
             DomainError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
             DomainError::BusinessRuleViolation(msg) => write!(f, "Business rule violation: {}", msg),
             DomainError::InfrastructureError(msg) => write!(f, "Infrastructure error: {}", msg),
+            DomainError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
+            DomainError::ExternalServiceError(msg) => write!(f, "External service error: {}", msg),
         }
     }
 }
