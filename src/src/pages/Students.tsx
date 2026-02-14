@@ -1,5 +1,12 @@
-import { FC, useEffect, useState } from 'react'
+import { FC, useEffect, useState, useRef } from 'react'
 import type { Class, Student } from '../lib/tauri'
+
+interface ImportResult {
+    success_count: number
+    error_count: number
+    errors: string[]
+    imported_students: Student[]
+}
 
 const Students: FC = () => {
     const [classes, setClasses] = useState<Class[]>([])
@@ -7,9 +14,13 @@ const Students: FC = () => {
     const [students, setStudents] = useState<Student[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
+    const [showImportModal, setShowImportModal] = useState(false)
     const [formData, setFormData] = useState({ student_id: '', first_name: '', last_name: '' })
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [isImporting, setIsImporting] = useState(false)
+    const [importResult, setImportResult] = useState<ImportResult | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
         loadClasses()
@@ -93,7 +104,7 @@ const Students: FC = () => {
         }
     }
 
-    const handleDelete = async (id: number) => {
+const handleDelete = async (id: number) => {
         if (!confirm('Are you sure you want to delete this student?')) return
 
         try {
@@ -110,6 +121,63 @@ const Students: FC = () => {
         }
     }
 
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        // Check file extension
+        if (!file.name.endsWith('.xls') && !file.name.endsWith('.xlsx')) {
+            alert('Please select an Excel file (.xls or .xlsx)')
+            return
+        }
+
+        setIsImporting(true)
+        setImportResult(null)
+
+        try {
+            // Read file as ArrayBuffer and send to Tauri
+            const arrayBuffer = await file.arrayBuffer()
+            const uint8Array = new Uint8Array(arrayBuffer)
+            
+            // Save file temporarily and import
+            const tempPath = `/tmp/${file.name}`
+            await window.electronAPI.fs.writeFile(tempPath, uint8Array)
+            
+            const result = await window.electronAPI.student.importFromExcel(
+                tempPath,
+                selectedClassId || undefined
+            )
+
+            setImportResult(result)
+
+            if (result.success_count > 0) {
+                // Reload students
+                if (selectedClassId) {
+                    loadStudents()
+                } else {
+                    loadAllStudents()
+                }
+            }
+
+            // Clean up temp file
+            await window.electronAPI.fs.removeFile(tempPath)
+        } catch (error) {
+            console.error('Import failed:', error)
+            setImportResult({
+                success_count: 0,
+                error_count: 1,
+                errors: ['Import failed: ' + (error as Error).message],
+                imported_students: []
+            })
+        } finally {
+            setIsImporting(false)
+        }
+    }
+
+    const triggerFileSelect = () => {
+        fileInputRef.current?.click()
+    }
+
     const filteredStudents = students.filter(s =>
         s.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -124,18 +192,26 @@ const Students: FC = () => {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
+{/* Header */}
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white mb-1">Students</h1>
                     <p className="text-gray-400">Manage students across all classes</p>
                 </div>
-                <button onClick={() => setShowModal(true)} className="btn btn-primary">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Add Student
-                </button>
+                <div className="flex gap-3">
+                    <button onClick={() => setShowImportModal(true)} className="btn btn-secondary">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        Import from Excel
+                    </button>
+                    <button onClick={() => setShowModal(true)} className="btn btn-primary">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        Add Student
+                    </button>
+                </div>
             </div>
 
             {/* Filters */}
@@ -312,6 +388,113 @@ const Students: FC = () => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+</div>
+            )}
+
+            {/* Import Modal */}
+            {showImportModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowImportModal(false)}></div>
+                    <div className="glass rounded-2xl p-6 w-full max-w-lg relative animate-fade-in">
+                        <h2 className="text-xl font-semibold text-white mb-6">Import Students from Excel</h2>
+                        
+                        <div className="space-y-4">
+                            <div className="glass rounded-lg p-4">
+                                <h3 className="text-sm font-medium text-white mb-2">Supported Formats:</h3>
+                                <ul className="text-sm text-gray-400 space-y-1">
+                                    <li>• SF1 Excel files (.xls, .xlsx)</li>
+                                    <li>• Columns: LRN, Last Name, First Name, Middle Name, etc.</li>
+                                </ul>
+                            </div>
+
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".xls,.xlsx"
+                                onChange={handleFileSelect}
+                                className="hidden"
+                            />
+
+                            <button
+                                onClick={triggerFileSelect}
+                                disabled={isImporting}
+                                className="w-full btn btn-primary"
+                            >
+                                {isImporting ? (
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        Importing...
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center justify-center gap-2">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                        </svg>
+                                        Select Excel File
+                                    </div>
+                                )}
+                            </button>
+
+                            {/* Import Results */}
+                            {importResult && (
+                                <div className="space-y-3">
+                                    <div className="glass rounded-lg p-4">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            {importResult.success_count > 0 && (
+                                                <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                                                    <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                            {importResult.error_count > 0 && (
+                                                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                                                    <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="text-white font-medium">
+                                                    Import Complete
+                                                </p>
+                                                <p className="text-sm text-gray-400">
+                                                    {importResult.success_count} students imported, {importResult.error_count} errors
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {importResult.errors.length > 0 && (
+                                            <div className="space-y-2">
+                                                <p className="text-sm font-medium text-red-400">Errors:</p>
+                                                <div className="max-h-32 overflow-y-auto space-y-1">
+                                                    {importResult.errors.map((error, idx) => (
+                                                        <p key={idx} className="text-xs text-gray-400">{error}</p>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex gap-3 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowImportModal(false)
+                                        setImportResult(null)
+                                        if (fileInputRef.current) {
+                                            fileInputRef.current.value = ''
+                                        }
+                                    }}
+                                    className="btn btn-secondary flex-1"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

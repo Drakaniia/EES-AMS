@@ -1,4 +1,5 @@
 import { FC } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 
 type Page = 'dashboard' | 'attendance' | 'classes' | 'students' | 'settings'
 
@@ -14,6 +15,7 @@ interface NavItem {
 }
 
 const Sidebar: FC<SidebarProps> = ({ currentPage, onNavigate }) => {
+    const { userProfile } = useAuth()
     const navItems: NavItem[] = [
         {
             id: 'dashboard',
@@ -96,6 +98,44 @@ const Sidebar: FC<SidebarProps> = ({ currentPage, onNavigate }) => {
                     </button>
                 ))}
             </nav>
+
+{/* Profile Section */}
+            {userProfile && (
+                <div className="p-4 border-t border-white/10">
+                    <div className="glass rounded-xl p-4">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                                <span className="text-sm text-white font-semibold">
+                                    {userProfile.displayName.charAt(0).toUpperCase()}
+                                </span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm text-white font-medium truncate">
+                                    {userProfile.displayName}
+                                </p>
+                                {userProfile.organization && (
+                                    <p className="text-xs text-gray-400 truncate">
+                                        {userProfile.organization.name}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => onNavigate('settings')}
+                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+                                currentPage === 'settings'
+                                    ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border border-blue-500/30'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            Profile Settings
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Sync Status */}
             <div className="p-4 border-t border-white/10">

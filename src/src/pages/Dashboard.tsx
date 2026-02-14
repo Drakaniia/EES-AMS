@@ -1,7 +1,9 @@
 import { FC, useEffect, useState } from 'react'
 import type { Class, AttendanceStats } from '../lib/tauri'
+import { useAuth } from '../contexts/AuthContext'
 
 const Dashboard: FC = () => {
+    const { userProfile } = useAuth()
     const [classes, setClasses] = useState<Class[]>([])
     const [stats, setStats] = useState<AttendanceStats | null>(null)
     const [selectedClassId, setSelectedClassId] = useState<number | null>(null)
@@ -75,24 +77,66 @@ const Dashboard: FC = () => {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-white mb-1">Dashboard</h1>
-                    <p className="text-gray-400">{today}</p>
+{/* Header */}
+            <div className="space-y-4">
+                {/* User Profile Card */}
+                {userProfile && userProfile.organization && (
+                    <div className="glass rounded-2xl p-6">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                                    <span className="text-xl text-white font-semibold">
+                                        {userProfile.displayName.charAt(0).toUpperCase()}
+                                    </span>
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-semibold text-white">{userProfile.displayName}</h2>
+                                    <p className="text-gray-400">{userProfile.email}</p>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                            userProfile.organization.type === 'government' 
+                                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                                : userProfile.organization.type === 'educational'
+                                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                                : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                                        }`}>
+                                            {userProfile.organization.name}
+                                        </span>
+                                        {userProfile.schoolName && (
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-500/20 text-gray-400 border border-gray-500/30">
+                                                {userProfile.schoolName}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-gray-500">Welcome back!</p>
+                                <p className="text-sm text-white font-medium">Teacher Portal</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Dashboard Header */}
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold text-white mb-1">Dashboard</h1>
+                        <p className="text-gray-400">{today}</p>
+                    </div>
+                    <select
+                        value={selectedClassId || ''}
+                        onChange={(e) => setSelectedClassId(Number(e.target.value))}
+                        className="input max-w-xs"
+                    >
+                        {classes.length === 0 && <option value="">No classes yet</option>}
+                        {classes.map((cls) => (
+                            <option key={cls.id} value={cls.id}>
+                                {cls.name} {cls.section && `- ${cls.section}`}
+                            </option>
+                        ))}
+                    </select>
                 </div>
-                <select
-                    value={selectedClassId || ''}
-                    onChange={(e) => setSelectedClassId(Number(e.target.value))}
-                    className="input max-w-xs"
-                >
-                    {classes.length === 0 && <option value="">No classes yet</option>}
-                    {classes.map((cls) => (
-                        <option key={cls.id} value={cls.id}>
-                            {cls.name} {cls.section && `- ${cls.section}`}
-                        </option>
-                    ))}
-                </select>
             </div>
 
             {/* Stats Grid */}

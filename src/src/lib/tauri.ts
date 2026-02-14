@@ -15,11 +15,27 @@ export interface Class {
 export interface Student {
     id?: number;
     student_id: string;
-    first_name: string;
+    lrn?: string;
     last_name: string;
+    first_name: string;
+    middle_name?: string;
+    gender?: string;
+    birthday?: string;
+    age?: number;
+    mother_name?: string;
+    father_name?: string;
+    guardian_name?: string;
+    address?: string;
     class_id?: number;
     created_at?: string;
     updated_at?: string;
+}
+
+export interface ImportResult {
+    success_count: number;
+    error_count: number;
+    errors: string[];
+    imported_students: Student[];
 }
 
 export interface AttendanceRecord {
@@ -53,6 +69,13 @@ export interface AttendanceStats {
     absent_today: number;
     late_today: number;
     attendance_rate: number;
+}
+
+export interface UpdateStatus {
+    available: boolean;
+    current_version: string;
+    latest_version?: string;
+    body?: string;
 }
 
 export interface ApiResponse<T = unknown> {
@@ -89,35 +112,7 @@ export const tauriAPI = {
         },
     },
 
-    student: {
-        create: async (data: Student): Promise<ApiResponse<{ id: number }>> => {
-            const response = await invoke<ApiResponse<number>>('student_create', {
-                input: {
-                    student_id: data.student_id,
-                    first_name: data.first_name,
-                    last_name: data.last_name,
-                    class_id: data.class_id
-                }
-            });
-            
-            if (response.success && response.id !== undefined) {
-                return { success: true, data: { id: response.id } };
-            }
-            return { success: false, error: response.error };
-        },
 
-        getByClass: async (classId: number): Promise<ApiResponse<Student[]>> => {
-            return await invoke<ApiResponse<Student[]>>('student_get_by_class', { classId });
-        },
-
-        getAll: async (): Promise<ApiResponse<Student[]>> => {
-            return await invoke<ApiResponse<Student[]>>('student_get_all');
-        },
-
-        delete: async (id: number): Promise<ApiResponse> => {
-            return await invoke<ApiResponse>('student_delete', { id });
-        },
-    },
 
     attendance: {
         record: async (data: AttendanceRecord): Promise<ApiResponse<{ id: number }>> => {
@@ -150,7 +145,7 @@ export const tauriAPI = {
         },
     },
 
-    google: {
+google: {
         saveCredentials: async (credentials: GoogleCredentials): Promise<ApiResponse> => {
             return await invoke<ApiResponse>('google_save_credentials', { credentials });
         },
@@ -182,6 +177,72 @@ export const tauriAPI = {
 
         getSyncStatus: async (): Promise<ApiResponse<SyncStatus>> => {
             return await invoke<ApiResponse<SyncStatus>>('google_get_sync_status');
+        },
+    },
+
+    fs: {
+        writeFile: async (path: string, contents: Uint8Array): Promise<void> => {
+            return await invoke('fs_write_file', { path, contents });
+        },
+
+        removeFile: async (path: string): Promise<void> => {
+            return await invoke('fs_remove_file', { path });
+        },
+    },
+
+    student: {
+        create: async (data: Student): Promise<ApiResponse<{ id: number }>> => {
+            const response = await invoke<ApiResponse<number>>('student_create', {
+                input: {
+                    student_id: data.student_id,
+                    first_name: data.first_name,
+                    last_name: data.last_name,
+                    class_id: data.class_id
+                }
+            });
+            
+            if (response.success && response.id !== undefined) {
+                return { success: true, data: { id: response.id } };
+            }
+            return { success: false, error: response.error };
+        },
+
+        getByClass: async (classId: number): Promise<ApiResponse<Student[]>> => {
+            return await invoke<ApiResponse<Student[]>>('student_get_by_class', { classId });
+        },
+
+        getAll: async (): Promise<ApiResponse<Student[]>> => {
+            return await invoke<ApiResponse<Student[]>>('student_get_all');
+        },
+
+        delete: async (id: number): Promise<ApiResponse> => {
+            return await invoke<ApiResponse>('student_delete', { id });
+        },
+
+        importFromExcel: async (filePath: string, classId?: number): Promise<ImportResult> => {
+            return await invoke<ImportResult>('student_import_from_excel', { filePath, classId });
+        },
+    },
+
+    updater: {
+        checkForUpdates: async (): Promise<ApiResponse<UpdateStatus>> => {
+            return await invoke<ApiResponse<UpdateStatus>>('check_for_updates');
+        },
+
+        downloadAndInstall: async (): Promise<ApiResponse<string>> => {
+            return await invoke<ApiResponse<string>>('download_and_install_update');
+        },
+
+        restart: async (): Promise<ApiResponse> => {
+            return await invoke<ApiResponse>('restart_app');
+        },
+
+        onUpdateProgress: (callback: (progress: string) => void) => {
+            import('@tauri-apps/api/event').then(({ listen }) => {
+                listen('update-progress', (event) => {
+                    callback(event.payload as string);
+                });
+            });
         },
     },
 };

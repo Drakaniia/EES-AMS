@@ -1,5 +1,6 @@
 import { FC, useEffect, useState } from 'react'
 import type { SyncStatus } from '../lib/tauri'
+import { useUpdateService } from '../hooks/useUpdateService'
 
 const Settings: FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -11,119 +12,99 @@ const Settings: FC = () => {
         clientId: '',
         clientSecret: '',
         redirectUri: 'http://localhost'
-    })
-    const [showCredentialsForm, setShowCredentialsForm] = useState(false)
+})
 
-    useEffect(() => {
-        checkAuthStatus()
-        loadSyncStatus()
-    }, [])
+            {/* Auto-Update Settings Section */}
+            <div className="glass rounded-2xl p-6">
+                <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#10B981" />
+                    </svg>
+                    Application Updates
+                </h2>
 
-    const checkAuthStatus = async () => {
-        try {
-            const response = await window.electronAPI.google.isAuthenticated()
-            if (response.success && response.data !== undefined) {
-                setIsAuthenticated(response.data)
-            }
-        } catch (error) {
-            console.error('Failed to check auth status:', error)
-        }
-    }
+                <div className="space-y-4">
+                    {/* Auto-update toggle */}
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-white font-medium">Check for Updates Automatically</p>
+                            <p className="text-gray-400 text-sm">Enable automatic update checks on app startup</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={autoUpdateEnabled}
+                                onChange={(e) => setAutoUpdateEnabled(e.target.checked)}
+                            />
+                            <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                    </div>
 
-    const loadSyncStatus = async () => {
-        try {
-            const response = await window.electronAPI.google.getSyncStatus()
-            if (response.success && response.data) {
-                setSyncStatus(response.data)
-            }
-        } catch (error) {
-            console.error('Failed to load sync status:', error)
-        }
-    }
+                    {/* Current version info */}
+                    <div className="glass rounded-xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-gray-400">Current Version</span>
+                            <span className="text-white font-medium">
+                                {updateStatus?.current_version || '1.0.0'}
+                            </span>
+                        </div>
+                        
+                        {updateStatus?.available && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-gray-400">Update Available</span>
+                                <span className="text-green-400 font-medium">
+                                    {updateStatus.latest_version}
+                                </span>
+                            </div>
+                        )}
+                    </div>
 
-    const handleSaveCredentials = async () => {
-        if (!credentials.clientId || !credentials.clientSecret) return
+                    {/* Update controls */}
+                    <div className="flex gap-3">
+                        <button
+                            onClick={checkForUpdates}
+                            disabled={isUpdating}
+                            className="btn btn-secondary"
+                        >
+                            Check for Updates
+                        </button>
 
-        try {
-            const response = await window.electronAPI.google.saveCredentials(credentials)
-            if (response.success) {
-                setShowCredentialsForm(false)
-                alert('Credentials saved! You can now authenticate with Google.')
-                // Automatically start auth flow after saving credentials
-                handleAuthenticate()
-            }
-        } catch (error) {
-            console.error('Failed to save credentials:', error)
-        }
-    }
+                        {updateStatus?.available && !isUpdating && (
+                            <button
+                                onClick={downloadAndInstall}
+                                className="btn btn-primary"
+                            >
+                                Install Update
+                            </button>
+                        )}
 
-    const handleAuthenticate = async () => {
-        try {
-            const response = await window.electronAPI.google.startAuth()
-            if (response.success) {
-                setIsAuthenticating(true)
-            }
-        } catch (error) {
-            console.error('Failed to start auth:', error)
-        }
-    }
+                        {updateProgress && (
+                            <div className="flex-1 glass rounded-xl p-4">
+                                <p className="text-sm text-blue-400">{updateProgress}</p>
+                            </div>
+                        )}
+                    </div>
 
-    const handleSubmitCode = async () => {
-        if (!authCode.trim()) return
+                    {error && (
+                        <div className="glass rounded-xl p-4 border border-red-500/20 bg-red-500/5">
+                            <p className="text-red-400 text-sm">{error}</p>
+                        </div>
+                    )}
+                </div>
+            </div>
 
-        try {
-            const response = await window.electronAPI.google.handleCallback(authCode.trim())
-            if (response.success) {
-                setIsAuthenticated(true)
-                setIsAuthenticating(false)
-                setAuthCode('')
-            } else {
-                alert('Authentication failed. Please try again.')
-            }
-        } catch (error) {
-            console.error('Failed to authenticate:', error)
-        }
-    }
-
-    const handleLogout = async () => {
-        try {
-            const response = await window.electronAPI.google.logout()
-            if (response.success) {
-                setIsAuthenticated(false)
-            }
-        } catch (error) {
-            console.error('Failed to logout:', error)
-        }
-    }
-
-    const handleManualSync = async () => {
-        setIsSyncing(true)
-        try {
-            const response = await window.electronAPI.google.sync()
-            if (response.success) {
-                loadSyncStatus()
-                alert('Sync completed successfully!')
-            } else {
-                alert('Sync failed. Please check your connection.')
-            }
-        } catch (error) {
-            console.error('Failed to sync:', error)
-        } finally {
-            setIsSyncing(false)
-        }
-    }
-
-    const formatDate = (dateString: string | null) => {
-        if (!dateString) return 'Never'
-        return new Date(dateString).toLocaleString()
-    }
-
-    return (
-        <div className="space-y-6 max-w-3xl">
-            {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-white mb-1">Settings</h1>
-                <p className="text-gray-400">Configure Google Sheets sync and app preferences</p>
+            {/* About Section */}
+            <div className="glass rounded-2xl p-6">
+                <h2 className="text-lg font-semibold text-white mb-4">About</h2>
+                <div className="space-y-2 text-sm text-gray-400">
+                    <p><strong className="text-white">AttendEase</strong> - Attendance Management System</p>
+                    <p>Version 1.0.0</p>
+                    <p className="pt-4">
+                        A desktop application for managing student attendance with offline-first
+                        architecture and Google Sheets sync for backup and reporting.
+                    </p>
+                </div>
             </div>
 
             {/* Google Sync Section */}
