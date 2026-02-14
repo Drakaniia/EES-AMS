@@ -2,7 +2,7 @@
 // IPC bridge between frontend and backend
 
 use tauri::State;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 // AppState for dependency injection
 pub struct AppState {
@@ -32,6 +32,7 @@ pub struct AppState {
             crate::infrastructure::database::ClassRepositoryImpl
         >
     >>,
+    pub auth_handler: Arc<Mutex<crate::application::handlers::AuthHandler>>,
 }
 
 // ========================================
@@ -267,6 +268,78 @@ pub async fn fs_remove_file(path: String) -> Result<(), String> {
         Ok(_) => Ok(()),
         Err(e) => Err(format!("Failed to remove file: {}", e)),
     }
+}
+
+// ========================================
+// Update Commands
+// ========================================
+
+// ========================================
+// Authentication Commands
+// ========================================
+
+use crate::domain::entities::user::{LoginRequest, RegisterRequest, UserProfile};
+
+#[tauri::command]
+pub async fn auth_register(
+    request: RegisterRequest,
+    state: State<'_, AppState>,
+) -> crate::domain::entities::user::AuthResponse {
+    let result = {
+        let handler = state.auth_handler.lock().unwrap();
+        handler.register(request).await
+    };
+    result
+}
+
+#[tauri::command]
+pub async fn auth_login(
+    request: LoginRequest,
+    state: State<'_, AppState>,
+) -> crate::domain::entities::user::AuthResponse {
+    let result = {
+        let handler = state.auth_handler.lock().unwrap();
+        handler.login(request).await
+    };
+    result
+}
+
+#[tauri::command]
+pub async fn auth_validate_token(
+    token: String,
+    state: State<'_, AppState>,
+) -> Option<UserProfile> {
+    let result = {
+        let handler = state.auth_handler.lock().unwrap();
+        handler.validate_token(&token).await
+    };
+    result
+}
+
+#[tauri::command]
+pub async fn auth_get_current_user(
+    state: State<'_, AppState>,
+) -> Option<UserProfile> {
+    state.auth_handler.lock().unwrap().get_current_user()
+}
+
+#[tauri::command]
+pub async fn auth_update_profile(
+    profile: UserProfile,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let result = {
+        let handler = state.auth_handler.lock().unwrap();
+        handler.update_profile(profile).await
+    };
+    result
+}
+
+#[tauri::command]
+pub async fn auth_logout(
+    state: State<'_, AppState>,
+) {
+    state.auth_handler.lock().unwrap().logout();
 }
 
 // ========================================

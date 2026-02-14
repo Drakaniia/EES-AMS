@@ -1,16 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { User as FirebaseUser } from "firebase/auth";
-import { authService } from "../lib/auth";
-import { UserProfile } from "../lib/organization";
+import { authService, UserProfile } from "../lib/auth-tauri";
 
 interface AuthContextType {
-  user: FirebaseUser | null;
   userProfile: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, displayName: string) => Promise<void>;
+  signUp: (data: { email: string; password: string; displayName: string; schoolName: string }) => Promise<void>;
   signOut: () => Promise<void>;
-  updateUserProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  updateUserProfile: (updates: UserProfile) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,78 +17,80 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = authService.onAuthStateChanged(async (authUser) => {
-      setUser(authUser);
-      setLoading(true);
-
-      if (authUser) {
-        try {
-          const profile = await authService.getUserProfile(authUser);
-          setUserProfile(profile);
-        } catch (error) {
-          console.error("Error fetching user profile:", error);
-          setUserProfile(null);
-        }
+    const checkAuth = async () => {
+      const token = authService.getToken();
+      const storedProfile = authService.getStoredProfile();
+      
+      if (token && storedProfile) {
+        // Validate token with backend
+        const user = await authService.validateToken(token);
+        setUserProfile(user);
       } else {
-        setUserProfile(null);
+        // Check if there's a current session on backend
+        const user = await authService.getCurrentUser();
+        setUserProfile(user);
       }
-
+      
       setLoading(false);
-    });
+    };
 
-    return unsubscribe;
+    checkAuth();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const profile = await authService.signIn(email, password);
-      setUserProfile(profile);
-    } catch (error) {
-      throw error;
+    const response = await authService.login({ email, password });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Login failed');
+    }
+    
+    if (response.user) {
+      setUserProfile(response.user);
     }
   };
 
-  const signUp = async (email: string, password: string, displayName: string) => {
-    try {
-      const profile = await authService.signUp(email, password, displayName);
-      setUserProfile(profile);
-    } catch (error) {
-      throw error;
+  const signUp = async (data: { 
+    email: string; 
+    password: string; 
+    displayName: string; 
+    schoolName: string;
+  }) => {
+    const response = await authService.register({
+      email: data.email,
+      password: data.password,
+      display_name: data.displayName,
+      school_name: data.schoolName
+    });
+    
+    if (!response.success) {
+      throw new Error(response.message || 'Registration failed');
+    }
+    
+    if (response.user) {
+      setUserProfile(response.user);
     }
   };
 
   const signOut = async () => {
-    try {
-      await authService.signOut();
-      setUser(null);
-      setUserProfile(null);
-    } catch (error) {
-      throw error;
-    }
+    await authService.logout();
+    setUserProfile(null);
   };
 
-  const updateUserProfile = async (updates: Partial<UserProfile>) => {
-    if (!user) throw new Error("No authenticated user");
+  const updateUserProfile = async (updates: UserProfile) => {
+    const success = await authService.updateUserProfile(updates);
     
-    try {
-      await authService.updateUserProfile(user.uid, updates);
-      
-      // Update local state
-      if (userProfile) {
-        setUserProfile({ ...userProfile, ...updates });
-      }
-    } catch (error) {
-      throw error;
+    if (!success) {
+      throw new Error('Failed to update profile');
     }
+    
+    setUserProfile(updates);
   };
 
   const value: AuthContextType = {
-    user,
     userProfile,
     loading,
     signIn,

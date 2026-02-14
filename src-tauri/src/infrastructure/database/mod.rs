@@ -7,9 +7,11 @@ pub mod class_repository_impl;
 pub mod student_repository_impl;
 pub mod attendance_repository_impl;
 pub mod settings_repository_impl;
+pub mod user_repository_impl;
 
 pub use json_db::JsonDatabase;
 pub use class_repository_impl::ClassRepositoryImpl;
 pub use student_repository_impl::StudentRepositoryImpl;
 pub use attendance_repository_impl::AttendanceRepositoryImpl;
 pub use settings_repository_impl::SettingsRepositoryImpl;
+pub use user_repository_impl::UserRepositoryImpl;

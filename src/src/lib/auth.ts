@@ -9,7 +9,7 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
-import { UserProfile, createProfileFromUser, detectOrganization } from "./organization";
+import { UserProfile, createProfileFromUser } from "./organization";
 
 export const authService = {
   async signIn(email: string, password: string): Promise<UserProfile> {
