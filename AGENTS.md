@@ -2,214 +2,649 @@
 
 ## Project Overview
 
-EES-AMS (AttendEase) is a modern, cross-platform attendance management system built with Tauri (Rust backend) and React (TypeScript frontend). Designed for educational institutions, it provides features for class management, student management, attendance recording, data statistics, and Google Sheets synchronization.
+EES-AMS (AttendEase) is a modern, cross-platform attendance management system built with Tauri 2.0 (Rust backend) and React 18 (TypeScript frontend). Designed for educational institutions, it provides comprehensive features for class management, student management, attendance recording, data statistics, real-time synchronization, and multi-platform data storage.
 
-### Core Tech Stack
+### Core Features
 
-**Frontend (src/):**
-- React 18 + TypeScript
-- Tailwind CSS 4.x (via Vite plugin)
-- Vite 7.x as build tool
-- Tauri API 2.x for backend communication
+- **Class Management**: Create and manage classes with sections and school years
+- **Student Management**: Add students with unique IDs, Excel import support, assign to classes
+- **Attendance Recording**: Record daily attendance with multiple status options (present, absent, late, excused)
+- **Dashboard Statistics**: Real-time attendance statistics and trend analysis
+- **Hybrid Storage**: Local JSON + Google Drive + Firebase Firestore synchronization
+- **User Authentication**: JWT-based authentication with OAuth2 (Google) support
+- **Auto-Update**: Automatic application updates with Tauri Updater Plugin
+- **Offline-First**: Works offline and syncs when connection is available
+- **Cross-Platform**: Runs on Windows, macOS, and Linux
 
-**Backend (src-tauri/):**
-- Rust 1.70+
-- Tauri 2.0 framework
-- Clean Architecture layered design
-- JSON file storage (no database server required)
-- Tokio async runtime
-- OAuth2 for Google authentication
-- ts-rs for TypeScript type generation
+## Tech Stack
 
-### Architecture Design
+### Frontend (src/)
+- **React 18** with TypeScript
+- **Tailwind CSS 4.x** (using @tailwindcss/vite)
+- **Vite 7.3.1** for build tooling
+- **Firebase 12.9.0** for authentication and realtime data
+- **ESLint 10.0.0** + **Prettier** for code quality
 
-The project uses Clean Architecture layered design:
+### Backend (src-tauri/)
+- **Rust** with Tauri 2.0 framework
+- **Clean Architecture** (Domain/Infrastructure/Application layers)
+- **JSON file storage** for local data persistence
+- **Firebase Firestore** for cloud synchronization
+- **OAuth2** for Google authentication
+- **JWT** (jsonwebtoken) for token-based authentication
+- **Argon2** for secure password hashing
+- **calamine** for Excel import functionality
+- **ts-rs** for automatic TypeScript type generation
+- **Async/await** with Tokio runtime
+
+### Development Tools
+- **Bun** (package manager and runtime)
+- **Husky** for Git hooks
+- **Commitlint** for conventional commits
+- **Lint-staged** for pre-commit checks
+- **Rust Clippy** for Rust linting
+
+## Build, Lint, and Test Commands
+
+### Prerequisites
+- **Bun** (package manager and runtime, recommended)
+- **Rust 1.70+** (install from https://rustup.rs/)
+- **Node.js** (for Vite development)
+
+### Installation
+```bash
+# Install all dependencies
+bun install
+
+# Install Rust dependencies (done automatically on first build)
+cd src-tauri && cargo fetch
+```
+
+### Development Commands (from project root)
+```bash
+# Full development (frontend + backend)
+bun run dev
+
+# Frontend-only development (fast UI iteration)
+bun run dev:frontend
+
+# Backend-only development (requires cargo-watch)
+bun run dev:backend
+
+# Production build
+bun run build
+
+# Install dependencies
+bun run install
+```
+
+### Backend Commands (from src-tauri directory)
+```bash
+# Check compilation without building
+cargo check
+
+# Run linter
+cargo clippy -- -D warnings
+
+# Format code
+cargo fmt
+
+# Run all tests
+cargo test
+
+# Run single test
+cargo test test_name
+
+# Run tests with output
+cargo test -- --nocapture
+
+# Run specific module tests
+cargo test domain::entities::student
+
+# Run importer tests
+cargo test student_importer
+
+# Build release version (optimized)
+cargo build --release
+
+# Run development server
+cargo run
+```
+
+### Frontend Commands (from src directory)
+```bash
+# Start development server
+bun run dev
+
+# TypeScript type checking
+tsc --noEmit
+
+# Run linter
+bun run lint
+
+# Fix lint issues
+bun run lint:fix
+
+# Format code
+bun run format
+
+# Check formatting
+bun run format:check
+
+# Build for production
+bun run build
+
+# Preview production build
+bun run preview
+```
+
+## Code Style Guidelines
+
+### Rust Backend Guidelines
+
+#### Imports and Dependencies
+- Group imports in order: std → external crates → internal modules
+- Use `crate::` prefix for internal modules
+- Prefer explicit imports over glob imports
+```rust
+use std::sync::{Arc, Mutex};
+use serde::{Deserialize, Serialize};
+use crate::domain::entities::Student;
+```
+
+#### Naming Conventions
+- Functions, variables, and files: `snake_case`
+- Types, structs, enums, traits: `PascalCase`
+- Constants: `SCREAMING_SNAKE_CASE`
+- Module names: `snake_case`
+- Tauri commands: `feature_action` pattern
+- Services: `FeatureService` or `FeatureServiceImpl`
+
+#### Error Handling
+- Use `Result<T, DomainError>` for repository returns
+- Use `?` operator for error propagation
+- Domain errors in `domain/errors/mod.rs`
+- Never use `panic!` in production code
+- Use `anyhow` for flexible error context when needed
+```rust
+pub async fn create_student(&self, input: CreateStudentInput) -> DomainResult<i64> {
+    let student = Student::new(/*...*/)?;
+    Ok(self.student_repo.create(student).await?)
+}
+```
+
+#### Async and State Management
+- Use `async/await` for all async operations
+- Shared state via `Arc<Mutex<T>>`
+- Drop MutexGuard before await points to avoid deadlock
+```rust
+{
+    let data = self.db.get_data().lock().unwrap();
+    // Modify data
+}
+// Now we can await safely
+some_async_fn().await
+```
+
+#### Domain Entities
+- All entities must implement `ts-rs::TS` trait for TypeScript type generation
+- Use `#[derive(Debug, Clone, Serialize, Deserialize, TS)]`
+- Include serde attributes for proper JSON handling
+- Add `#[ts(export)]` for types that need to be exported to frontend
+
+#### Repository Pattern
+- Interfaces (traits) in `domain/repositories/`
+- Implementations in `infrastructure/database/`
+- All methods are async
+- Return `DomainResult<T>` type
+- Use Arc for shared ownership across services
+
+#### Service Layer
+- Business logic in `domain/services/`
+- Services depend on repository traits (not implementations)
+- Use dependency injection for better testability
+```rust
+pub struct StudentServiceImpl {
+    student_repo: Arc<dyn StudentRepository>,
+}
+```
+
+### TypeScript Frontend Guidelines
+
+#### Code Organization
+- Components in `src/components/`
+- Pages in `src/pages/`
+- Utilities in `src/lib/`
+- Types in `src/types/`
+- Contexts in `src/contexts/`
+- Hooks in `src/hooks/`
+
+#### Naming Conventions
+- Components: `PascalCase`
+- Functions, variables, files: `camelCase`
+- Constants: `UPPER_SNAKE_CASE`
+- Interfaces: `PascalCase` with `I` prefix optional
+- Custom hooks: `use*` prefix
+
+#### TypeScript Standards
+- Strict mode enabled
+- No implicit `any` types
+- Explicit return types for functions
+- Use interfaces for object shapes
+- Use `type` for unions and aliases
+```typescript
+interface Student {
+  id: number;
+  name: string;
+  classId: number;
+}
+
+const createStudent = async (input: CreateStudentInput): Promise<Student> => {
+  // Implementation
+};
+```
+
+#### React Patterns
+- Functional components with hooks
+- TypeScript props interfaces
+- No class components
+- Avoid `React.FC` (use explicit function signatures)
+```typescript
+interface StudentListProps {
+  students: Student[];
+  onStudentSelect: (id: number) => void;
+}
+
+const StudentList = ({ students, onStudentSelect }: StudentListProps) => {
+  return (
+    <div>
+      {students.map(student => (
+        <StudentCard key={student.id} student={student} onClick={onStudentSelect} />
+      ))}
+    </div>
+  );
+};
+```
+
+#### State Management
+- Local state with `useState`
+- Global state through React Context
+- Async state with custom hooks (e.g., `useUpdateService`)
+- Avoid prop drilling when appropriate
+- Use `useMemo` for expensive computations
+- Use `useCallback` for stable function references
+
+#### Tauri Integration
+- Import from `@tauri-apps/api/core`
+- Use `invoke` for backend calls
+- Handle errors with try-catch
+- Type-safe invocations using generics
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+const loadStudents = async (): Promise<Student[]> => {
+  try {
+    const response = await invoke<Student[]>('student_get_all');
+    return response;
+  } catch (error) {
+    console.error('Failed to load students:', error);
+    return [];
+  }
+};
+```
+
+#### Firebase Integration
+- Initialize Firebase in `src/lib/firebase.ts`
+- Use Firebase Auth for authentication
+- Use Firestore for real-time data sync
+- Handle Firebase errors gracefully
+```typescript
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+```
+
+### Git Workflow
+
+#### Commit Messages
+- Follow conventional commits: `type(scope): description`
+- Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
+- Scopes: `student`, `class`, `attendance`, `auth`, `sync`, `firebase`, `update`
+- Example: `feat(student): add Excel import functionality`
+- Example: `fix(auth): resolve JWT token expiration issue`
+
+#### Pre-commit Hooks
+- Husky runs before commit
+- Lint-staged checks only staged files
+- ESLint and Prettier run automatically
+- Commitlint validates commit message format
+
+#### Branch Organization
+- `main` - production-ready code
+- `develop` - integration branch
+- `feature/*` - feature branches
+- `hotfix/*` - emergency fixes
+- `release/*` - release preparation
+
+## Architecture
+
+### Clean Architecture Layers
 
 ```
 src-tauri/src/
-├── domain/              # Domain layer (business logic core)
-│   ├── entities/        # Domain entities (Class, Student, Attendance, SyncStatus)
-│   ├── services/        # Domain service interfaces and implementations
-│   ├── repositories/    # Repository interfaces (abstract data access)
-│   └── errors/          # Domain error types
-├── infrastructure/      # Infrastructure layer (technical implementation)
-│   ├── database/        # Data persistence (JSON files)
-│   ├── external/        # External services (Google API)
-│   └── config/          # Configuration management
-└── application/         # Application layer (coordination layer)
-    ├── commands/        # Tauri IPC commands (frontend entry points)
-    └── handlers/        # Request handlers (coordinate domain services and infrastructure)
+├── domain/              # Domain Layer (Business Logic)
+│   ├── entities/        # Domain entities (Student, Class, Attendance, User)
+│   ├── repositories/    # Repository interfaces (traits)
+│   ├── services/        # Domain services (StudentService, ClassService, AuthService)
+│   └── errors/          # Domain errors (DomainError, ValidationError)
+├── infrastructure/      # Infrastructure Layer (External Concerns)
+│   ├── database/        # Data persistence (JsonDatabase, Repository implementations)
+│   ├── external/        # External services (Firebase, Google Sync, OAuth2)
+│   ├── config/          # Configuration management
+│   └── importer/        # Data import (Excel import)
+└── application/         # Application Layer (Orchestration)
+    ├── commands/        # Tauri IPC commands
+    └── handlers/        # Request handlers (coordinate between layers)
 ```
 
-**Frontend page structure:**
+### Data Flow
+
 ```
-src/src/
-├── components/          # Reusable UI components (Sidebar)
-├── pages/              # Page components
-│   ├── Dashboard.tsx   # Dashboard (statistics)
-│   ├── Attendance.tsx  # Attendance recording
-│   ├── Classes.tsx     # Class management
-│   ├── Students.tsx    # Student management
-│   └── Settings.tsx    # Settings (Google sync configuration)
-└── lib/                # Frontend utilities (Tauri bindings)
-```
-
-## Building and Running
-
-### Prerequisites
-
-- **Bun** (package manager and runtime, recommended)
-- **Rust 1.70+** (install from https://rustup.rs/)
-- **Firebase project** (for hybrid storage - see docs/FIREBASE_INTEGRATION.md)
-
-### Install Dependencies
-
-```bash
-bun install
+Frontend (React)
+    ↓ invoke()
+Tauri Commands
+    ↓
+Application Handlers
+    ↓
+Domain Services
+    ↓
+Repositories (Infrastructure)
+    ↓
+Database / External Services
 ```
 
-### Environment Configuration
+### Hybrid Storage Architecture
 
-Copy the example environment file and configure your settings:
-
-```bash
-cp .env.example .env
-# Edit .env with your Firebase and Google Drive credentials
+```
+┌─────────────────────────────────────────┐
+│         Application Layer               │
+└─────────────────────────────────────────┘
+                  ↓
+┌─────────────────────────────────────────┐
+│     Hybrid Sync Service                 │
+│  (coordinates between storage layers)   │
+└─────────────────────────────────────────┘
+         ↓              ↓              ↓
+┌──────────────┐ ┌──────────┐ ┌────────────┐
+│ Local JSON   │ │Google    │ │Firebase    │
+│ Storage      │ │Drive     │ │Firestore   │
+│ (Offline)    │ │(Backup)  │ │(Real-time) │
+└──────────────┘ └──────────┘ └────────────┘
 ```
 
-#### Required Environment Variables
+## Database Patterns
 
-```bash
-# Firebase (required for hybrid storage)
-FIREBASE_PROJECT_ID=your-firebase-project-id
-FIREBASE_SERVICE_ACCOUNT_KEY_PATH=./firebase-service-account.json
+### Local JSON Storage
+- Schema definition in `infrastructure/database/schema.rs`
+- Counter IDs for entity relationships
+- Atomic operations using Mutex locks
+- Backup before major changes
+- Automatic backup on startup
 
-# Google Drive (optional)
-GOOGLE_DRIVE_CLIENT_ID=your-google-drive-client-id
-GOOGLE_DRIVE_CLIENT_SECRET=your-google-drive-client-secret
-
-# Application settings
-DATABASE_PATH=./data
-SYNC_INTERVAL_MINUTES=30
+### File Structure
+```
+attendease-data/
+├── attendance-data.json    # Main database (classes, students, attendance)
+├── users.json              # User authentication data
+├── settings.json           # Application settings
+└── backups/                # Automatic backups
+    ├── attendance-data-YYYYMMDD-HHMMSS.json
+    └── ...
 ```
 
-### Development Commands
-
-**Full application development (recommended):**
-```bash
-bun run dev
+### Firebase Firestore Structure
 ```
-This starts both the frontend development server and Tauri development environment.
-
-**Frontend-only development (fast UI iteration):**
-```bash
-bun run dev:frontend
-```
-Only starts the Vite development server, suitable for frontend styling and interaction development.
-
-**Backend-only development (requires cargo-watch):**
-```bash
-bun run dev:backend
-```
-Uses cargo-watch to monitor Rust code changes and automatically recompile.
-
-### Build Production Version
-
-```bash
-bun run build
-```
-This builds the frontend and packages the Tauri application, generating platform-specific installers.
-
-### Frontend-specific Commands
-
-In the `src/` directory:
-```bash
-bun run dev          # Start Vite development server
-bun run build        # TypeScript type check + Vite build
-bun run lint         # ESLint code check
-bun run preview      # Preview production build
+collections/
+├── users/                  # User accounts
+├── classes/                # Class information
+├── students/               # Student records
+├── attendance/             # Attendance records
+└── sync_metadata/          # Sync conflict resolution
 ```
 
-## Development Conventions
+## Authentication & Security
 
-### Code Style
+### User Authentication
+- JWT-based authentication using `jsonwebtoken`
+- Password hashing with Argon2
+- OAuth2 flow for Google authentication
+- Token validation and refresh
+- Session management
 
-**Rust:**
-- Follow Rust official code style (rustfmt)
-- Use `cargo clippy` for additional checks
-- All domain entities implement `ts-rs::TS` trait to generate TypeScript types
-- Use `async/await` for async operations
-- Use `Arc` and `Mutex` for shared state
+### Firebase Security Rules
+- Defined in `docs/FIREBASE_INTEGRATION.md`
+- User-scoped data access
+- Authentication required for writes
+- Public read for certain collections
 
-**TypeScript:**
-- Enable strict mode (`strict: true`)
-- Enable all check options (`noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`)
-- Use TypeScript strict type checking
-- React components use functional components and Hooks
+### Security Guidelines
+- Never commit secrets or API keys
+- Use environment variables for configuration
+- Validate all user inputs on both client and server
+- Sanitize data before storage
+- Use prepared statements for database operations (when applicable)
+- Implement rate limiting for sensitive operations
+- Enable HTTPS in production
+- Regular security audits and dependency updates
 
-### Data Persistence
+## Features & Integrations
 
-- Use JSON file storage in app data directory
-- Data file path: `{app_data_dir}/attendease/`
-- Abstract data access through Repository Pattern
+### Excel Import
+- Uses `calamine` crate for Excel file parsing
+- Supports `.xls` and `.xlsx` formats
+- Validates student data before import
+- Bulk import with progress tracking
+- Error reporting for invalid records
+- Tests in `infrastructure/importer/student_importer_tests.rs`
 
-### Frontend-Backend Communication
-
-- Communicate via Tauri IPC commands
-- All commands defined in `src-tauri/src/application/commands.rs`
-- Command naming follows `feature_action` format (e.g., `class_create`, `student_get_all`)
-- Use TypeScript types to ensure type safety
-
-### Google Sheets Integration
-
+### Google Drive Integration
 - OAuth2 authentication flow
-- Credentials stored in settings (JSON format)
-- Supports offline mode, sync happens when connection is restored
-- Sync status tracking (SyncStatus)
+- File upload and download
+- Backup and restore functionality
+- Conflict resolution
+- Sync status tracking
 
-### Update Mechanism
+### Firebase Integration
+- Real-time data synchronization
+- Firestore for cloud storage
+- Firebase Auth for authentication
+- Offline support with local cache
+- Conflict resolution strategies
+- See `docs/FIREBASE_INTEGRATION.md` for details
 
-- Use Tauri plugin `tauri_plugin_updater`
-- Automatic update checking
-- Supports silent update downloads
-- Update endpoint configured in `tauri.conf.json`
+### Auto-Update System
+- Tauri Updater Plugin integration
+- Automatic update checking (every 4 hours)
+- User notification for available updates
+- Download progress tracking
+- Signature verification (production)
+- Update server configuration in `tauri.conf.json`
+- See `docs/AUTO_UPDATE_SETUP.md` for details
 
-## Tauri Configuration
+## Performance Considerations
 
-- Application identifier: `com.attendease.app`
-- Window size: 1400x900 (minimum 1024x700)
-- Development server: `http://localhost:5173`
-- CSP policy: Restricted to same-origin and inline styles
-- Build targets: MSI, NSIS, DEB, AppImage, DMG, APP
+### Backend
+- Batch database operations when possible
+- Use pagination for large datasets
+- Lazy load non-critical data
+- Cache frequently accessed data
+- Optimize SQL/JSON queries
+- Use `Arc` for shared state to avoid cloning
+- Release Mutex locks before async operations
 
-## Type System
+### Frontend
+- Optimize React render cycles with `useMemo`/`useCallback`
+- Lazy load components with React.lazy()
+- Code splitting with dynamic imports
+- Virtualize long lists
+- Debounce search inputs
+- Use Web Workers for heavy computations
 
-**Backend entity types:**
-- `Class`: Class (ID, name, section, school year)
-- `Student`: Student (ID, name, class ID)
-- `Attendance`: Attendance record (ID, student ID, date, status)
-- `AttendanceStatus`: Attendance status (Present, Absent, Late, Excused)
-- `SyncStatus`: Sync status (Synced, Pending, Failed)
+### Release Build Optimization
+```toml
+[profile.release]
+codegen-units = 1      # Compile slower but better optimized
+lto = true            # Link time optimization
+strip = true          # Strip symbols from binary
+panic = "abort"       # Abort on panic (reduces binary size)
+```
 
-All entity types are automatically generated as corresponding TypeScript types via `ts-rs`, ensuring frontend-backend type consistency.
+## Testing Strategy
+
+### Backend Tests
+- Unit tests for business logic in `domain/`
+- Integration tests for repository operations
+- Mock external dependencies (Firebase, Google API)
+- Test error paths and edge cases
+- Excel import tests in `infrastructure/importer/`
+- Run with: `cargo test`
+
+### Frontend Tests
+- Component tests with React Testing Library
+- Integration tests for user flows
+- Mock Tauri API calls in tests
+- Test loading and error states
+- (To be implemented with React Testing Library)
+
+### Test Commands
+```bash
+# Run all Rust tests
+cargo test
+
+# Run tests with output
+cargo test -- --nocapture
+
+# Run specific test module
+cargo test student_importer
+
+# Run tests for specific function
+cargo test test_excel_import_valid_data
+```
 
 ## Development Workflow
 
-1. Modify domain entities or business logic → Update `src-tauri/src/domain/`
-2. Add new features → Define commands in `src-tauri/src/application/commands.rs`
-3. Implement frontend UI → In `src/src/pages/` or `src/src/components/`
-4. Call backend commands via Tauri API → `import { invoke } from '@tauri-apps/api/core'`
+1. Create feature branch from `develop`
+2. Implement backend (domain → repository → handler → command)
+3. Add TypeScript type generation with `ts-rs` attributes
+4. Implement frontend components and pages
+5. Test integration between frontend and backend
+6. Run formatters and linters
+7. Update documentation if needed
+8. Submit PR for code review
+
+## Configuration
+
+### Environment Variables
+Create `.env` file from `.env.example`:
+```bash
+# Firebase Configuration
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_SERVICE_ACCOUNT_KEY_PATH=./firebase-service-account.json
+FIREBASE_API_KEY=your-firebase-web-api-key
+FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+FIREBASE_DATABASE_URL=https://your-project.firebaseio.com
+FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+
+# Google Drive Configuration
+GOOGLE_DRIVE_CLIENT_ID=your-google-drive-client-id
+GOOGLE_DRIVE_CLIENT_SECRET=your-google-drive-client-secret
+GOOGLE_DRIVE_REDIRECT_URL=http://localhost:8080/callback
+
+# JWT Configuration
+JWT_SECRET=your-jwt-secret-key-change-in-production
+
+# Database Configuration
+DATABASE_PATH=./data
+SYNC_INTERVAL_MINUTES=30
+
+# Application Configuration
+APP_ENV=development
+LOG_LEVEL=debug
+```
+
+### Tauri Configuration
+- App configuration in `src-tauri/tauri.conf.json`
+- Window settings (size, minimum size, decorations)
+- Security policies (CSP)
+- Updater endpoints and public key
+- Bundle targets (MSI, NSIS, DEB, AppImage, DMG, APP)
 
 ## Debugging
 
-**Backend debugging:**
-- View Tauri dev tools console
+### Backend
 - Use `println!` or `eprintln!` for debug output
+- Tauri dev tools console
+- Rust debugger with `cargo-debug` or VS Code
+- Enable logging with `env_logger::init()`
 
-**Frontend debugging:**
-- Browser developer tools (dev mode)
-- React DevTools extension
+### Frontend
+- Browser developer tools
+- React DevTools
+- Tauri console in development mode
+- Network tab for API calls
+- Application tab for local storage
 
-## License
+### Common Issues
 
-MIT License
+#### Build Errors
+- Check Rust version: `rustc --version`
+- Update dependencies: `cargo update`
+- Clean build: `cargo clean && cargo build`
+
+#### Runtime Errors
+- Check console for error messages
+- Verify Firebase configuration
+- Check file permissions
+- Ensure all environment variables are set
+
+#### Sync Issues
+- Verify Firebase security rules
+- Check network connectivity
+- Review sync logs for conflicts
+- Ensure authentication tokens are valid
+
+## Documentation
+
+- **FIREBASE_INTEGRATION.md**: Firebase setup and configuration guide
+- **AUTO_UPDATE_SETUP.md**: Auto-update system configuration
+- **README.md**: Project overview and getting started
+- **AGENTS.md**: This file - development guidelines
+- **GITHUB_CODE_REVIEW_WORKFLOW.md**: GitHub code review workflow and best practices
+
+## Support and Maintenance
+
+### Regular Maintenance Tasks
+- Update dependencies monthly
+- Review and address security vulnerabilities
+- Test auto-update flow
+- Verify Firebase sync functionality
+- Check database integrity
+- Update documentation
+
+### Version Management
+- Follow semantic versioning (MAJOR.MINOR.PATCH)
+- Update version in `src-tauri/Cargo.toml`
+- Update version in `tauri.conf.json`
+- Update CHANGELOG.md for each release
+- Tag releases in Git
+
+### Backup and Recovery
+- Automatic backups created on startup
+- Manual export functionality
+- Restore from Google Drive
+- Restore from Firebase Firestore
+- Import from Excel backup files

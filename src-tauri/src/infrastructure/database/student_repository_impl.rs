@@ -8,6 +8,7 @@ use crate::domain::errors::{DomainError, DomainResult};
 use crate::infrastructure::database::schema::StudentRecord;
 use crate::infrastructure::database::JsonDatabase;
 
+#[derive(Clone)]
 pub struct StudentRepositoryImpl {
     db: JsonDatabase,
 }
@@ -48,7 +49,8 @@ impl StudentRepository for StudentRepositoryImpl {
         last_name: String,
         class_id: Option<i64>,
     ) -> DomainResult<i64> {
-        let mut data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let mut data = db_arc.lock().unwrap();
         
         if data.students.iter().any(|s| s.student_id == student_id) {
             return Err(DomainError::AlreadyExists(format!("Student ID {} already exists", student_id)));
@@ -85,7 +87,8 @@ impl StudentRepository for StudentRepositoryImpl {
     }
 
     async fn get_by_id(&self, id: i64) -> DomainResult<Student> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         data.students.iter()
             .find(|s| s.id == id)
             .map(Self::record_to_entity)
@@ -93,7 +96,8 @@ impl StudentRepository for StudentRepositoryImpl {
     }
 
     async fn get_all(&self) -> DomainResult<Vec<Student>> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         let mut students: Vec<Student> = data.students.iter()
             .map(Self::record_to_entity)
             .collect();
@@ -105,7 +109,8 @@ impl StudentRepository for StudentRepositoryImpl {
     }
 
     async fn get_by_class(&self, class_id: i64) -> DomainResult<Vec<Student>> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         let mut students: Vec<Student> = data.students.iter()
             .filter(|s| s.class_id == Some(class_id))
             .map(Self::record_to_entity)
@@ -118,14 +123,16 @@ impl StudentRepository for StudentRepositoryImpl {
     }
 
     async fn get_by_student_id(&self, student_id: &str) -> DomainResult<Option<Student>> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         Ok(data.students.iter()
             .find(|s| s.student_id == student_id)
             .map(Self::record_to_entity))
     }
 
     async fn delete(&self, id: i64) -> DomainResult<()> {
-        let mut data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let mut data = db_arc.lock().unwrap();
         let original_len = data.students.len();
         data.students.retain(|s| s.id != id);
         
@@ -139,7 +146,8 @@ impl StudentRepository for StudentRepositoryImpl {
     }
 
     async fn student_id_exists(&self, student_id: &str) -> DomainResult<bool> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         Ok(data.students.iter().any(|s| s.student_id == student_id))
     }
 
@@ -159,7 +167,8 @@ impl StudentRepository for StudentRepositoryImpl {
         address: Option<String>,
         class_id: Option<i64>,
     ) -> DomainResult<i64> {
-        let mut data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let mut data = db_arc.lock().unwrap();
 
         let now = chrono::Utc::now().to_rfc3339();
         data.counters.students += 1;
@@ -192,12 +201,14 @@ impl StudentRepository for StudentRepositoryImpl {
     }
 
     async fn lrn_exists(&self, lrn: &str) -> DomainResult<bool> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         Ok(data.students.iter().any(|s| s.lrn.as_ref() == Some(&lrn.to_string())))
     }
 
     async fn count_by_class(&self, class_id: i64) -> DomainResult<i32> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         Ok(data.students.iter()
             .filter(|s| s.class_id == Some(class_id))
             .count() as i32)

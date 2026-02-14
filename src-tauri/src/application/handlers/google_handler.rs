@@ -1,11 +1,10 @@
 // Google Handler
 // Application-level handler for Google sync operations
 
-use crate::infrastructure::external::{GoogleSync, GoogleCredentials, TokenData};
+#![allow(dead_code)]
+
+use crate::infrastructure::external::{GoogleSync, GoogleCredentials};
 use crate::domain::repositories::SettingsRepository;
-use crate::domain::entities::attendance::Attendance;
-use crate::domain::entities::class::Class;
-use crate::domain::entities::student::Student;
 use crate::domain::services::{AttendanceService, ClassService};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -32,6 +31,7 @@ impl<T> ApiResponse<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn success_with_id(id: i64) -> Self {
         ApiResponse {
             success: true,
@@ -98,8 +98,10 @@ impl<SR: SettingsRepository, AS: AttendanceService, CS: ClassService>
     }
 
     pub async fn save_credentials(&self, credentials: GoogleCredentials) -> ApiResponse<()> {
-        let mut sync = self.google_sync.lock().unwrap();
-        sync.set_credentials(credentials.clone());
+        {
+            let mut sync = self.google_sync.lock().unwrap();
+            sync.set_credentials(credentials.clone());
+        }
         
         if let Ok(json) = serde_json::to_string(&credentials) {
             let _ = self.settings_repo.set("google_credentials".to_string(), json).await;
@@ -122,67 +124,67 @@ impl<SR: SettingsRepository, AS: AttendanceService, CS: ClassService>
     }
 
     pub async fn handle_callback(&self, code: String) -> ApiResponse<bool> {
+        // Clone the sync to avoid holding MutexGuard across .await
         let sync = self.google_sync.lock().unwrap().clone();
-        drop(sync);
-        
-        let sync_ref = self.google_sync.lock().unwrap();
-        match sync_ref.exchange_code(code).await {
-            Ok(token) => {
-                if let Ok(json) = serde_json::to_string(&token) {
-                    let _ = self.settings_repo.set("google_token".to_string(), json).await;
-                }
-                ApiResponse::success(true)
-            }
-            Err(e) => ApiResponse::error(e),
+        let token = match sync.exchange_code(code).await {
+            Ok(token) => token,
+            Err(e) => return ApiResponse::error(e),
+        };
+
+        // Save token back into the shared state
+        self.google_sync.lock().unwrap().set_token(token.clone());
+
+        if let Ok(json) = serde_json::to_string(&token) {
+            let _ = self.settings_repo.set("google_token".to_string(), json).await;
         }
+        ApiResponse::success(true)
     }
 
     pub async fn logout(&self) -> ApiResponse<()> {
-        let sync = self.google_sync.lock().unwrap();
-        sync.logout();
+        {
+            let sync = self.google_sync.lock().unwrap();
+            sync.logout();
+        }
         let _ = self.settings_repo.set("google_token".to_string(), "".to_string()).await;
         ApiResponse::success_empty()
     }
 
     pub async fn sync(&self) -> ApiResponse<bool> {
-        let sync_guard = self.google_sync.lock().unwrap();
-        
-        if sync_guard.get_is_syncing() {
-            return ApiResponse::error("Already syncing".to_string());
+        {
+            let sync_guard = self.google_sync.lock().unwrap();
+            
+            if sync_guard.get_is_syncing() {
+                return ApiResponse::error("Already syncing".to_string());
+            }
+            
+            if !sync_guard.is_authenticated() {
+                return ApiResponse::error("Not authenticated".to_string());
+            }
+            
+            sync_guard.set_syncing(true);
+            sync_guard.set_error(None);
         }
-        
-        if !sync_guard.is_authenticated() {
-            return ApiResponse::error("Not authenticated".to_string());
-        }
-        
-        sync_guard.set_syncing(true);
-        sync_guard.set_error(None);
-        drop(sync_guard);
 
         let sync_result = self.perform_sync().await;
 
-        let sync = self.google_sync.lock().unwrap();
-        sync.set_syncing(false);
-        
-        match sync_result {
-            Ok(_) => ApiResponse::success(true),
-            Err(e) => {
-                sync.set_error(Some(e.clone()));
-                ApiResponse::error(e)
+        {
+            let sync = self.google_sync.lock().unwrap();
+            sync.set_syncing(false);
+            
+            match sync_result {
+                Ok(_) => ApiResponse::success(true),
+                Err(e) => {
+                    sync.set_error(Some(e.clone()));
+                    ApiResponse::error(e)
+                }
             }
         }
     }
 
     async fn perform_sync(&self) -> Result<(), String> {
-        // Get root folder
-        let sync = self.google_sync.lock().unwrap();
-        let root_folder_result = sync.get_or_create_folder("Attendance Management System", None).await;
-        drop(sync);
-
-        let root_folder_id = match root_folder_result {
-            Ok(id) => id,
-            Err(e) => return Err(e),
-        };
+        // Clone sync to avoid holding MutexGuard across .await
+        let sync = self.google_sync.lock().unwrap().clone();
+        let root_folder_id = sync.get_or_create_folder("Attendance Management System", None).await?;
 
         let classes = match self.class_service.get_all_classes().await {
             Ok(c) => c,
@@ -195,11 +197,8 @@ impl<SR: SettingsRepository, AS: AttendanceService, CS: ClassService>
                 class.section.as_ref().map(|s| format!(" - {}", s)).unwrap_or_default()
             );
 
-            let sync = self.google_sync.lock().unwrap();
-            let class_folder_result = sync.get_or_create_folder(&class_name, Some(&root_folder_id)).await;
-            drop(sync);
-
-            let class_folder_id = match class_folder_result {
+            let sync = self.google_sync.lock().unwrap().clone();
+            let class_folder_id = match sync.get_or_create_folder(&class_name, Some(&root_folder_id)).await {
                 Ok(id) => id,
                 Err(_) => continue,
             };
@@ -207,16 +206,15 @@ impl<SR: SettingsRepository, AS: AttendanceService, CS: ClassService>
             let month_year = Utc::now().format("%B %Y").to_string();
             let spreadsheet_key = format!("spreadsheet_{}_{}", class.id, month_year.replace(" ", "_"));
             
-            let spreadsheet_id = self.settings_repo.get(&spreadsheet_key).await?;
+            let mut spreadsheet_id = self.settings_repo.get(&spreadsheet_key).await.map_err(|e| e.to_string())?;
 
             if spreadsheet_id.is_none() {
-                let sync = self.google_sync.lock().unwrap();
+                let sync = self.google_sync.lock().unwrap().clone();
                 let title = format!("Attendance - {}", month_year);
                 let result = sync.create_spreadsheet(&title, Some(&class_folder_id)).await;
-                drop(sync);
 
                 if let Ok(id) = result {
-                    let _ = self.settings_repo.set(spreadsheet_key.clone(), id).await;
+                    let _ = self.settings_repo.set(spreadsheet_key.clone(), id.clone()).await;
                     spreadsheet_id = Some(id);
                 }
             }
@@ -242,9 +240,8 @@ impl<SR: SettingsRepository, AS: AttendanceService, CS: ClassService>
                     ]
                 }).collect();
 
-                let sync = self.google_sync.lock().unwrap();
+                let sync = self.google_sync.lock().unwrap().clone();
                 let append_result = sync.append_sheet_values(&sheet_id, "Attendance!A:E", formatted_records).await;
-                drop(sync);
 
                 if append_result.is_ok() {
                     let record_ids: Vec<i64> = unsynced.iter().map(|r| r.id).collect();
@@ -258,21 +255,51 @@ impl<SR: SettingsRepository, AS: AttendanceService, CS: ClassService>
     }
 
     pub async fn get_sync_status(&self) -> ApiResponse<SyncStatus> {
-        let sync = self.google_sync.lock().unwrap();
         let unsynced = match self.attendance_service.get_unsynced_records().await {
             Ok(r) => r,
             Err(_) => vec![],
         };
         let last_sync = self.settings_repo.get("last_sync_time").await.ok().flatten();
 
+        let (is_syncing, error) = {
+            let sync = self.google_sync.lock().unwrap();
+            (sync.get_is_syncing(), sync.get_error())
+        };
+
         let status = SyncStatus {
             is_online: true,
             last_sync_time: last_sync,
             pending_records: unsynced.len() as i32,
-            is_syncing: sync.get_is_syncing(),
-            error: sync.get_error(),
+            is_syncing,
+            error,
         };
 
         ApiResponse::success(status)
+    }
+
+    /// Hybrid sync with Firebase backup and Google Sheets
+    #[allow(dead_code)]
+    pub async fn sync_with_data(&self, data: serde_json::Value) -> ApiResponse<bool> {
+        // First save to Firebase as backup
+        if let Err(e) = crate::infrastructure::external::firebase::save_data(&data).await {
+            eprintln!("Warning: Failed to save to Firebase backup: {}", e);
+        }
+
+        // Then try to sync to Google Sheets if authenticated
+        let sync_guard = self.google_sync.lock().unwrap();
+        
+        if sync_guard.is_authenticated() {
+            drop(sync_guard);
+            let response = self.sync().await;
+            if response.success {
+                response
+            } else {
+                // If Google sync fails, we still have the Firebase backup
+                ApiResponse::error(format!("Google sync failed, data saved to Firebase backup: {}", response.error.unwrap_or_default()))
+            }
+        } else {
+            // Not authenticated to Google, but we have Firebase backup
+            ApiResponse::success(false)
+        }
     }
 }

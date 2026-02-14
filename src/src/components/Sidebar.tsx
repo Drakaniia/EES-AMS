@@ -1,6 +1,7 @@
 import { FC } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
+
 type Page = 'dashboard' | 'attendance' | 'classes' | 'students' | 'settings'
 
 interface SidebarProps {
@@ -15,7 +16,8 @@ interface NavItem {
 }
 
 const Sidebar: FC<SidebarProps> = ({ currentPage, onNavigate }) => {
-    const { userProfile } = useAuth()
+    const { userProfile, signOut } = useAuth()
+
     const navItems: NavItem[] = [
         {
             id: 'dashboard',
@@ -89,8 +91,8 @@ const Sidebar: FC<SidebarProps> = ({ currentPage, onNavigate }) => {
                         key={item.id}
                         onClick={() => onNavigate(item.id)}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${currentPage === item.id
-                                ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border border-blue-500/30'
-                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border border-blue-500/30'
+                            : 'text-gray-400 hover:text-white hover:bg-white/5'
                             }`}
                     >
                         {item.icon}
@@ -99,9 +101,9 @@ const Sidebar: FC<SidebarProps> = ({ currentPage, onNavigate }) => {
                 ))}
             </nav>
 
-{/* Profile Section */}
+            {/* Profile Section */}
             {userProfile && (
-                <div className="p-4 border-t border-white/10">
+                <div className="p-4 border-t border-white/10 space-y-3">
                     <div className="glass rounded-xl p-4">
                         <div className="flex items-center gap-3 mb-3">
                             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
@@ -122,11 +124,10 @@ const Sidebar: FC<SidebarProps> = ({ currentPage, onNavigate }) => {
                         </div>
                         <button
                             onClick={() => onNavigate('settings')}
-                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
-                                currentPage === 'settings'
-                                    ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border border-blue-500/30'
-                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                            }`}
+                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${currentPage === 'settings'
+                                ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border border-blue-500/30'
+                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                }`}
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -134,6 +135,17 @@ const Sidebar: FC<SidebarProps> = ({ currentPage, onNavigate }) => {
                             Profile Settings
                         </button>
                     </div>
+
+                    {/* Logout Button */}
+                    <button
+                        onClick={signOut}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all duration-200"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        Logout
+                    </button>
                 </div>
             )}
 

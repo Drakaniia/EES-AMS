@@ -4,7 +4,7 @@
 use crate::application::handlers::student_handler::{CreateStudentFromSF1Input, ImportResult};
 use crate::domain::entities::student::Student;
 use anyhow::Result;
-use calamine::{open_workbook, DataType, Reader, Xls, Xlsx};
+use calamine::{open_workbook, Data, Reader, Xls, Xlsx, Range};
 use std::path::Path;
 
 pub struct StudentImporter;
@@ -26,35 +26,41 @@ impl StudentImporter {
             return Err(anyhow::anyhow!("File not found: {}", file_path.display()));
         }
 
-        // Try to open as XLS first, then XLSX
-        let workbook: Result<Box<dyn Reader<_>>, _> =
-            match file_path.extension().and_then(|s| s.to_str()) {
-                Some("xls") => {
-                    open_workbook::<Xls<_>>(file_path).map(|wb| Box::new(wb) as Box<dyn Reader<_>>)
-                }
-                Some("xlsx") => {
-                    open_workbook::<Xlsx<_>>(file_path).map(|wb| Box::new(wb) as Box<dyn Reader<_>>)
-                }
-                _ => {
-                    return Err(anyhow::anyhow!(
-                        "Unsupported file format. Only .xls and .xlsx files are supported."
-                    ))
-                }
-            };
+        // Try to determine file type and open appropriately
+        let file_ext = file_path.extension().and_then(|s| s.to_str()).unwrap_or("");
+        let range: Range<Data>;
 
-        let mut workbook =
-            workbook.map_err(|e| anyhow::anyhow!("Failed to open workbook: {}", e))?;
-
-        let sheet_names = workbook.sheet_names().to_vec();
-        if sheet_names.is_empty() {
-            return Err(anyhow::anyhow!("No worksheets found in the workbook"));
+        match file_ext {
+            "xlsx" => {
+                let mut workbook: Xlsx<_> = open_workbook(file_path)
+                    .map_err(|e| anyhow::anyhow!("Failed to open XLSX workbook: {}", e))?;
+                let sheet_names = workbook.sheet_names().to_vec();
+                if sheet_names.is_empty() {
+                    return Err(anyhow::anyhow!("No worksheets found in the workbook"));
+                }
+                let sheet_name = &sheet_names[0];
+                range = workbook
+                    .worksheet_range(sheet_name)
+                    .map_err(|e| anyhow::anyhow!("Cannot read worksheet {}: {}", sheet_name, e))?;
+            }
+            "xls" => {
+                let mut workbook: Xls<_> = open_workbook(file_path)
+                    .map_err(|e| anyhow::anyhow!("Failed to open XLS workbook: {}", e))?;
+                let sheet_names = workbook.sheet_names().to_vec();
+                if sheet_names.is_empty() {
+                    return Err(anyhow::anyhow!("No worksheets found in the workbook"));
+                }
+                let sheet_name = &sheet_names[0];
+                range = workbook
+                    .worksheet_range(sheet_name)
+                    .map_err(|e| anyhow::anyhow!("Cannot read worksheet {}: {}", sheet_name, e))?;
+            }
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Unsupported file format. Only .xls and .xlsx files are supported."
+                ))
+            }
         }
-
-        // Use the first worksheet
-        let sheet_name = &sheet_names[0];
-        let range = workbook
-            .worksheet_range(sheet_name)
-            .ok_or_else(|| anyhow::anyhow!("Cannot read worksheet: {}", sheet_name))??;
 
         let mut imported_students = Vec::new();
         let mut errors = Vec::new();
@@ -71,7 +77,7 @@ impl StudentImporter {
             }
 
             // Skip empty rows
-            if row.iter().all(|cell| cell.is_empty()) {
+            if row.iter().all(|cell| matches!(cell, Data::Empty)) {
                 continue;
             }
 
@@ -111,7 +117,10 @@ impl StudentImporter {
     }
 
     /// Analyze columns to identify which column contains what data
-    fn analyze_columns(&self, range: &calamine::Range<DataType>) -> Result<ColumnMapping> {
+    fn analyze_columns(
+        &self,
+        range: &Range<Data>,
+    ) -> Result<ColumnMapping> {
         let mut mapping = ColumnMapping::default();
 
         // Look at the first few rows to identify column types
@@ -122,10 +131,11 @@ impl StudentImporter {
         }
 
         // Try to identify columns by header names in first row
-        if let Some(header_row) = sample_rows.first().as_ref() {
+        if let Some(header_row) = sample_rows.first() {
             for (col_idx, cell) in header_row.iter().enumerate() {
-                if let DataType::String(header_text) = cell {
-                    let header = header_text.to_lowercase().trim();
+                if let Data::String(header_text) = cell {
+                    let header = header_text.to_lowercase();
+                    let header = header.trim();
 
                     // Match column headers to fields
                     if header.contains("lrn") || header.contains("learner") {
@@ -173,17 +183,20 @@ impl StudentImporter {
     /// Infer name columns by analyzing data patterns
     fn infer_name_columns(
         &self,
-        sample_rows: &[&[DataType]],
+        sample_rows: &[&[Data]],
         mapping: &mut ColumnMapping,
     ) -> Result<()> {
-        // Try to identify name columns by looking for patterns like "Last, First Middle"
-        for (col_idx, column_cells) in sample_rows[0].iter().enumerate() {
-            if let DataType::String(text) = column_cells {
-                // Check if this looks like a "Last, First" format
-                if text.contains(',') && mapping.last_name.is_none() {
-                    mapping.last_name = Some(col_idx);
-                } else if !text.contains(',') && mapping.first_name.is_none() && text.len() > 2 {
-                    mapping.first_name = Some(col_idx);
+        // Only infer if there are rows with data
+        if !sample_rows.is_empty() {
+            for (col_idx, column_cells) in sample_rows[0].iter().enumerate() {
+                if let Data::String(text) = column_cells {
+                    // Check if this looks like a "Last, First" format
+                    if text.contains(',') && mapping.last_name.is_none() {
+                        mapping.last_name = Some(col_idx);
+                    } else if !text.contains(',') && mapping.first_name.is_none() && text.len() > 2
+                    {
+                        mapping.first_name = Some(col_idx);
+                    }
                 }
             }
         }
@@ -193,7 +206,7 @@ impl StudentImporter {
     /// Parse a single row into student input
     fn parse_student_row(
         &self,
-        row: &[DataType],
+        row: &[Data],
         mapping: &ColumnMapping,
         class_id: Option<i64>,
     ) -> Result<CreateStudentFromSF1Input> {
@@ -201,28 +214,28 @@ impl StudentImporter {
             col_idx
                 .and_then(|idx| row.get(idx))
                 .and_then(|cell| match cell {
-                    DataType::String(s) => Some(s.trim().to_string()),
-                    DataType::Float(f) => Some(f.to_string()),
-                    DataType::Int(i) => Some(i.to_string()),
+                    Data::String(s) => Some(s.trim().to_string()),
+                    Data::Float(f) => Some(f.to_string()),
+                    Data::Int(i) => Some(i.to_string()),
                     _ => None,
                 })
-                .filter(|s| !s.is_empty())
+                .filter(|s: &String| !s.is_empty())
         };
 
         let get_i32 = |col_idx: Option<usize>| -> Option<i32> {
             col_idx
                 .and_then(|idx| row.get(idx))
                 .and_then(|cell| match cell {
-                    DataType::Int(i) => Some(*i as i32),
-                    DataType::Float(f) => Some(*f as i32),
-                    DataType::String(s) => s.trim().parse().ok(),
+                    Data::Int(i) => Some(*i as i32),
+                    Data::Float(f) => Some(*f as i32),
+                    Data::String(s) => s.trim().parse().ok(),
                     _ => None,
                 })
         };
 
         // Parse name from "Last, First Middle" format if needed
         let (last_name, first_name, middle_name) =
-            if let (Some(name_col_idx), Some(combined_name)) =
+            if let (Some(_name_col_idx), Some(combined_name)) =
                 (mapping.last_name, get_string(mapping.last_name))
             {
                 if combined_name.contains(',') {

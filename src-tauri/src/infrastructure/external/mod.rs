@@ -6,5 +6,4 @@ pub mod firebase;
 // pub mod hybrid_sync; // Temporarily disabled - depends on GoogleDriveService
 
 pub use google_sync::{GoogleSync, GoogleCredentials, TokenData};
-pub use firebase::{FirebaseService, SyncResult, ConflictInfo, SyncMetadata};
 // pub use hybrid_sync::{HybridSyncService, SyncConfig, SyncSource, SyncDirection, ConflictResolutionStrategy};

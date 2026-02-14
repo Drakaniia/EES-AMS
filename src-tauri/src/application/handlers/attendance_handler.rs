@@ -1,9 +1,10 @@
 // Attendance Handler
 // Application-level handler for attendance operations
 
+#![allow(dead_code)]
+
 use crate::domain::services::AttendanceService;
 use crate::domain::entities::attendance::{Attendance, AttendanceStatus, AttendanceStats};
-use crate::domain::entities::student::Student;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -45,6 +46,7 @@ impl<T> ApiResponse<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn success_empty() -> Self {
         ApiResponse {
             success: true,
@@ -92,7 +94,7 @@ impl<S: AttendanceService> AttendanceHandler<S> {
         }
     }
 
-    pub async fn get_by_class_and_date(&self, class_id: i64, date: String) -> ApiResponse<Attendance> {
+    pub async fn get_by_class_and_date(&self, class_id: i64, date: String) -> ApiResponse<Vec<Attendance>> {
         ApiResponse::from_domain_result(self.service.get_attendance_by_class_and_date(class_id, &date).await)
     }
 
@@ -100,7 +102,7 @@ impl<S: AttendanceService> AttendanceHandler<S> {
         ApiResponse::from_domain_result(self.service.get_today_stats(class_id).await)
     }
 
-    pub async fn get_unsynced(&self) -> ApiResponse<Attendance> {
+    pub async fn get_unsynced(&self) -> ApiResponse<Vec<Attendance>> {
         ApiResponse::from_domain_result(self.service.get_unsynced_records().await)
     }
 }

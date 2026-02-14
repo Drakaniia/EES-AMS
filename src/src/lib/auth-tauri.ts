@@ -116,6 +116,9 @@ export const authService = {
       }
       return user
     } catch (error) {
+      // Silently handle validation failures
+      // User may not have an account yet - that's OK
+      console.debug('Token validation failed:', error instanceof Error ? error.message : error)
       return null
     }
   },
@@ -128,6 +131,9 @@ export const authService = {
       }
       return user
     } catch (error) {
+      // Silently handle getting current user failures
+      // This is normal for new installations
+      console.debug('Get current user failed:', error instanceof Error ? error.message : error)
       return null
     }
   },
@@ -137,7 +143,7 @@ export const authService = {
       await invoke('auth_update_profile', { profile })
       localStorage.setItem('user_profile', JSON.stringify(profile))
       return true
-    } catch (error) {
+    } catch {
       return false
     }
   },
@@ -145,7 +151,7 @@ export const authService = {
   async logout(): Promise<void> {
     try {
       await invoke('auth_logout')
-    } catch (error) {
+    } catch {
       // Continue with local logout even if backend call fails
     } finally {
       localStorage.removeItem('auth_token')

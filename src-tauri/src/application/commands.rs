@@ -2,7 +2,7 @@
 // IPC bridge between frontend and backend
 
 use tauri::State;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 // AppState for dependency injection
 pub struct AppState {
@@ -32,7 +32,7 @@ pub struct AppState {
             crate::infrastructure::database::ClassRepositoryImpl
         >
     >>,
-    pub auth_handler: Arc<Mutex<crate::application::handlers::AuthHandler>>,
+    // pub auth_handler: Arc<Mutex<crate::application::handlers::AuthHandler>>,
 }
 
 // ========================================
@@ -43,23 +43,23 @@ pub struct AppState {
 pub async fn class_create(
     input: crate::application::handlers::class_handler::CreateClassInput,
     state: State<'_, AppState>,
-) -> crate::application::handlers::class_handler::ApiResponse<i64> {
-    state.class_handler.create_class(input).await
+) -> Result<crate::application::handlers::class_handler::ApiResponse<i64>, String> {
+    Ok(state.class_handler.create_class(input).await)
 }
 
 #[tauri::command]
 pub async fn class_get_all(
     state: State<'_, AppState>,
-) -> crate::application::handlers::class_handler::ApiResponse<crate::domain::entities::class::Class> {
-    state.class_handler.get_all_classes().await
+) -> Result<crate::application::handlers::class_handler::ApiResponse<Vec<crate::domain::entities::class::Class>>, String> {
+    Ok(state.class_handler.get_all_classes().await)
 }
 
 #[tauri::command]
 pub async fn class_delete(
     id: i64,
     state: State<'_, AppState>,
-) -> crate::application::handlers::class_handler::ApiResponse<()> {
-    state.class_handler.delete_class(id).await
+) -> Result<crate::application::handlers::class_handler::ApiResponse<()>, String> {
+    Ok(state.class_handler.delete_class(id).await)
 }
 
 // ========================================
@@ -70,31 +70,31 @@ pub async fn class_delete(
 pub async fn student_create(
     input: crate::application::handlers::student_handler::CreateStudentInput,
     state: State<'_, AppState>,
-) -> crate::application::handlers::student_handler::ApiResponse<i64> {
-    state.student_handler.create_student(input).await
+) -> Result<crate::application::handlers::student_handler::ApiResponse<i64>, String> {
+    Ok(state.student_handler.create_student(input).await)
 }
 
 #[tauri::command]
 pub async fn student_get_all(
     state: State<'_, AppState>,
-) -> crate::application::handlers::student_handler::ApiResponse<Vec<crate::domain::entities::student::Student>> {
-    state.student_handler.get_all_students().await
+) -> Result<crate::application::handlers::student_handler::ApiResponse<Vec<crate::domain::entities::student::Student>>, String> {
+    Ok(state.student_handler.get_all_students().await)
 }
 
 #[tauri::command]
 pub async fn student_get_by_class(
     class_id: i64,
     state: State<'_, AppState>,
-) -> crate::application::handlers::student_handler::ApiResponse<Vec<crate::domain::entities::student::Student>> {
-    state.student_handler.get_students_by_class(class_id).await
+) -> Result<crate::application::handlers::student_handler::ApiResponse<Vec<crate::domain::entities::student::Student>>, String> {
+    Ok(state.student_handler.get_students_by_class(class_id).await)
 }
 
 #[tauri::command]
 pub async fn student_delete(
     id: i64,
     state: State<'_, AppState>,
-) -> crate::application::handlers::student_handler::ApiResponse<()> {
-    state.student_handler.delete_student(id).await
+) -> Result<crate::application::handlers::student_handler::ApiResponse<()>, String> {
+    Ok(state.student_handler.delete_student(id).await)
 }
 
 #[tauri::command]
@@ -102,7 +102,7 @@ pub async fn student_import_from_excel(
     file_path: String,
     class_id: Option<i64>,
     state: State<'_, AppState>,
-) -> crate::application::handlers::student_handler::ImportResult {
+) -> Result<crate::application::handlers::student_handler::ImportResult, String> {
     use crate::infrastructure::importer::StudentImporter;
     
     let importer = StudentImporter::new();
@@ -130,24 +130,24 @@ pub async fn student_import_from_excel(
                 };
                 
                 match state.student_handler.create_student_from_sf1(input).await {
-                    Ok(_) => created_count += 1,
-                    Err(e) => db_errors.push(format!("Failed to create student: {}", e.error.unwrap_or_default())),
+                    response if response.success => created_count += 1,
+                    response => db_errors.push(format!("Failed to create student: {}", response.error.unwrap_or_default())),
                 }
             }
             
-            crate::application::handlers::student_handler::ImportResult {
+            Ok(crate::application::handlers::student_handler::ImportResult {
                 success_count: created_count,
                 error_count: result.error_count + db_errors.len(),
                 errors: [result.errors, db_errors].concat(),
                 imported_students: Vec::new(),
-            }
+            })
         }
-        Err(e) => crate::application::handlers::student_handler::ImportResult {
+        Err(e) => Ok(crate::application::handlers::student_handler::ImportResult {
             success_count: 0,
             error_count: 1,
             errors: vec![format!("Import failed: {}", e)],
             imported_students: Vec::new(),
-        }
+        })
     }
 }
 
@@ -159,8 +159,8 @@ pub async fn student_import_from_excel(
 pub async fn attendance_record(
     input: crate::application::handlers::attendance_handler::RecordAttendanceInput,
     state: State<'_, AppState>,
-) -> crate::application::handlers::attendance_handler::ApiResponse<i64> {
-    state.attendance_handler.record_attendance(input).await
+) -> Result<crate::application::handlers::attendance_handler::ApiResponse<i64>, String> {
+    Ok(state.attendance_handler.record_attendance(input).await)
 }
 
 #[tauri::command]
@@ -168,23 +168,23 @@ pub async fn attendance_get_by_class_and_date(
     class_id: i64,
     date: String,
     state: State<'_, AppState>,
-) -> crate::application::handlers::attendance_handler::ApiResponse<crate::domain::entities::attendance::Attendance> {
-    state.attendance_handler.get_by_class_and_date(class_id, date).await
+) -> Result<crate::application::handlers::attendance_handler::ApiResponse<Vec<crate::domain::entities::attendance::Attendance>>, String> {
+    Ok(state.attendance_handler.get_by_class_and_date(class_id, date).await)
 }
 
 #[tauri::command]
 pub async fn attendance_get_unsynced(
     state: State<'_, AppState>,
-) -> crate::application::handlers::attendance_handler::ApiResponse<crate::domain::entities::attendance::Attendance> {
-    state.attendance_handler.get_unsynced().await
+) -> Result<crate::application::handlers::attendance_handler::ApiResponse<Vec<crate::domain::entities::attendance::Attendance>>, String> {
+    Ok(state.attendance_handler.get_unsynced().await)
 }
 
 #[tauri::command]
 pub async fn attendance_get_stats(
     class_id: i64,
     state: State<'_, AppState>,
-) -> crate::application::handlers::attendance_handler::ApiResponse<crate::domain::entities::attendance::AttendanceStats> {
-    state.attendance_handler.get_today_stats(class_id).await
+) -> Result<crate::application::handlers::attendance_handler::ApiResponse<crate::domain::entities::attendance::AttendanceStats>, String> {
+    Ok(state.attendance_handler.get_today_stats(class_id).await)
 }
 
 // ========================================
@@ -195,51 +195,51 @@ pub async fn attendance_get_stats(
 pub async fn google_save_credentials(
     credentials: crate::infrastructure::external::GoogleCredentials,
     state: State<'_, AppState>,
-) -> crate::application::handlers::google_handler::ApiResponse<()> {
-    state.google_handler.save_credentials(credentials).await
+) -> Result<crate::application::handlers::google_handler::ApiResponse<()>, String> {
+    Ok(state.google_handler.save_credentials(credentials).await)
 }
 
 #[tauri::command]
 pub async fn google_is_authenticated(
     state: State<'_, AppState>,
-) -> crate::application::handlers::google_handler::ApiResponse<bool> {
-    state.google_handler.is_authenticated().await
+) -> Result<crate::application::handlers::google_handler::ApiResponse<bool>, String> {
+    Ok(state.google_handler.is_authenticated().await)
 }
 
 #[tauri::command]
 pub async fn google_start_auth(
     state: State<'_, AppState>,
-) -> crate::application::handlers::google_handler::ApiResponse<String> {
-    state.google_handler.start_auth().await
+) -> Result<crate::application::handlers::google_handler::ApiResponse<String>, String> {
+    Ok(state.google_handler.start_auth().await)
 }
 
 #[tauri::command]
 pub async fn google_handle_callback(
     code: String,
     state: State<'_, AppState>,
-) -> crate::application::handlers::google_handler::ApiResponse<bool> {
-    state.google_handler.handle_callback(code).await
+) -> Result<crate::application::handlers::google_handler::ApiResponse<bool>, String> {
+    Ok(state.google_handler.handle_callback(code).await)
 }
 
 #[tauri::command]
 pub async fn google_logout(
     state: State<'_, AppState>,
-) -> crate::application::handlers::google_handler::ApiResponse<()> {
-    state.google_handler.logout().await
+) -> Result<crate::application::handlers::google_handler::ApiResponse<()>, String> {
+    Ok(state.google_handler.logout().await)
 }
 
 #[tauri::command]
 pub async fn google_sync(
     state: State<'_, AppState>,
-) -> crate::application::handlers::google_handler::ApiResponse<bool> {
-    state.google_handler.sync().await
+) -> Result<crate::application::handlers::google_handler::ApiResponse<bool>, String> {
+    Ok(state.google_handler.sync().await)
 }
 
 #[tauri::command]
 pub async fn google_get_sync_status(
     state: State<'_, AppState>,
-) -> crate::application::handlers::google_handler::ApiResponse<crate::application::handlers::google_handler::SyncStatus> {
-    state.google_handler.get_sync_status().await
+) -> Result<crate::application::handlers::google_handler::ApiResponse<crate::application::handlers::google_handler::SyncStatus>, String> {
+    Ok(state.google_handler.get_sync_status().await)
 }
 
 // ========================================
@@ -278,49 +278,51 @@ pub async fn fs_remove_file(path: String) -> Result<(), String> {
 // Authentication Commands
 // ========================================
 
+/*
+#[allow(dead_code)]
 use crate::domain::entities::user::{LoginRequest, RegisterRequest, UserProfile};
 
 #[tauri::command]
 pub async fn auth_register(
     request: RegisterRequest,
     state: State<'_, AppState>,
-) -> crate::domain::entities::user::AuthResponse {
+) -> Result<crate::domain::entities::user::AuthResponse, String> {
     let result = {
         let handler = state.auth_handler.lock().unwrap();
         handler.register(request).await
     };
-    result
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn auth_login(
     request: LoginRequest,
     state: State<'_, AppState>,
-) -> crate::domain::entities::user::AuthResponse {
+) -> Result<crate::domain::entities::user::AuthResponse, String> {
     let result = {
         let handler = state.auth_handler.lock().unwrap();
         handler.login(request).await
     };
-    result
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn auth_validate_token(
     token: String,
     state: State<'_, AppState>,
-) -> Option<UserProfile> {
+) -> Result<Option<UserProfile>, String> {
     let result = {
-        let handler = state.auth_handler.lock().unwrap();
+        let mut handler = state.auth_handler.lock().unwrap();
         handler.validate_token(&token).await
     };
-    result
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn auth_get_current_user(
     state: State<'_, AppState>,
-) -> Option<UserProfile> {
-    state.auth_handler.lock().unwrap().get_current_user()
+) -> Result<Option<UserProfile>, String> {
+    Ok(state.auth_handler.lock().unwrap().get_current_user())
 }
 
 #[tauri::command]
@@ -338,13 +340,12 @@ pub async fn auth_update_profile(
 #[tauri::command]
 pub async fn auth_logout(
     state: State<'_, AppState>,
-) {
+) -> Result<(), String> {
     state.auth_handler.lock().unwrap().logout();
+    Ok(())
 }
+*/
 
 // ========================================
 // Update Commands
 // ========================================
-
-pub use crate::application::handlers::update_handler::UpdateInfo;
-pub use crate::application::handlers::update_handler::UpdateStatus;

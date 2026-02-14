@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::domain::services::AuthService;
 use crate::domain::entities::user::{UserProfile, LoginRequest, RegisterRequest, AuthResponse};
 

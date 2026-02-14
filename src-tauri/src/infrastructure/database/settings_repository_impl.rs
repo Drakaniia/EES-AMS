@@ -3,9 +3,10 @@
 
 use async_trait::async_trait;
 use crate::domain::repositories::SettingsRepository;
-use crate::domain::errors::{DomainError, DomainResult};
+use crate::domain::errors::DomainResult;
 use crate::infrastructure::database::JsonDatabase;
 
+#[derive(Clone)]
 pub struct SettingsRepositoryImpl {
     db: JsonDatabase,
 }
@@ -19,12 +20,14 @@ impl SettingsRepositoryImpl {
 #[async_trait]
 impl SettingsRepository for SettingsRepositoryImpl {
     async fn get(&self, key: &str) -> DomainResult<Option<String>> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         Ok(data.settings.get(key).cloned())
     }
 
     async fn set(&self, key: String, value: String) -> DomainResult<()> {
-        let mut data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let mut data = db_arc.lock().unwrap();
         data.settings.insert(key, value);
         drop(data);
         self.db.save()?;
@@ -32,7 +35,8 @@ impl SettingsRepository for SettingsRepositoryImpl {
     }
 
     async fn delete(&self, key: &str) -> DomainResult<()> {
-        let mut data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let mut data = db_arc.lock().unwrap();
         data.settings.remove(key);
         drop(data);
         self.db.save()?;
@@ -40,7 +44,8 @@ impl SettingsRepository for SettingsRepositoryImpl {
     }
 
     async fn get_all(&self) -> DomainResult<std::collections::HashMap<String, String>> {
-        let data = self.db.get_data().lock().unwrap();
+        let db_arc = self.db.get_data();
+        let data = db_arc.lock().unwrap();
         Ok(data.settings.clone())
     }
 }

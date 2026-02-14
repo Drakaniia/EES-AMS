@@ -18,23 +18,21 @@ const AuthScreen: FC = () => {
         setError('')
         setIsLoading(true)
 
-        try {
-            if (isLogin) {
-                await signIn(email, password)
-            } else {
-                await signUp({
-                    email,
-                    password,
-                    displayName,
-                    schoolName
-                })
-            }
+        const success = isLogin 
+            ? await signIn(email, password)
+            : await signUp({
+                email,
+                password,
+                displayName,
+                schoolName
+            })
+        
+        if (success) {
             // Navigation will be handled by AuthContext
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'An error occurred')
-        } finally {
-            setIsLoading(false)
+            console.log('Authentication successful')
         }
+        
+        setIsLoading(false)
     }
 
     const handleGoogleSignIn = async () => {

@@ -7,6 +7,7 @@ use crate::domain::errors::{DomainError, DomainResult};
 use async_trait::async_trait;
 
 #[async_trait]
+#[allow(dead_code)]
 pub trait StudentService: Send + Sync {
     async fn create_student(&self, student_id: String, first_name: String, last_name: String, class_id: Option<i64>) -> DomainResult<Student>;
     async fn create_student_from_sf1(
@@ -26,9 +27,11 @@ pub trait StudentService: Send + Sync {
         class_id: Option<i64>,
     ) -> DomainResult<Student>;
     async fn get_all_students(&self) -> DomainResult<Vec<Student>>;
+    #[allow(dead_code)]
     async fn get_student_by_id(&self, id: i64) -> DomainResult<Student>;
     async fn get_students_by_class(&self, class_id: i64) -> DomainResult<Vec<Student>>;
     async fn delete_student(&self, id: i64) -> DomainResult<()>;
+    #[allow(dead_code)]
     async fn unassign_from_class(&self, id: i64) -> DomainResult<()>;
 }
 

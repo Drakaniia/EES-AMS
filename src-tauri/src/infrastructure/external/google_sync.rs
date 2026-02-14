@@ -8,7 +8,6 @@ use oauth2::{
     AuthorizationCode, TokenResponse, basic::BasicClient, reqwest::async_http_client,
 };
 use reqwest;
-use std::collections::HashMap;
 
 const SHEETS_API: &str = "https://sheets.googleapis.com/v4/spreadsheets";
 const DRIVE_API: &str = "https://www.googleapis.com/drive/v3/files";
@@ -27,6 +26,7 @@ pub struct TokenData {
     pub expires_in: Option<u64>,
 }
 
+#[derive(Clone)]
 pub struct GoogleSync {
     credentials: Option<GoogleCredentials>,
     token: Arc<Mutex<Option<TokenData>>>,

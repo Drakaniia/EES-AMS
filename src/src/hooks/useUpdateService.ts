@@ -24,21 +24,6 @@ export const useUpdateService = (): UpdateService => {
   const [updateProgress, setUpdateProgress] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Check for updates on component mount
-    checkForUpdates();
-
-    // Set up update progress listener
-    tauriAPI.updater.onUpdateProgress((progress) => {
-      setUpdateProgress(progress);
-    });
-
-    // Periodic check for updates (every 4 hours)
-    const interval = setInterval(checkForUpdates, 4 * 60 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
   const checkForUpdates = async () => {
     try {
       setError(null);
@@ -48,10 +33,34 @@ export const useUpdateService = (): UpdateService => {
       } else {
         setError(response.error || 'Failed to check for updates');
       }
-    } catch (err) {
+    } catch {
       setError('Network error while checking for updates');
     }
   };
+
+  useEffect(() => {
+    // Check for updates on component mount
+    const updateCheck = async () => {
+      try {
+        await checkForUpdates();
+      } catch {
+        // Ignore errors on initial check
+      }
+    };
+    updateCheck();
+
+    // Set up update progress listener
+    tauriAPI.updater.onUpdateProgress((progress) => {
+      setUpdateProgress(progress);
+    });
+
+    // Periodic check for updates (every 4 hours)
+    const interval = setInterval(() => {
+      checkForUpdates().catch(() => {});
+    }, 4 * 60 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const downloadAndInstall = async () => {
     try {
@@ -71,7 +80,7 @@ export const useUpdateService = (): UpdateService => {
         setError(response.error || 'Failed to download update');
         setIsUpdating(false);
       }
-    } catch (err) {
+    } catch {
       setError('Network error during update download');
       setIsUpdating(false);
     }
@@ -80,7 +89,7 @@ export const useUpdateService = (): UpdateService => {
   const restart = async () => {
     try {
       await tauriAPI.updater.restart();
-    } catch (err) {
+    } catch {
       setError('Failed to restart application');
     }
   };

@@ -3,9 +3,10 @@
 
 use async_trait::async_trait;
 use crate::domain::entities::student::Student;
-use crate::domain::errors::{DomainError, DomainResult};
+use crate::domain::errors::DomainResult;
 
 #[async_trait]
+#[allow(dead_code)]
 pub trait StudentRepository: Send + Sync {
     /// Create a new student
     async fn create(

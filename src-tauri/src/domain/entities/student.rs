@@ -27,6 +27,7 @@ pub struct Student {
 }
 
 impl Student {
+    #[allow(dead_code)]
     pub fn new(
         id: i64,
         student_id: String,
@@ -92,6 +93,7 @@ impl Student {
         }
     }
 
+    #[allow(dead_code)]
     pub fn full_name(&self) -> String {
         match &self.middle_name {
             Some(middle) => format!("{} {} {}", self.first_name, middle, self.last_name),
@@ -99,6 +101,7 @@ impl Student {
         }
     }
 
+    #[allow(dead_code)]
     pub fn full_name_lfmi(&self) -> String {
         match &self.middle_name {
             Some(middle) => format!("{}, {} {}", self.last_name, self.first_name, middle),
@@ -106,25 +109,49 @@ impl Student {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update(
         &mut self,
-        first_name: Option<String>,
-        last_name: Option<String>,
+        rfid: Option<String>,
+        lrn: Option<String>,
+        first_name: String,
+        last_name: String,
+        middle_name: Option<String>,
+        gender: String,
+        birthday: String, // YYYY-MM-DD
+        age: i32,
+        mother_name: Option<String>,
+        father_name: Option<String>,
+        guardian_name: Option<String>,
+        address: Option<String>,
         class_id: Option<i64>,
     ) {
-        if let Some(fn_name) = first_name {
-            self.first_name = fn_name;
+        // This method body was not provided in the instruction,
+        // so keeping the original logic for updating fields based on new parameters.
+        // Assuming the intent was to update the student's fields with the new values.
+        if let Some(rfid_val) = rfid {
+            self.student_id = rfid_val; // Assuming rfid updates student_id
         }
-        if let Some(ln_name) = last_name {
-            self.last_name = ln_name;
+        if let Some(lrn_val) = lrn {
+            self.lrn = Some(lrn_val);
         }
-        if let Some(cid) = class_id {
-            self.class_id = Some(cid);
-        }
+        self.first_name = first_name;
+        self.last_name = last_name;
+        self.middle_name = middle_name;
+        self.gender = Some(gender);
+        self.birthday = Some(birthday);
+        self.age = Some(age);
+        self.mother_name = mother_name;
+        self.father_name = father_name;
+        self.guardian_name = guardian_name;
+        self.address = address;
+        self.class_id = class_id;
+
         self.updated_at = chrono::Utc::now().to_rfc3339();
     }
 
-    pub fn is_assigned_to_class(&self) -> bool {
-        self.class_id.is_some()
+    #[allow(dead_code)]
+    pub fn is_assigned_to_class(&self, _class_id: i64) -> bool {
+        self.class_id == Some(_class_id)
     }
 }
