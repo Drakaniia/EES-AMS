@@ -1,3 +1,7 @@
-echo "Running pre-commit hooks..."
-npx lint-staged
-echo "Pre-commit hooks completed!"
+#!/bin/sh
+# Check if there are staged files in src/
+STAGED_FILES=$(git diff --cached --name-only | grep "^src/")
+if [ -n "$STAGED_FILES" ]; then
+    echo "Running linting and formatting on staged files..."
+    cd src && bunx lint-staged
+fi
