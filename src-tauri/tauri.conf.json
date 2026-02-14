@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "identifier": "com.attendease.app",
   "build": {
-    "frontendDist": "../client/dist",
+    "frontendDist": "../src/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "cd ../client && bun run dev",
-    "beforeBuildCommand": "cd ../client && bun run build"
+    "beforeDevCommand": "cd ../src && bun run dev",
+    "beforeBuildCommand": "cd ../src && bun run build"
   },
   "app": {
     "windows": [
@@ -47,6 +47,15 @@
       "frameworks": [],
       "minimumSystemVersion": "10.13",
       "exceptionDomain": ""
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": ["https://api.attendease.app/updates/{{target}}/{{current_version}}"],
+      "dialog": false,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDBERjhEQzYzMTA5NEQ5Rjk3MApSV1dRWlJ4YUhFbHJpNnJ5b2JtM3d0TnFpVTZ3Q0Z5TnBjU09pQmFZUHZ3bXdnZDlVbHlGQXJrR3V5eTAK"
     }
   }
 }
