@@ -48,7 +48,7 @@ pub async fn download_and_install_update(app_handle: tauri::AppHandle) -> Result
             match updater.check().await {
                 Ok(Some(update)) => {
                     // Download and install the update with progress tracking
-                    match update.download_and_install(|progress_event| {
+                    match update.download_and_install(|progress_event| -> () {
                         let progress = format!("Progress: {:?}", progress_event);
                         
                         // Emit progress event to frontend

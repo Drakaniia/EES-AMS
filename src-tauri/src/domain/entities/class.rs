@@ -17,7 +17,12 @@ pub struct Class {
 }
 
 impl Class {
-    pub fn new(id: i64, name: String, section: Option<String>, school_year: Option<String>) -> Self {
+    pub fn new(
+        id: i64,
+        name: String,
+        section: Option<String>,
+        school_year: Option<String>,
+    ) -> Self {
         let now = chrono::Utc::now().to_rfc3339();
         Class {
             id,
@@ -29,7 +34,12 @@ impl Class {
         }
     }
 
-    pub fn update(&mut self, name: Option<String>, section: Option<String>, school_year: Option<String>) {
+    pub fn update(
+        &mut self,
+        name: Option<String>,
+        section: Option<String>,
+        school_year: Option<String>,
+    ) {
         if let Some(n) = name {
             self.name = n;
         }

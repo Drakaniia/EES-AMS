@@ -108,7 +108,8 @@ impl AttendanceStats {
     pub fn calculate_rate(&mut self) {
         if self.total_students > 0 {
             let present = self.present_count + self.late_count;
-            self.attendance_rate = ((present as f32 / self.total_students as f32) * 100.0).round() as i32;
+            self.attendance_rate =
+                ((present as f32 / self.total_students as f32) * 100.0).round() as i32;
         }
     }
 }

@@ -64,7 +64,7 @@ impl<AR: AttendanceRepository + Send + Sync, SR: StudentRepository + Send + Sync
         }
 
         let id = self.attendance_repo
-            .record(student_id, class_id, date.clone(), status.clone(), notes)
+            .record(student_id, class_id, date.clone(), status.clone(), notes.clone())
             .await?;
 
         Ok(Attendance::new(id, student_id, class_id, date, status, notes))
