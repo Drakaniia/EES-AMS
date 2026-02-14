@@ -5,6 +5,7 @@ mod domain;
 mod infrastructure;
 mod application;
 
+use tauri::Manager;
 use domain::{
     services::{ClassService, StudentService, AttendanceService, ClassServiceImpl, StudentServiceImpl, AttendanceServiceImpl},
     repositories::{ClassRepository, StudentRepository, AttendanceRepository, SettingsRepository},
@@ -21,9 +22,11 @@ use application::{
     handlers::{ClassHandler, StudentHandler, AttendanceHandler, GoogleHandler},
     commands::{AppState, 
         class_create, class_get_all, class_delete,
-        student_create, student_get_all, student_get_by_class, student_delete,
+        student_create, student_get_all, student_get_by_class, student_delete, student_import_from_excel,
         attendance_record, attendance_get_by_class_and_date, attendance_get_unsynced, attendance_get_stats,
-        google_save_credentials, google_is_authenticated, google_start_auth, google_handle_callback, google_logout, google_sync, google_get_sync_status
+        google_save_credentials, google_is_authenticated, google_start_auth, google_handle_callback, google_logout, google_sync, google_get_sync_status,
+        fs_write_file, fs_remove_file,
+        check_for_updates, download_and_install_update, restart_app
     },
 };
 use std::sync::{Arc, Mutex};
@@ -43,13 +46,13 @@ pub fn run() {
             // Initialize infrastructure layer
             let db = JsonDatabase::new(app_data_dir)
                 .expect("Failed to initialize database");
-            let db_arc = Arc::new(db);
+            let db = Arc::new(db);
 
             // Initialize repositories
-            let class_repo = Arc::new(ClassRepositoryImpl::new(db_arc.clone()));
-            let student_repo = Arc::new(StudentRepositoryImpl::new(db_arc.clone()));
-            let attendance_repo = Arc::new(AttendanceRepositoryImpl::new(db_arc.clone()));
-            let settings_repo = Arc::new(SettingsRepositoryImpl::new(db_arc.clone()));
+            let class_repo = Arc::new(ClassRepositoryImpl::new(db.as_ref().clone()));
+            let student_repo = Arc::new(StudentRepositoryImpl::new(db.as_ref().clone()));
+            let attendance_repo = Arc::new(AttendanceRepositoryImpl::new(db.as_ref().clone()));
+            let settings_repo = Arc::new(SettingsRepositoryImpl::new(db.as_ref().clone()));
 
             // Initialize domain services
             let class_service = Arc::new(
@@ -115,6 +118,7 @@ pub fn run() {
             student_get_all,
             student_get_by_class,
             student_delete,
+            student_import_from_excel,
             attendance_record,
             attendance_get_by_class_and_date,
             attendance_get_unsynced,
@@ -126,7 +130,14 @@ pub fn run() {
             google_logout,
             google_sync,
             google_get_sync_status,
+            fs_write_file,
+            fs_remove_file,
+            check_for_updates,
+            download_and_install_update,
+            restart_app,
         ])
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
