@@ -6,5 +6,11 @@ echo "Staged files in src/: $STAGED_FILES"
 if [ -n "$STAGED_FILES" ]; then
     echo "Running linting and formatting on staged files..."
     cd src && bunx lint-staged
+    LINT_EXIT_CODE=$?
+    if [ $LINT_EXIT_CODE -ne 0 ]; then
+        echo "Lint-staged failed"
+        exit 1
+    fi
 fi
 echo "Pre-commit hook completed"
+exit 0
