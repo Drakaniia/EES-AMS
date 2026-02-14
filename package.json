@@ -8,13 +8,14 @@
     "dev:frontend": "cd src && bun run dev",
     "dev:backend": "cd src-tauri && cargo watch -x run",
     "build": "cd src-tauri && cargo tauri build",
-    "install": "cd src && bun install"
+    "install": "cd src && bun install",
+    "prepare": "husky"
   },
   "keywords": [
     "tauri",
     "attendance",
     "education"
   ],
-  "author": "",
+"author": "",
   "license": "MIT"
 }
