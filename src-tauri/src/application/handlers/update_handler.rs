@@ -1,16 +1,8 @@
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tauri_plugin_updater::UpdaterExt;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UpdateInfo {
-    pub version: String,
-    pub date: String,
-    pub body: String,
-}
-
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateStatus {
     pub available: bool,
@@ -20,6 +12,7 @@ pub struct UpdateStatus {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn check_for_updates(app_handle: tauri::AppHandle) -> Result<UpdateStatus, String> {
     match app_handle.updater() {
         Ok(updater) => {
@@ -44,6 +37,7 @@ pub async fn check_for_updates(app_handle: tauri::AppHandle) -> Result<UpdateSta
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn download_and_install_update(app_handle: tauri::AppHandle) -> Result<String, String> {
     match app_handle.updater() {
         Ok(updater) => {
@@ -78,6 +72,7 @@ pub async fn download_and_install_update(app_handle: tauri::AppHandle) -> Result
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn restart_app(app_handle: tauri::AppHandle) -> Result<String, String> {
     app_handle.restart();
     #[allow(unreachable_code)]
