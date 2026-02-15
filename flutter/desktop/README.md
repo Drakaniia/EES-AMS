@@ -1,8 +1,8 @@
-# AttendEase AMS - Flutter Migration Guide
+# AttendEase AMS - Flutter Desktop Frontend
 
 ## Overview
 
-This is the complete Flutter migration of the AttendEase Attendance Management System from React/Tauri to Flutter. The migration preserves all existing functionality while leveraging Flutter's performance advantages and cross-platform capabilities.
+This is the Flutter desktop frontend for the AttendEase Attendance Management System that works alongside the existing Tauri/Rust backend. The Flutter desktop app provides a native-like experience while leveraging Flutter's performance advantages and cross-platform capabilities. The existing Tauri backend remains unchanged and continues to function as before.
 
 ## Architecture Overview
 
@@ -49,33 +49,31 @@ lib/
     └── app_localizations.dart
 ```
 
-### Key Architecture Changes
+### Key Architecture Integration
 
-#### 1. State Management Migration
-**From:** React Context API + Custom Hooks
-**To:** Riverpod (modern Flutter state management)
+#### 1. State Management
+**Flutter Implementation:** Riverpod (modern Flutter state management)
 
-- `AuthContext` → `authProvider` (Riverpod StateNotifier)
-- Custom hooks → Provider-specific notifiers
+- `authProvider` (Riverpod StateNotifier)
+- Provider-specific notifiers for different domains
 - Consistent state patterns across all features
 
-#### 2. API Communication Migration
-**From:** Tauri IPC Commands
-**To:** HTTP API with Dio + Retrofit
+#### 2. API Communication
+**Integration with:** Existing Tauri/Rust Backend via HTTP
 
-- All `invoke()` calls replaced with proper HTTP calls
+- HTTP API with Dio + Retrofit
 - Maintains same API endpoints from Rust backend
 - Type-safe API service classes with automatic JSON serialization
 - Error handling with proper `ApiResponse<T>` wrapper
 
-#### 3. Component Migration Mapping
+#### 3. Component Structure
 | React Component | Flutter Widget | Purpose |
 |----------------|----------------|---------|
-| `<div>` | `Container` / `Column` / `Row` | Layout containers |
-| `<span>` | `Text` | Text display |
-| `<button>` | `ElevatedButton` / `TextButton` | Clickable actions |
-| `<input>` | `TextFormField` | Form inputs |
-| `<select>` | `DropdownButton` | Selection inputs |
+| (Existing) | `Container` / `Column` / `Row` | Layout containers |
+| (Existing) | `Text` | Text display |
+| (Existing) | `ElevatedButton` / `TextButton` | Clickable actions |
+| (Existing) | `TextFormField` | Form inputs |
+| (Existing) | `DropdownButton` | Selection inputs |
 | CSS classes | Widget properties | Styling |
 | React Hooks | Riverpod providers | State management |
 
@@ -99,8 +97,6 @@ lib/
 - [x] Theme system implementation
 - [x] Project structure and architecture
 - [x] Data models and serialization
-
-### ✅ Completed Features
 - [x] Attendance tracking functionality
 - [x] Class management
 - [x] Student management
@@ -131,11 +127,68 @@ dart run build_runner build  # Generate JSON serialization code
 
 ### Running the App
 ```bash
-# Development
+# Development (auto-detect platform)
 flutter run
 
-# Release build
-flutter build windows  # windows/macos/linux as needed
+# Development on Windows specifically
+flutter run -d windows
+
+# Development on macOS
+flutter run -d macos
+
+# Development on Linux
+flutter run -d linux
+
+# Web development
+flutter run -d web
+
+# Release builds
+flutter build windows    # Windows executable
+flutter build macos      # macOS app
+flutter build linux      # Linux app
+flutter build web        # Web build
+flutter build apk        # Android APK
+flutter build ios        # iOS app
+```
+
+### Essential Commands
+```bash
+# Install dependencies
+flutter pub get
+
+# Clean build cache
+flutter clean
+
+# Check Flutter environment
+flutter doctor -v
+
+# Generate code (JSON serialization, etc.)
+dart run build_runner build
+
+# Watch for code generation changes
+dart run build_runner watch
+
+# Run tests
+flutter test
+
+# Run tests with coverage
+flutter test --coverage
+
+# Analyze code for issues
+flutter analyze
+
+# Check for outdated dependencies
+flutter pub outdated
+
+# Upgrade dependencies
+flutter pub upgrade
+
+# List connected devices
+flutter devices
+
+# Create app bundles for distribution
+flutter build windows --release
+flutter build msix       # Windows MSIX package
 ```
 
 ### Code Generation
