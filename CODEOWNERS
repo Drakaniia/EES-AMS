@@ -11,7 +11,7 @@
 
 # Frontend code
 /src/ @frontend-team
-
+    
 # Backend Rust code
 /src-tauri/src/ @backend-team
 

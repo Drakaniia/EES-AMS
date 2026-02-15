@@ -67,14 +67,142 @@ impl FirebaseService {
         Ok(student.clone())
     }
 
-    pub async fn get_student(&self, _id: i64) -> Result<Option<Student>> {
-        // TODO: Implement loading from Firebase or backup
+    /// Upsert (create or update) student in Firebase
+    pub async fn upsert_student(&self, student: &Student) -> Result<Student> {
+        let student_data = serde_json::to_value(student)?;
+        self.save_data(&student_data).await?;
+        Ok(student.clone())
+    }
+
+    pub async fn get_student(&self, id: i64) -> Result<Option<Student>> {
+        // Try to load from backup files first
+        let backup_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("backups")
+            .join("firebase");
+        
+        if backup_dir.exists() {
+            // Look for the most recent student backup file
+            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+                let mut latest_file: Option<std::path::PathBuf> = None;
+                let mut latest_time = std::time::SystemTime::UNIX_EPOCH;
+                
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                        if filename.starts_with("firebase_backup_") && filename.ends_with(".json") {
+                            if let Ok(metadata) = std::fs::metadata(&path) {
+                                if let Ok(modified) = metadata.modified() {
+                                    if modified > latest_time {
+                                        latest_time = modified;
+                                        latest_file = Some(path);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // If we found a backup file, try to load the student from it
+                if let Some(file_path) = latest_file {
+                    if let Ok(content) = std::fs::read_to_string(&file_path) {
+                        if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
+                            // Check if this is a student record with matching ID
+                            if let Some(student_id) = data.get("id").and_then(|v| v.as_i64()) {
+                                if student_id == id {
+                                    if let Ok(student) = serde_json::from_value::<Student>(data) {
+                                        return Ok(Some(student));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If no data found in backups, try to load from local JSON database
+        let db_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("data");
+        
+        let students_file = db_dir.join("students.json");
+        if students_file.exists() {
+            if let Ok(content) = std::fs::read_to_string(&students_file) {
+                if let Ok(students) = serde_json::from_str::<Vec<Student>>(&content) {
+                    return Ok(students.into_iter().find(|s| s.id == id));
+                }
+            }
+        }
+        
         Ok(None)
     }
 
     pub async fn get_all_students(&self) -> Result<Vec<Student>> {
-        // TODO: Implement loading from Firebase or backup
-        Ok(vec![])
+        let mut students = Vec::new();
+        
+        // Try to load from backup files first
+        let backup_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("backups")
+            .join("firebase");
+        
+        if backup_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                        if filename.starts_with("firebase_backup_") && filename.ends_with(".json") {
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
+                                    // Check if this contains student data
+                                    if data.get("id").is_some() && data.get("student_id").is_some() {
+                                        if let Ok(student) = serde_json::from_value::<Student>(data) {
+                                            // Avoid duplicates
+                                            if !students.iter().any(|s: &Student| s.id == student.id) {
+                                                students.push(student);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Also load from local JSON database as backup
+        let db_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("data");
+        
+        let students_file = db_dir.join("students.json");
+        if students_file.exists() {
+            if let Ok(content) = std::fs::read_to_string(&students_file) {
+                if let Ok(db_students) = serde_json::from_str::<Vec<Student>>(&content) {
+                    for db_student in db_students {
+                        if !students.iter().any(|s| s.id == db_student.id) {
+                            students.push(db_student);
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(students)
+    }
+
+    /// Get students by class ID
+    pub async fn get_students_by_class(&self, class_id: i64) -> Result<Vec<Student>> {
+        let all_students = self.get_all_students().await?;
+        Ok(all_students.into_iter()
+            .filter(|s| s.class_id == Some(class_id))
+            .collect())
     }
 
     pub async fn delete_student(&self, id: i64) -> Result<()> {
@@ -95,14 +223,129 @@ impl FirebaseService {
         Ok(class.clone())
     }
 
-    pub async fn get_class(&self, _id: i64) -> Result<Option<Class>> {
-        // TODO: Implement loading from Firebase or backup
+    pub async fn get_class(&self, id: i64) -> Result<Option<Class>> {
+        // Try to load from backup files first
+        let backup_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("backups")
+            .join("firebase");
+        
+        if backup_dir.exists() {
+            // Look for the most recent class backup file
+            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+                let mut latest_file: Option<std::path::PathBuf> = None;
+                let mut latest_time = std::time::SystemTime::UNIX_EPOCH;
+                
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                        if filename.starts_with("firebase_backup_") && filename.ends_with(".json") {
+                            if let Ok(metadata) = std::fs::metadata(&path) {
+                                if let Ok(modified) = metadata.modified() {
+                                    if modified > latest_time {
+                                        latest_time = modified;
+                                        latest_file = Some(path);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // If we found a backup file, try to load the class from it
+                if let Some(file_path) = latest_file {
+                    if let Ok(content) = std::fs::read_to_string(&file_path) {
+                        if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
+                            // Check if this is a class record with matching ID
+                            if data.get("id").is_some() && data.get("name").is_some() {
+                                if let Some(class_id) = data.get("id").and_then(|v| v.as_i64()) {
+                                    if class_id == id {
+                                        if let Ok(class) = serde_json::from_value::<Class>(data) {
+                                            return Ok(Some(class));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If no data found in backups, try to load from local JSON database
+        let db_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("data");
+        
+        let classes_file = db_dir.join("classes.json");
+        if classes_file.exists() {
+            if let Ok(content) = std::fs::read_to_string(&classes_file) {
+                if let Ok(classes) = serde_json::from_str::<Vec<Class>>(&content) {
+                    return Ok(classes.into_iter().find(|c| c.id == id));
+                }
+            }
+        }
+        
         Ok(None)
     }
 
     pub async fn get_all_classes(&self) -> Result<Vec<Class>> {
-        // TODO: Implement loading from Firebase or backup
-        Ok(vec![])
+        let mut classes = Vec::new();
+        
+        // Try to load from backup files first
+        let backup_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("backups")
+            .join("firebase");
+        
+        if backup_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                        if filename.starts_with("firebase_backup_") && filename.ends_with(".json") {
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
+                                    // Check if this contains class data
+                                    if data.get("id").is_some() && data.get("name").is_some() {
+                                        if let Ok(class) = serde_json::from_value::<Class>(data) {
+                                            // Avoid duplicates
+                                            if !classes.iter().any(|c: &Class| c.id == class.id) {
+                                                classes.push(class);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Also load from local JSON database as backup
+        let db_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("data");
+        
+        let classes_file = db_dir.join("classes.json");
+        if classes_file.exists() {
+            if let Ok(content) = std::fs::read_to_string(&classes_file) {
+                if let Ok(db_classes) = serde_json::from_str::<Vec<Class>>(&content) {
+                    for db_class in db_classes {
+                        if !classes.iter().any(|c| c.id == db_class.id) {
+                            classes.push(db_class);
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(classes)
     }
 
     pub async fn delete_class(&self, id: i64) -> Result<()> {
@@ -123,14 +366,136 @@ impl FirebaseService {
         Ok(attendance.clone())
     }
 
-    pub async fn get_attendance(&self, _id: i64) -> Result<Option<Attendance>> {
-        // TODO: Implement loading from Firebase or backup
+    pub async fn get_attendance(&self, id: i64) -> Result<Option<Attendance>> {
+        // Try to load from backup files first
+        let backup_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("backups")
+            .join("firebase");
+        
+        if backup_dir.exists() {
+            // Look for the most recent attendance backup file
+            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+                let mut latest_file: Option<std::path::PathBuf> = None;
+                let mut latest_time = std::time::SystemTime::UNIX_EPOCH;
+                
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                        if filename.starts_with("firebase_backup_") && filename.ends_with(".json") {
+                            if let Ok(metadata) = std::fs::metadata(&path) {
+                                if let Ok(modified) = metadata.modified() {
+                                    if modified > latest_time {
+                                        latest_time = modified;
+                                        latest_file = Some(path);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // If we found a backup file, try to load the attendance record from it
+                if let Some(file_path) = latest_file {
+                    if let Ok(content) = std::fs::read_to_string(&file_path) {
+                        if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
+                            // Check if this is an attendance record with matching ID
+                            if data.get("id").is_some() && data.get("student_id").is_some() {
+                                if let Some(attendance_id) = data.get("id").and_then(|v| v.as_i64()) {
+                                    if attendance_id == id {
+                                        if let Ok(attendance) = serde_json::from_value::<Attendance>(data) {
+                                            return Ok(Some(attendance));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If no data found in backups, try to load from local JSON database
+        let db_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("data");
+        
+        let attendance_file = db_dir.join("attendance.json");
+        if attendance_file.exists() {
+            if let Ok(content) = std::fs::read_to_string(&attendance_file) {
+                if let Ok(attendance_records) = serde_json::from_str::<Vec<Attendance>>(&content) {
+                    return Ok(attendance_records.into_iter().find(|a| a.id == id));
+                }
+            }
+        }
+        
         Ok(None)
     }
 
-    pub async fn get_attendance_by_class_and_date(&self, _class_id: i64, _date: &str) -> Result<Vec<Attendance>> {
-        // TODO: Implement loading from Firebase or backup
-        Ok(vec![])
+    pub async fn get_attendance_by_class_and_date(&self, class_id: i64, date: &str) -> Result<Vec<Attendance>> {
+        let mut attendance_records = Vec::new();
+        
+        // Try to load from backup files first
+        let backup_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("backups")
+            .join("firebase");
+        
+        if backup_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                        if filename.starts_with("firebase_backup_") && filename.ends_with(".json") {
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
+                                    // Check if this contains attendance data matching class_id and date
+                                    if let Some(_record_id) = data.get("id").and_then(|v| v.as_i64()) {
+                                        if let Some(record_class_id) = data.get("class_id").and_then(|v| v.as_i64()) {
+                                            if let Some(record_date) = data.get("date").and_then(|v| v.as_str()) {
+                                                if record_class_id == class_id && record_date == date {
+                                                    if let Ok(attendance) = serde_json::from_value::<Attendance>(data) {
+                                                        // Avoid duplicates
+                                                        if !attendance_records.iter().any(|a: &Attendance| a.id == attendance.id) {
+                                                            attendance_records.push(attendance);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Also load from local JSON database as backup
+        let db_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("data");
+        
+        let attendance_file = db_dir.join("attendance.json");
+        if attendance_file.exists() {
+            if let Ok(content) = std::fs::read_to_string(&attendance_file) {
+                if let Ok(db_attendance) = serde_json::from_str::<Vec<Attendance>>(&content) {
+                    for db_record in db_attendance {
+                        if db_record.class_id == class_id && db_record.date == date
+                            && !attendance_records.iter().any(|a| a.id == db_record.id) {
+                                attendance_records.push(db_record);
+                            }
+                    }
+                }
+            }
+        }
+        
+        Ok(attendance_records)
     }
 
     pub async fn delete_attendance(&self, id: i64) -> Result<()> {

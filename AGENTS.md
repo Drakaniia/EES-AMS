@@ -5,10 +5,6 @@
 ### Prerequisites
 - **Bun** (package manager and runtime, recommended)
 - **Rust 1.70+** (install from https://rustup.rs/)
-
-### Prerequisites
-- **Bun** (package manager and runtime, recommended)
-- **Rust 1.70+** (install from https://rustup.rs/)
 - **Flutter** (install from https://flutter.dev/)
 
 ### Installation
@@ -29,9 +25,6 @@ bun run dev
 
 # Flutter development
 bun run dev:flutter
-
-# Frontend-only development (fast UI iteration)
-bun run dev:frontend
 
 # Backend-only development (requires cargo-watch)
 bun run dev:backend
@@ -60,8 +53,17 @@ npm run test
 # Run Flutter tests only
 npm run test:flutter
 
+# Run specific test (from src-tauri directory)
+cargo test test_name
+
 # Run tests with output (from src-tauri directory)
 cargo test -- --nocapture
+
+# Run specific module tests (from src-tauri directory)
+cargo test domain::entities::student
+
+# Run importer tests (from src-tauri directory)
+cargo test student_importer
 ```
 
 ### Code Quality Commands
@@ -80,6 +82,9 @@ npm run format:check
 
 # Type checking (TypeScript only)
 npm run typecheck
+
+# Check Rust compilation
+cd src-tauri && cargo check
 ```
 
 ### Cleanup Commands
@@ -92,63 +97,6 @@ cd flutter/desktop && flutter clean
 
 # Clean Rust only
 cd src-tauri && cargo clean
-```
-
-### Backend Commands (from src-tauri directory)
-```bash
-# Check compilation
-cargo check
-
-# Run linter
-cargo clippy -- -D warnings
-
-# Format code
-cargo fmt
-
-# Run all tests
-cargo test
-
-# Run single test
-cargo test test_name
-
-# Run tests with output
-cargo test -- --nocapture
-
-# Run specific module tests
-cargo test domain::entities::student
-
-# Run importer tests
-cargo test student_importer
-
-# Build release version
-cargo build --release
-
-# Run development server
-cargo run
-```
-
-### Frontend Commands (from src directory)
-```bash
-# Start development server
-bun run dev
-
-# TypeScript type checking
-tsc --noEmit
-
-# Run linter
-bun run lint
-
-# Fix lint issues
-bun run lint:fix
-
-# Format code
-bun run format
-
-# Check formatting
-bun run format:check
-
-# Build for production
-bun run build
 ```
 
 ## Rust Code Style Guidelines
@@ -194,45 +142,29 @@ use crate::domain::entities::Student;
 - Return `DomainResult<T>` type
 - Use Arc for shared ownership across services
 
-## TypeScript Frontend Guidelines
+## Flutter/Dart Frontend Guidelines
 
 ### Code Organization
-- Components in `src/components/`
-- Pages in `src/pages/`
-- Utilities in `src/lib/`
-- Types in `src/types/`
-- Contexts in `src/contexts/`
-- Hooks in `src/hooks/`
+- Flutter code in `flutter/desktop/`
+- Mobile code in `flutter/mobile/`
+- Generated code managed by build_runner
 
 ### Naming Conventions
-- Components: `PascalCase`
-- Functions, variables, files: `camelCase`
-- Constants: `UPPER_SNAKE_CASE`
-- Custom hooks: `use*` prefix
+- Classes, typedefs, and type parameters: `PascalCase`
+- Libraries, packages, directories, and source files: `snake_case`
+- Other identifiers: `camelCase`
+- Private identifiers: `_privateIdentifier`
 
-### TypeScript Standards
-- Strict mode enabled
-- No implicit `any` types
-- Explicit return types for functions
-- Use interfaces for object shapes
-
-### React Patterns
-- Functional components with hooks
-- TypeScript props interfaces
-- No class components
-- Avoid `React.FC` (use explicit function signatures)
+### Dart Standards
+- Use `dart format` for code formatting
+- Follow Effective Dart guidelines
+- Use meaningful variable names
+- Prefer final for immutable objects
 
 ### State Management
-- Local state with `useState`
-- Global state through React Context
-- Use `useMemo` for expensive computations
-- Use `useCallback` for stable function references
-
-### Tauri Integration
-- Import from `@tauri-apps/api/core`
-- Use `invoke` for backend calls
-- Handle errors with try-catch
-- Type-safe invocations using generics
+- Use Provider or Riverpod for state management
+- Follow BLoC pattern for complex business logic
+- Use immutable data structures when possible
 
 ## Git Workflow
 
@@ -285,7 +217,7 @@ APP_ENV=development
 LOG_LEVEL=debug
 ```
 
-## Lint-staged Configuration
+### Lint-staged Configuration
 ```json
 {
   "src/**/*.{ts,tsx,js,jsx}": ["eslint --fix", "prettier --write"],
@@ -296,6 +228,15 @@ LOG_LEVEL=debug
 
 ## Testing
 - Backend tests: `cargo test` from src-tauri directory
-- Run single test: `cargo test test_name`
-- Run with output: `cargo test -- --nocapture`
-- Frontend tests: To be implemented with React Testing Library
+- Run single test: `cargo test test_name` from src-tauri directory
+- Run with output: `cargo test -- --nocapture` from src-tauri directory
+- Frontend tests: `flutter test` from flutter/desktop directory
+- All tests: `npm run test:all`
+
+## Security Best Practices
+- Never commit secrets or API keys
+- Use environment variables for sensitive data
+- Validate all user inputs
+- Sanitize data before storing or transmitting
+- Use HTTPS for all network communications
+- Implement proper authentication and authorization

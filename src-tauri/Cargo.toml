@@ -33,6 +33,9 @@ argon2 = "0.5"
 jsonwebtoken = "9.3"
 rand_core = "0.6"
 dirs = "5.0"
+axum = { version = "0.7", features = ["macros"] }
+tower-http = { version = "0.5", features = ["cors"] }
+hyper = { version = "1.0" }
 
 [dev-dependencies]
 tempfile = "3.8"

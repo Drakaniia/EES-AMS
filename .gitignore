@@ -58,13 +58,7 @@ flutter/desktop/.flutter-plugins-dependencies
 flutter/desktop/.packages
 flutter/desktop/pubspec.lock
 flutter/desktop/build/web/
-flutter/mobile/.dart_tool/
-flutter/mobile/build/
-flutter/mobile/.flutter-plugins
-flutter/mobile/.flutter-plugins-dependencies
-flutter/mobile/.packages
-flutter/mobile/pubspec.lock
-flutter/mobile/build/web/
+
 *.apk
 *.ipa
 *.app

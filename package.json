@@ -3,33 +3,32 @@
   "version": "1.0.0",
   "private": true,
   "description": "AttendEase - Attendance Management System",
-"scripts": {
-    "dev": "cd src-tauri && npx @tauri-apps/cli@latest dev",
-    "dev:frontend": "cd src && bun run dev",
+  "scripts": {
     "dev:backend": "cd src-tauri && cargo watch -x run",
-    "dev:flutter": "cd flutter/desktop && flutter run",
+    "dev:flutter": "cd flutter/desktop && flutter pub run build_runner build --delete-conflicting-outputs && flutter run",
     "build": "cd src-tauri && npx @tauri-apps/cli@latest build",
-    "build:flutter": "cd flutter/desktop && flutter build release",
-    "build:web": "cd flutter/desktop && flutter build web",
+    "build:flutter": "cd flutter/desktop && flutter pub run build_runner build --delete-conflicting-outputs && flutter build release",
+    "build:web": "cd flutter/desktop && flutter pub run build_runner build --delete-conflicting-outputs && flutter build web",
     "build:all": "npm run build:flutter && npm run build",
+    "codegen": "cd flutter/desktop && flutter pub run build_runner build --delete-conflicting-outputs",
+    "codegen:watch": "cd flutter/desktop && flutter pub run build_runner watch --delete-conflicting-outputs",
     "install": "cd src && bun install && cd ../flutter/desktop && flutter pub get",
     "install:deps": "bun install && cd flutter/desktop && flutter pub get && cd src-tauri && cargo fetch",
     "prepare": "husky",
     "test": "cd src-tauri && cargo test",
     "test:flutter": "cd flutter/desktop && flutter test",
     "test:all": "npm run test && npm run test:flutter",
-    "lint": "cd src && bun run lint && cd ../src-tauri && cargo clippy -- -D warnings",
-    "lint:fix": "cd src && bun run lint:fix && cd ../src-tauri && cargo clippy --fix -- -D warnings",
-    "format": "cd src && bun run format && cd ../src-tauri && cargo fmt",
-    "format:check": "cd src && bun run format:check && cd ../src-tauri && cargo fmt --check",
-    "clean": "cd src-tauri && cargo clean && cd ../flutter/desktop && flutter clean && rm -rf node_modules",
-    "typecheck": "cd src && tsc --noEmit"
+    "lint": "cd src-tauri && cargo clippy -- -D warnings",
+    "lint:fix": "cd src-tauri && cargo clippy --fix -- -D warnings",
+    "format": "cd src-tauri && cargo fmt",
+    "format:check": "cd src-tauri && cargo fmt --check",
+    "typecheck": "echo 'No TypeScript files to check in this project'"
   },
   "keywords": [
     "tauri",
     "attendance",
     "education"
   ],
-"author": "",
+  "author": "",
   "license": "MIT"
 }
