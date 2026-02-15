@@ -56,6 +56,7 @@ impl Student {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new_from_sf1(
         id: i64,
         lrn: Option<String>,
@@ -109,7 +110,7 @@ impl Student {
         }
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::too_many_arguments)]
     pub fn update(
         &mut self,
         rfid: Option<String>,

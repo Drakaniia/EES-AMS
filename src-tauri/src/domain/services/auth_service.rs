@@ -84,7 +84,7 @@ impl AuthService {
     // User registration
     pub async fn register(&self, request: RegisterRequest) -> Result<(UserProfile, String), String> {
         // Check if user already exists
-        if let Some(_) = self.user_repo.find_by_email(&request.email).await? {
+        if self.user_repo.find_by_email(&request.email).await?.is_some() {
             return Err("User with this email already exists".to_string());
         }
 
