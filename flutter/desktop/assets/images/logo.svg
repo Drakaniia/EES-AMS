@@ -1,0 +1,7 @@
+<!-- Placeholder logo for Flutter desktop application -->
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle cx="64" cy="64" r="60" fill="#1976D2"/>
+<path d="M44 48L84 48L84 56L44 56L44 48Z" fill="white"/>
+<path d="M44 64L84 64L84 72L44 72L44 64Z" fill="white"/>
+<path d="M44 80L84 80L84 88L44 88L44 80Z" fill="white"/>
+</svg>
