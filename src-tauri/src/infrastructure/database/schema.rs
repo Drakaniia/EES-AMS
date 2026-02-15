@@ -5,21 +5,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Database counters for generating IDs
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Counters {
     pub classes: i64,
     pub students: i64,
     pub attendance: i64,
-}
-
-impl Default for Counters {
-    fn default() -> Self {
-        Counters {
-            classes: 0,
-            students: 0,
-            attendance: 0,
-        }
-    }
 }
 
 /// Class record for database storage
@@ -68,23 +58,11 @@ pub struct AttendanceRecord {
 }
 
 /// Complete database schema
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DatabaseSchema {
     pub classes: Vec<ClassRecord>,
     pub students: Vec<StudentRecord>,
     pub attendance: Vec<AttendanceRecord>,
     pub settings: HashMap<String, String>,
     pub counters: Counters,
-}
-
-impl Default for DatabaseSchema {
-    fn default() -> Self {
-        DatabaseSchema {
-            classes: Vec::new(),
-            students: Vec::new(),
-            attendance: Vec::new(),
-            settings: HashMap::new(),
-            counters: Counters::default(),
-        }
-    }
 }

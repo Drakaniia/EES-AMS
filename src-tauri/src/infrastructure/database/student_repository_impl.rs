@@ -213,4 +213,41 @@ impl StudentRepository for StudentRepositoryImpl {
             .filter(|s| s.class_id == Some(class_id))
             .count() as i32)
     }
+    
+    async fn update(&self, student: &Student) -> DomainResult<()> {
+        let db_arc = self.db.get_data();
+        let mut data = db_arc.lock().unwrap();
+        
+        // Find the student to update
+        if let Some(existing_student) = data.students.iter_mut().find(|s| s.id == student.id) {
+            // Update the student fields
+            existing_student.student_id = student.student_id.clone();
+            existing_student.lrn = student.lrn.clone();
+            existing_student.last_name = student.last_name.clone();
+            existing_student.first_name = student.first_name.clone();
+            existing_student.middle_name = student.middle_name.clone();
+            existing_student.gender = student.gender.clone();
+            existing_student.birthday = student.birthday.clone();
+            existing_student.age = student.age;
+            existing_student.mother_name = student.mother_name.clone();
+            existing_student.father_name = student.father_name.clone();
+            existing_student.guardian_name = student.guardian_name.clone();
+            existing_student.address = student.address.clone();
+            existing_student.class_id = student.class_id;
+            existing_student.updated_at = chrono::Utc::now().to_rfc3339();
+            
+            drop(data);
+            self.db.save()?;
+            Ok(())
+        } else {
+            Err(DomainError::NotFound(format!("Student with id {} not found", student.id)))
+        }
+    }
+    
+    async fn get_classes(&self) -> DomainResult<Vec<crate::domain::entities::class::Class>> {
+        // This method should not be in the StudentRepository trait
+        // It should be in the ClassRepository. This is a design issue.
+        // For now, returning an empty vector to satisfy the trait, but this should be fixed properly.
+        Ok(Vec::new())
+    }
 }
