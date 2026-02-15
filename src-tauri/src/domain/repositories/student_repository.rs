@@ -18,6 +18,7 @@ pub trait StudentRepository: Send + Sync {
     ) -> DomainResult<i64>;
 
     /// Create a new student from SF1 data
+    #[allow(clippy::too_many_arguments)]
     async fn create_from_sf1(
         &self,
         student_id: String,
@@ -58,4 +59,10 @@ pub trait StudentRepository: Send + Sync {
 
     /// Get count of students in a class
     async fn count_by_class(&self, class_id: i64) -> DomainResult<i32>;
+
+    /// Update a student record
+    async fn update(&self, student: &Student) -> DomainResult<()>;
+
+    /// Get all classes
+    async fn get_classes(&self) -> DomainResult<Vec<crate::domain::entities::class::Class>>;
 }
