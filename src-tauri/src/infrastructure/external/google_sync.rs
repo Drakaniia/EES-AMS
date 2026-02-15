@@ -8,6 +8,8 @@ use oauth2::{
     AuthorizationCode, TokenResponse, basic::BasicClient, reqwest::async_http_client,
 };
 use reqwest;
+use crate::domain::entities::{Student, Class, Attendance};
+use anyhow::Result;
 
 const SHEETS_API: &str = "https://sheets.googleapis.com/v4/spreadsheets";
 const DRIVE_API: &str = "https://www.googleapis.com/drive/v3/files";
@@ -227,8 +229,7 @@ impl GoogleSync {
             .to_string();
 
         if let Some(folder) = folder_id {
-            let move_url = format!("{}?addParents={}", 
-                format!("{}/{}", DRIVE_API, spreadsheet_id), folder);
+            let move_url = format!("{}/{}?addParents={}", DRIVE_API, spreadsheet_id, folder);
             let _ = self.fetch_with_auth(&move_url, "PATCH", None).await;
         }
 
@@ -287,5 +288,108 @@ impl GoogleSync {
     pub fn get_error(&self) -> Option<String> {
         let e = self.last_error.lock().unwrap();
         e.clone()
+    }
+}
+
+/// Google Drive Service for backup and synchronization
+#[allow(dead_code)]
+pub struct GoogleDriveService {
+    client: reqwest::Client,
+    token: Arc<Mutex<Option<TokenData>>>,
+}
+
+impl GoogleDriveService {
+    #[allow(dead_code)]
+    pub async fn new() -> Result<Self> {
+        Ok(GoogleDriveService {
+            client: reqwest::Client::new(),
+            token: Arc::new(Mutex::new(None)),
+        })
+    }
+
+    #[allow(dead_code)]
+    pub async fn sync_student(&self, student: &Student) -> Result<Student> {
+        // For now, this saves to a local directory as Google Drive integration placeholder
+        let backup_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("backups")
+            .join("google_drive");
+        
+        std::fs::create_dir_all(&backup_dir)?;
+        
+        let filename = format!("student_{}_{}.json", student.id, student.student_id.replace('.', "_"));
+        let filepath = backup_dir.join(filename);
+        
+        let json_content = serde_json::to_string_pretty(student)?;
+        std::fs::write(&filepath, json_content)?;
+        
+        Ok(student.clone())
+    }
+
+    #[allow(dead_code)]
+    pub async fn get_student(&self, id: i64) -> Result<Option<Student>> {
+        let backup_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("backups")
+            .join("google_drive");
+        
+        if backup_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                        if filename.starts_with(&format!("student_{}_", id)) && filename.ends_with(".json") {
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                if let Ok(student) = serde_json::from_str::<Student>(&content) {
+                                    return Ok(Some(student));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(None)
+    }
+
+    #[allow(dead_code)]
+    pub async fn sync_class(&self, class: &Class) -> Result<Class> {
+        let backup_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("backups")
+            .join("google_drive");
+        
+        std::fs::create_dir_all(&backup_dir)?;
+        
+        let filename = format!("class_{}.json", class.id);
+        let filepath = backup_dir.join(filename);
+        
+        let json_content = serde_json::to_string_pretty(class)?;
+        std::fs::write(&filepath, json_content)?;
+        
+        Ok(class.clone())
+    }
+
+    #[allow(dead_code)]
+    pub async fn sync_attendance(&self, attendance: &Attendance) -> Result<Attendance> {
+        let backup_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("attendease")
+            .join("backups")
+            .join("google_drive");
+        
+        std::fs::create_dir_all(&backup_dir)?;
+        
+        let filename = format!("attendance_{}_{}_{}.json", attendance.id, attendance.class_id, attendance.date.replace('-', "_"));
+        let filepath = backup_dir.join(filename);
+        
+        let json_content = serde_json::to_string_pretty(attendance)?;
+        std::fs::write(&filepath, json_content)?;
+        
+        Ok(attendance.clone())
     }
 }

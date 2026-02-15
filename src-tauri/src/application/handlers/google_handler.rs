@@ -255,10 +255,7 @@ impl<SR: SettingsRepository, AS: AttendanceService, CS: ClassService>
     }
 
     pub async fn get_sync_status(&self) -> ApiResponse<SyncStatus> {
-        let unsynced = match self.attendance_service.get_unsynced_records().await {
-            Ok(r) => r,
-            Err(_) => vec![],
-        };
+        let unsynced = self.attendance_service.get_unsynced_records().await.unwrap_or_default();
         let last_sync = self.settings_repo.get("last_sync_time").await.ok().flatten();
 
         let (is_syncing, error) = {
@@ -286,10 +283,12 @@ impl<SR: SettingsRepository, AS: AttendanceService, CS: ClassService>
         }
 
         // Then try to sync to Google Sheets if authenticated
-        let sync_guard = self.google_sync.lock().unwrap();
+        let is_authenticated = {
+            let sync_guard = self.google_sync.lock().unwrap();
+            sync_guard.is_authenticated()
+        };
         
-        if sync_guard.is_authenticated() {
-            drop(sync_guard);
+        if is_authenticated {
             let response = self.sync().await;
             if response.success {
                 response
