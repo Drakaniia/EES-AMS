@@ -1,29 +1,56 @@
 #!/bin/sh
 echo "Pre-commit hook running..."
 
-# Check if there are staged files in src/
-STAGED_FILES=$(git diff --cached --name-only | grep "^src/")
+# Check if there are staged files in src/ or flutter/
+STAGED_FILES=$(git diff --cached --name-only | grep -E "^(src/|flutter/)")
 
 if [ -n "$STAGED_FILES" ]; then
-    echo "Running linting and formatting on staged files..."
-    cd src
+    # Check for Flutter files
+    FLUTTER_STAGED=$(echo "$STAGED_FILES" | grep "^flutter/")
     
-    # Run lint-staged on the staged files
-    if command -v bunx >/dev/null 2>&1; then
-        echo "Using bunx to run lint-staged"
-        bunx lint-staged
-    else
-        echo "Using npx to run lint-staged"
-        npx lint-staged
+    if [ -n "$FLUTTER_STAGED" ]; then
+        echo "Running Flutter analysis on staged files..."
+        
+        # Run flutter analyze on the Flutter desktop project
+        cd flutter/desktop
+        
+        if command -v flutter >/dev/null 2>&1; then
+            echo "Using flutter to run analysis"
+            flutter analyze
+            ANALYZE_EXIT_CODE=$?
+            if [ $ANALYZE_EXIT_CODE -ne 0 ]; then
+                echo "❌ Flutter analyze failed - hook will prevent commit"
+                exit 1
+            fi
+        else
+            echo "⚠️ Flutter not found, skipping analysis"
+        fi
+        
+        cd ../..
     fi
     
-    LINT_EXIT_CODE=$?
-    if [ $LINT_EXIT_CODE -ne 0 ]; then
-        echo "❌ Lint-staged failed - hook will prevent commit"
-        exit 1
-    fi
+    # Check for Tauri/Rust files
+    TAURI_STAGED=$(echo "$STAGED_FILES" | grep "^src-tauri/")
     
-    cd ..
+    if [ -n "$TAURI_STAGED" ]; then
+        echo "Running Rust analysis on staged files..."
+        
+        cd src-tauri
+        
+        if command -v cargo >/dev/null 2>&1; then
+            echo "Using cargo to run check"
+            cargo check
+            CHECK_EXIT_CODE=$?
+            if [ $CHECK_EXIT_CODE -ne 0 ]; then
+                echo "❌ Cargo check failed - hook will prevent commit"
+                exit 1
+            fi
+        else
+            echo "⚠️ Cargo not found, skipping check"
+        fi
+        
+        cd ..
+    fi
 fi
 
 echo "✅ Pre-commit hook completed successfully"
