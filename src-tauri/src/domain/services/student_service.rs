@@ -10,6 +10,7 @@ use async_trait::async_trait;
 #[allow(dead_code)]
 pub trait StudentService: Send + Sync {
     async fn create_student(&self, student_id: String, first_name: String, last_name: String, class_id: Option<i64>) -> DomainResult<Student>;
+    #[allow(clippy::too_many_arguments)]
     async fn create_student_from_sf1(
         &self,
         lrn: Option<String>,
