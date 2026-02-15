@@ -49,3 +49,44 @@ tmp/
 *.xlsx
 !assets/student-list/*.xls
 !assets/student-list/*.xlsx
+
+# Flutter/Dart specific
+flutter/desktop/.dart_tool/
+flutter/desktop/build/
+flutter/desktop/.flutter-plugins
+flutter/desktop/.flutter-plugins-dependencies
+flutter/desktop/.packages
+flutter/desktop/pubspec.lock
+flutter/desktop/build/web/
+flutter/mobile/.dart_tool/
+flutter/mobile/build/
+flutter/mobile/.flutter-plugins
+flutter/mobile/.flutter-plugins-dependencies
+flutter/mobile/.packages
+flutter/mobile/pubspec.lock
+flutter/mobile/build/web/
+*.apk
+*.ipa
+*.app
+*.msix
+*.pkg
+
+# Rust additional
+**/*.rs.bk
+/src-tauri/Cargo.toml.orig
+
+# Bun/Node.js additional
+bun.lockb
+package-lock.json
+
+# Development tools
+.ruff_cache/
+.kiro/
+coverage/
+
+# IDE specific settings
+.vscode/settings.json
+
+# Test outputs
+test-results/
+*.profraw
