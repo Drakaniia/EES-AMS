@@ -9,8 +9,14 @@ export function nfcSupported(): NfcSupport {
 
 type NDEFReadingEventLike = { serialNumber?: string };
 
+interface NDEFReaderLike {
+	scan(options: { signal: AbortSignal }): Promise<void>;
+	onreadingerror: (() => void) | null;
+	onreading: ((event: NDEFReadingEventLike) => void) | null;
+}
+
 export class NfcScanner {
-	private reader: unknown = null;
+	private reader: NDEFReaderLike | null = null;
 	private controller: AbortController | null = null;
 	private onRead: (serial: string) => void;
 	private onError: (err: Error) => void;
@@ -26,12 +32,13 @@ export class NfcScanner {
 			return;
 		}
 		try {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			this.reader = new (window as any).NDEFReader();
+			const NDEFReaderCtor = (window as unknown as { NDEFReader: new () => NDEFReaderLike })
+				.NDEFReader;
+			this.reader = new NDEFReaderCtor();
 			this.controller = new AbortController();
-			await (this.reader as any).scan({ signal: this.controller.signal });
-			(this.reader as any).onreadingerror = () => this.onError(new Error('Cannot read this card.'));
-			(this.reader as any).onreading = (event: NDEFReadingEventLike) => {
+			await this.reader.scan({ signal: this.controller.signal });
+			this.reader.onreadingerror = () => this.onError(new Error('Cannot read this card.'));
+			this.reader.onreading = (event: NDEFReadingEventLike) => {
 				const serial = (event.serialNumber ?? '').toLowerCase().replace(/[^a-f0-9:]/g, '');
 				if (serial) this.onRead(serial);
 			};

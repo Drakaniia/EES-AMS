@@ -57,7 +57,7 @@ class ApiClient {
 	async findStudentByCard(serial: string): Promise<Student | undefined> {
 		try {
 			return await this.request<Student>(`/api/students/card/${encodeURIComponent(serial)}`);
-		} catch (e) {
+		} catch {
 			// 404 means not found
 			return undefined;
 		}
@@ -98,7 +98,7 @@ class ApiClient {
 	async lastEventForStudent(studentId: string): Promise<AttendanceEvent | undefined> {
 		try {
 			return await this.request<AttendanceEvent>(`/api/events/student/${studentId}/last`);
-		} catch (e) {
+		} catch {
 			return undefined;
 		}
 	}

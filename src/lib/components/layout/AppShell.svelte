@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 
 	const navItems = [
@@ -57,10 +59,14 @@
 
 		<!-- Nav -->
 		<nav class="flex overflow-x-auto md:flex-col md:gap-1 md:overflow-visible md:px-3 md:pt-2">
-			{#each navItems as item}
+			{#each navItems as item (item.href)}
 				{@const active = isActive(item.href, $page.url.pathname)}
 				<a
-					href={item.href}
+					href={resolve(item.href)}
+					onclick={(e) => {
+						e.preventDefault();
+						goto(resolve(item.href));
+					}}
 					class="flex items-center gap-3 px-4 py-3 text-sm whitespace-nowrap transition-colors md:rounded-md
 						{active
 						? 'bg-surface text-foreground border-primary md:border-l-primary border-b-2 md:border-b-0 md:border-l-2'

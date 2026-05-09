@@ -12,3 +12,4 @@ target/
 .agents/
 .kirio/
 skills/
+src-tauri/gen/
