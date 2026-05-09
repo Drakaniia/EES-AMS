@@ -154,7 +154,7 @@
 
 			<div class="mt-4">
 				<a
-					href="/reports"
+					href="/records"
 					class="text-sm font-mono inline-flex items-center gap-1 text-primary hover:text-accent transition-colors"
 				>
 					View all records
