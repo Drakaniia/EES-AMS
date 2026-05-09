@@ -30,8 +30,7 @@ export class NfcScanner {
 			this.reader = new (window as any).NDEFReader();
 			this.controller = new AbortController();
 			await (this.reader as any).scan({ signal: this.controller.signal });
-			(this.reader as any).onreadingerror = () =>
-				this.onError(new Error('Cannot read this card.'));
+			(this.reader as any).onreadingerror = () => this.onError(new Error('Cannot read this card.'));
 			(this.reader as any).onreading = (event: NDEFReadingEventLike) => {
 				const serial = (event.serialNumber ?? '').toLowerCase().replace(/[^a-f0-9:]/g, '');
 				if (serial) this.onRead(serial);

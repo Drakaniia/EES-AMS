@@ -11,3 +11,4 @@ bun.lockb
 target/
 .agents/
 .kirio/
+skills/
