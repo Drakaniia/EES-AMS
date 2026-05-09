@@ -223,7 +223,10 @@ impl StudentRepository {
     /// Delete a student and all their events
     pub fn delete(&self, id: StudentId) -> Result<()> {
         let conn = self.pool.get()?;
-        let rows = conn.execute("DELETE FROM students WHERE id = ?1", params![id.0.to_string()])?;
+        let rows = conn.execute(
+            "DELETE FROM students WHERE id = ?1",
+            params![id.0.to_string()],
+        )?;
 
         if rows == 0 {
             return Err(AppError::StudentNotFound(id.0.to_string()));
@@ -374,7 +377,10 @@ impl EventRepository {
     /// Delete an event
     pub fn delete(&self, id: EventId) -> Result<()> {
         let conn = self.pool.get()?;
-        let rows = conn.execute("DELETE FROM events WHERE id = ?1", params![id.0.to_string()])?;
+        let rows = conn.execute(
+            "DELETE FROM events WHERE id = ?1",
+            params![id.0.to_string()],
+        )?;
 
         if rows == 0 {
             return Err(AppError::EventNotFound(id.0.to_string()));

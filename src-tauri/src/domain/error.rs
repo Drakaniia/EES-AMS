@@ -36,9 +36,7 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
-            Self::StudentNotFound(msg) | Self::EventNotFound(msg) => {
-                (StatusCode::NOT_FOUND, msg)
-            }
+            Self::StudentNotFound(msg) | Self::EventNotFound(msg) => (StatusCode::NOT_FOUND, msg),
             Self::CardAlreadyRegistered(msg) | Self::InvalidInput(msg) => {
                 (StatusCode::BAD_REQUEST, msg)
             }
