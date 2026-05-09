@@ -49,7 +49,7 @@ pub fn run() {
 
             // Start HTTP server in background
             let state = AppState::new(pool);
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 if let Err(e) = start_server(state, DEFAULT_PORT).await {
                     log::error!("server error: {}", e);
                 }
