@@ -41,7 +41,11 @@ pub fn run() {
                 .unwrap_or_else(|_| "127.0.0.1".to_string());
 
             log::info!("local IP address: {}", local_ip);
-            log::info!("server will be accessible at http://{}:{}", local_ip, DEFAULT_PORT);
+            log::info!(
+                "server will be accessible at http://{}:{}",
+                local_ip,
+                DEFAULT_PORT
+            );
 
             // Start HTTP server in background
             let state = AppState::new(pool);

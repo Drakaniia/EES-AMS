@@ -1,6 +1,8 @@
 /// HTTP API server
 use crate::domain::{error::Result, models::*};
-use crate::infrastructure::database::{DbPool, EventRepository, SettingsRepository, StudentRepository};
+use crate::infrastructure::database::{
+    DbPool, EventRepository, SettingsRepository, StudentRepository,
+};
 use axum::{
     extract::{Path, State},
     http::{header, Method, StatusCode},
