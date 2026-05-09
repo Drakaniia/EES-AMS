@@ -1,8 +1,0 @@
-<!-- Placeholder app icon for Flutter desktop application -->
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="64" height="64" rx="12" fill="#2196F3"/>
-<path d="M32 16C35.3137 16 38 18.6863 38 22V30C38 33.3137 35.3137 36 32 36C28.6863 36 26 33.3137 26 30V22C26 18.6863 28.6863 16 32 16Z" fill="white"/>
-<path d="M20 32C20 30.8954 20.8954 30 22 30H42C43.1046 30 44 30.8954 44 32V38C44 43.5228 39.5228 48 34 48H30C24.4772 48 20 43.5228 20 38V32Z" fill="white"/>
-<circle cx="22" cy="44" r="3" fill="white"/>
-<circle cx="42" cy="44" r="3" fill="white"/>
-</svg>

@@ -1,86 +1,23 @@
-# Generated files
-/target/
-/src-tauri/target/
-/dist/
-/build/
+node_modules
 
-# Environment variables
-.env*
-!.env.example
-
-# Firebase credentials
-firebase-service-account.json
-*.key
-
-# Tauri specific
-/src-tauri/target/src-tauri-generated/
-/src-tauri/cargo-apk/
-/src-tauri/target/bundle/
-
-# Node modules
-node_modules/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-logs/
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
 
-# Database/data files
-data/
-*.db
-*.sqlite
-
-# Temporary files
-temp/
-tmp/
-*.tmp
-
-# Excel test files (keep examples)
-*.xls
-*.xlsx
-!assets/student-list/*.xls
-!assets/student-list/*.xlsx
-
-# Flutter/Dart specific
-flutter/desktop/.dart_tool/
-flutter/desktop/build/
-flutter/desktop/.flutter-plugins
-flutter/desktop/.flutter-plugins-dependencies
-flutter/desktop/.packages
-flutter/desktop/pubspec.lock
-flutter/desktop/build/web/
-
-*.apk
-*.ipa
-*.app
-*.msix
-*.pkg
-
-# Rust additional
-**/*.rs.bk
-/src-tauri/Cargo.toml.orig
-
-# Bun/Node.js additional
-bun.lockb
-package-lock.json
-
-# Development tools
-.ruff_cache/
-.kiro/
-coverage/
-
-# IDE specific settings
-.vscode/settings.json
-
-# Test outputs
-test-results/
-*.profraw
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
