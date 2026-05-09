@@ -1,3 +1,0 @@
-#!/bin/sh
-# Run tests before pushing
-cd src && bun run build

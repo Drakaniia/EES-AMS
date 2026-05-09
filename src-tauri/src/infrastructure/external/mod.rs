@@ -1,9 +1,0 @@
-// External Services Module
-// Integrations with external services
-
-pub mod google_sync;
-pub mod firebase;
-// pub mod hybrid_sync; // Temporarily disabled - depends on GoogleDriveService
-
-pub use google_sync::{GoogleSync, GoogleCredentials, TokenData};
-// pub use hybrid_sync::{HybridSyncService, SyncConfig, SyncSource, SyncDirection, ConflictResolutionStrategy};
