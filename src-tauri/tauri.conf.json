@@ -1,70 +1,40 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "AttendEase",
-  "version": "1.0.0",
-  "identifier": "com.attendease.app",
-  "build": {
-    "frontendDist": "../src/dist",
-    "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "cd ../src && bun run dev",
-    "beforeBuildCommand": "cd ../src && pnpm build"
-  },
-  "app": {
-    "windows": [
-      {
-        "title": "AttendEase - Attendance Management",
-        "width": 1400,
-        "height": 900,
-        "minWidth": 1024,
-        "minHeight": 700,
-        "resizable": true,
-        "fullscreen": false,
-        "decorations": true,
-        "transparent": false,
-        "titleBarStyle": "Overlay"
-      }
-    ],
-    "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'"
-    }
-  },
-  "bundle": {
-    "active": true,
-    "targets": [
-      "msi",
-      "nsis",
-      "deb",
-      "appimage",
-      "dmg",
-      "app"
-    ],
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
-    "windows": {
-      "certificateThumbprint": null,
-      "digestAlgorithm": "sha256",
-      "timestampUrl": ""
-    },
-    "macOS": {
-      "frameworks": [],
-      "minimumSystemVersion": "10.13",
-      "exceptionDomain": ""
-    },
-    "createUpdaterArtifacts": true
-  },
-  "plugins": {
-    "updater": {
-      "active": true,
-      "endpoints": [
-        "https://api.attendease.app/updates/{{target}}/{{current_version}}"
-      ],
-      "dialog": false,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDBERjhEQzYzMTA5NEQ5Rjk3MApSV1dRWlJ4YUhFbHJpNnJ5b2JtM3d0TnFpVTZ3Q0Z5TnBjU09pQmFZUHZ3bXdnZDlVbHlGQXJrR3V5eTAK"
-    }
-  }
+	"$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+	"productName": "ees_ams",
+	"version": "0.1.0",
+	"identifier": "com.tauri.dev",
+	"build": {
+		"frontendDist": "../build",
+		"devUrl": "http://localhost:5173",
+		"beforeDevCommand": "bun run dev",
+		"beforeBuildCommand": "bun run build"
+	},
+	"app": {
+		"windows": [
+			{
+				"title": "EES - Attendance Management System",
+				"width": 800,
+				"height": 600,
+				"resizable": true,
+				"fullscreen": false
+			}
+		],
+		"security": {
+			"csp": null
+		}
+	},
+	"bundle": {
+		"active": true,
+		"targets": "all",
+		"icon": [
+			"icons/32x32.png",
+			"icons/128x128.png",
+			"icons/128x128@2x.png",
+			"icons/icon.icns",
+			"icons/icon.ico"
+		],
+		"android": {
+			"debugApplicationIdSuffix": ".debug"
+		}
+	}
 }
