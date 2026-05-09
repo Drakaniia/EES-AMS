@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import { listEvents, listStudents, type AttendanceEvent, type Student } from '$lib/db';
@@ -16,11 +19,11 @@
 
 	const todayEvents = $derived(events.filter((e) => fmtDate(e.timestamp) === today));
 
-	const studentMap = $derived(new Map(students.map((s) => [s.id, s])));
+	const studentMap = $derived(new SvelteMap(students.map((s) => [s.id, s])));
 
 	// Last event per student today — determine who's currently checked in
 	const checkedIn = $derived.by(() => {
-		const lastByStudent = new Map<string, AttendanceEvent>();
+		const lastByStudent = new SvelteMap<string, AttendanceEvent>();
 		for (const e of [...todayEvents].sort((a, b) => a.timestamp - b.timestamp)) {
 			lastByStudent.set(e.studentId, e);
 		}
@@ -43,7 +46,11 @@
 	>
 		{#snippet actions()}
 			<a
-				href="/students"
+				href={resolve('/students')}
+				onclick={(e) => {
+					e.preventDefault();
+					goto(resolve('/students'));
+				}}
 				class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
 			>
 				<svg
@@ -64,7 +71,11 @@
 				Manage students
 			</a>
 			<a
-				href="/attendance"
+				href={resolve('/attendance')}
+				onclick={(e) => {
+					e.preventDefault();
+					goto(resolve('/attendance'));
+				}}
 				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
 			>
 				<svg
@@ -154,7 +165,11 @@
 
 			<div class="mt-4">
 				<a
-					href="/records"
+					href={resolve('/records')}
+					onclick={(e) => {
+						e.preventDefault();
+						goto(resolve('/records'));
+					}}
 					class="text-primary hover:text-accent inline-flex items-center gap-1 font-mono text-sm transition-colors"
 				>
 					View all records

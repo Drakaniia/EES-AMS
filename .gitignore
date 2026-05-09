@@ -8,6 +8,9 @@ node_modules
 /.svelte-kit
 /build
 
+# Rust / Tauri
+src-tauri/target/
+
 # OS
 .DS_Store
 Thumbs.db
