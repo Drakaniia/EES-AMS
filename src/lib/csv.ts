@@ -58,8 +58,7 @@ export function eventsToCSV(
 				checkIn && checkOut && checkOut > checkIn
 					? ((checkOut - checkIn) / 3600000).toFixed(2)
 					: '';
-			const late =
-				checkIn && lateAfter ? (fmtTime(checkIn) > lateAfter ? 'Yes' : 'No') : '';
+			const late = checkIn && lateAfter ? (fmtTime(checkIn) > lateAfter ? 'Yes' : 'No') : '';
 			return [
 				g.date,
 				g.student.studentNumber,

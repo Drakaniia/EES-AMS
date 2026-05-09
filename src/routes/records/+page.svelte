@@ -87,7 +87,7 @@
 		{#snippet actions()}
 			<button
 				onclick={onExport}
-				class="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-primary text-primary-foreground text-sm font-medium hover:bg-accent transition-colors"
+				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
 			>
 				<!-- Download icon -->
 				<svg
@@ -110,14 +110,14 @@
 	</PageHeader>
 
 	<!-- ── Filters ──────────────────────────────────────────────────────────── -->
-	<section class="px-6 md:px-12 py-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+	<section class="grid gap-4 px-6 py-8 sm:grid-cols-2 md:px-12 lg:grid-cols-4">
 		<!-- From -->
 		<div class="space-y-2">
 			<div class="label-mono">From</div>
 			<input
 				type="date"
 				bind:value={from}
-				class="w-full h-10 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+				class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
 			/>
 		</div>
 
@@ -127,7 +127,7 @@
 			<input
 				type="date"
 				bind:value={to}
-				class="w-full h-10 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+				class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
 			/>
 		</div>
 
@@ -136,7 +136,7 @@
 			<div class="label-mono">Student</div>
 			<select
 				bind:value={studentId}
-				class="w-full h-10 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+				class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
 			>
 				<option value="">All students</option>
 				{#each students as s (s.id)}
@@ -148,23 +148,23 @@
 		<!-- Total -->
 		<div class="space-y-2">
 			<div class="label-mono">Total events</div>
-			<div class="h-10 flex items-center font-mono text-sm">{filtered.length}</div>
+			<div class="flex h-10 items-center font-mono text-sm">{filtered.length}</div>
 		</div>
 	</section>
 
 	<!-- ── Table ────────────────────────────────────────────────────────────── -->
-	<section class="px-6 md:px-12 pb-16">
-		<div class="rounded-2xl border border-border overflow-hidden bg-card">
+	<section class="px-6 pb-16 md:px-12">
+		<div class="border-border bg-card overflow-hidden rounded-2xl border">
 			<table class="w-full text-sm">
 				<thead class="bg-surface text-left">
 					<tr>
-						<th class="px-4 py-3 label-mono">When</th>
-						<th class="px-4 py-3 label-mono">Student</th>
-						<th class="px-4 py-3 label-mono">Type</th>
-						<th class="px-4 py-3 label-mono text-right w-20"> </th>
+						<th class="label-mono px-4 py-3">When</th>
+						<th class="label-mono px-4 py-3">Student</th>
+						<th class="label-mono px-4 py-3">Type</th>
+						<th class="label-mono w-20 px-4 py-3 text-right"> </th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-border">
+				<tbody class="divide-border divide-y">
 					{#if filtered.length === 0}
 						{@render emptyState()}
 					{:else}
@@ -178,15 +178,15 @@
 								</td>
 								<td class="px-4 py-3 align-top">
 									{@render typePill(e.type)}
-									<span class="ml-2 font-mono text-xs text-muted-foreground"
+									<span class="text-muted-foreground ml-2 font-mono text-xs"
 										>{fmtTime(e.timestamp)}</span
 									>
 								</td>
-								<td class="px-4 py-3 align-top text-right">
+								<td class="px-4 py-3 text-right align-top">
 									<button
 										onclick={() => onDelete(e.id)}
 										aria-label="Delete event"
-										class="inline-flex items-center justify-center size-8 rounded-md border border-border text-destructive hover:bg-destructive/10 transition-colors"
+										class="border-border text-destructive hover:bg-destructive/10 inline-flex size-8 items-center justify-center rounded-md border transition-colors"
 									>
 										<!-- Trash2 icon -->
 										<svg
@@ -200,9 +200,7 @@
 											aria-hidden="true"
 										>
 											<polyline points="3 6 5 6 21 6" />
-											<path
-												d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
-											/>
+											<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
 											<path d="M10 11v6M14 11v6" />
 											<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
 										</svg>
@@ -220,7 +218,7 @@
 <!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 {#if toastMessage}
 	<div
-		class="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl border shadow-lg text-sm font-medium
+		class="fixed right-6 bottom-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
 			{toastOk
 			? 'bg-background border-border text-foreground'
 			: 'bg-destructive/10 border-destructive/40 text-destructive'}"
@@ -234,7 +232,7 @@
 <!-- ── Snippets ───────────────────────────────────────────────────────────── -->
 {#snippet emptyState()}
 	<tr>
-		<td colspan={4} class="px-4 py-12 text-center text-muted-foreground">
+		<td colspan={4} class="text-muted-foreground px-4 py-12 text-center">
 			No records match the filters.
 		</td>
 	</tr>
@@ -242,13 +240,11 @@
 
 {#snippet typePill(type: 'in' | 'out')}
 	<span
-		class="text-xs font-mono px-2 py-1 rounded-pill
+		class="rounded-pill px-2 py-1 font-mono text-xs
 			{type === 'in'
 			? 'bg-primary text-primary-foreground'
-			: 'bg-surface border border-border text-foreground'}"
+			: 'bg-surface border-border text-foreground border'}"
 	>
 		{type === 'in' ? 'CHECK-IN' : 'CHECK-OUT'}
 	</span>
 {/snippet}
-
-

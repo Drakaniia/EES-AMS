@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 
 	const navItems = [
@@ -12,8 +14,7 @@
 	type NavIconName = (typeof navItems)[number]['icon'];
 
 	const iconPaths: Record<NavIconName, string> = {
-		dashboard:
-			'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
+		dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
 		users:
 			'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
 		scan: 'M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10',
@@ -30,26 +31,26 @@
 	}
 </script>
 
-<div class="min-h-screen flex flex-col md:flex-row bg-background text-foreground">
+<div class="bg-background text-foreground flex min-h-screen flex-col md:flex-row">
 	<!-- Sidebar -->
 	<aside
-		class="md:w-72 border-b md:border-b-0 md:border-r border-border bg-background md:min-h-screen flex md:flex-col"
+		class="border-border bg-background flex border-b md:min-h-screen md:w-72 md:flex-col md:border-r md:border-b-0"
 	>
 		<!-- Desktop brand -->
-		<div class="hidden md:block px-6 pt-8 pb-6">
+		<div class="hidden px-6 pt-8 pb-6 md:block">
 			<div class="label-mono mb-3">Horizon · Step 01</div>
 			<h1 class="display-lg leading-none">
 				Attendance<br />Workspace
 			</h1>
-			<p class="mt-4 text-sm text-muted-foreground max-w-[14rem]">
+			<p class="text-muted-foreground mt-4 max-w-[14rem] text-sm">
 				Tap-to-attend with NFC ID cards. Local-first, always offline-ready.
 			</p>
 		</div>
 
 		<!-- Mobile brand bar -->
-		<div class="md:hidden flex items-center gap-3 px-4 py-3 border-b border-border w-full">
+		<div class="border-border flex w-full items-center gap-3 border-b px-4 py-3 md:hidden">
 			<div
-				class="size-8 rounded-md bg-primary text-primary-foreground grid place-items-center font-mono text-xs font-bold"
+				class="bg-primary text-primary-foreground grid size-8 place-items-center rounded-md font-mono text-xs font-bold"
 			>
 				H
 			</div>
@@ -57,14 +58,18 @@
 		</div>
 
 		<!-- Nav -->
-		<nav class="flex md:flex-col md:gap-1 md:px-3 md:pt-2 overflow-x-auto md:overflow-visible">
-			{#each navItems as item}
+		<nav class="flex overflow-x-auto md:flex-col md:gap-1 md:overflow-visible md:px-3 md:pt-2">
+			{#each navItems as item (item.href)}
 				{@const active = isActive(item.href, $page.url.pathname)}
 				<a
-					href={item.href}
-					class="flex items-center gap-3 px-4 py-3 md:rounded-md text-sm whitespace-nowrap transition-colors
+					href={resolve(item.href)}
+					onclick={(e) => {
+						e.preventDefault();
+						goto(resolve(item.href));
+					}}
+					class="flex items-center gap-3 px-4 py-3 text-sm whitespace-nowrap transition-colors md:rounded-md
 						{active
-						? 'bg-surface text-foreground border-b-2 md:border-b-0 border-primary md:border-l-2 md:border-l-primary'
+						? 'bg-surface text-foreground border-primary md:border-l-primary border-b-2 md:border-b-0 md:border-l-2'
 						: 'text-muted-foreground hover:text-foreground hover:bg-surface/60'}"
 				>
 					<svg
@@ -84,11 +89,11 @@
 			{/each}
 		</nav>
 
-		<div class="hidden md:block mt-auto px-6 py-6 label-mono">v1 · local-only</div>
+		<div class="label-mono mt-auto hidden px-6 py-6 md:block">v1 · local-only</div>
 	</aside>
 
 	<!-- Main content -->
-	<main class="flex-1 min-w-0">
+	<main class="min-w-0 flex-1">
 		{@render children()}
 	</main>
 </div>
