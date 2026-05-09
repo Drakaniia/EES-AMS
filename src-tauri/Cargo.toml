@@ -1,47 +1,25 @@
 [package]
-name = "attendease"
-version = "0.0.0"
+name = "app"
+version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
+license = ""
+repository = ""
 edition = "2021"
+rust-version = "1.77.2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
-tauri-build = { version = "2.0.0", features = [] }
+tauri-build = { version = "2.6.1", features = [] }
 
 [dependencies]
-tauri = { version = "2.0.0", features = [] }
-tauri-plugin-shell = "2.0.0"
-tauri-plugin-updater = "2.0.0"
-tauri-plugin-process = "2.0.0"
-serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
-oauth2 = "4.4"
-tokio = { version = "1", features = ["full"] }
-chrono = { version = "0.4", features = ["serde"] }
-urlencoding = "2.1"
-async-trait = "0.1"
-ts-rs = "9.0"
-calamine = "0.25"
-anyhow = "1.0"
-firestore-db-and-auth = "0.8"
-firestore = "0.37"
-dotenv = "0.15"
-argon2 = "0.5"
-jsonwebtoken = "9.3"
-rand_core = "0.6"
-dirs = "5.0"
-
-[dev-dependencies]
-tempfile = "3.8"
-
-[profile.dev]
-incremental = true 
-
-[profile.release]
-codegen-units = 1 # Compile slower but better optimized
-lto = true # Link time optimization
-strip = true # Strip symbols from binary
-panic = "abort" # Abort on panic
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.1", features = [] }
+tauri-plugin-log = "2"
