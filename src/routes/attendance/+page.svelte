@@ -130,10 +130,7 @@
 
 <svelte:head>
 	<title>Tap Mode — Horizon Attendance</title>
-	<meta
-		name="description"
-		content="Continuous NFC tap to check students in and out."
-	/>
+	<meta name="description" content="Continuous NFC tap to check students in and out." />
 </svelte:head>
 
 <AppShell>
@@ -144,8 +141,11 @@
 	>
 		{#snippet actions()}
 			<button
-				onclick={() => { pickerQuery = ''; pickerOpen = true; }}
-				class="inline-flex items-center gap-2 px-4 py-2 rounded-pill border border-border bg-background text-sm font-medium hover:bg-surface transition-colors"
+				onclick={() => {
+					pickerQuery = '';
+					pickerOpen = true;
+				}}
+				class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
 			>
 				Manual log
 			</button>
@@ -153,7 +153,7 @@
 			{#if scanning}
 				<button
 					onclick={stopScanning}
-					class="inline-flex items-center gap-2 px-4 py-2 rounded-pill border border-destructive/40 text-destructive text-sm font-medium hover:bg-destructive/10 transition-colors"
+					class="rounded-pill border-destructive/40 text-destructive hover:bg-destructive/10 inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
 				>
 					<!-- Square icon -->
 					<svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -164,7 +164,7 @@
 			{:else}
 				<button
 					onclick={startScanning}
-					class="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-primary text-primary-foreground text-sm font-medium hover:bg-accent transition-colors"
+					class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
 				>
 					<!-- Play icon -->
 					<svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -176,16 +176,16 @@
 		{/snippet}
 	</PageHeader>
 
-	<section class="px-6 md:px-12 py-10 grid lg:grid-cols-[1.2fr_1fr] gap-8">
+	<section class="grid gap-8 px-6 py-10 md:px-12 lg:grid-cols-[1.2fr_1fr]">
 		<!-- ── Scanner panel ─────────────────────────────────────────────── -->
 		<div
-			class="relative rounded-3xl border border-border overflow-hidden bg-surface min-h-[420px] flex items-center justify-center p-10
-				{scanning ? 'ring-2 ring-primary/40' : ''}"
+			class="border-border bg-surface relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-3xl border p-10
+				{scanning ? 'ring-primary/40 ring-2' : ''}"
 		>
 			<!-- Ambient glow -->
 			<div
 				aria-hidden="true"
-				class="absolute inset-0 opacity-50 pointer-events-none"
+				class="pointer-events-none absolute inset-0 opacity-50"
 				style="background: radial-gradient(60% 60% at 50% 40%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 70%)"
 			></div>
 
@@ -194,7 +194,7 @@
 
 				<!-- Scan ring -->
 				<div
-					class="mx-auto size-40 rounded-full grid place-items-center border-2
+					class="mx-auto grid size-40 place-items-center rounded-full border-2
 						{scanning ? 'border-primary animate-pulse' : 'border-border'}"
 				>
 					<!-- ScanLine icon -->
@@ -217,7 +217,7 @@
 				</div>
 
 				<h3 class="display-lg mt-8">{scanning ? 'Tap a card' : 'Press start'}</h3>
-				<p class="text-muted-foreground mt-2 max-w-md mx-auto">
+				<p class="text-muted-foreground mx-auto mt-2 max-w-md">
 					{#if supported}
 						Cards are read via Web NFC. Keep the device awake while in tap mode.
 					{:else}
@@ -228,8 +228,8 @@
 		</div>
 
 		<!-- ── Session log ───────────────────────────────────────────────── -->
-		<div class="rounded-2xl border border-border bg-card p-6">
-			<div class="flex items-baseline justify-between mb-4">
+		<div class="border-border bg-card rounded-2xl border p-6">
+			<div class="mb-4 flex items-baseline justify-between">
 				<h3 class="text-lg font-medium">Session log</h3>
 				<span class="label-mono">Latest taps</span>
 			</div>
@@ -237,11 +237,11 @@
 			{#if log.length === 0}
 				{@render emptyLog()}
 			{:else}
-				<ul class="divide-y divide-border max-h-[420px] overflow-y-auto">
+				<ul class="divide-border max-h-[420px] divide-y overflow-y-auto">
 					{#each log as line (line.id)}
-						<li class="py-3 flex items-center justify-between gap-3">
+						<li class="flex items-center justify-between gap-3 py-3">
 							<div class="min-w-0">
-								<div class="font-medium truncate">{line.studentName}</div>
+								<div class="truncate font-medium">{line.studentName}</div>
 								<div class="label-mono">#{line.studentNumber} · {fmtTime(line.timestamp)}</div>
 							</div>
 							{@render pill(line.type)}
@@ -255,22 +255,40 @@
 
 <!-- ── Last-result overlay ────────────────────────────────────────────────── -->
 {#if lastResult}
-	<div class="fixed inset-x-0 bottom-6 flex justify-center pointer-events-none px-4 z-50">
+	<div class="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
 		<div
-			class="pointer-events-auto rounded-2xl shadow-lg px-6 py-4 flex items-center gap-3 border
+			class="pointer-events-auto flex items-center gap-3 rounded-2xl border px-6 py-4 shadow-lg
 				{lastResult.ok
 				? 'bg-primary text-primary-foreground border-primary'
 				: 'bg-destructive text-destructive-foreground border-destructive'}"
 		>
 			{#if lastResult.ok}
 				<!-- CheckCircle2 -->
-				<svg class="size-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<svg
+					class="size-6 shrink-0"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
 					<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
 					<polyline points="22 4 12 14.01 9 11.01" />
 				</svg>
 			{:else}
 				<!-- XCircle -->
-				<svg class="size-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<svg
+					class="size-6 shrink-0"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
 					<circle cx="12" cy="12" r="10" />
 					<line x1="15" y1="9" x2="9" y2="15" />
 					<line x1="9" y1="9" x2="15" y2="15" />
@@ -278,7 +296,7 @@
 			{/if}
 			<div>
 				<div class="font-medium">{lastResult.name}</div>
-				<div class="text-xs font-mono opacity-90">
+				<div class="font-mono text-xs opacity-90">
 					{lastResult.type === 'in' ? 'CHECK-IN' : 'CHECK-OUT'} · {fmtTime(lastResult.time)}
 				</div>
 			</div>
@@ -303,10 +321,14 @@
 		aria-modal="true"
 		aria-labelledby="picker-title"
 	>
-		<div class="w-full max-w-md rounded-2xl border border-border bg-background shadow-xl p-6 space-y-4">
+		<div
+			class="border-border bg-background w-full max-w-md space-y-4 rounded-2xl border p-6 shadow-xl"
+		>
 			<div>
 				<h2 id="picker-title" class="text-lg font-semibold">Manual log</h2>
-				<p class="text-sm text-muted-foreground mt-1">Select a student to toggle their attendance.</p>
+				<p class="text-muted-foreground mt-1 text-sm">
+					Select a student to toggle their attendance.
+				</p>
 			</div>
 
 			<!-- svelte-ignore a11y_autofocus -->
@@ -314,12 +336,14 @@
 				autofocus
 				placeholder="Search by name or number"
 				bind:value={pickerQuery}
-				class="w-full px-4 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+				class="border-border bg-background focus:ring-primary w-full rounded-md border px-4 py-2 text-sm focus:ring-2 focus:outline-none"
 			/>
 
-			<ul class="max-h-[300px] overflow-y-auto divide-y divide-border rounded-xl border border-border">
+			<ul
+				class="divide-border border-border max-h-[300px] divide-y overflow-y-auto rounded-xl border"
+			>
 				{#if filteredStudents.length === 0}
-					<li class="py-6 text-center text-sm text-muted-foreground">No matches</li>
+					<li class="text-muted-foreground py-6 text-center text-sm">No matches</li>
 				{:else}
 					{#each filteredStudents as s (s.id)}
 						<li>
@@ -328,7 +352,7 @@
 									await logForStudent(s);
 									pickerOpen = false;
 								}}
-								class="w-full text-left py-3 px-4 hover:bg-surface transition-colors flex items-center justify-between"
+								class="hover:bg-surface flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
 							>
 								<span>
 									<div class="font-medium">{s.name}</div>
@@ -344,7 +368,7 @@
 			<div class="flex justify-end">
 				<button
 					onclick={() => (pickerOpen = false)}
-					class="px-4 py-2 rounded-md border border-border text-sm hover:bg-surface transition-colors"
+					class="border-border hover:bg-surface rounded-md border px-4 py-2 text-sm transition-colors"
 				>
 					Cancel
 				</button>
@@ -356,7 +380,7 @@
 <!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 {#if toastMessage}
 	<div
-		class="fixed bottom-6 right-6 z-[60] px-4 py-3 rounded-xl border shadow-lg text-sm font-medium
+		class="fixed right-6 bottom-6 z-[60] rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
 			{toastOk
 			? 'bg-background border-border text-foreground'
 			: 'bg-destructive/10 border-destructive/40 text-destructive'}"
@@ -370,7 +394,7 @@
 <!-- ── Snippets ───────────────────────────────────────────────────────────── -->
 {#snippet emptyLog()}
 	<div
-		class="py-12 text-center text-muted-foreground text-sm border border-dashed border-border rounded-xl"
+		class="text-muted-foreground border-border rounded-xl border border-dashed py-12 text-center text-sm"
 	>
 		Nothing yet. Tap a card or use Manual Log.
 	</div>
@@ -378,12 +402,12 @@
 
 {#snippet pill(type: 'in' | 'out' | 'error')}
 	<span
-		class="text-xs font-mono px-2 py-1 rounded-pill shrink-0
+		class="rounded-pill shrink-0 px-2 py-1 font-mono text-xs
 			{type === 'in'
 			? 'bg-primary text-primary-foreground'
 			: type === 'out'
-			? 'bg-surface text-foreground border border-border'
-			: 'bg-destructive text-destructive-foreground'}"
+				? 'bg-surface text-foreground border-border border'
+				: 'bg-destructive text-destructive-foreground'}"
 	>
 		{type === 'in' ? 'CHECK-IN' : type === 'out' ? 'CHECK-OUT' : 'ERROR'}
 	</span>

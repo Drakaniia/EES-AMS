@@ -1,8 +1,7 @@
 activate skills when needed
-always follow @DESIGN.md  and /reference when generating UI
-we start by converrting typescript (/reference) into svelte 
-always run bun run check every after implimentaition done to ensure
-
+always follow @DESIGN.md and /reference when generating UI
+we start by converrting typescript (/reference) into svelte
+always run bun run check, lint, typecheck / cargo check, clippy fmt --check every after implimentaition done to ensure
 
 use this Svelte patterns:
 $state / $derived / $derived.by instead of useState/useEffect

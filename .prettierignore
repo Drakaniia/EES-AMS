@@ -11,3 +11,5 @@ bun.lockb
 target/
 .agents/
 .kirio/
+skills/
+src-tauri/gen/
