@@ -3,7 +3,7 @@
 
 	const navItems = [
 		{ href: '/', label: 'Dashboard', icon: 'dashboard' },
-		{ href: '/teachers', label: 'Students', icon: 'users' },
+		{ href: '/students', label: 'Students', icon: 'users' },
 		{ href: '/attendance', label: 'Tap Mode', icon: 'scan' },
 		{ href: '/reports', label: 'Records', icon: 'file-text' },
 		{ href: '/settings', label: 'Settings', icon: 'settings' }

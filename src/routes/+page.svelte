@@ -43,7 +43,7 @@
 	>
 		{#snippet actions()}
 			<a
-				href="/teachers"
+				href="/students"
 				class="inline-flex items-center gap-2 px-4 py-2 rounded-pill border border-border bg-background text-sm font-medium hover:bg-surface transition-colors"
 			>
 				<svg
