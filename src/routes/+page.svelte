@@ -44,7 +44,7 @@
 		{#snippet actions()}
 			<a
 				href="/students"
-				class="inline-flex items-center gap-2 px-4 py-2 rounded-pill border border-border bg-background text-sm font-medium hover:bg-surface transition-colors"
+				class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
 			>
 				<svg
 					class="size-4"
@@ -65,7 +65,7 @@
 			</a>
 			<a
 				href="/attendance"
-				class="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-primary text-primary-foreground text-sm font-medium hover:bg-accent transition-colors"
+				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
 			>
 				<svg
 					class="size-4"
@@ -89,17 +89,17 @@
 	</PageHeader>
 
 	<!-- Stats row -->
-	<section class="px-6 md:px-12 py-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+	<section class="grid gap-4 px-6 py-10 sm:grid-cols-2 md:px-12 lg:grid-cols-3">
 		{@render statCard('Students enrolled', students.length)}
 		{@render statCard('Logged today', todayEvents.length, true)}
 		{@render statCard('Currently checked in', checkedIn.length)}
 	</section>
 
 	<!-- Panels -->
-	<section class="px-6 md:px-12 pb-16 grid gap-8 lg:grid-cols-2">
+	<section class="grid gap-8 px-6 pb-16 md:px-12 lg:grid-cols-2">
 		<!-- Currently in the room -->
-		<div class="rounded-2xl border border-border bg-card p-6">
-			<div class="flex items-baseline justify-between mb-4">
+		<div class="border-border bg-card rounded-2xl border p-6">
+			<div class="mb-4 flex items-baseline justify-between">
 				<h3 class="text-lg font-medium">Currently in the room</h3>
 				<span class="label-mono">Last tap registered as check-in</span>
 			</div>
@@ -107,15 +107,15 @@
 			{#if checkedIn.length === 0}
 				{@render emptyState('No one is checked in yet. Open Tap Mode to begin.')}
 			{:else}
-				<ul class="divide-y divide-border">
+				<ul class="divide-border divide-y">
 					{#each checkedIn as e (e.id)}
 						{@const s = studentMap.get(e.studentId)}
-						<li class="py-3 flex items-center justify-between">
+						<li class="flex items-center justify-between py-3">
 							<div>
 								<div class="font-medium">{s?.name ?? 'Unknown'}</div>
 								<div class="label-mono">#{s?.studentNumber}</div>
 							</div>
-							<div class="font-mono text-sm text-muted-foreground">in · {fmtTime(e.timestamp)}</div>
+							<div class="text-muted-foreground font-mono text-sm">in · {fmtTime(e.timestamp)}</div>
 						</li>
 					{/each}
 				</ul>
@@ -123,8 +123,8 @@
 		</div>
 
 		<!-- Recent activity -->
-		<div class="rounded-2xl border border-border bg-card p-6">
-			<div class="flex items-baseline justify-between mb-4">
+		<div class="border-border bg-card rounded-2xl border p-6">
+			<div class="mb-4 flex items-baseline justify-between">
 				<h3 class="text-lg font-medium">Recent activity</h3>
 				<span class="label-mono">Last 8 events</span>
 			</div>
@@ -132,18 +132,18 @@
 			{#if events.length === 0}
 				{@render emptyState('No events yet.')}
 			{:else}
-				<ul class="divide-y divide-border">
+				<ul class="divide-border divide-y">
 					{#each events.slice(0, 8) as e (e.id)}
 						{@const s = studentMap.get(e.studentId)}
-						<li class="py-3 flex items-center justify-between">
+						<li class="flex items-center justify-between py-3">
 							<div class="min-w-0">
-								<div class="font-medium truncate">{s?.name ?? 'Unknown'}</div>
+								<div class="truncate font-medium">{s?.name ?? 'Unknown'}</div>
 								<div class="label-mono">{fmtDate(e.timestamp)} · {fmtTime(e.timestamp)}</div>
 							</div>
 							<span
-								class="text-xs font-mono px-2 py-1 rounded-pill {e.type === 'in'
+								class="rounded-pill px-2 py-1 font-mono text-xs {e.type === 'in'
 									? 'bg-primary text-primary-foreground'
-									: 'bg-surface text-foreground border border-border'}"
+									: 'bg-surface text-foreground border-border border'}"
 							>
 								{e.type === 'in' ? 'CHECK-IN' : 'CHECK-OUT'}
 							</span>
@@ -155,7 +155,7 @@
 			<div class="mt-4">
 				<a
 					href="/records"
-					class="text-sm font-mono inline-flex items-center gap-1 text-primary hover:text-accent transition-colors"
+					class="text-primary hover:text-accent inline-flex items-center gap-1 font-mono text-sm transition-colors"
 				>
 					View all records
 					<svg
@@ -179,7 +179,7 @@
 
 {#snippet statCard(label: string, value: number, accent = false)}
 	<div
-		class="rounded-2xl border border-border p-6 {accent
+		class="border-border rounded-2xl border p-6 {accent
 			? 'bg-primary text-primary-foreground'
 			: 'bg-surface'}"
 	>
@@ -190,10 +190,10 @@
 
 {#snippet emptyState(text: string)}
 	<div
-		class="py-10 text-center text-muted-foreground text-sm border border-dashed border-border rounded-xl"
+		class="text-muted-foreground border-border rounded-xl border border-dashed py-10 text-center text-sm"
 	>
 		<svg
-			class="size-5 mx-auto mb-2 opacity-60"
+			class="mx-auto mb-2 size-5 opacity-60"
 			viewBox="0 0 24 24"
 			fill="none"
 			stroke="currentColor"
