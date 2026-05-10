@@ -155,15 +155,15 @@
 </script>
 
 <svelte:head>
-	<title>Students — Horizon Attendance</title>
+	<title>Students — Attendance System</title>
 	<meta name="description" content="Manage students and register their NFC cards." />
 </svelte:head>
 
 <AppShell>
 	<PageHeader
-		category="Registry Management"
+		category="Students"
 		title="Student Roster"
-		description="Maintain the institutional student registry and manage NFC identification credentials."
+		description="Manage your student list and their NFC identification cards."
 	>
 		{#snippet actions()}
 			<button

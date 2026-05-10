@@ -121,7 +121,7 @@ export async function deleteEvent(id: string) {
 
 const DEFAULT_SETTINGS: Settings = {
 	id: 'app',
-	className: 'Horizon Class',
+	className: 'My Class',
 	dayStart: '08:30',
 	dayEnd: '15:30',
 	lateAfter: '08:45'

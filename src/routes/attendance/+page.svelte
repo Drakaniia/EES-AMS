@@ -129,15 +129,15 @@
 </script>
 
 <svelte:head>
-	<title>Tap Mode — Horizon Attendance</title>
+	<title>Tap Mode — Attendance System</title>
 	<meta name="description" content="Continuous NFC tap to check students in and out." />
 </svelte:head>
 
 <AppShell>
 	<PageHeader
-		category="Live Session"
-		title="Attendance Logging"
-		description="Active monitoring of student check-ins via NFC identification. Deploy this terminal at entry points."
+		category="Tap Mode"
+		title="Live Session"
+		description="Active monitoring of student check-ins. Use this screen to record attendance as students arrive."
 	>
 		{#snippet actions()}
 			<button

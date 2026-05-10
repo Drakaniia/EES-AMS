@@ -57,7 +57,7 @@
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
-		a.download = `horizon-backup-${Date.now()}.json`;
+		a.download = `attendance-backup-${Date.now()}.json`;
 		a.click();
 		URL.revokeObjectURL(url);
 		toast('Backup downloaded');
@@ -103,15 +103,15 @@
 </script>
 
 <svelte:head>
-	<title>Settings — Horizon Attendance</title>
+	<title>Settings — Attendance System</title>
 	<meta name="description" content="Configure class details and back up your data." />
 </svelte:head>
 
 <AppShell>
 	<PageHeader
-		category="System Configuration"
-		title="Workspace Settings"
-		description="Define institutional parameters, manage data backups, and configure system-wide attendance rules."
+		category="Settings"
+		title="System Configuration"
+		description="Configure system-wide rules and manage your attendance data."
 	/>
 
 	{#if settings === null}

@@ -84,7 +84,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            class_name: "Horizon Class".to_string(),
+            class_name: "My Class".to_string(),
             day_start: "08:30".to_string(),
             day_end: "15:30".to_string(),
             late_after: "08:45".to_string(),

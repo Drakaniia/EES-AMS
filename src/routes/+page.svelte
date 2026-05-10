@@ -34,15 +34,15 @@
 </script>
 
 <svelte:head>
-	<title>Dashboard — Horizon Attendance</title>
+	<title>Dashboard — Attendance System</title>
 	<meta name="description" content="Today's attendance at a glance." />
 </svelte:head>
 
 <AppShell>
 	<PageHeader
-		category="System Overview"
-		title="Institutional Attendance"
-		description="Live operational overview of campus-wide attendance. Monitor real-time logs and manage student check-ins."
+		category="Overview"
+		title="Attendance Overview"
+		description="A simple overview of today's attendance. Monitor real-time logs and manage student check-ins."
 	>
 		{#snippet actions()}
 			<a

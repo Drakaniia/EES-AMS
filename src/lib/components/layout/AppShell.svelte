@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
+	import logo from '$lib/assets/logo-seal.png';
 
 	const navGroups = [
 		{
@@ -51,23 +52,21 @@
 	>
 		<!-- Desktop brand -->
 		<div class="hidden px-6 pt-8 pb-6 md:block">
-			<div class="label-mono mb-3">Horizon · Institutional</div>
-			<h1 class="display-lg leading-none">
-				Attendance<br />Management
-			</h1>
+			<div class="flex items-center gap-3">
+				<img src={logo} alt="School Logo" class="size-10 object-contain" />
+				<h1 class="text-xl font-bold tracking-tight">
+					Attendance<br />System
+				</h1>
+			</div>
 			<p class="text-muted-foreground mt-4 max-w-[14rem] text-sm">
-				School-wide attendance tracking with NFC ID integration.
+				Manage student attendance with ease.
 			</p>
 		</div>
 
 		<!-- Mobile brand bar -->
 		<div class="border-border flex w-full items-center gap-3 border-b px-4 py-3 md:hidden">
-			<div
-				class="bg-primary text-primary-foreground grid size-8 place-items-center rounded-md font-mono text-xs font-bold"
-			>
-				H
-			</div>
-			<div class="font-medium">Horizon Attendance</div>
+			<img src={logo} alt="School Logo" class="size-8 object-contain" />
+			<div class="font-medium">Attendance System</div>
 		</div>
 
 		<!-- Nav -->
@@ -108,8 +107,6 @@
 				</div>
 			{/each}
 		</nav>
-
-		<div class="label-mono mt-auto hidden px-6 py-6 md:block text-[10px] opacity-50">Enterprise Edition</div>
 	</aside>
 
 	<!-- Main content -->
