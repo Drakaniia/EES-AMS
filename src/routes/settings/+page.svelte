@@ -216,7 +216,7 @@
 						</button>
 					</div>
 
-					<div class="divide-border divide-y border-t border-border pt-5">
+					<div class="divide-border border-border divide-y border-t pt-5">
 						{#if classes.length === 0}
 							<div class="text-muted-foreground p-12 text-center text-sm">
 								No classes configured. Add a class to start tracking attendance.
