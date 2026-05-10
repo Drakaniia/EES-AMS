@@ -8,7 +8,6 @@
 		saveStudent,
 		deleteStudent,
 		listClasses,
-		uid,
 		findStudentByCard,
 		type Student,
 		type Class
@@ -172,24 +171,59 @@
 		const serial = formCardSerial.trim().toLowerCase();
 		const classId = formClassId;
 
-		if (!name || !num) return;
+		console.log('Form submission:', { name, num, serial, classId, editing });
 
-		const base: Student = editing ?? {
-			id: uid(),
-			createdAt: new Date().toISOString(),
-			name: '',
-			studentNumber: ''
-		};
-		await saveStudent({
-			...base,
-			name,
-			studentNumber: num,
-			cardSerial: serial || undefined,
-			classId: classId || undefined
-		});
-		toast(editing ? 'Student updated' : 'Student added');
-		closeDialog();
-		reload();
+		if (!name || !num) {
+			console.log('Validation failed: name or number missing');
+			toast('Please fill in all required fields');
+			return;
+		}
+
+		// Check for duplicate student number (only for new students)
+		if (!editing) {
+			const existingStudent = students.find(s => s.studentNumber === num);
+			if (existingStudent) {
+				toast(`Student number "${num}" already exists for ${existingStudent.name}. Please use a different number.`);
+				return;
+			}
+		}
+
+		try {
+			const studentData: Student = editing ? {
+				...editing,
+				name,
+				studentNumber: num,
+				cardSerial: serial || undefined,
+				classId: classId || undefined
+			} : {
+				// For new students, pass empty string as ID to trigger creation
+				id: '',
+				createdAt: new Date().toISOString(),
+				name,
+				studentNumber: num,
+				cardSerial: serial || undefined,
+				classId: classId || undefined
+			};
+			
+			console.log('Saving student:', studentData);
+			
+			await saveStudent(studentData);
+			toast(editing ? 'Student updated' : 'Student added');
+			closeDialog();
+			reload();
+		} catch (error) {
+			console.error('Error saving student:', error);
+			const msg = error instanceof Error ? error.message : 'Failed to save student';
+			
+			// Check for common database errors
+			if (msg.includes('UNIQUE constraint failed') && msg.includes('student_number')) {
+				toast('Student number already exists. Please use a different student number.');
+			} else if (msg.includes('UNIQUE constraint failed') && msg.includes('card_serial')) {
+				toast('Card serial already registered to another student.');
+			} else {
+				toast(`Error: ${msg}`);
+			}
+		}
 	}
 
 	async function onDelete(s: Student) {
@@ -425,14 +459,23 @@
 					<select
 						id="field-class"
 						bind:value={formClassId}
-						required
+						required={classes.length > 0}
 						class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
 					>
-						<option value="" disabled>Select a class</option>
-						{#each classes as c (c.id)}
-							<option value={c.id}>{c.name}</option>
-						{/each}
+						{#if classes.length === 0}
+							<option value="">No classes available</option>
+						{:else}
+							<option value="" disabled>Select a class</option>
+							{#each classes as c (c.id)}
+								<option value={c.id}>{c.name}</option>
+							{/each}
+						{/if}
 					</select>
+					{#if classes.length === 0}
+						<p class="text-muted-foreground mt-1 text-xs">
+							Create a class first to assign students, or add student without class assignment.
+						</p>
+					{/if}
 				</div>
 				<div class="space-y-1.5">
 					<label for="field-card" class="label-mono">Card serial (optional)</label>
