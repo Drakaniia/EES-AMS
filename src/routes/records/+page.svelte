@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import DateRangePicker from '$lib/components/ui/DateRangePicker.svelte';
@@ -14,9 +15,22 @@
 		type AttendanceEvent,
 		type Class
 	} from '$lib/db-rust';
-	import { downloadCSV, eventsToCSV, fmtDate, fmtDateTime, fmtTime } from '$lib/csv';
+	import { downloadCSV, eventsToCSV, fmtDate, fmtTime } from '$lib/csv';
 
-	// ── State ────────────────────────────────────────────────────────────────
+	// ── Types ────────────────────────────────────────────────────────────────
+	type StudentAttendance = {
+		studentId: string;
+		studentName: string;
+		studentNumber: string;
+		className: string;
+		date: string;
+		checkInTime?: string;
+		checkOutTime?: string;
+		checkInTimestamp?: number;
+		checkOutTimestamp?: number;
+		isLate?: boolean;
+		events: AttendanceEvent[];
+	};
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
 	let classes = $state<Class[]>([]);
@@ -42,6 +56,71 @@
 	let studentMap = $derived(new Map(students.map((s) => [s.id, s])));
 	let classMap = $derived(new Map(classes.map((c) => [c.id, c])));
 
+	// Group events by student and date
+	let groupedAttendance = $derived(() => {
+		const groups = new SvelteMap<string, StudentAttendance>();
+
+		filtered.forEach((event) => {
+			const student = studentMap.get(event.studentId);
+			if (!student) return;
+
+			const date = fmtDate(event.timestamp);
+			const key = `${event.studentId}-${date}`;
+
+			if (!groups.has(key)) {
+				const className = getEventClassName(event);
+				groups.set(key, {
+					studentId: event.studentId,
+					studentName: student.name,
+					studentNumber: student.studentNumber,
+					className,
+					date,
+					events: []
+				});
+			}
+
+			const group = groups.get(key)!;
+			group.events.push(event);
+
+			if (event.type === 'in') {
+				if (!group.checkInTime || event.timestamp < group.checkInTime) {
+					group.checkInTime = fmtTime(event.timestamp);
+					group.checkInTimestamp = new Date(event.timestamp).getTime();
+
+					// Check if late
+					const studentClass = classes.find((c) => c.id === student.classId);
+					if (studentClass && studentClass.lateAfter) {
+						const eventTime = new Date(event.timestamp);
+						const [h, m] = studentClass.lateAfter.split(':').map(Number);
+						const lateTime = new Date(
+							eventTime.getFullYear(),
+							eventTime.getMonth(),
+							eventTime.getDate(),
+							h,
+							m,
+							0,
+							0
+						);
+						group.isLate = eventTime > lateTime;
+					}
+				}
+			} else if (event.type === 'out') {
+				if (!group.checkOutTime || event.timestamp > group.checkOutTime) {
+					group.checkOutTime = fmtTime(event.timestamp);
+					group.checkOutTimestamp = new Date(event.timestamp).getTime();
+				}
+			}
+		});
+
+		return Array.from(groups.values()).sort((a: StudentAttendance, b: StudentAttendance) => {
+			// Sort by date descending, then by student name
+			if (a.date !== b.date) {
+				return new Date(b.date).getTime() - new Date(a.date).getTime();
+			}
+			return a.studentName.localeCompare(b.studentName);
+		});
+	});
+
 	let filtered = $derived(
 		events.filter((e) => {
 			const d = fmtDate(e.timestamp);
@@ -60,11 +139,11 @@
 	);
 
 	// Pagination for records
-	const totalPages = $derived(Math.ceil(filtered.length / itemsPerPage));
+	const totalPages = $derived(Math.ceil(groupedAttendance().length / itemsPerPage));
 	const paginatedFiltered = $derived(() => {
 		const start = (currentPage - 1) * itemsPerPage;
 		const end = start + itemsPerPage;
-		return filtered.slice(start, end);
+		return groupedAttendance().slice(start, end);
 	});
 
 	function handlePageChange(page: number) {
@@ -99,13 +178,6 @@
 		const classSuffix = classId ? `_${classMap.get(classId)?.name || 'class'}` : '';
 		downloadCSV(`attendance-records${classSuffix}${range}.csv`, csv);
 		toast('CSV exported');
-	}
-
-	async function onDelete(id: string) {
-		if (!confirm('Delete this event?')) return;
-		await deleteEvent(id);
-		toast('Deleted');
-		await reload();
 	}
 
 	function getEventClassName(e: AttendanceEvent) {
@@ -220,8 +292,8 @@
 
 		<!-- Total -->
 		<div class="space-y-2">
-			<div class="label-mono">Total events</div>
-			<div class="flex h-10 items-center font-mono text-sm">{filtered.length}</div>
+			<div class="label-mono">Total attendance records</div>
+			<div class="flex h-10 items-center font-mono text-sm">{groupedAttendance().length}</div>
 		</div>
 	</section>
 
@@ -231,60 +303,87 @@
 			<table class="w-full text-sm">
 				<thead class="bg-surface text-left">
 					<tr>
-						<th class="label-mono px-4 py-3">When</th>
+						<th class="label-mono px-4 py-3">Date</th>
 						<th class="label-mono px-4 py-3">Student</th>
 						<th class="label-mono px-4 py-3">Class</th>
-						<th class="label-mono px-4 py-3">Type</th>
+						<th class="label-mono px-4 py-3">Check In</th>
+						<th class="label-mono px-4 py-3">Check Out</th>
 						<th class="label-mono w-20 px-4 py-3 text-right"> </th>
 					</tr>
 				</thead>
 				<tbody class="divide-border divide-y">
-					{#if filtered.length === 0}
+					{#if groupedAttendance().length === 0}
 						{@render emptyState()}
 					{:else}
-						{#each paginatedFiltered() as e (e.id)}
-							{@const s = studentMap.get(e.studentId)}
+						{#each paginatedFiltered() as record (record.studentId + record.date)}
 							<tr class="hover:bg-surface/40 transition-colors">
-								<td class="px-4 py-3 align-top font-mono">{fmtDateTime(e.timestamp)}</td>
+								<td class="px-4 py-3 align-top font-mono">{record.date}</td>
 								<td class="px-4 py-3 align-top">
-									<div class="font-medium">{s?.name ?? 'Unknown'}</div>
-									<div class="label-mono">#{s?.studentNumber}</div>
+									<div class="font-medium">{record.studentName}</div>
+									<div class="label-mono">#{record.studentNumber}</div>
 								</td>
 								<td class="px-4 py-3 align-top">
 									<span
 										class="rounded-pill bg-surface border-border border px-2 py-0.5 text-[10px]"
 									>
-										{getEventClassName(e)}
+										{record.className}
 									</span>
 								</td>
 								<td class="px-4 py-3 align-top">
-									{@render typePill(e.type)}
-									<span class="text-muted-foreground ml-2 font-mono text-xs"
-										>{fmtTime(e.timestamp)}</span
-									>
+									{#if record.checkInTime}
+										<div class="flex items-center gap-2">
+											{@render checkInPill(record.checkInTime, record.isLate)}
+										</div>
+									{:else}
+										<span class="text-muted-foreground font-mono text-xs">—</span>
+									{/if}
+								</td>
+								<td class="px-4 py-3 align-top">
+									{#if record.checkOutTime}
+										{@render checkOutPill(record.checkOutTime)}
+									{:else}
+										<span class="text-muted-foreground font-mono text-xs">—</span>
+									{/if}
 								</td>
 								<td class="px-4 py-3 text-right align-top">
-									<button
-										onclick={() => onDelete(e.id)}
-										aria-label="Delete event"
-										class="border-border text-destructive hover:bg-destructive/10 inline-flex size-8 items-center justify-center rounded-md border transition-colors"
-									>
-										<svg
-											class="size-3.5"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											aria-hidden="true"
+									{#if record.events.length > 0}
+										<button
+											onclick={() => {
+												// Delete all events for this student on this date
+												if (
+													confirm(
+														`Delete all attendance records for ${(record as StudentAttendance).studentName} on ${(record as StudentAttendance).date}?`
+													)
+												) {
+													Promise.all(
+														(record as StudentAttendance).events.map((e: AttendanceEvent) =>
+															deleteEvent(e.id)
+														)
+													);
+													toast('Deleted');
+													reload();
+												}
+											}}
+											aria-label="Delete attendance record"
+											class="border-border text-destructive hover:bg-destructive/10 inline-flex size-8 items-center justify-center rounded-md border transition-colors"
 										>
-											<polyline points="3 6 5 6 21 6" />
-											<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-											<path d="M10 11v6M14 11v6" />
-											<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-										</svg>
-									</button>
+											<svg
+												class="size-3.5"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+											>
+												<polyline points="3 6 5 6 21 6" />
+												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+												<path d="M10 11v6M14 11v6" />
+												<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+											</svg>
+										</button>
+									{/if}
 								</td>
 							</tr>
 						{/each}
@@ -325,19 +424,27 @@
 
 {#snippet emptyState()}
 	<tr>
-		<td colspan={5} class="text-muted-foreground px-4 py-12 text-center">
-			No records match the filters.
+		<td colspan={6} class="text-muted-foreground px-4 py-12 text-center">
+			No attendance records match the filters.
 		</td>
 	</tr>
 {/snippet}
 
-{#snippet typePill(type: 'in' | 'out')}
+{#snippet checkInPill(time: string, isLate?: boolean)}
 	<span
 		class="rounded-pill px-2 py-1 font-mono text-xs
-			{type === 'in'
-			? 'bg-primary text-primary-foreground'
-			: 'bg-surface border-border text-foreground border'}"
+			{isLate ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'}"
 	>
-		{type === 'in' ? 'CHECK-IN' : 'CHECK-OUT'}
+		{time}
+		{#if isLate}
+			(LATE){/if}
+	</span>
+{/snippet}
+
+{#snippet checkOutPill(time: string)}
+	<span
+		class="rounded-pill bg-surface border-border text-foreground border px-2 py-1 font-mono text-xs"
+	>
+		{time}
 	</span>
 {/snippet}
