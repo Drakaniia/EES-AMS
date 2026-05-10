@@ -15,7 +15,8 @@
 		type AttendanceEvent,
 		type Class
 	} from '$lib/db-rust';
-	import { downloadCSV, eventsToCSV, fmtDate, fmtTime } from '$lib/csv';
+	import { fmtDate, fmtTime } from '$lib/csv';
+import { exportCsvWithFolder } from '$lib/db-rust';
 
 	// ── Types ────────────────────────────────────────────────────────────────
 	type StudentAttendance = {
@@ -179,12 +180,14 @@
 		currentPage = 1;
 	}
 
-	function onExport() {
-		const csv = eventsToCSV(filtered, students, classes, lateAfter);
-		const range = from || to ? `_${from || 'start'}_to_${to || 'end'}` : '';
-		const classSuffix = classId ? `_${classMap.get(classId)?.name || 'class'}` : '';
-		downloadCSV(`attendance-records${classSuffix}${range}.csv`, csv);
-		toast('CSV exported');
+	async function onExport() {
+		try {
+			const filePath = await exportCsvWithFolder(filtered, students, classes, lateAfter);
+			toast(`CSV exported to: ${filePath}`);
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : 'Export failed';
+			toast(`Export failed: ${msg}`, false);
+		}
 	}
 
 	function getEventClassName(e: AttendanceEvent) {

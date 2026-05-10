@@ -12,6 +12,9 @@ use commands::{
     delete_student,
     // Export/Import commands
     export_all,
+    export_database,
+    export_json_with_folder,
+    export_csv_with_folder,
     find_student_by_card,
     get_class,
     // Settings commands
@@ -69,9 +72,13 @@ pub fn run() {
             save_settings,
             // Export/Import commands
             export_all,
+            export_database,
+            export_json_with_folder,
+            export_csv_with_folder,
             import_all,
             wipe_all,
         ])
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Setup logging
             if cfg!(debug_assertions) {

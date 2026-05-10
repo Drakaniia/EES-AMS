@@ -199,6 +199,28 @@ export async function exportAll(): Promise<ExportData> {
 	return await invoke('export_all');
 }
 
+export async function exportDatabase(): Promise<string> {
+	return await invoke('export_database');
+}
+
+export async function exportJsonWithFolder(): Promise<string> {
+	return await invoke('export_json_with_folder');
+}
+
+export async function exportCsvWithFolder(
+	events: AttendanceEvent[],
+	students: Student[],
+	classes: Class[],
+	globalLateAfter: string
+): Promise<string> {
+	return await invoke('export_csv_with_folder', {
+		events,
+		students,
+		classes,
+		globalLateAfter
+	});
+}
+
 export async function importAll(payload: ExportData): Promise<void> {
 	return await invoke('import_all', { payload });
 }

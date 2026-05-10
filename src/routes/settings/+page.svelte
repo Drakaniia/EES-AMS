@@ -9,7 +9,8 @@
 		listClasses,
 		saveClass,
 		deleteClass,
-		exportAll,
+		exportDatabase,
+		exportJsonWithFolder,
 		importAll,
 		wipeAll,
 		type Settings,
@@ -44,6 +45,10 @@
 
 	// Hidden file input reference
 	let fileInput = $state<HTMLInputElement | null>(null);
+
+	// Export dialog state
+	let exportDialogOpen = $state(false);
+	let exportFormat = $state<'json' | 'database'>('json');
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string, ok = true) {
@@ -134,16 +139,27 @@
 		}
 	}
 
+	function openExportDialog() {
+		exportDialogOpen = true;
+	}
+
 	async function onExport() {
-		const data = await exportAll();
-		const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = `attendance-backup-${Date.now()}.json`;
-		a.click();
-		URL.revokeObjectURL(url);
-		toast('Backup downloaded');
+		try {
+			let filePath: string;
+			
+			if (exportFormat === 'database') {
+				filePath = await exportDatabase();
+				toast(`Database exported to: ${filePath}`);
+			} else {
+				filePath = await exportJsonWithFolder();
+				toast(`JSON exported to: ${filePath}`);
+			}
+			
+			exportDialogOpen = false;
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : 'Export failed';
+			toast(`Export failed: ${msg}`, false);
+		}
 	}
 
 	async function onImport(file: File) {
@@ -288,7 +304,7 @@
 
 					<div class="flex flex-wrap gap-2">
 						<button
-							onclick={onExport}
+							onclick={openExportDialog}
 							class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
 						>
 							<svg
@@ -598,6 +614,81 @@
 					class="rounded-pill bg-destructive flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 				>
 					Wipe All
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- ── Export Format Dialog ─────────────────────────────────────────────── -->
+{#if exportDialogOpen}
+	<div
+		class="fixed inset-0 z-40 bg-black/50"
+		role="presentation"
+		onclick={() => (exportDialogOpen = false)}
+		onkeydown={(e) => e.key === 'Escape' && (exportDialogOpen = false)}
+	></div>
+
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center p-4"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="export-dialog-title"
+	>
+		<div
+			class="border-border bg-background w-full max-w-md space-y-5 rounded-2xl border p-6 shadow-xl"
+		>
+			<div>
+				<h2 id="export-dialog-title" class="text-lg font-semibold">Export Data</h2>
+				<p class="text-muted-foreground mt-1 text-sm">
+					Choose the format for your data export. You'll be able to select the save location.
+				</p>
+			</div>
+
+			<div class="space-y-3">
+				<label class="flex items-center gap-3 cursor-pointer">
+					<input
+						type="radio"
+						bind:group={exportFormat}
+						value="json"
+						class="text-primary focus:ring-primary"
+					/>
+					<div>
+						<div class="font-medium">JSON Format</div>
+						<div class="text-muted-foreground text-sm">
+							Human-readable format, easy to share and import back into the system
+						</div>
+					</div>
+				</label>
+
+				<label class="flex items-center gap-3 cursor-pointer">
+					<input
+						type="radio"
+						bind:group={exportFormat}
+						value="database"
+						class="text-primary focus:ring-primary"
+					/>
+					<div>
+						<div class="font-medium">SQLite Database (.db)</div>
+						<div class="text-muted-foreground text-sm">
+							Complete database file, can be opened with SQLite tools
+						</div>
+					</div>
+				</label>
+			</div>
+
+			<div class="flex gap-2">
+				<button
+					onclick={() => (exportDialogOpen = false)}
+					class="border-border hover:bg-surface flex-1 rounded-md border px-4 py-2 text-sm transition-colors"
+				>
+					Cancel
+				</button>
+				<button
+					onclick={onExport}
+					class="rounded-pill bg-primary flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+				>
+					Export
 				</button>
 			</div>
 		</div>

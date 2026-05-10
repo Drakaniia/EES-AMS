@@ -2,7 +2,7 @@
 !we start by converting typescript (/reference) into svelte
 !always run `bun run check && bun run lint && bun run typecheck` / `cargo check` and `clippy fmt --check` after implementation to ensure quality
 
-always use @rust-skills
+always read @rust-skills when implimenting code
 always use @tauri-v2
 always use @svelte-best-practices
 always use @svelte-code-writer
