@@ -49,6 +49,15 @@ rusb = "0.9"
 pcsc = "2.8"
 rand = "0.8"
 
+[dev-dependencies]
+tempfile = "3.8"
+mockall = "0.12"
+tokio-test = "0.4"
+serial_test = "3.0"
+proptest = "1.4"
+criterion = "0.5"
+tauri = { version = "2.11.1", features = ["test"] }
+
 [profile.release]
 opt-level = 3
 lto = "fat"

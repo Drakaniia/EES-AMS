@@ -5,7 +5,7 @@
 	import { resolve } from '$app/paths';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
-	import { listEvents, listStudents, type AttendanceEvent, type Student } from '$lib/db';
+	import { listEvents, listStudents, type AttendanceEvent, type Student } from '$lib/db-rust';
 	import { fmtDate, fmtTime } from '$lib/csv';
 
 	let students = $state<Student[]>([]);
@@ -24,7 +24,11 @@
 	// Last event per student today — determine who's currently checked in
 	const checkedIn = $derived.by(() => {
 		const lastByStudent = new SvelteMap<string, AttendanceEvent>();
-		for (const e of [...todayEvents].sort((a, b) => a.timestamp - b.timestamp)) {
+		for (const e of [...todayEvents].sort((a, b) => {
+			const aTime = typeof a.timestamp === 'string' ? new Date(a.timestamp).getTime() : a.timestamp;
+			const bTime = typeof b.timestamp === 'string' ? new Date(b.timestamp).getTime() : b.timestamp;
+			return aTime - bTime;
+		})) {
 			lastByStudent.set(e.studentId, e);
 		}
 		return [...lastByStudent.values()].filter((e) => e.type === 'in');
@@ -196,7 +200,7 @@
 			? 'bg-primary text-primary-foreground'
 			: 'bg-surface'}"
 	>
-		<div class="label-mono {accent ? '!text-primary-foreground/80' : ''}">{label}</div>
+		<div class="label-mono {accent ? 'text-primary-foreground/80!' : ''}">{label}</div>
 		<div class="mt-2 text-5xl font-medium tracking-tight">{value}</div>
 	</div>
 {/snippet}
