@@ -35,21 +35,6 @@
 	let toastMessage = $state<string | null>(null);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-	// NFC support state (async)
-	let supported = $state<'connected' | 'disconnected'>('disconnected');
-	let supportedLoading = $state(true);
-
-	// Check NFC support on mount
-	onMount(async () => {
-		try {
-			supported = await nfcSupported();
-		} catch {
-			supported = 'disconnected';
-		} finally {
-			supportedLoading = false;
-		}
-	});
-
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string) {
 		toastMessage = msg;
@@ -78,26 +63,40 @@
 			scanner = null;
 			return;
 		}
-		if (!supported) return;
 
-		scanning = true;
-		const student = scanFor;
-		scanner = new NfcScanner(
-			async (s) => {
-				cardSerial = s;
-				scanning = false;
-				const existing = await findStudentByCard(s);
-				if (existing && existing.id !== student.id) {
-					cardError = `This card is already paired to ${existing.name}.`;
+		// Check NFC support when starting to scan
+		(async () => {
+			try {
+				const supported = await nfcSupported();
+				if (!supported) {
+					cardError = 'NFC Card Reader not connected. Connect USB reader or enter serial manually.';
+					scanning = false;
+					return;
 				}
-				scanner?.stop();
-			},
-			(e) => {
-				cardError = e.message;
+
+				scanning = true;
+				const student = scanFor;
+				scanner = new NfcScanner(
+					async (s) => {
+						cardSerial = s;
+						scanning = false;
+						const existing = await findStudentByCard(s);
+						if (existing && existing.id !== student.id) {
+							cardError = `This card is already paired to ${existing.name}.`;
+						}
+						scanner?.stop();
+					},
+					(e) => {
+						cardError = e.message;
+						scanning = false;
+					}
+				);
+				scanner.start();
+			} catch {
+				cardError = 'Failed to check NFC Card Reader. Please try again.';
 				scanning = false;
 			}
-		);
-		scanner.start();
+		})();
 
 		return () => {
 			scanner?.stop();
@@ -201,84 +200,12 @@
 		{/snippet}
 	</PageHeader>
 
-	<!-- NFC status badge -->
-	<div class="px-6 py-6 md:px-12">
-		<div
-			class="rounded-pill inline-flex w-fit items-center gap-2 border px-3 py-2 font-mono text-xs
-				{supportedLoading
-				? 'border-muted bg-muted text-muted-foreground'
-				: supported === 'connected'
-					? 'border-border bg-surface'
-					: 'border-destructive/40 bg-destructive/10 text-destructive'}"
-		>
-			{#if supportedLoading}
-				<!-- Loading spinner -->
-				<svg class="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-					<circle
-						cx="12"
-						cy="12"
-						r="10"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-dasharray="31.416"
-						stroke-dashoffset="31.416"
-						class="opacity-25"
-					></circle>
-					<path
-						d="M12 2a10 10 0 0 1 0 20"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						class="opacity-75"
-					></path>
-				</svg>
-				CHECKING NFC READER...
-			{:else if supported === 'connected'}
-				<!-- Wifi icon -->
-				<svg
-					class="size-3.5"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path
-						d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"
-					/>
-				</svg>
-				NFC CARD READER CONNECTED
-			{:else}
-				<!-- WifiOff icon -->
-				<svg
-					class="size-3.5"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<line x1="1" y1="1" x2="23" y2="23" />
-					<path
-						d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.56 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"
-					/>
-				</svg>
-				NFC CARD READER NOT CONNECTED
-			{/if}
-		</div>
-	</div>
-
 	<!-- Student roster -->
 	<section class="px-6 pb-16 md:px-12">
 		{#if students.length === 0}
 			{@render emptyState()}
 		{:else}
-			<div class="border-border bg-card overflow-hidden rounded-2xl border">
+			<div class="border-border bg-card mt-8 overflow-hidden rounded-2xl border">
 				<table class="w-full text-sm">
 					<thead class="bg-surface text-left">
 						<tr>
@@ -483,14 +410,6 @@
 			</div>
 
 			<div class="space-y-4">
-				{#if supportedLoading}
-					<p class="text-muted-foreground font-mono text-xs">Checking for NFC Card Reader...</p>
-				{:else if !supported}
-					<p class="text-destructive font-mono text-xs">
-						NFC Card Reader not connected. Connect USB reader or enter serial manually.
-					</p>
-				{/if}
-
 				<!-- Scan area -->
 				<div class="border-border bg-surface/50 rounded-2xl border border-dashed p-8 text-center">
 					<svg

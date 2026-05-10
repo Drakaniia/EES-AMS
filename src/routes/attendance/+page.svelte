@@ -270,6 +270,33 @@
 	</section>
 </AppShell>
 
+<!-- ── NFC status badge (bottom right) ───────────────────────────────────── -->
+{#if !supportedLoading && supported === 'disconnected'}
+	<div class="fixed right-6 bottom-6 z-40">
+		<div
+			class="rounded-pill border-destructive/40 bg-destructive/10 text-destructive inline-flex w-fit items-center gap-2 border px-3 py-2 font-mono text-xs shadow-lg"
+		>
+			<!-- WifiOff icon -->
+			<svg
+				class="size-3.5"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<line x1="1" y1="1" x2="23" y2="23" />
+				<path
+					d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.56 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"
+				/>
+			</svg>
+			NFC CARD READER NOT CONNECTED
+		</div>
+	</div>
+{/if}
+
 <!-- ── Last-result overlay ────────────────────────────────────────────────── -->
 {#if lastResult}
 	<div class="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
