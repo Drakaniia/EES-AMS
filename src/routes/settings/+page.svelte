@@ -38,6 +38,10 @@
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Delete confirmation dialog
+	let deleteTarget = $state<{ id: string; name: string } | null>(null);
+	let wipeTarget = $state(false);
+
 	// Hidden file input reference
 	let fileInput = $state<HTMLInputElement | null>(null);
 
@@ -124,10 +128,10 @@
 	}
 
 	async function onDeleteClass(id: string) {
-		if (!confirm('Delete this class? Students will remain but will be unassigned.')) return;
-		await deleteClass(id);
-		toast('Class deleted');
-		reload();
+		const classToDelete = classes.find((c) => c.id === id);
+		if (classToDelete) {
+			deleteTarget = { id: classToDelete.id, name: classToDelete.name };
+		}
 	}
 
 	async function onExport() {
@@ -163,11 +167,7 @@
 	}
 
 	async function onWipe() {
-		if (!confirm('Erase ALL students, events, classes, and settings? This cannot be undone.'))
-			return;
-		await wipeAll();
-		await reload();
-		toast('All data wiped');
+		wipeTarget = true;
 	}
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
@@ -468,6 +468,141 @@
 		</div>
 	</form>
 </Dialog>
+
+<!-- ── Delete confirmation dialog ────────────────────────────────────────── -->
+{#if deleteTarget}
+	<div
+		class="fixed inset-0 z-40 bg-black/50"
+		role="presentation"
+		onclick={() => (deleteTarget = null)}
+		onkeydown={(e) => e.key === 'Escape' && (deleteTarget = null)}
+	></div>
+
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center p-4"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="delete-dialog-title"
+	>
+		<div
+			class="border-border bg-background w-full max-w-sm space-y-5 rounded-2xl border p-6 shadow-xl"
+		>
+			<div class="flex flex-col items-center gap-3 text-center">
+				<div class="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
+					<svg
+						class="text-destructive size-6"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<polyline points="3 6 5 6 21 6" />
+						<path
+							d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+						/>
+					</svg>
+				</div>
+				<div>
+					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete class?</h2>
+					<p class="text-muted-foreground mt-1 text-sm">
+						<span class="text-foreground font-medium">{deleteTarget.name}</span> will be permanently removed.
+						Students will remain but will be unassigned.
+					</p>
+				</div>
+			</div>
+
+			<div class="flex gap-2">
+				<button
+					onclick={() => (deleteTarget = null)}
+					class="border-border hover:bg-surface flex-1 rounded-md border px-4 py-2 text-sm transition-colors"
+				>
+					Cancel
+				</button>
+				<button
+					onclick={async () => {
+						if (!deleteTarget) return;
+						await deleteClass(deleteTarget.id);
+						toast('Class deleted');
+						deleteTarget = null;
+						reload();
+					}}
+					class="rounded-pill bg-destructive flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+				>
+					Delete
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- ── Wipe confirmation dialog ─────────────────────────────────────────── -->
+{#if wipeTarget}
+	<div
+		class="fixed inset-0 z-40 bg-black/50"
+		role="presentation"
+		onclick={() => (wipeTarget = false)}
+		onkeydown={(e) => e.key === 'Escape' && (wipeTarget = false)}
+	></div>
+
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center p-4"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="wipe-dialog-title"
+	>
+		<div
+			class="border-border bg-background w-full max-w-sm space-y-5 rounded-2xl border p-6 shadow-xl"
+		>
+			<div class="flex flex-col items-center gap-3 text-center">
+				<div class="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
+					<svg
+						class="text-destructive size-6"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<polyline points="3 6 5 6 21 6" />
+						<path
+							d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+						/>
+					</svg>
+				</div>
+				<div>
+					<h2 id="wipe-dialog-title" class="text-lg font-semibold">Erase ALL data?</h2>
+					<p class="text-muted-foreground mt-1 text-sm">
+						This will permanently erase ALL students, events, classes, and settings. This action
+						cannot be undone.
+					</p>
+				</div>
+			</div>
+
+			<div class="flex gap-2">
+				<button
+					onclick={() => (wipeTarget = false)}
+					class="border-border hover:bg-surface flex-1 rounded-md border px-4 py-2 text-sm transition-colors"
+				>
+					Cancel
+				</button>
+				<button
+					onclick={async () => {
+						await wipeAll();
+						await reload();
+						toast('All data wiped');
+						wipeTarget = false;
+					}}
+					class="rounded-pill bg-destructive flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+				>
+					Wipe All
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 {#if toastMessage}

@@ -48,6 +48,13 @@
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Delete confirmation dialog
+	let deleteTarget = $state<{
+		studentName: string;
+		date: string;
+		events: AttendanceEvent[];
+	} | null>(null);
+
 	// Pagination
 	let currentPage = $state(1);
 	let itemsPerPage = $state(10);
@@ -349,20 +356,11 @@
 									{#if record.events.length > 0}
 										<button
 											onclick={() => {
-												// Delete all events for this student on this date
-												if (
-													confirm(
-														`Delete all attendance records for ${(record as StudentAttendance).studentName} on ${(record as StudentAttendance).date}?`
-													)
-												) {
-													Promise.all(
-														(record as StudentAttendance).events.map((e: AttendanceEvent) =>
-															deleteEvent(e.id)
-														)
-													);
-													toast('Deleted');
-													reload();
-												}
+												deleteTarget = {
+													studentName: (record as StudentAttendance).studentName,
+													date: (record as StudentAttendance).date,
+													events: (record as StudentAttendance).events
+												};
 											}}
 											aria-label="Delete attendance record"
 											class="border-border text-destructive hover:bg-destructive/10 inline-flex size-8 items-center justify-center rounded-md border transition-colors"
@@ -378,8 +376,7 @@
 												aria-hidden="true"
 											>
 												<polyline points="3 6 5 6 21 6" />
-												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-												<path d="M10 11v6M14 11v6" />
+												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
 												<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
 											</svg>
 										</button>
@@ -401,7 +398,7 @@
 {#if toastMessage}
 	<div
 		class="fixed right-6 bottom-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
-			{toastOk
+					{toastOk
 			? 'bg-background border-border text-foreground'
 			: 'bg-destructive/10 border-destructive/40 text-destructive'}"
 		role="status"
@@ -433,7 +430,7 @@
 {#snippet checkInPill(time: string, isLate?: boolean)}
 	<span
 		class="rounded-pill px-2 py-1 font-mono text-xs
-			{isLate ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'}"
+					{isLate ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'}"
 	>
 		{time}
 		{#if isLate}
@@ -448,3 +445,72 @@
 		{time}
 	</span>
 {/snippet}
+
+<!-- ── Delete confirmation dialog ────────────────────────────────────────── -->
+{#if deleteTarget}
+	<div
+		class="fixed inset-0 z-40 bg-black/50"
+		role="presentation"
+		onclick={() => (deleteTarget = null)}
+		onkeydown={(e) => e.key === 'Escape' && (deleteTarget = null)}
+	></div>
+
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center p-4"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="delete-dialog-title"
+	>
+		<div
+			class="border-border bg-background w-full max-w-sm space-y-5 rounded-2xl border p-6 shadow-xl"
+		>
+			<div class="flex flex-col items-center gap-3 text-center">
+				<div class="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
+					<svg
+						class="text-destructive size-6"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<polyline points="3 6 5 6 21 6" />
+						<path
+							d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+						/>
+					</svg>
+				</div>
+				<div>
+					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete attendance records?</h2>
+					<p class="text-muted-foreground mt-1 text-sm">
+						<span class="text-foreground font-medium">{deleteTarget.studentName}</span> attendance
+						on <span class="text-foreground font-medium">{deleteTarget.date}</span> will be permanently
+						removed.
+					</p>
+				</div>
+			</div>
+
+			<div class="flex gap-2">
+				<button
+					onclick={() => (deleteTarget = null)}
+					class="border-border hover:bg-surface flex-1 rounded-md border px-4 py-2 text-sm transition-colors"
+				>
+					Cancel
+				</button>
+				<button
+					onclick={async () => {
+						if (!deleteTarget) return;
+						await Promise.all(deleteTarget.events.map((e: AttendanceEvent) => deleteEvent(e.id)));
+						toast('Deleted');
+						deleteTarget = null;
+						reload();
+					}}
+					class="rounded-pill bg-destructive flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+				>
+					Delete
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
