@@ -7,14 +7,19 @@
 		listStudents,
 		saveStudent,
 		deleteStudent,
+		listClasses,
 		uid,
 		findStudentByCard,
-		type Student
-	} from '$lib/db';
+		type Student,
+		type Class
+	} from '$lib/db-rust';
 	import { NfcScanner, nfcSupported } from '$lib/nfc';
 
 	// ── State ────────────────────────────────────────────────────────────────
 	let students = $state<Student[]>([]);
+	let classes = $state<Class[]>([]);
+	let selectedClassId = $state<string>(''); // Filter
+
 	let dialogOpen = $state(false);
 	let editing = $state<Student | null>(null);
 	let scanFor = $state<Student | null>(null);
@@ -23,6 +28,7 @@
 	let formName = $state('');
 	let formStudentNumber = $state('');
 	let formCardSerial = $state('');
+	let formClassId = $state('');
 
 	// Delete confirmation dialog
 	let deleteTarget = $state<Student | null>(null);
@@ -60,13 +66,27 @@
 	}
 
 	async function reload() {
-		students = await listStudents();
-		currentPage = 1; // Reset to first page when data changes
+		try {
+			const [s, c] = await Promise.all([listStudents(selectedClassId || undefined), listClasses()]);
+			students = s;
+			classes = c;
+			currentPage = 1;
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : 'Database error';
+			toast(`Failed to load students: ${msg}`);
+		}
 	}
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
 		reload();
+	});
+
+	// Re-load when filter changes
+	$effect(() => {
+		if (selectedClassId !== undefined) {
+			reload();
+		}
 	});
 
 	// ── NFC scanner for register-card dialog ─────────────────────────────────
@@ -82,7 +102,6 @@
 			return;
 		}
 
-		// Check NFC support when starting to scan
 		(async () => {
 			try {
 				const supported = await nfcSupported();
@@ -128,6 +147,7 @@
 		formName = '';
 		formStudentNumber = '';
 		formCardSerial = '';
+		formClassId = selectedClassId || (classes.length > 0 ? classes[0].id : '');
 		dialogOpen = true;
 	}
 
@@ -136,6 +156,7 @@
 		formName = s.name;
 		formStudentNumber = s.studentNumber;
 		formCardSerial = s.cardSerial ?? '';
+		formClassId = s.classId ?? '';
 		dialogOpen = true;
 	}
 
@@ -149,15 +170,23 @@
 		const name = formName.trim();
 		const num = formStudentNumber.trim();
 		const serial = formCardSerial.trim().toLowerCase();
+		const classId = formClassId;
+
 		if (!name || !num) return;
 
 		const base: Student = editing ?? {
 			id: uid(),
-			createdAt: Date.now(),
+			createdAt: new Date().toISOString(),
 			name: '',
 			studentNumber: ''
 		};
-		await saveStudent({ ...base, name, studentNumber: num, cardSerial: serial || undefined });
+		await saveStudent({
+			...base,
+			name,
+			studentNumber: num,
+			cardSerial: serial || undefined,
+			classId: classId || undefined
+		});
 		toast(editing ? 'Student updated' : 'Student added');
 		closeDialog();
 		reload();
@@ -182,6 +211,11 @@
 		scanFor = null;
 		reload();
 	}
+
+	function getClassName(id?: string) {
+		if (!id) return '—';
+		return classes.find((c) => c.id === id)?.name ?? 'Unknown';
+	}
 </script>
 
 <svelte:head>
@@ -196,25 +230,36 @@
 		description="Manage your student list and their NFC identification cards."
 	>
 		{#snippet actions()}
-			<button
-				onclick={openAdd}
-				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
-			>
-				<!-- Plus icon -->
-				<svg
-					class="size-4"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
+			<div class="flex items-center gap-3">
+				<!-- Class Filter -->
+				<select
+					bind:value={selectedClassId}
+					class="border-border bg-background focus:ring-primary rounded-pill h-10 border px-4 py-2 text-sm focus:ring-2 focus:outline-none"
 				>
-					<path d="M12 5v14M5 12h14" />
-				</svg>
-				Add student
-			</button>
+					<option value="">All Classes</option>
+					{#each classes as c (c.id)}
+						<option value={c.id}>{c.name}</option>
+					{/each}
+				</select>
+
+				<button
+					onclick={openAdd}
+					class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
+				>
+					<svg
+						class="size-4"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M12 5v14M5 12h14" />
+					</svg>
+					Add student
+				</button>
+			</div>
 		{/snippet}
 	</PageHeader>
 
@@ -229,6 +274,7 @@
 						<tr>
 							{@render th('Name')}
 							{@render th('Student #')}
+							{@render th('Class')}
 							{@render th('Card')}
 							{@render th('Actions', 'w-36 text-right')}
 						</tr>
@@ -238,6 +284,11 @@
 							<tr>
 								{@render td(s.name, 'font-medium')}
 								{@render td(s.studentNumber, 'font-mono')}
+								<td class="px-4 py-3">
+									<span class="rounded-pill bg-surface border-border border px-2 py-0.5 text-xs">
+										{getClassName(s.classId)}
+									</span>
+								</td>
 								<td class="px-4 py-3 font-mono text-xs">
 									{#if s.cardSerial}
 										<span class="rounded-pill bg-surface border-border border px-2 py-1"
@@ -254,7 +305,6 @@
 											onclick={() => (scanFor = s)}
 											class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
 											title="Pair NFC card"
-											aria-label="Pair NFC card for {s.name}"
 										>
 											<svg
 												class="size-3.5"
@@ -264,7 +314,6 @@
 												stroke-width="2"
 												stroke-linecap="round"
 												stroke-linejoin="round"
-												aria-hidden="true"
 											>
 												<rect x="2" y="5" width="20" height="14" rx="2" />
 												<path d="M2 10h20" />
@@ -275,7 +324,6 @@
 											onclick={() => openEdit(s)}
 											class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
 											title="Edit student"
-											aria-label="Edit {s.name}"
 										>
 											<svg
 												class="size-3.5"
@@ -285,7 +333,6 @@
 												stroke-width="2"
 												stroke-linecap="round"
 												stroke-linejoin="round"
-												aria-hidden="true"
 											>
 												<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
 												<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -296,7 +343,6 @@
 											onclick={() => onDelete(s)}
 											class="border-border bg-background hover:bg-surface text-destructive inline-flex size-8 items-center justify-center rounded-md border transition-colors"
 											title="Delete student"
-											aria-label="Delete {s.name}"
 										>
 											<svg
 												class="size-3.5"
@@ -306,7 +352,6 @@
 												stroke-width="2"
 												stroke-linecap="round"
 												stroke-linejoin="round"
-												aria-hidden="true"
 											>
 												<polyline points="3 6 5 6 21 6" />
 												<path
@@ -324,7 +369,6 @@
 		{/if}
 	</section>
 
-	<!-- Pagination controls - bottom right of page -->
 	<div class="fixed right-6 bottom-6 z-10">
 		<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
 	</div>
@@ -332,7 +376,6 @@
 
 <!-- ── Add / Edit dialog ──────────────────────────────────────────────────── -->
 {#if dialogOpen}
-	<!-- Backdrop -->
 	<div
 		class="fixed inset-0 z-40 bg-black/50"
 		role="presentation"
@@ -340,7 +383,6 @@
 		onkeydown={(e) => e.key === 'Escape' && closeDialog()}
 	></div>
 
-	<!-- Panel -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center p-4"
 		role="dialog"
@@ -355,7 +397,7 @@
 					{editing ? 'Edit student' : 'Add student'}
 				</h2>
 				<p class="text-muted-foreground mt-1 text-sm">
-					Pair an NFC card now or later from the roster.
+					Assign to a class and pair an NFC card later.
 				</p>
 			</div>
 
@@ -379,6 +421,20 @@
 					/>
 				</div>
 				<div class="space-y-1.5">
+					<label for="field-class" class="label-mono">Class / Section</label>
+					<select
+						id="field-class"
+						bind:value={formClassId}
+						required
+						class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+					>
+						<option value="" disabled>Select a class</option>
+						{#each classes as c (c.id)}
+							<option value={c.id}>{c.name}</option>
+						{/each}
+					</select>
+				</div>
+				<div class="space-y-1.5">
 					<label for="field-card" class="label-mono">Card serial (optional)</label>
 					<input
 						id="field-card"
@@ -399,7 +455,7 @@
 						type="submit"
 						class="rounded-pill bg-primary text-primary-foreground hover:bg-accent px-4 py-2 text-sm font-medium transition-colors"
 					>
-						{editing ? 'Save' : 'Add student'}
+						{editing ? 'Save Changes' : 'Add Student'}
 					</button>
 				</div>
 			</form>
@@ -409,7 +465,6 @@
 
 <!-- ── Register card dialog ───────────────────────────────────────────────── -->
 {#if scanFor}
-	<!-- Backdrop -->
 	<div
 		class="fixed inset-0 z-40 bg-black/50"
 		role="presentation"
@@ -417,7 +472,6 @@
 		onkeydown={(e) => e.key === 'Escape' && (scanFor = null)}
 	></div>
 
-	<!-- Panel -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center p-4"
 		role="dialog"
@@ -433,7 +487,6 @@
 			</div>
 
 			<div class="space-y-4">
-				<!-- Scan area -->
 				<div class="border-border bg-surface/50 rounded-2xl border border-dashed p-8 text-center">
 					<svg
 						class="mx-auto mb-3 size-10 {scanning
@@ -445,7 +498,6 @@
 						stroke-width="2"
 						stroke-linecap="round"
 						stroke-linejoin="round"
-						aria-hidden="true"
 					>
 						<rect x="2" y="5" width="20" height="14" rx="2" />
 						<path d="M2 10h20" />
@@ -462,7 +514,6 @@
 					<div class="mt-2 font-mono text-sm break-all">{cardSerial || '—'}</div>
 				</div>
 
-				<!-- Manual entry -->
 				<div class="space-y-1.5">
 					<label for="manual-serial" class="label-mono">Or enter serial manually</label>
 					<input
@@ -498,7 +549,6 @@
 
 <!-- ── Delete confirmation dialog ────────────────────────────────────────── -->
 {#if deleteTarget}
-	<!-- Backdrop -->
 	<div
 		class="fixed inset-0 z-40 bg-black/50"
 		role="presentation"
@@ -506,7 +556,6 @@
 		onkeydown={(e) => e.key === 'Escape' && (deleteTarget = null)}
 	></div>
 
-	<!-- Panel -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center p-4"
 		role="dialog"
@@ -516,7 +565,6 @@
 		<div
 			class="border-border bg-background w-full max-w-sm space-y-5 rounded-2xl border p-6 shadow-xl"
 		>
-			<!-- Icon + heading -->
 			<div class="flex flex-col items-center gap-3 text-center">
 				<div class="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
 					<svg
@@ -527,7 +575,6 @@
 						stroke-width="2"
 						stroke-linecap="round"
 						stroke-linejoin="round"
-						aria-hidden="true"
 					>
 						<polyline points="3 6 5 6 21 6" />
 						<path
@@ -538,8 +585,7 @@
 				<div>
 					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete student?</h2>
 					<p class="text-muted-foreground mt-1 text-sm">
-						<span class="text-foreground font-medium">{deleteTarget.name}</span> and all their attendance
-						records will be permanently removed. This cannot be undone.
+						<span class="text-foreground font-medium">{deleteTarget.name}</span> will be permanently removed.
 					</p>
 				</div>
 			</div>
@@ -553,7 +599,7 @@
 				</button>
 				<button
 					onclick={confirmDelete}
-					class="rounded-pill bg-destructive flex-1 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+					class="rounded-pill bg-destructive flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 				>
 					Delete
 				</button>
@@ -562,10 +608,9 @@
 	</div>
 {/if}
 
-<!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 {#if toastMessage}
 	<div
-		class="border-border bg-background fixed right-6 bottom-6 z-[60] rounded-xl border px-4 py-3 text-sm font-medium shadow-lg"
+		class="border-border bg-background fixed right-6 bottom-6 z-60 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg"
 		role="status"
 		aria-live="polite"
 	>
@@ -573,10 +618,15 @@
 	</div>
 {/if}
 
-<!-- ── Snippets ───────────────────────────────────────────────────────────── -->
 {#snippet emptyState()}
 	<div class="border-border bg-surface/50 rounded-2xl border border-dashed p-12 text-center">
-		<p class="text-muted-foreground">No students yet. Add your first student to begin.</p>
+		<p class="text-muted-foreground">
+			{#if selectedClassId}
+				No students assigned to this class yet.
+			{:else}
+				No students yet. Add your first student to begin.
+			{/if}
+		</p>
 	</div>
 {/snippet}
 

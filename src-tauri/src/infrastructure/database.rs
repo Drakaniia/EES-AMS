@@ -12,51 +12,180 @@ use std::path::Path;
 /// Database connection pool type
 pub type DbPool = Pool<SqliteConnectionManager>;
 
-/// Initialize the database with schema
+/// Initialize the database with schema and migrations
 pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
     let manager = SqliteConnectionManager::file(path);
     let pool = Pool::new(manager)?;
 
     let conn = pool.get()?;
+
+    // Check if we need to run migrations
+    let user_version: i32 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap_or(0);
+
+    if user_version < 1 {
+        // Initial schema creation or migration to version 1
+        migrate_to_v1(&conn)?;
+        conn.execute("PRAGMA user_version = 1", [])?;
+    }
+
+    Ok(pool)
+}
+
+/// Migrate database to version 1 (add class support)
+fn migrate_to_v1(conn: &rusqlite::Connection) -> Result<()> {
+    // Create all tables with proper schema
     conn.execute_batch(
         r#"
-        CREATE TABLE IF NOT EXISTS students (
+        -- Create classes table
+        CREATE TABLE IF NOT EXISTS classes (
+            id TEXT PRIMARY KEY NOT NULL,
+            name TEXT NOT NULL,
+            day_start TEXT NOT NULL,
+            day_end TEXT NOT NULL,
+            late_after TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+
+        -- Create indexes for classes
+        CREATE INDEX IF NOT EXISTS idx_classes_name ON classes(name);
+
+        -- Create students table with class support
+        CREATE TABLE IF NOT EXISTS students_new (
             id TEXT PRIMARY KEY NOT NULL,
             name TEXT NOT NULL,
             student_number TEXT NOT NULL UNIQUE,
             card_serial TEXT UNIQUE,
-            created_at TEXT NOT NULL
+            class_id TEXT,
+            created_at INTEGER NOT NULL
         );
 
-        CREATE INDEX IF NOT EXISTS idx_students_card ON students(card_serial);
-        CREATE INDEX IF NOT EXISTS idx_students_name ON students(name);
+        -- Create indexes for students
+        CREATE INDEX IF NOT EXISTS idx_students_card_new ON students_new(card_serial);
+        CREATE INDEX IF NOT EXISTS idx_students_name_new ON students_new(name);
+        CREATE INDEX IF NOT EXISTS idx_students_class_new ON students_new(class_id);
 
-        CREATE TABLE IF NOT EXISTS events (
+        -- Create events table with class support
+        CREATE TABLE IF NOT EXISTS events_new (
             id TEXT PRIMARY KEY NOT NULL,
             student_id TEXT NOT NULL,
+            class_id TEXT,
             event_type TEXT NOT NULL CHECK(event_type IN ('in', 'out')),
-            timestamp TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
             note TEXT,
-            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+            FOREIGN KEY (student_id) REFERENCES students_new(id) ON DELETE CASCADE
         );
 
-        CREATE INDEX IF NOT EXISTS idx_events_student ON events(student_id);
-        CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
+        -- Create indexes for events
+        CREATE INDEX IF NOT EXISTS idx_events_student_new ON events_new(student_id);
+        CREATE INDEX IF NOT EXISTS idx_events_timestamp_new ON events_new(timestamp);
 
+        -- Create settings table
         CREATE TABLE IF NOT EXISTS settings (
-            id INTEGER PRIMARY KEY CHECK(id = 1),
-            class_name TEXT NOT NULL,
+            id TEXT PRIMARY KEY NOT NULL,
             day_start TEXT NOT NULL,
             day_end TEXT NOT NULL,
             late_after TEXT NOT NULL
         );
 
-        INSERT OR IGNORE INTO settings (id, class_name, day_start, day_end, late_after)
-        VALUES (1, 'My Class', '08:30', '15:30', '08:45');
+        -- Insert default settings
+        INSERT OR IGNORE INTO settings (id, day_start, day_end, late_after)
+        VALUES ('app', '08:30', '15:30', '08:45');
         "#,
     )?;
 
-    Ok(pool)
+    // Migrate data from old tables if they exist
+    let has_old_students = conn
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='students'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)))
+        .unwrap_or(false);
+
+    if has_old_students {
+        // Copy data from old students table to new one
+        conn.execute(
+            "INSERT INTO students_new (id, name, student_number, card_serial, created_at) 
+             SELECT id, name, student_number, card_serial, created_at FROM students",
+            [],
+        )?;
+
+        // Copy data from old events table to new one
+        conn.execute(
+            "INSERT INTO events_new (id, student_id, event_type, timestamp, note) 
+             SELECT id, student_id, event_type, timestamp, note FROM events",
+            [],
+        )?;
+
+        // Drop old tables
+        conn.execute("DROP TABLE IF EXISTS students", [])?;
+        conn.execute("DROP TABLE IF EXISTS events", [])?;
+
+        // Rename new tables
+        conn.execute("ALTER TABLE students_new RENAME TO students", [])?;
+        conn.execute("ALTER TABLE events_new RENAME TO events", [])?;
+
+        // Rename indexes
+        conn.execute("DROP INDEX IF EXISTS idx_students_card_new", [])?;
+        conn.execute("DROP INDEX IF EXISTS idx_students_name_new", [])?;
+        conn.execute("DROP INDEX IF EXISTS idx_students_class_new", [])?;
+        conn.execute("DROP INDEX IF EXISTS idx_events_student_new", [])?;
+        conn.execute("DROP INDEX IF EXISTS idx_events_timestamp_new", [])?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_students_card ON students(card_serial)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_students_name ON students(name)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_student ON events(student_id)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)",
+            [],
+        )?;
+    } else {
+        // No old data, just rename the new tables
+        conn.execute("ALTER TABLE students_new RENAME TO students", [])?;
+        conn.execute("ALTER TABLE events_new RENAME TO events", [])?;
+
+        // Rename indexes
+        conn.execute("DROP INDEX IF EXISTS idx_students_card_new", [])?;
+        conn.execute("DROP INDEX IF EXISTS idx_students_name_new", [])?;
+        conn.execute("DROP INDEX IF EXISTS idx_students_class_new", [])?;
+        conn.execute("DROP INDEX IF EXISTS idx_events_student_new", [])?;
+        conn.execute("DROP INDEX IF EXISTS idx_events_timestamp_new", [])?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_students_card ON students(card_serial)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_students_name ON students(name)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_student ON events(student_id)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)",
+            [],
+        )?;
+    }
+
+    Ok(())
 }
 
 /// Student repository
@@ -71,26 +200,52 @@ impl StudentRepository {
 
     /// List all students
     pub fn list(&self) -> Result<Vec<Student>> {
-        let conn = self.pool.get()?;
-        let mut stmt = conn.prepare(
-            "SELECT id, name, student_number, card_serial, created_at 
-             FROM students 
-             ORDER BY name ASC",
-        )?;
+        self.list_by_class(None)
+    }
 
-        let students = stmt
-            .query_map([], |row| {
+    /// List students by class
+    pub fn list_by_class(&self, class_id: Option<&str>) -> Result<Vec<Student>> {
+        let conn = self.pool.get()?;
+        let students = if let Some(class_id) = class_id {
+            let mut stmt = conn.prepare(
+                "SELECT id, name, student_number, card_serial, class_id, created_at 
+                 FROM students 
+                 WHERE class_id = ?1 
+                 ORDER BY name ASC",
+            )?;
+            let rows = stmt.query_map(params![class_id], |row| {
                 Ok(Student {
                     id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
                     name: row.get(1)?,
                     student_number: row.get(2)?,
                     card_serial: row.get(3)?,
-                    created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
+                    class_id: row.get(4)?,
+                    created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
                 })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+            })?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()?
+        } else {
+            let mut stmt = conn.prepare(
+                "SELECT id, name, student_number, card_serial, class_id, created_at 
+                 FROM students 
+                 ORDER BY name ASC",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok(Student {
+                    id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
+                    name: row.get(1)?,
+                    student_number: row.get(2)?,
+                    card_serial: row.get(3)?,
+                    class_id: row.get(4)?,
+                    created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
+                        .unwrap()
+                        .with_timezone(&Utc),
+                })
+            })?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()?
+        };
 
         Ok(students)
     }
@@ -100,7 +255,7 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         let student = conn
             .query_row(
-                "SELECT id, name, student_number, card_serial, created_at 
+                "SELECT id, name, student_number, card_serial, class_id, created_at 
                  FROM students 
                  WHERE id = ?1",
                 params![id.0.to_string()],
@@ -110,7 +265,8 @@ impl StudentRepository {
                         name: row.get(1)?,
                         student_number: row.get(2)?,
                         card_serial: row.get(3)?,
-                        created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
+                        class_id: row.get(4)?,
+                        created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
                             .unwrap()
                             .with_timezone(&Utc),
                     })
@@ -127,7 +283,7 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         let student = conn
             .query_row(
-                "SELECT id, name, student_number, card_serial, created_at 
+                "SELECT id, name, student_number, card_serial, class_id, created_at 
                  FROM students 
                  WHERE card_serial = ?1",
                 params![serial],
@@ -137,7 +293,8 @@ impl StudentRepository {
                         name: row.get(1)?,
                         student_number: row.get(2)?,
                         card_serial: row.get(3)?,
-                        created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
+                        class_id: row.get(4)?,
+                        created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
                             .unwrap()
                             .with_timezone(&Utc),
                     })
@@ -162,19 +319,21 @@ impl StudentRepository {
             name: req.name,
             student_number: req.student_number,
             card_serial: req.card_serial,
+            class_id: req.class_id,
             created_at: Utc::now(),
         };
 
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT INTO students (id, name, student_number, card_serial, created_at) 
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO students (id, name, student_number, card_serial, class_id, created_at) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 student.id.0.to_string(),
                 student.name,
                 student.student_number,
                 student.card_serial,
-                student.created_at.to_rfc3339(),
+                student.class_id,
+                student.created_at.timestamp(),
             ],
         )?;
 
@@ -203,16 +362,20 @@ impl StudentRepository {
         if let Some(card_serial) = req.card_serial {
             student.card_serial = Some(card_serial);
         }
+        if let Some(class_id) = req.class_id {
+            student.class_id = Some(class_id);
+        }
 
         let conn = self.pool.get()?;
         conn.execute(
             "UPDATE students 
-             SET name = ?1, student_number = ?2, card_serial = ?3 
-             WHERE id = ?4",
+             SET name = ?1, student_number = ?2, card_serial = ?3, class_id = ?4 
+             WHERE id = ?5",
             params![
                 student.name,
                 student.student_number,
                 student.card_serial,
+                student.class_id,
                 id.0.to_string(),
             ],
         )?;
@@ -250,7 +413,7 @@ impl EventRepository {
     pub fn list(&self) -> Result<Vec<AttendanceEvent>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(
-            "SELECT id, student_id, event_type, timestamp, note 
+            "SELECT id, student_id, class_id, event_type, timestamp, note 
              FROM events 
              ORDER BY timestamp DESC",
         )?;
@@ -262,15 +425,16 @@ impl EventRepository {
                     student_id: StudentId(
                         uuid::Uuid::parse_str(&row.get::<_, String>(1)?).unwrap(),
                     ),
-                    event_type: match row.get::<_, String>(2)?.as_str() {
+                    class_id: row.get(2)?,
+                    event_type: match row.get::<_, String>(3)?.as_str() {
                         "in" => AttendanceType::In,
                         "out" => AttendanceType::Out,
                         _ => unreachable!(),
                     },
-                    timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)
+                    timestamp: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
-                    note: row.get(4)?,
+                    note: row.get(5)?,
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -282,7 +446,7 @@ impl EventRepository {
     pub fn list_for_student(&self, student_id: StudentId) -> Result<Vec<AttendanceEvent>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(
-            "SELECT id, student_id, event_type, timestamp, note 
+            "SELECT id, student_id, class_id, event_type, timestamp, note 
              FROM events 
              WHERE student_id = ?1 
              ORDER BY timestamp DESC",
@@ -295,15 +459,16 @@ impl EventRepository {
                     student_id: StudentId(
                         uuid::Uuid::parse_str(&row.get::<_, String>(1)?).unwrap(),
                     ),
-                    event_type: match row.get::<_, String>(2)?.as_str() {
+                    class_id: row.get(2)?,
+                    event_type: match row.get::<_, String>(3)?.as_str() {
                         "in" => AttendanceType::In,
                         "out" => AttendanceType::Out,
                         _ => unreachable!(),
                     },
-                    timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)
+                    timestamp: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
-                    note: row.get(4)?,
+                    note: row.get(5)?,
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -316,7 +481,7 @@ impl EventRepository {
         let conn = self.pool.get()?;
         let event = conn
             .query_row(
-                "SELECT id, student_id, event_type, timestamp, note 
+                "SELECT id, student_id, class_id, event_type, timestamp, note 
                  FROM events 
                  WHERE student_id = ?1 
                  ORDER BY timestamp DESC 
@@ -328,15 +493,16 @@ impl EventRepository {
                         student_id: StudentId(
                             uuid::Uuid::parse_str(&row.get::<_, String>(1)?).unwrap(),
                         ),
-                        event_type: match row.get::<_, String>(2)?.as_str() {
+                        class_id: row.get(2)?,
+                        event_type: match row.get::<_, String>(3)?.as_str() {
                             "in" => AttendanceType::In,
                             "out" => AttendanceType::Out,
                             _ => unreachable!(),
                         },
-                        timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)
+                        timestamp: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
                             .unwrap()
                             .with_timezone(&Utc),
-                        note: row.get(4)?,
+                        note: row.get(5)?,
                     })
                 },
             )
@@ -350,6 +516,7 @@ impl EventRepository {
         let event = AttendanceEvent {
             id: EventId::new(),
             student_id: req.student_id,
+            class_id: req.class_id,
             event_type: req.event_type,
             timestamp: Utc::now(),
             note: req.note,
@@ -357,16 +524,17 @@ impl EventRepository {
 
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT INTO events (id, student_id, event_type, timestamp, note) 
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 event.id.0.to_string(),
                 event.student_id.0.to_string(),
+                event.class_id,
                 match event.event_type {
                     AttendanceType::In => "in",
                     AttendanceType::Out => "out",
                 },
-                event.timestamp.to_rfc3339(),
+                event.timestamp.timestamp(),
                 event.note,
             ],
         )?;
@@ -403,31 +571,32 @@ impl SettingsRepository {
     /// Get settings
     pub fn get(&self) -> Result<Settings> {
         let conn = self.pool.get()?;
-        let settings = conn.query_row(
-            "SELECT class_name, day_start, day_end, late_after FROM settings WHERE id = 1",
-            [],
-            |row| {
-                Ok(Settings {
-                    class_name: row.get(0)?,
-                    day_start: row.get(1)?,
-                    day_end: row.get(2)?,
-                    late_after: row.get(3)?,
-                })
-            },
-        )?;
+        let settings = conn
+            .query_row(
+                "SELECT id, day_start, day_end, late_after FROM settings WHERE id = 'app'",
+                [],
+                |row| {
+                    Ok(Settings {
+                        id: row.get(0)?,
+                        day_start: row.get(1)?,
+                        day_end: row.get(2)?,
+                        late_after: row.get(3)?,
+                    })
+                },
+            )
+            .optional()?;
 
-        Ok(settings)
+        Ok(settings.unwrap_or_default())
     }
 
     /// Update settings
     pub fn update(&self, settings: Settings) -> Result<Settings> {
         let conn = self.pool.get()?;
         conn.execute(
-            "UPDATE settings 
-             SET class_name = ?1, day_start = ?2, day_end = ?3, late_after = ?4 
-             WHERE id = 1",
+            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after) 
+             VALUES (?1, ?2, ?3, ?4)",
             params![
-                settings.class_name,
+                settings.id,
                 settings.day_start,
                 settings.day_end,
                 settings.late_after,
@@ -435,5 +604,146 @@ impl SettingsRepository {
         )?;
 
         Ok(settings)
+    }
+}
+
+/// Class repository
+pub struct ClassRepository {
+    pool: DbPool,
+}
+
+impl ClassRepository {
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    /// List all classes
+    pub fn list(&self) -> Result<Vec<Class>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, day_start, day_end, late_after, created_at 
+             FROM classes 
+             ORDER BY name ASC",
+        )?;
+
+        let classes = stmt
+            .query_map([], |row| {
+                Ok(Class {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    day_start: row.get(2)?,
+                    day_end: row.get(3)?,
+                    late_after: row.get(4)?,
+                    created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
+                        .unwrap()
+                        .with_timezone(&Utc),
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        Ok(classes)
+    }
+
+    /// Get class by ID
+    pub fn get(&self, id: &str) -> Result<Option<Class>> {
+        let conn = self.pool.get()?;
+        let class = conn
+            .query_row(
+                "SELECT id, name, day_start, day_end, late_after, created_at 
+                 FROM classes 
+                 WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok(Class {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        day_start: row.get(2)?,
+                        day_end: row.get(3)?,
+                        late_after: row.get(4)?,
+                        created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
+                            .unwrap()
+                            .with_timezone(&Utc),
+                    })
+                },
+            )
+            .optional()?;
+
+        Ok(class)
+    }
+
+    /// Create a new class
+    pub fn create(&self, req: CreateClassRequest) -> Result<Class> {
+        let class = Class {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: req.name,
+            day_start: req.day_start,
+            day_end: req.day_end,
+            late_after: req.late_after,
+            created_at: Utc::now(),
+        };
+
+        let conn = self.pool.get()?;
+        conn.execute(
+            "INSERT INTO classes (id, name, day_start, day_end, late_after, created_at) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                class.id,
+                class.name,
+                class.day_start,
+                class.day_end,
+                class.late_after,
+                class.created_at.timestamp(),
+            ],
+        )?;
+
+        Ok(class)
+    }
+
+    /// Update a class
+    pub fn update(&self, id: &str, req: UpdateClassRequest) -> Result<Class> {
+        let mut class = self
+            .get(id)?
+            .ok_or_else(|| AppError::ClassNotFound(id.to_string()))?;
+
+        if let Some(name) = req.name {
+            class.name = name;
+        }
+        if let Some(day_start) = req.day_start {
+            class.day_start = day_start;
+        }
+        if let Some(day_end) = req.day_end {
+            class.day_end = day_end;
+        }
+        if let Some(late_after) = req.late_after {
+            class.late_after = late_after;
+        }
+
+        let conn = self.pool.get()?;
+        conn.execute(
+            "UPDATE classes 
+             SET name = ?1, day_start = ?2, day_end = ?3, late_after = ?4 
+             WHERE id = ?5",
+            params![
+                class.name,
+                class.day_start,
+                class.day_end,
+                class.late_after,
+                id,
+            ],
+        )?;
+
+        Ok(class)
+    }
+
+    /// Delete a class
+    pub fn delete(&self, id: &str) -> Result<()> {
+        let conn = self.pool.get()?;
+        let rows = conn.execute("DELETE FROM classes WHERE id = ?1", params![id])?;
+
+        if rows == 0 {
+            return Err(AppError::ClassNotFound(id.to_string()));
+        }
+
+        Ok(())
     }
 }

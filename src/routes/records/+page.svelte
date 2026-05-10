@@ -7,19 +7,23 @@
 	import {
 		listStudents,
 		listEvents,
+		listClasses,
 		getSettings,
 		deleteEvent,
 		type Student,
-		type AttendanceEvent
-	} from '$lib/db';
+		type AttendanceEvent,
+		type Class
+	} from '$lib/db-rust';
 	import { downloadCSV, eventsToCSV, fmtDate, fmtDateTime, fmtTime } from '$lib/csv';
 
 	// ── State ────────────────────────────────────────────────────────────────
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
+	let classes = $state<Class[]>([]);
 	let from = $state('');
 	let to = $state('');
 	let studentId = $state('');
+	let classId = $state('');
 	let lateAfter = $state('08:45');
 
 	// Date range picker dialog state
@@ -36,6 +40,7 @@
 
 	// ── Derived ──────────────────────────────────────────────────────────────
 	let studentMap = $derived(new Map(students.map((s) => [s.id, s])));
+	let classMap = $derived(new Map(classes.map((c) => [c.id, c])));
 
 	let filtered = $derived(
 		events.filter((e) => {
@@ -43,6 +48,13 @@
 			if (from && d < from) return false;
 			if (to && d > to) return false;
 			if (studentId && e.studentId !== studentId) return false;
+
+			if (classId) {
+				const s = studentMap.get(e.studentId);
+				const eventClassId = e.classId || s?.classId;
+				if (eventClassId !== classId) return false;
+			}
+
 			return true;
 		})
 	);
@@ -68,17 +80,24 @@
 	}
 
 	async function reload() {
-		const [s, e, st] = await Promise.all([listStudents(), listEvents(), getSettings()]);
+		const [s, e, c, st] = await Promise.all([
+			listStudents(),
+			listEvents(),
+			listClasses(),
+			getSettings()
+		]);
 		students = s;
 		events = e;
+		classes = c;
 		lateAfter = st.lateAfter;
-		currentPage = 1; // Reset to first page when data changes
+		currentPage = 1;
 	}
 
 	function onExport() {
-		const csv = eventsToCSV(filtered, students, lateAfter);
+		const csv = eventsToCSV(filtered, students, classes, lateAfter);
 		const range = from || to ? `_${from || 'start'}_to_${to || 'end'}` : '';
-		downloadCSV(`attendance-records${range}.csv`, csv);
+		const classSuffix = classId ? `_${classMap.get(classId)?.name || 'class'}` : '';
+		downloadCSV(`attendance-records${classSuffix}${range}.csv`, csv);
 		toast('CSV exported');
 	}
 
@@ -87,6 +106,12 @@
 		await deleteEvent(id);
 		toast('Deleted');
 		await reload();
+	}
+
+	function getEventClassName(e: AttendanceEvent) {
+		const id = e.classId || studentMap.get(e.studentId)?.classId;
+		if (!id) return '—';
+		return classMap.get(id)?.name ?? 'Unknown';
 	}
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
@@ -111,7 +136,6 @@
 				onclick={onExport}
 				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
 			>
-				<!-- Download icon -->
 				<svg
 					class="size-4"
 					viewBox="0 0 24 24"
@@ -166,6 +190,20 @@
 			</button>
 		</div>
 
+		<!-- Class -->
+		<div class="space-y-2">
+			<div class="label-mono">Class</div>
+			<select
+				bind:value={classId}
+				class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+			>
+				<option value="">All classes</option>
+				{#each classes as c (c.id)}
+					<option value={c.id}>{c.name}</option>
+				{/each}
+			</select>
+		</div>
+
 		<!-- Student -->
 		<div class="space-y-2">
 			<div class="label-mono">Student</div>
@@ -195,6 +233,7 @@
 					<tr>
 						<th class="label-mono px-4 py-3">When</th>
 						<th class="label-mono px-4 py-3">Student</th>
+						<th class="label-mono px-4 py-3">Class</th>
 						<th class="label-mono px-4 py-3">Type</th>
 						<th class="label-mono w-20 px-4 py-3 text-right"> </th>
 					</tr>
@@ -212,6 +251,13 @@
 									<div class="label-mono">#{s?.studentNumber}</div>
 								</td>
 								<td class="px-4 py-3 align-top">
+									<span
+										class="rounded-pill bg-surface border-border border px-2 py-0.5 text-[10px]"
+									>
+										{getEventClassName(e)}
+									</span>
+								</td>
+								<td class="px-4 py-3 align-top">
 									{@render typePill(e.type)}
 									<span class="text-muted-foreground ml-2 font-mono text-xs"
 										>{fmtTime(e.timestamp)}</span
@@ -223,7 +269,6 @@
 										aria-label="Delete event"
 										class="border-border text-destructive hover:bg-destructive/10 inline-flex size-8 items-center justify-center rounded-md border transition-colors"
 									>
-										<!-- Trash2 icon -->
 										<svg
 											class="size-3.5"
 											viewBox="0 0 24 24"
@@ -249,13 +294,11 @@
 		</div>
 	</section>
 
-	<!-- Pagination controls - bottom right of page -->
 	<div class="fixed right-6 bottom-6 z-30">
 		<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
 	</div>
 </AppShell>
 
-<!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 {#if toastMessage}
 	<div
 		class="fixed right-6 bottom-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
@@ -269,7 +312,6 @@
 	</div>
 {/if}
 
-<!-- ── Date Range Picker Dialog ────────────────────────────────────────────── -->
 <DateRangePicker
 	open={dateRangePickerOpen}
 	fromValue={from}
@@ -281,10 +323,9 @@
 	}}
 />
 
-<!-- ── Snippets ───────────────────────────────────────────────────────────── -->
 {#snippet emptyState()}
 	<tr>
-		<td colspan={4} class="text-muted-foreground px-4 py-12 text-center">
+		<td colspan={5} class="text-muted-foreground px-4 py-12 text-center">
 			No records match the filters.
 		</td>
 	</tr>

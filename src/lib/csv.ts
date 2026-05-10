@@ -1,18 +1,18 @@
-import type { AttendanceEvent, Student } from './db';
+import type { AttendanceEvent, Student, Class } from './types';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-export const fmtDate = (ts: number) => {
-	const d = new Date(ts);
+export const fmtDate = (ts: number | string) => {
+	const d = new Date(typeof ts === 'string' ? ts : ts);
 	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-export const fmtTime = (ts: number) => {
-	const d = new Date(ts);
+export const fmtTime = (ts: number | string) => {
+	const d = new Date(typeof ts === 'string' ? ts : ts);
 	return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export const fmtDateTime = (ts: number) => `${fmtDate(ts)} ${fmtTime(ts)}`;
+export const fmtDateTime = (ts: number | string) => `${fmtDate(ts)} ${fmtTime(ts)}`;
 
 const escape = (v: string | number | undefined | null) => {
 	if (v === undefined || v === null) return '';
@@ -23,12 +23,14 @@ const escape = (v: string | number | undefined | null) => {
 export function eventsToCSV(
 	events: AttendanceEvent[],
 	students: Student[],
-	lateAfter: string
+	classes: Class[],
+	globalLateAfter: string
 ): string {
 	const byStudent = new Map(students.map((s) => [s.id, s]));
+	const byClass = new Map(classes.map((c) => [c.id, c]));
 	const groups = new Map<
 		string,
-		{ student: Student; date: string; ins: number[]; outs: number[] }
+		{ student: Student; date: string; ins: number[]; outs: number[]; classId?: string }
 	>();
 
 	for (const e of events) {
@@ -38,11 +40,13 @@ export function eventsToCSV(
 		const key = `${student.id}|${date}`;
 		let g = groups.get(key);
 		if (!g) {
-			g = { student, date, ins: [], outs: [] };
+			g = { student, date, ins: [], outs: [], classId: e.classId || student.classId };
 			groups.set(key, g);
 		}
-		if (e.type === 'in') g.ins.push(e.timestamp);
-		else g.outs.push(e.timestamp);
+		const timestamp =
+			typeof e.timestamp === 'string' ? new Date(e.timestamp).getTime() : e.timestamp;
+		if (e.type === 'in') g.ins.push(timestamp);
+		else g.outs.push(timestamp);
 	}
 
 	const rows = [...groups.values()]
@@ -58,9 +62,15 @@ export function eventsToCSV(
 				checkIn && checkOut && checkOut > checkIn
 					? ((checkOut - checkIn) / 3600000).toFixed(2)
 					: '';
-			const late = checkIn && lateAfter ? (fmtTime(checkIn) > lateAfter ? 'Yes' : 'No') : '';
+
+			const cls = g.classId ? byClass.get(g.classId) : null;
+			const lateThreshold = cls?.lateAfter || globalLateAfter;
+
+			const late =
+				checkIn && lateThreshold ? (fmtTime(checkIn) > lateThreshold ? 'Yes' : 'No') : '';
 			return [
 				g.date,
+				cls?.name || 'Unknown',
 				g.student.studentNumber,
 				g.student.name,
 				checkIn ? fmtTime(checkIn) : '',
@@ -70,7 +80,7 @@ export function eventsToCSV(
 			];
 		});
 
-	const header = ['Date', 'Student #', 'Name', 'Check-in', 'Check-out', 'Hours', 'Late'];
+	const header = ['Date', 'Class', 'Student #', 'Name', 'Check-in', 'Check-out', 'Hours', 'Late'];
 	return [header, ...rows].map((r) => r.map(escape).join(',')).join('\n');
 }
 

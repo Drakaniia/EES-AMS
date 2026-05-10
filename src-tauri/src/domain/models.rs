@@ -47,6 +47,8 @@ pub struct Student {
     pub student_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card_serial: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub class_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -58,12 +60,26 @@ pub enum AttendanceType {
     Out,
 }
 
+/// Class record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Class {
+    pub id: String,
+    pub name: String,
+    pub day_start: String,
+    pub day_end: String,
+    pub late_after: String,
+    pub created_at: DateTime<Utc>,
+}
+
 /// Attendance event record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AttendanceEvent {
     pub id: EventId,
     pub student_id: StudentId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub class_id: Option<String>,
     #[serde(rename = "type")]
     pub event_type: AttendanceType,
     pub timestamp: DateTime<Utc>,
@@ -75,7 +91,7 @@ pub struct AttendanceEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
-    pub class_name: String,
+    pub id: String,
     pub day_start: String,  // "08:30"
     pub day_end: String,    // "15:30"
     pub late_after: String, // "08:45"
@@ -84,7 +100,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            class_name: "My Class".to_string(),
+            id: "app".to_string(),
             day_start: "08:30".to_string(),
             day_end: "15:30".to_string(),
             late_after: "08:45".to_string(),
@@ -100,6 +116,8 @@ pub struct CreateStudentRequest {
     pub student_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card_serial: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub class_id: Option<String>,
 }
 
 /// Request to update a student
@@ -112,6 +130,32 @@ pub struct UpdateStudentRequest {
     pub student_number: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card_serial: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub class_id: Option<String>,
+}
+
+/// Request to create a new class
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateClassRequest {
+    pub name: String,
+    pub day_start: String,
+    pub day_end: String,
+    pub late_after: String,
+}
+
+/// Request to update a class
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateClassRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub day_start: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub day_end: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub late_after: Option<String>,
 }
 
 /// Request to create an attendance event
@@ -119,6 +163,8 @@ pub struct UpdateStudentRequest {
 #[serde(rename_all = "camelCase")]
 pub struct CreateEventRequest {
     pub student_id: StudentId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub class_id: Option<String>,
     #[serde(rename = "type")]
     pub event_type: AttendanceType,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -130,7 +176,8 @@ pub struct CreateEventRequest {
 #[serde(rename_all = "camelCase")]
 pub struct ExportData {
     pub students: Vec<Student>,
+    pub classes: Vec<Class>,
     pub events: Vec<AttendanceEvent>,
-    pub settings: Settings,
-    pub exported_at: DateTime<Utc>,
+    pub settings: Vec<Settings>,
+    pub exported_at: i64,
 }
