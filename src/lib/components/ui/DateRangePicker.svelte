@@ -261,8 +261,9 @@
 								onclick={() => handleDateSelect(day as Date, 'from')}
 								disabled={isDateDisabled}
 								class="relative rounded-md p-2 text-sm transition-colors
-									{isDateDisabled ? 'text-muted-foreground/30 cursor-not-allowed' : 'hover:bg-surface cursor-pointer'}
-									{isDateSelected ? 'bg-primary text-primary-foreground hover:bg-primary' : ''}
+									{isDateDisabled ? 'text-muted-foreground/30 cursor-not-allowed' : ''}
+									{!isDateDisabled && !isDateSelected ? 'hover:bg-surface cursor-pointer' : ''}
+									{isDateSelected ? 'bg-primary text-primary-foreground cursor-default' : ''}
 									{isDateToday && !isDateSelected ? 'border-border border' : ''}"
 							>
 								{(day as Date).getDate()}
@@ -379,8 +380,9 @@
 								onclick={() => handleDateSelect(day as Date, 'to')}
 								disabled={isDateDisabled}
 								class="relative rounded-md p-2 text-sm transition-colors
-									{isDateDisabled ? 'text-muted-foreground/30 cursor-not-allowed' : 'hover:bg-surface cursor-pointer'}
-									{isDateSelected ? 'bg-primary text-primary-foreground hover:bg-primary' : ''}
+									{isDateDisabled ? 'text-muted-foreground/30 cursor-not-allowed' : ''}
+									{!isDateDisabled && !isDateSelected ? 'hover:bg-surface cursor-pointer' : ''}
+									{isDateSelected ? 'bg-primary text-primary-foreground cursor-default' : ''}
 									{isDateToday && !isDateSelected ? 'border-border border' : ''}"
 							>
 								{(day as Date).getDate()}
