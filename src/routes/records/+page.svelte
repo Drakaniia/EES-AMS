@@ -3,6 +3,7 @@
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import DateRangePicker from '$lib/components/ui/DateRangePicker.svelte';
+	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import {
 		listStudents,
 		listEvents,
@@ -29,6 +30,10 @@
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Pagination
+	let currentPage = $state(1);
+	let itemsPerPage = $state(10);
+
 	// ── Derived ──────────────────────────────────────────────────────────────
 	let studentMap = $derived(new Map(students.map((s) => [s.id, s])));
 
@@ -41,6 +46,18 @@
 			return true;
 		})
 	);
+
+	// Pagination for records
+	const totalPages = $derived(Math.ceil(filtered.length / itemsPerPage));
+	const paginatedFiltered = $derived(() => {
+		const start = (currentPage - 1) * itemsPerPage;
+		const end = start + itemsPerPage;
+		return filtered.slice(start, end);
+	});
+
+	function handlePageChange(page: number) {
+		currentPage = page;
+	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string, ok = true) {
@@ -55,6 +72,7 @@
 		students = s;
 		events = e;
 		lateAfter = st.lateAfter;
+		currentPage = 1; // Reset to first page when data changes
 	}
 
 	function onExport() {
@@ -185,7 +203,7 @@
 					{#if filtered.length === 0}
 						{@render emptyState()}
 					{:else}
-						{#each filtered as e (e.id)}
+						{#each paginatedFiltered() as e (e.id)}
 							{@const s = studentMap.get(e.studentId)}
 							<tr class="hover:bg-surface/40 transition-colors">
 								<td class="px-4 py-3 align-top font-mono">{fmtDateTime(e.timestamp)}</td>
@@ -230,6 +248,11 @@
 			</table>
 		</div>
 	</section>
+
+	<!-- Pagination controls - bottom right of page -->
+	<div class="fixed right-6 bottom-6 z-30">
+		<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
+	</div>
 </AppShell>
 
 <!-- ── Toast ──────────────────────────────────────────────────────────────── -->

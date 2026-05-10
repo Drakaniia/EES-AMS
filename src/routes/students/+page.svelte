@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
+	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import {
 		listStudents,
 		saveStudent,
@@ -35,6 +36,10 @@
 	let toastMessage = $state<string | null>(null);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Pagination
+	let currentPage = $state(1);
+	let itemsPerPage = $state(10);
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string) {
 		toastMessage = msg;
@@ -42,8 +47,21 @@
 		toastTimer = setTimeout(() => (toastMessage = null), 3000);
 	}
 
+	// Computed pagination values
+	const totalPages = $derived(Math.ceil(students.length / itemsPerPage));
+	const paginatedStudents = $derived(() => {
+		const start = (currentPage - 1) * itemsPerPage;
+		const end = start + itemsPerPage;
+		return students.slice(start, end);
+	});
+
+	function handlePageChange(page: number) {
+		currentPage = page;
+	}
+
 	async function reload() {
 		students = await listStudents();
+		currentPage = 1; // Reset to first page when data changes
 	}
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
@@ -216,7 +234,7 @@
 						</tr>
 					</thead>
 					<tbody class="divide-border divide-y">
-						{#each students as s (s.id)}
+						{#each paginatedStudents() as s (s.id)}
 							<tr>
 								{@render td(s.name, 'font-medium')}
 								{@render td(s.studentNumber, 'font-mono')}
@@ -305,6 +323,11 @@
 			</div>
 		{/if}
 	</section>
+
+	<!-- Pagination controls - bottom right of page -->
+	<div class="fixed right-6 bottom-6 z-10">
+		<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
+	</div>
 </AppShell>
 
 <!-- ── Add / Edit dialog ──────────────────────────────────────────────────── -->
