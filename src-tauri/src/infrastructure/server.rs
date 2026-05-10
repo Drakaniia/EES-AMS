@@ -1,7 +1,7 @@
 /// HTTP API server
 use crate::domain::{error::Result, models::*};
 use crate::infrastructure::database::{
-    DbPool, EventRepository, SettingsRepository, StudentRepository,
+    ClassRepository, DbPool, EventRepository, SettingsRepository, StudentRepository,
 };
 use axum::{
     extract::{Path, State},
@@ -38,6 +38,11 @@ impl AppState {
     #[inline]
     fn settings_repo(&self) -> SettingsRepository {
         SettingsRepository::new(self.pool.clone())
+    }
+
+    #[inline]
+    fn class_repo(&self) -> ClassRepository {
+        ClassRepository::new(self.pool.clone())
     }
 }
 
@@ -227,14 +232,16 @@ async fn update_settings(
 
 async fn export_data(State(state): State<Arc<AppState>>) -> Result<Json<ExportData>> {
     let students = state.student_repo().list()?;
+    let classes = state.class_repo().list()?;
     let events = state.event_repo().list()?;
     let settings = state.settings_repo().get()?;
 
     let export = ExportData {
         students,
+        classes,
         events,
-        settings,
-        exported_at: chrono::Utc::now(),
+        settings: vec![settings],
+        exported_at: chrono::Utc::now().timestamp(),
     };
 
     Ok(Json(export))
@@ -244,12 +251,24 @@ async fn import_data(
     State(state): State<Arc<AppState>>,
     Json(data): Json<ExportData>,
 ) -> Result<StatusCode> {
+    // Import classes first (students may reference them)
+    for class in data.classes {
+        let req = CreateClassRequest {
+            name: class.name,
+            day_start: class.day_start,
+            day_end: class.day_end,
+            late_after: class.late_after,
+        };
+        let _ = state.class_repo().create(req);
+    }
+
     // Import students
     for student in data.students {
         let req = CreateStudentRequest {
             name: student.name,
             student_number: student.student_number,
             card_serial: student.card_serial,
+            class_id: student.class_id,
         };
         let _ = state.student_repo().create(req);
     }
@@ -258,14 +277,17 @@ async fn import_data(
     for event in data.events {
         let req = CreateEventRequest {
             student_id: event.student_id,
+            class_id: event.class_id,
             event_type: event.event_type,
             note: event.note,
         };
         let _ = state.event_repo().create(req);
     }
 
-    // Import settings
-    let _ = state.settings_repo().update(data.settings);
+    // Import settings (take first one if available)
+    if let Some(settings) = data.settings.into_iter().next() {
+        let _ = state.settings_repo().update(settings);
+    }
 
     Ok(StatusCode::OK)
 }
@@ -275,7 +297,7 @@ async fn wipe_data(State(state): State<Arc<AppState>>) -> Result<StatusCode> {
     conn.execute("DELETE FROM events", [])?;
     conn.execute("DELETE FROM students", [])?;
     conn.execute(
-        "UPDATE settings SET class_name = 'Horizon Class', day_start = '08:30', day_end = '15:30', late_after = '08:45' WHERE id = 1",
+        "UPDATE settings SET class_name = 'My Class', day_start = '08:30', day_end = '15:30', late_after = '08:45' WHERE id = 1",
         [],
     )?;
 

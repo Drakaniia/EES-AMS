@@ -2,16 +2,30 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
+	import logo from '$lib/assets/logo-seal.png';
 
-	const navItems = [
-		{ href: '/', label: 'Dashboard', icon: 'dashboard' },
-		{ href: '/students', label: 'Students', icon: 'users' },
-		{ href: '/attendance', label: 'Tap Mode', icon: 'scan' },
-		{ href: '/records', label: 'Records', icon: 'file-text' },
-		{ href: '/settings', label: 'Settings', icon: 'settings' }
+	const navGroups = [
+		{
+			title: 'Main',
+			items: [
+				{ href: '/', label: 'Overview', icon: 'dashboard' },
+				{ href: '/attendance', label: 'Live Session', icon: 'scan' }
+			]
+		},
+		{
+			title: 'Management',
+			items: [
+				{ href: '/students', label: 'Student Roster', icon: 'users' },
+				{ href: '/records', label: 'Attendance Logs', icon: 'file-text' }
+			]
+		},
+		{
+			title: 'System',
+			items: [{ href: '/settings', label: 'Configuration', icon: 'settings' }]
+		}
 	] as const;
 
-	type NavIconName = (typeof navItems)[number]['icon'];
+	type NavIconName = (typeof navGroups)[number]['items'][number]['icon'];
 
 	const iconPaths: Record<NavIconName, string> = {
 		dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -31,69 +45,72 @@
 	}
 </script>
 
-<div class="bg-background text-foreground flex min-h-screen flex-col md:flex-row">
+<div class="bg-background text-foreground flex h-screen flex-col overflow-hidden md:flex-row">
 	<!-- Sidebar -->
 	<aside
 		class="border-border bg-background flex border-b md:min-h-screen md:w-72 md:flex-col md:border-r md:border-b-0"
 	>
 		<!-- Desktop brand -->
 		<div class="hidden px-6 pt-8 pb-6 md:block">
-			<div class="label-mono mb-3">Horizon · Step 01</div>
-			<h1 class="display-lg leading-none">
-				Attendance<br />Workspace
-			</h1>
+			<div class="flex items-center gap-3">
+				<img src={logo} alt="School Logo" class="size-10 object-contain" />
+				<h1 class="text-xl font-bold tracking-tight">
+					Attendance<br />System
+				</h1>
+			</div>
 			<p class="text-muted-foreground mt-4 max-w-[14rem] text-sm">
-				Tap-to-attend with NFC ID cards. Local-first, always offline-ready.
+				Manage student attendance with ease.
 			</p>
 		</div>
 
 		<!-- Mobile brand bar -->
 		<div class="border-border flex w-full items-center gap-3 border-b px-4 py-3 md:hidden">
-			<div
-				class="bg-primary text-primary-foreground grid size-8 place-items-center rounded-md font-mono text-xs font-bold"
-			>
-				H
-			</div>
-			<div class="font-medium">Horizon Attendance</div>
+			<img src={logo} alt="School Logo" class="size-8 object-contain" />
+			<div class="font-medium">Attendance System</div>
 		</div>
 
 		<!-- Nav -->
-		<nav class="flex overflow-x-auto md:flex-col md:gap-1 md:overflow-visible md:px-3 md:pt-2">
-			{#each navItems as item (item.href)}
-				{@const active = isActive(item.href, $page.url.pathname)}
-				<a
-					href={resolve(item.href)}
-					onclick={(e) => {
-						e.preventDefault();
-						goto(resolve(item.href));
-					}}
-					class="flex items-center gap-3 px-4 py-3 text-sm whitespace-nowrap transition-colors md:rounded-md
-						{active
-						? 'bg-surface text-foreground border-primary md:border-l-primary border-b-2 md:border-b-0 md:border-l-2'
-						: 'text-muted-foreground hover:text-foreground hover:bg-surface/60'}"
-				>
-					<svg
-						class="size-4 shrink-0"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path d={iconPaths[item.icon]} />
-					</svg>
-					<span>{item.label}</span>
-				</a>
+		<nav class="flex overflow-x-auto md:flex-col md:gap-6 md:overflow-visible md:px-3 md:pt-4">
+			{#each navGroups as group (group.title)}
+				<div class="flex flex-row md:flex-col md:gap-1">
+					<div class="label-mono hidden px-3 pb-2 text-[10px] md:block">{group.title}</div>
+					<div class="flex flex-row md:flex-col md:gap-1">
+						{#each group.items as item (item.href)}
+							{@const active = isActive(item.href, $page.url.pathname)}
+							<a
+								href={resolve(item.href)}
+								onclick={(e) => {
+									e.preventDefault();
+									goto(resolve(item.href));
+								}}
+								class="flex items-center gap-3 px-4 py-3 text-sm whitespace-nowrap transition-colors md:rounded-md
+									{active
+									? 'bg-surface text-foreground border-primary md:border-l-primary border-b-2 md:border-b-0 md:border-l-2'
+									: 'text-muted-foreground hover:text-foreground hover:bg-surface/60'}"
+							>
+								<svg
+									class="size-4 shrink-0"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d={iconPaths[item.icon]} />
+								</svg>
+								<span>{item.label}</span>
+							</a>
+						{/each}
+					</div>
+				</div>
 			{/each}
 		</nav>
-
-		<div class="label-mono mt-auto hidden px-6 py-6 md:block">v1 · local-only</div>
 	</aside>
 
 	<!-- Main content -->
-	<main class="min-w-0 flex-1">
+	<main class="min-w-0 flex-1 overflow-auto">
 		{@render children()}
 	</main>
 </div>

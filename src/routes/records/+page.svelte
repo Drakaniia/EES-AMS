@@ -2,31 +2,45 @@
 	import { onMount } from 'svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
+	import DateRangePicker from '$lib/components/ui/DateRangePicker.svelte';
+	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import {
 		listStudents,
 		listEvents,
+		listClasses,
 		getSettings,
 		deleteEvent,
 		type Student,
-		type AttendanceEvent
-	} from '$lib/db';
+		type AttendanceEvent,
+		type Class
+	} from '$lib/db-rust';
 	import { downloadCSV, eventsToCSV, fmtDate, fmtDateTime, fmtTime } from '$lib/csv';
 
 	// ── State ────────────────────────────────────────────────────────────────
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
+	let classes = $state<Class[]>([]);
 	let from = $state('');
 	let to = $state('');
 	let studentId = $state('');
+	let classId = $state('');
 	let lateAfter = $state('08:45');
+
+	// Date range picker dialog state
+	let dateRangePickerOpen = $state(false);
 
 	// Toast
 	let toastMessage = $state<string | null>(null);
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Pagination
+	let currentPage = $state(1);
+	let itemsPerPage = $state(10);
+
 	// ── Derived ──────────────────────────────────────────────────────────────
 	let studentMap = $derived(new Map(students.map((s) => [s.id, s])));
+	let classMap = $derived(new Map(classes.map((c) => [c.id, c])));
 
 	let filtered = $derived(
 		events.filter((e) => {
@@ -34,9 +48,28 @@
 			if (from && d < from) return false;
 			if (to && d > to) return false;
 			if (studentId && e.studentId !== studentId) return false;
+
+			if (classId) {
+				const s = studentMap.get(e.studentId);
+				const eventClassId = e.classId || s?.classId;
+				if (eventClassId !== classId) return false;
+			}
+
 			return true;
 		})
 	);
+
+	// Pagination for records
+	const totalPages = $derived(Math.ceil(filtered.length / itemsPerPage));
+	const paginatedFiltered = $derived(() => {
+		const start = (currentPage - 1) * itemsPerPage;
+		const end = start + itemsPerPage;
+		return filtered.slice(start, end);
+	});
+
+	function handlePageChange(page: number) {
+		currentPage = page;
+	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string, ok = true) {
@@ -47,16 +80,24 @@
 	}
 
 	async function reload() {
-		const [s, e, st] = await Promise.all([listStudents(), listEvents(), getSettings()]);
+		const [s, e, c, st] = await Promise.all([
+			listStudents(),
+			listEvents(),
+			listClasses(),
+			getSettings()
+		]);
 		students = s;
 		events = e;
+		classes = c;
 		lateAfter = st.lateAfter;
+		currentPage = 1;
 	}
 
 	function onExport() {
-		const csv = eventsToCSV(filtered, students, lateAfter);
+		const csv = eventsToCSV(filtered, students, classes, lateAfter);
 		const range = from || to ? `_${from || 'start'}_to_${to || 'end'}` : '';
-		downloadCSV(`horizon-attendance${range}.csv`, csv);
+		const classSuffix = classId ? `_${classMap.get(classId)?.name || 'class'}` : '';
+		downloadCSV(`attendance-records${classSuffix}${range}.csv`, csv);
 		toast('CSV exported');
 	}
 
@@ -67,6 +108,12 @@
 		await reload();
 	}
 
+	function getEventClassName(e: AttendanceEvent) {
+		const id = e.classId || studentMap.get(e.studentId)?.classId;
+		if (!id) return '—';
+		return classMap.get(id)?.name ?? 'Unknown';
+	}
+
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
 		reload();
@@ -74,22 +121,21 @@
 </script>
 
 <svelte:head>
-	<title>Records — Horizon Attendance</title>
+	<title>Records — Attendance System</title>
 	<meta name="description" content="Filter, review, and export attendance records as CSV." />
 </svelte:head>
 
 <AppShell>
 	<PageHeader
-		step="Step 04 · Records"
-		title="Review and export attendance"
-		description="Filter by date and student, then export a daily CSV summary with check-in, check-out, hours, and lateness."
+		category="Archives"
+		title="Attendance Logs"
+		description="Review and filter historical attendance data for your classes."
 	>
 		{#snippet actions()}
 			<button
 				onclick={onExport}
 				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
 			>
-				<!-- Download icon -->
 				<svg
 					class="size-4"
 					viewBox="0 0 24 24"
@@ -111,24 +157,51 @@
 
 	<!-- ── Filters ──────────────────────────────────────────────────────────── -->
 	<section class="grid gap-4 px-6 py-8 sm:grid-cols-2 md:px-12 lg:grid-cols-4">
-		<!-- From -->
+		<!-- Date Range -->
 		<div class="space-y-2">
-			<div class="label-mono">From</div>
-			<input
-				type="date"
-				bind:value={from}
-				class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
-			/>
+			<div class="label-mono">Date Range</div>
+			<button
+				onclick={() => (dateRangePickerOpen = true)}
+				class="border-border bg-background hover:bg-surface focus:ring-primary flex h-10 w-full items-center justify-between rounded-md border px-3 text-left text-sm transition-colors focus:ring-2 focus:outline-none"
+			>
+				<span class={from || to ? '' : 'text-muted-foreground'}>
+					{from && to
+						? `${new Date(from).toLocaleDateString()} - ${new Date(to).toLocaleDateString()}`
+						: from
+							? `From ${new Date(from).toLocaleDateString()}`
+							: to
+								? `To ${new Date(to).toLocaleDateString()}`
+								: 'Select date range'}
+				</span>
+				<svg
+					class="text-muted-foreground size-4"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+					<line x1="16" y1="2" x2="16" y2="6"></line>
+					<line x1="8" y1="2" x2="8" y2="6"></line>
+					<line x1="3" y1="10" x2="21" y2="10"></line>
+				</svg>
+			</button>
 		</div>
 
-		<!-- To -->
+		<!-- Class -->
 		<div class="space-y-2">
-			<div class="label-mono">To</div>
-			<input
-				type="date"
-				bind:value={to}
+			<div class="label-mono">Class</div>
+			<select
+				bind:value={classId}
 				class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
-			/>
+			>
+				<option value="">All classes</option>
+				{#each classes as c (c.id)}
+					<option value={c.id}>{c.name}</option>
+				{/each}
+			</select>
 		</div>
 
 		<!-- Student -->
@@ -160,6 +233,7 @@
 					<tr>
 						<th class="label-mono px-4 py-3">When</th>
 						<th class="label-mono px-4 py-3">Student</th>
+						<th class="label-mono px-4 py-3">Class</th>
 						<th class="label-mono px-4 py-3">Type</th>
 						<th class="label-mono w-20 px-4 py-3 text-right"> </th>
 					</tr>
@@ -168,13 +242,20 @@
 					{#if filtered.length === 0}
 						{@render emptyState()}
 					{:else}
-						{#each filtered as e (e.id)}
+						{#each paginatedFiltered() as e (e.id)}
 							{@const s = studentMap.get(e.studentId)}
 							<tr class="hover:bg-surface/40 transition-colors">
 								<td class="px-4 py-3 align-top font-mono">{fmtDateTime(e.timestamp)}</td>
 								<td class="px-4 py-3 align-top">
 									<div class="font-medium">{s?.name ?? 'Unknown'}</div>
 									<div class="label-mono">#{s?.studentNumber}</div>
+								</td>
+								<td class="px-4 py-3 align-top">
+									<span
+										class="rounded-pill bg-surface border-border border px-2 py-0.5 text-[10px]"
+									>
+										{getEventClassName(e)}
+									</span>
 								</td>
 								<td class="px-4 py-3 align-top">
 									{@render typePill(e.type)}
@@ -188,7 +269,6 @@
 										aria-label="Delete event"
 										class="border-border text-destructive hover:bg-destructive/10 inline-flex size-8 items-center justify-center rounded-md border transition-colors"
 									>
-										<!-- Trash2 icon -->
 										<svg
 											class="size-3.5"
 											viewBox="0 0 24 24"
@@ -213,9 +293,12 @@
 			</table>
 		</div>
 	</section>
+
+	<div class="fixed right-6 bottom-6 z-30">
+		<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
+	</div>
 </AppShell>
 
-<!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 {#if toastMessage}
 	<div
 		class="fixed right-6 bottom-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
@@ -229,10 +312,20 @@
 	</div>
 {/if}
 
-<!-- ── Snippets ───────────────────────────────────────────────────────────── -->
+<DateRangePicker
+	open={dateRangePickerOpen}
+	fromValue={from}
+	toValue={to}
+	on:close={() => (dateRangePickerOpen = false)}
+	on:select={(e: CustomEvent<{ from: string; to: string }>) => {
+		from = e.detail.from;
+		to = e.detail.to;
+	}}
+/>
+
 {#snippet emptyState()}
 	<tr>
-		<td colspan={4} class="text-muted-foreground px-4 py-12 text-center">
+		<td colspan={5} class="text-muted-foreground px-4 py-12 text-center">
 			No records match the filters.
 		</td>
 	</tr>

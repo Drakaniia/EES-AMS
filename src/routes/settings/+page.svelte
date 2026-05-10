@@ -2,16 +2,36 @@
 	import { onMount } from 'svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
-	import { getSettings, saveSettings, exportAll, importAll, wipeAll, type Settings } from '$lib/db';
+	import Dialog from '$lib/components/ui/Dialog.svelte';
+	import {
+		getSettings,
+		saveSettings,
+		listClasses,
+		saveClass,
+		deleteClass,
+		exportAll,
+		importAll,
+		wipeAll,
+		type Settings,
+		type Class
+	} from '$lib/db-rust';
 
 	// ── State ────────────────────────────────────────────────────────────────
 	let settings = $state<Settings | null>(null);
+	let classes = $state<Class[]>([]);
 
-	// Form fields — kept in sync with loaded settings
-	let className = $state('');
-	let dayStart = $state('');
-	let dayEnd = $state('');
-	let lateAfter = $state('');
+	// Global settings fields
+	let defaultDayStart = $state('08:30');
+	let defaultDayEnd = $state('15:30');
+	let defaultLateAfter = $state('08:45');
+
+	// Class Dialog state
+	let classDialogOpen = $state(false);
+	let editingClass = $state<Class | null>(null);
+	let formClassName = $state('');
+	let formDayStart = $state('');
+	let formDayEnd = $state('');
+	let formLateAfter = $state('');
 
 	// Toast
 	let toastMessage = $state<string | null>(null);
@@ -29,26 +49,85 @@
 		toastTimer = setTimeout(() => (toastMessage = null), 3000);
 	}
 
-	function syncFields(s: Settings) {
-		className = s.className;
-		dayStart = s.dayStart;
-		dayEnd = s.dayEnd;
-		lateAfter = s.lateAfter;
+	async function reload() {
+		try {
+			const [s, c] = await Promise.all([getSettings(), listClasses()]);
+			settings = s;
+			classes = c;
+			if (s) {
+				defaultDayStart = s.dayStart;
+				defaultDayEnd = s.dayEnd;
+				defaultLateAfter = s.lateAfter;
+			}
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : 'Database error';
+			toast(`Failed to load: ${msg}`, false);
+			// Set a fallback state so it doesn't spin forever
+			settings = settings || { id: 'app', dayStart: '08:30', dayEnd: '15:30', lateAfter: '08:45' };
+		}
 	}
 
 	// ── Actions ──────────────────────────────────────────────────────────────
-	async function onSave(e: SubmitEvent) {
+	async function onSaveGlobal(e: SubmitEvent) {
 		e.preventDefault();
 		const next: Settings = {
 			id: 'app',
-			className,
-			dayStart,
-			dayEnd,
-			lateAfter
+			dayStart: defaultDayStart,
+			dayEnd: defaultDayEnd,
+			lateAfter: defaultLateAfter
 		};
 		await saveSettings(next);
 		settings = next;
-		toast('Settings saved');
+		toast('Global defaults saved');
+	}
+
+	function openAddClass() {
+		editingClass = null;
+		formClassName = '';
+		formDayStart = defaultDayStart;
+		formDayEnd = defaultDayEnd;
+		formLateAfter = defaultLateAfter;
+		classDialogOpen = true;
+	}
+
+	function openEditClass(c: Class) {
+		editingClass = c;
+		formClassName = c.name;
+		formDayStart = c.dayStart;
+		formDayEnd = c.dayEnd;
+		formLateAfter = c.lateAfter;
+		classDialogOpen = true;
+	}
+
+	async function onSaveClass(e: SubmitEvent) {
+		e.preventDefault();
+		const name = formClassName.trim();
+		if (!name) return;
+
+		const c: Class = {
+			id: editingClass?.id ?? '',
+			name,
+			dayStart: formDayStart,
+			dayEnd: formDayEnd,
+			lateAfter: formLateAfter,
+			createdAt: editingClass?.createdAt ?? ''
+		};
+
+		try {
+			await saveClass(c, !!editingClass);
+			toast(editingClass ? 'Class updated' : 'Class added');
+			classDialogOpen = false;
+			reload();
+		} catch (error) {
+			toast(`Failed to save class: ${error}`, false);
+		}
+	}
+
+	async function onDeleteClass(id: string) {
+		if (!confirm('Delete this class? Students will remain but will be unassigned.')) return;
+		await deleteClass(id);
+		toast('Class deleted');
+		reload();
 	}
 
 	async function onExport() {
@@ -57,7 +136,7 @@
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
-		a.download = `horizon-backup-${Date.now()}.json`;
+		a.download = `attendance-backup-${Date.now()}.json`;
 		a.click();
 		URL.revokeObjectURL(url);
 		toast('Backup downloaded');
@@ -68,9 +147,7 @@
 			const txt = await file.text();
 			const data = JSON.parse(txt);
 			await importAll(data);
-			const fresh = await getSettings();
-			settings = fresh;
-			syncFields(fresh);
+			await reload();
 			toast('Backup imported');
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -86,192 +163,311 @@
 	}
 
 	async function onWipe() {
-		if (!confirm('Erase ALL students, events, and settings? This cannot be undone.')) return;
+		if (!confirm('Erase ALL students, events, classes, and settings? This cannot be undone.'))
+			return;
 		await wipeAll();
-		const fresh = await getSettings();
-		settings = fresh;
-		syncFields(fresh);
+		await reload();
 		toast('All data wiped');
 	}
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
-	onMount(async () => {
-		const s = await getSettings();
-		settings = s;
-		syncFields(s);
+	onMount(() => {
+		reload();
 	});
 </script>
 
 <svelte:head>
-	<title>Settings — Horizon Attendance</title>
-	<meta name="description" content="Configure class details and back up your data." />
+	<title>Settings — Attendance System</title>
+	<meta name="description" content="Manage your classes and system configuration." />
 </svelte:head>
 
 <AppShell>
 	<PageHeader
-		step="Step 05 · Settings"
-		title="Configure your workspace"
-		description="Personalize the class and protect your data with regular backups. Everything is stored on this device only."
+		category="Settings"
+		title="System Configuration"
+		description="Manage your class schedule and system-wide attendance rules."
 	/>
 
 	{#if settings === null}
 		<div class="text-muted-foreground px-6 py-12 text-sm md:px-12">Loading…</div>
 	{:else}
-		<section class="grid gap-8 px-6 py-10 md:px-12 lg:grid-cols-2">
-			<!-- ── Class & schedule ──────────────────────────────────────────── -->
-			<form onsubmit={onSave} class="border-border bg-card space-y-5 rounded-2xl border p-6">
-				<h3 class="text-lg font-medium">Class &amp; schedule</h3>
+		<div class="grid gap-8 px-6 py-10 md:px-12 lg:grid-cols-12">
+			<!-- ── Class Management ────────────────────────────────────────── -->
+			<div class="space-y-6 lg:col-span-8">
+				<section class="border-border bg-card overflow-hidden rounded-2xl border">
+					<div class="flex items-center justify-between p-6 pb-4">
+						<h3 class="text-lg font-medium">Classes & Schedule</h3>
+						<button
+							onclick={openAddClass}
+							class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
+						>
+							<svg
+								class="size-4"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<path d="M12 5v14M5 12h14" />
+							</svg>
+							Add Class
+						</button>
+					</div>
 
-				<div class="space-y-2">
-					<label for="className" class="label-mono">Class name</label>
-					<input
-						id="className"
-						name="className"
-						type="text"
-						bind:value={className}
-						class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
-					/>
-				</div>
+					<div class="divide-border border-border divide-y border-t pt-5">
+						{#if classes.length === 0}
+							<div class="text-muted-foreground p-12 text-center text-sm">
+								No classes configured. Add a class to start tracking attendance.
+							</div>
+						{:else}
+							{#each classes as c (c.id)}
+								<div
+									class="hover:bg-surface flex items-center justify-between p-6 transition-colors"
+								>
+									<div class="space-y-1">
+										<div class="font-medium">{c.name}</div>
+										<div class="text-muted-foreground label-mono flex gap-4 text-xs">
+											<span>{c.dayStart} – {c.dayEnd}</span>
+											<span class="text-accent">Late after {c.lateAfter}</span>
+										</div>
+									</div>
+									<div class="flex gap-2">
+										<button
+											onclick={() => openEditClass(c)}
+											class="border-border bg-background hover:bg-surface inline-flex size-9 items-center justify-center rounded-md border transition-colors"
+											title="Edit class"
+										>
+											<svg
+												class="size-4"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+												<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+											</svg>
+										</button>
+										<button
+											onclick={() => onDeleteClass(c.id)}
+											class="border-border bg-background hover:bg-surface text-destructive inline-flex size-9 items-center justify-center rounded-md border transition-colors"
+											title="Delete class"
+										>
+											<svg
+												class="size-4"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<polyline points="3 6 5 6 21 6" />
+												<path
+													d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+												/>
+											</svg>
+										</button>
+									</div>
+								</div>
+							{/each}
+						{/if}
+					</div>
+				</section>
 
-				<div class="grid grid-cols-3 gap-4">
-					<div class="space-y-2">
-						<label for="dayStart" class="label-mono">Day start</label>
+				<!-- ── Backups ───────────────────────────────────────────────────── -->
+				<section class="border-border bg-card space-y-5 rounded-2xl border p-6">
+					<h3 class="text-lg font-medium">Data Management</h3>
+					<p class="text-muted-foreground text-sm">
+						Your data is stored locally. Use backups to transfer data between devices or browsers.
+					</p>
+
+					<div class="flex flex-wrap gap-2">
+						<button
+							onclick={onExport}
+							class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+						>
+							<svg
+								class="size-4"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+								<polyline points="7 10 12 15 17 10" />
+								<line x1="12" y1="15" x2="12" y2="3" />
+							</svg>
+							Export Data
+						</button>
+
+						<button
+							onclick={() => fileInput?.click()}
+							class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+						>
+							<svg
+								class="size-4"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+								<polyline points="17 8 12 3 7 8" />
+								<line x1="12" y1="3" x2="12" y2="15" />
+							</svg>
+							Import Backup
+						</button>
 						<input
-							id="dayStart"
-							name="dayStart"
-							type="time"
-							bind:value={dayStart}
-							class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+							bind:this={fileInput}
+							type="file"
+							accept="application/json"
+							class="hidden"
+							onchange={handleFileChange}
 						/>
 					</div>
-					<div class="space-y-2">
-						<label for="dayEnd" class="label-mono">Day end</label>
-						<input
-							id="dayEnd"
-							name="dayEnd"
-							type="time"
-							bind:value={dayEnd}
-							class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
-						/>
-					</div>
-					<div class="space-y-2">
-						<label for="lateAfter" class="label-mono">Late after</label>
-						<input
-							id="lateAfter"
-							name="lateAfter"
-							type="time"
-							bind:value={lateAfter}
-							class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
-						/>
-					</div>
-				</div>
 
-				<button
-					type="submit"
-					class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
-				>
-					Save settings
-				</button>
-			</form>
-
-			<!-- ── Backups ───────────────────────────────────────────────────── -->
-			<div class="border-border bg-card space-y-5 rounded-2xl border p-6">
-				<h3 class="text-lg font-medium">Backups</h3>
-				<p class="text-muted-foreground text-sm">
-					Data is stored in this browser only. Export a JSON backup before clearing your browser,
-					switching devices, or experimenting.
-				</p>
-
-				<div class="flex flex-wrap gap-2">
-					<!-- Export -->
-					<button
-						onclick={onExport}
-						class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
-					>
-						<!-- Download icon -->
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
+					<div class="border-border space-y-3 border-t pt-5">
+						<button
+							onclick={onWipe}
+							class="rounded-pill border-destructive/40 text-destructive hover:bg-destructive/10 inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
 						>
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="7 10 12 15 17 10" />
-							<line x1="12" y1="15" x2="12" y2="3" />
-						</svg>
-						Export backup
-					</button>
-
-					<!-- Import -->
-					<button
-						onclick={() => fileInput?.click()}
-						class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
-					>
-						<!-- Upload icon -->
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="17 8 12 3 7 8" />
-							<line x1="12" y1="3" x2="12" y2="15" />
-						</svg>
-						Import backup
-					</button>
-
-					<!-- Hidden file input -->
-					<input
-						bind:this={fileInput}
-						type="file"
-						accept="application/json"
-						class="hidden"
-						onchange={handleFileChange}
-					/>
-				</div>
-
-				<!-- Danger zone -->
-				<div class="border-border space-y-3 border-t pt-5">
-					<div class="text-destructive flex items-start gap-3 text-sm">
-						<!-- AlertTriangle icon -->
-						<svg
-							class="mt-0.5 size-4 shrink-0"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path
-								d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
-							/>
-							<line x1="12" y1="9" x2="12" y2="13" />
-							<line x1="12" y1="17" x2="12.01" y2="17" />
-						</svg>
-						<div>Permanently delete all students, events, and settings.</div>
+							Wipe all data
+						</button>
 					</div>
-					<button
-						onclick={onWipe}
-						class="rounded-pill border-destructive/40 text-destructive hover:bg-destructive/10 inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
-					>
-						Wipe all data
-					</button>
-				</div>
+				</section>
 			</div>
-		</section>
+
+			<!-- ── Sidebar: Global Defaults ────────────────────────────────── -->
+			<div class="space-y-6 lg:col-span-4">
+				<form
+					onsubmit={onSaveGlobal}
+					class="border-border bg-card space-y-5 rounded-2xl border p-6"
+				>
+					<div class="space-y-1">
+						<h3 class="text-lg font-medium">Global Defaults</h3>
+						<p class="text-muted-foreground text-xs">Used as templates for new classes.</p>
+					</div>
+
+					<div class="space-y-4">
+						<div class="space-y-2">
+							<label for="defDayStart" class="label-mono">Default Day Start</label>
+							<input
+								id="defDayStart"
+								type="time"
+								bind:value={defaultDayStart}
+								class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+							/>
+						</div>
+						<div class="space-y-2">
+							<label for="defDayEnd" class="label-mono">Default Day End</label>
+							<input
+								id="defDayEnd"
+								type="time"
+								bind:value={defaultDayEnd}
+								class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+							/>
+						</div>
+						<div class="space-y-2">
+							<label for="defLateAfter" class="label-mono">Default Late After</label>
+							<input
+								id="defLateAfter"
+								type="time"
+								bind:value={defaultLateAfter}
+								class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+							/>
+						</div>
+					</div>
+
+					<button
+						type="submit"
+						class="rounded-pill bg-primary text-primary-foreground hover:bg-accent w-full px-4 py-2 text-sm font-medium transition-colors"
+					>
+						Save Defaults
+					</button>
+				</form>
+			</div>
+		</div>
 	{/if}
 </AppShell>
+
+<!-- ── Class Dialog ───────────────────────────────────────────────────────── -->
+<Dialog
+	open={classDialogOpen}
+	title={editingClass ? 'Edit Class' : 'Add New Class'}
+	description="Define the schedule for this specific grade or section."
+	on:close={() => (classDialogOpen = false)}
+>
+	<form onsubmit={onSaveClass} class="space-y-4">
+		<div class="space-y-1.5">
+			<label for="className" class="label-mono">Class Name</label>
+			<input
+				id="className"
+				bind:value={formClassName}
+				placeholder="e.g. Grade 6 - Apple"
+				required
+				class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+			/>
+		</div>
+
+		<div class="grid grid-cols-3 gap-4">
+			<div class="space-y-1.5">
+				<label for="dayStart" class="label-mono">Start</label>
+				<input
+					id="dayStart"
+					type="time"
+					bind:value={formDayStart}
+					required
+					class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<label for="dayEnd" class="label-mono">End</label>
+				<input
+					id="dayEnd"
+					type="time"
+					bind:value={formDayEnd}
+					required
+					class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<label for="lateAfter" class="label-mono">Late After</label>
+				<input
+					id="lateAfter"
+					type="time"
+					bind:value={formLateAfter}
+					required
+					class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+				/>
+			</div>
+		</div>
+
+		<div class="flex justify-end gap-2 pt-2">
+			<button
+				type="button"
+				onclick={() => (classDialogOpen = false)}
+				class="border-border hover:bg-surface rounded-md border px-4 py-2 text-sm transition-colors"
+			>
+				Cancel
+			</button>
+			<button
+				type="submit"
+				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent px-4 py-2 text-sm font-medium transition-colors"
+			>
+				{editingClass ? 'Save Changes' : 'Create Class'}
+			</button>
+		</div>
+	</form>
+</Dialog>
 
 <!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 {#if toastMessage}

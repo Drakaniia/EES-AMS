@@ -5,7 +5,7 @@
 	import { resolve } from '$app/paths';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
-	import { listEvents, listStudents, type AttendanceEvent, type Student } from '$lib/db';
+	import { listEvents, listStudents, type AttendanceEvent, type Student } from '$lib/db-rust';
 	import { fmtDate, fmtTime } from '$lib/csv';
 
 	let students = $state<Student[]>([]);
@@ -24,25 +24,27 @@
 	// Last event per student today — determine who's currently checked in
 	const checkedIn = $derived.by(() => {
 		const lastByStudent = new SvelteMap<string, AttendanceEvent>();
-		for (const e of [...todayEvents].sort((a, b) => a.timestamp - b.timestamp)) {
+		for (const e of [...todayEvents].sort((a, b) => {
+			const aTime = typeof a.timestamp === 'string' ? new Date(a.timestamp).getTime() : a.timestamp;
+			const bTime = typeof b.timestamp === 'string' ? new Date(b.timestamp).getTime() : b.timestamp;
+			return aTime - bTime;
+		})) {
 			lastByStudent.set(e.studentId, e);
 		}
 		return [...lastByStudent.values()].filter((e) => e.type === 'in');
 	});
-
-	const weekday = new Date().toLocaleDateString(undefined, { weekday: 'long' });
 </script>
 
 <svelte:head>
-	<title>Dashboard — Horizon Attendance</title>
+	<title>Dashboard — Attendance System</title>
 	<meta name="description" content="Today's attendance at a glance." />
 </svelte:head>
 
 <AppShell>
 	<PageHeader
-		step="Step 01 · Today"
-		title="Establish your {weekday} attendance"
-		description="Live overview of who's in the room and what's been logged today. Open Tap Mode to start scanning NFC cards."
+		category="Overview"
+		title="Attendance Overview"
+		description="A simple overview of today's attendance. Monitor real-time logs and manage student check-ins."
 	>
 		{#snippet actions()}
 			<a
@@ -198,7 +200,7 @@
 			? 'bg-primary text-primary-foreground'
 			: 'bg-surface'}"
 	>
-		<div class="label-mono {accent ? '!text-primary-foreground/80' : ''}">{label}</div>
+		<div class="label-mono {accent ? 'text-primary-foreground/80!' : ''}">{label}</div>
 		<div class="mt-2 text-5xl font-medium tracking-tight">{value}</div>
 	</div>
 {/snippet}
