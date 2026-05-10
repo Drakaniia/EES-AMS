@@ -29,8 +29,6 @@
 		}
 		return [...lastByStudent.values()].filter((e) => e.type === 'in');
 	});
-
-	const weekday = new Date().toLocaleDateString(undefined, { weekday: 'long' });
 </script>
 
 <svelte:head>

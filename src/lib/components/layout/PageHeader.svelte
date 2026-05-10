@@ -18,7 +18,9 @@
 	<div class="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
 		<div>
 			{#if category}
-				<div class="bg-surface border-border text-muted-foreground mb-4 inline-block rounded-full border px-3 py-1 font-mono text-[10px] font-bold tracking-wider uppercase">
+				<div
+					class="bg-surface border-border text-muted-foreground mb-4 inline-block rounded-full border px-3 py-1 font-mono text-[10px] font-bold tracking-wider uppercase"
+				>
 					{category}
 				</div>
 			{/if}
