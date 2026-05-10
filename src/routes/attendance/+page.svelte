@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
+	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import {
 		listStudents,
 		findStudentByCard,
@@ -305,77 +306,53 @@
 {/if}
 
 <!-- ── Manual log dialog ──────────────────────────────────────────────────── -->
-{#if pickerOpen}
-	<!-- Backdrop -->
-	<div
-		class="fixed inset-0 z-40 bg-black/50"
-		role="presentation"
-		onclick={() => (pickerOpen = false)}
-		onkeydown={(e) => e.key === 'Escape' && (pickerOpen = false)}
-	></div>
+<Dialog
+	open={pickerOpen}
+	title="Manual log"
+	description="Select a student to toggle their attendance."
+	on:close={() => (pickerOpen = false)}
+>
+	<!-- svelte-ignore a11y_autofocus -->
+	<input
+		autofocus
+		placeholder="Search by name or number"
+		bind:value={pickerQuery}
+		class="border-border bg-background focus:ring-primary w-full rounded-md border px-4 py-2 text-sm focus:ring-2 focus:outline-none"
+	/>
 
-	<!-- Panel -->
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="picker-title"
-	>
-		<div
-			class="border-border bg-background w-full max-w-md space-y-4 rounded-2xl border p-6 shadow-xl"
+	<ul class="divide-border border-border max-h-[300px] divide-y overflow-y-auto rounded-xl border">
+		{#if filteredStudents.length === 0}
+			<li class="text-muted-foreground py-6 text-center text-sm">No matches</li>
+		{:else}
+			{#each filteredStudents as s (s.id)}
+				<li>
+					<button
+						onclick={async () => {
+							await logForStudent(s);
+							pickerOpen = false;
+						}}
+						class="hover:bg-surface flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
+					>
+						<span>
+							<div class="font-medium">{s.name}</div>
+							<div class="label-mono">#{s.studentNumber}</div>
+						</span>
+						<span class="label-mono text-primary">LOG →</span>
+					</button>
+				</li>
+			{/each}
+		{/if}
+	</ul>
+
+	<div class="flex justify-end pt-2">
+		<button
+			onclick={() => (pickerOpen = false)}
+			class="border-border hover:bg-surface rounded-md border px-4 py-2 text-sm transition-colors"
 		>
-			<div>
-				<h2 id="picker-title" class="text-lg font-semibold">Manual log</h2>
-				<p class="text-muted-foreground mt-1 text-sm">
-					Select a student to toggle their attendance.
-				</p>
-			</div>
-
-			<!-- svelte-ignore a11y_autofocus -->
-			<input
-				autofocus
-				placeholder="Search by name or number"
-				bind:value={pickerQuery}
-				class="border-border bg-background focus:ring-primary w-full rounded-md border px-4 py-2 text-sm focus:ring-2 focus:outline-none"
-			/>
-
-			<ul
-				class="divide-border border-border max-h-[300px] divide-y overflow-y-auto rounded-xl border"
-			>
-				{#if filteredStudents.length === 0}
-					<li class="text-muted-foreground py-6 text-center text-sm">No matches</li>
-				{:else}
-					{#each filteredStudents as s (s.id)}
-						<li>
-							<button
-								onclick={async () => {
-									await logForStudent(s);
-									pickerOpen = false;
-								}}
-								class="hover:bg-surface flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
-							>
-								<span>
-									<div class="font-medium">{s.name}</div>
-									<div class="label-mono">#{s.studentNumber}</div>
-								</span>
-								<span class="label-mono text-primary">LOG →</span>
-							</button>
-						</li>
-					{/each}
-				{/if}
-			</ul>
-
-			<div class="flex justify-end">
-				<button
-					onclick={() => (pickerOpen = false)}
-					class="border-border hover:bg-surface rounded-md border px-4 py-2 text-sm transition-colors"
-				>
-					Cancel
-				</button>
-			</div>
-		</div>
+			Cancel
+		</button>
 	</div>
-{/if}
+</Dialog>
 
 <!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 {#if toastMessage}
