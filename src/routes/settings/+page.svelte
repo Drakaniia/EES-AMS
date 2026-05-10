@@ -109,9 +109,9 @@
 
 <AppShell>
 	<PageHeader
-		step="Step 05 · Settings"
-		title="Configure your workspace"
-		description="Personalize the class and protect your data with regular backups. Everything is stored on this device only."
+		category="System Configuration"
+		title="Workspace Settings"
+		description="Define institutional parameters, manage data backups, and configure system-wide attendance rules."
 	/>
 
 	{#if settings === null}

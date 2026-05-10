@@ -40,9 +40,9 @@
 
 <AppShell>
 	<PageHeader
-		step="Step 01 · Today"
-		title="Establish your {weekday} attendance"
-		description="Live overview of who's in the room and what's been logged today. Open Tap Mode to start scanning NFC cards."
+		category="System Overview"
+		title="Institutional Attendance"
+		description="Live operational overview of campus-wide attendance. Monitor real-time logs and manage student check-ins."
 	>
 		{#snippet actions()}
 			<a

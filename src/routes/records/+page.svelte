@@ -80,9 +80,9 @@
 
 <AppShell>
 	<PageHeader
-		step="Step 04 · Records"
-		title="Review and export attendance"
-		description="Filter by date and student, then export a daily CSV summary with check-in, check-out, hours, and lateness."
+		category="Data Archives"
+		title="Attendance Logs"
+		description="Review, filter, and export historical attendance data for institutional reporting and compliance."
 	>
 		{#snippet actions()}
 			<button
