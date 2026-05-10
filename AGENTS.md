@@ -1,6 +1,6 @@
 always follow @DESIGN.md and /reference when generating UI
-we start by converrting typescript (/reference) into svelte
-always run `bun run check && bun run lint && bun run typecheck` / cargo check, clippy fmt --check every after implimentaition done to ensure
+we start by converting typescript (/reference) into svelte
+always run `bun run check && bun run lint && bun run typecheck` / `cargo check` and `clippy fmt --check` after implementation to ensure quality
 
 @rust-skills
 @tauri-v2
