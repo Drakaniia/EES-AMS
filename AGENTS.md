@@ -1,11 +1,11 @@
-always follow @DESIGN.md and /reference when generating UI
-we start by converting typescript (/reference) into svelte
-always run `bun run check && bun run lint && bun run typecheck` / `cargo check` and `clippy fmt --check` after implementation to ensure quality
+!always follow @DESIGN.md and /reference when generating UI
+!we start by converting typescript (/reference) into svelte
+!always run `bun run check && bun run lint && bun run typecheck` / `cargo check` and `clippy fmt --check` after implementation to ensure quality
 
-@rust-skills
-@tauri-v2
-@svelte-best-practices
-@svelte-code-writer
+always use @rust-skills
+always use @tauri-v2
+always use @svelte-best-practices
+always use @svelte-code-writer
 
 # EES-AMS - Employee Attendance Management System
 

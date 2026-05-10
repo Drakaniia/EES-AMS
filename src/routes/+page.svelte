@@ -5,14 +5,22 @@
 	import { resolve } from '$app/paths';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
-	import { listEvents, listStudents, type AttendanceEvent, type Student } from '$lib/db-rust';
+	import {
+		listEvents,
+		listStudents,
+		listClasses,
+		type AttendanceEvent,
+		type Student,
+		type Class
+	} from '$lib/db-rust';
 	import { fmtDate, fmtTime } from '$lib/csv';
 
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
+	let classes = $state<Class[]>([]);
 
 	onMount(async () => {
-		[students, events] = await Promise.all([listStudents(), listEvents()]);
+		[students, events, classes] = await Promise.all([listStudents(), listEvents(), listClasses()]);
 	});
 
 	const today = fmtDate(Date.now());
@@ -33,6 +41,48 @@
 		}
 		return [...lastByStudent.values()].filter((e) => e.type === 'in');
 	});
+
+	// ── Utility Functions ────────────────────────────────────────────────────────
+
+	function getTimeOfDay(): 'Morning' | 'Afternoon' {
+		const hour = new Date().getHours();
+		return hour < 12 ? 'Morning' : 'Afternoon';
+	}
+
+	function getActiveClass(): Class | null {
+		const now = new Date();
+		const currentTime = now.getHours() * 60 + now.getMinutes();
+
+		for (const cls of classes) {
+			const [startHour, startMin] = cls.dayStart.split(':').map(Number);
+			const [endHour, endMin] = cls.dayEnd.split(':').map(Number);
+			const startTime = startHour * 60 + startMin;
+			const endTime = endHour * 60 + endMin;
+
+			if (currentTime >= startTime && currentTime <= endTime) {
+				return cls;
+			}
+		}
+		return null;
+	}
+
+	// ── Dynamic Title Logic ────────────────────────────────────────────────────
+
+	const activeClass = $derived(getActiveClass());
+	const timeOfDay = $derived(getTimeOfDay());
+	const dynamicTitle = $derived(() => {
+		if (activeClass) {
+			return `${timeOfDay} ${activeClass.name} Attendance`;
+		}
+		return 'Attendance Overview';
+	});
+
+	const dynamicDescription = $derived(() => {
+		if (activeClass) {
+			return `Ready to record attendance for ${timeOfDay.toLowerCase()} ${activeClass.name} (${activeClass.dayStart} – ${activeClass.dayEnd})`;
+		}
+		return "A simple overview of today's attendance. Monitor real-time logs and manage student check-ins.";
+	});
 </script>
 
 <svelte:head>
@@ -42,9 +92,9 @@
 
 <AppShell>
 	<PageHeader
-		category="Overview"
-		title="Attendance Overview"
-		description="A simple overview of today's attendance. Monitor real-time logs and manage student check-ins."
+		category="Attendance Overview"
+		title={dynamicTitle()}
+		description={dynamicDescription()}
 	>
 		{#snippet actions()}
 			<a

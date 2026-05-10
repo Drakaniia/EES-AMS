@@ -95,6 +95,50 @@
 
 	let currentClass = $derived(classes.find((c) => c.id === selectedClassId));
 
+	// ── Utility Functions ────────────────────────────────────────────────────────
+
+	function getTimeOfDay(): 'Morning' | 'Afternoon' {
+		const hour = new Date().getHours();
+		return hour < 12 ? 'Morning' : 'Afternoon';
+	}
+
+	function getActiveClass(): Class | null {
+		const now = new Date();
+		const currentTime = now.getHours() * 60 + now.getMinutes();
+
+		for (const cls of classes) {
+			const [startHour, startMin] = cls.dayStart.split(':').map(Number);
+			const [endHour, endMin] = cls.dayEnd.split(':').map(Number);
+			const startTime = startHour * 60 + startMin;
+			const endTime = endHour * 60 + endMin;
+
+			if (currentTime >= startTime && currentTime <= endTime) {
+				return cls;
+			}
+		}
+		return null;
+	}
+
+	// ── Dynamic Title Logic ────────────────────────────────────────────────────
+
+	const activeClass = $derived(getActiveClass());
+	const timeOfDay = $derived(getTimeOfDay());
+	const dynamicTitle = $derived(() => {
+		if (activeClass) {
+			return `${timeOfDay} ${activeClass.name} Attendance`;
+		}
+		return 'Live Session';
+	});
+
+	const dynamicDescription = $derived(() => {
+		if (activeClass) {
+			return `Recording attendance for ${timeOfDay.toLowerCase()} ${activeClass.name} (${activeClass.dayStart} – ${activeClass.dayEnd})`;
+		}
+		return currentClass
+			? `Recording attendance for ${currentClass.name} (${currentClass.dayStart} – ${currentClass.dayEnd})`
+			: 'Active monitoring of student check-ins.';
+	});
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string, ok = true) {
 		toastMessage = msg;
@@ -203,13 +247,7 @@
 </svelte:head>
 
 <AppShell>
-	<PageHeader
-		category="Tap Mode"
-		title="Live Session"
-		description={currentClass
-			? `Recording attendance for ${currentClass.name} (${currentClass.dayStart} – ${currentClass.dayEnd})`
-			: 'Active monitoring of student check-ins.'}
-	>
+	<PageHeader category="Tap Mode" title={dynamicTitle()} description={dynamicDescription()}>
 		{#snippet actions()}
 			<div class="flex items-center gap-3">
 				<!-- Class Selector -->
