@@ -181,32 +181,36 @@
 
 		// Check for duplicate student number (only for new students)
 		if (!editing) {
-			const existingStudent = students.find(s => s.studentNumber === num);
+			const existingStudent = students.find((s) => s.studentNumber === num);
 			if (existingStudent) {
-				toast(`Student number "${num}" already exists for ${existingStudent.name}. Please use a different number.`);
+				toast(
+					`Student number "${num}" already exists for ${existingStudent.name}. Please use a different number.`
+				);
 				return;
 			}
 		}
 
 		try {
-			const studentData: Student = editing ? {
-				...editing,
-				name,
-				studentNumber: num,
-				cardSerial: serial || undefined,
-				classId: classId || undefined
-			} : {
-				// For new students, pass empty string as ID to trigger creation
-				id: '',
-				createdAt: new Date().toISOString(),
-				name,
-				studentNumber: num,
-				cardSerial: serial || undefined,
-				classId: classId || undefined
-			};
-			
+			const studentData: Student = editing
+				? {
+						...editing,
+						name,
+						studentNumber: num,
+						cardSerial: serial || undefined,
+						classId: classId || undefined
+					}
+				: {
+						// For new students, pass empty string as ID to trigger creation
+						id: '',
+						createdAt: new Date().toISOString(),
+						name,
+						studentNumber: num,
+						cardSerial: serial || undefined,
+						classId: classId || undefined
+					};
+
 			console.log('Saving student:', studentData);
-			
+
 			await saveStudent(studentData);
 			toast(editing ? 'Student updated' : 'Student added');
 			closeDialog();
@@ -214,7 +218,7 @@
 		} catch (error) {
 			console.error('Error saving student:', error);
 			const msg = error instanceof Error ? error.message : 'Failed to save student';
-			
+
 			// Check for common database errors
 			if (msg.includes('UNIQUE constraint failed') && msg.includes('student_number')) {
 				toast('Student number already exists. Please use a different student number.');
