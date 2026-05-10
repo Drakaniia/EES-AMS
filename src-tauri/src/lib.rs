@@ -4,12 +4,14 @@ mod infrastructure;
 
 use commands::{
     add_event,
+    check_for_updates,
     check_nfc_reader,
     create_class,
     create_student,
     delete_class,
     delete_event,
     delete_student,
+    download_and_install,
     // Export/Import commands
     export_all,
     find_student_by_card,
@@ -75,6 +77,9 @@ pub fn run() {
             export_all,
             import_all,
             wipe_all,
+            // Update commands
+            check_for_updates,
+            download_and_install,
         ])
         .setup(|app| {
             // Setup logging
