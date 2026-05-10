@@ -2,7 +2,7 @@ mod commands;
 mod domain;
 mod infrastructure;
 
-use commands::get_server_info;
+use commands::{get_server_info, check_nfc_reader, start_nfc_scanning, stop_nfc_scanning, read_nfc_card};
 use infrastructure::{init_db, start_server, AppState};
 use tauri::Manager;
 
@@ -11,7 +11,13 @@ const DEFAULT_PORT: u16 = 3030;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_server_info])
+        .invoke_handler(tauri::generate_handler![
+            get_server_info,
+            check_nfc_reader,
+            start_nfc_scanning,
+            stop_nfc_scanning,
+            read_nfc_card
+        ])
         .setup(|app| {
             // Setup logging
             if cfg!(debug_assertions) {

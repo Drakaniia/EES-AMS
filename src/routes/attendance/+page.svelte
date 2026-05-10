@@ -39,7 +39,30 @@
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-	const supported = nfcSupported() === 'supported';
+	// NFC support state (async)
+	let supported = $state<'connected' | 'disconnected'>('disconnected');
+	let supportedLoading = $state(true);
+
+	// Check NFC support on mount
+	onMount(() => {
+		(async () => {
+			try {
+				supported = await nfcSupported();
+			} catch {
+				supported = 'disconnected';
+			} finally {
+				supportedLoading = false;
+			}
+
+			// Load students
+			listStudents().then((s) => (students = s));
+		})();
+
+		return () => {
+			scanner?.stop();
+			scanner = null;
+		};
+	});
 
 	// ── Derived ──────────────────────────────────────────────────────────────
 	let filteredStudents = $derived(
@@ -105,7 +128,7 @@
 	function startScanning() {
 		if (scanner) return;
 		if (!supported) {
-			toast('NFC not available on this device. Use manual entry.', false);
+			toast('NFC Card Reader not connected. Connect USB reader or use manual entry.', false);
 			return;
 		}
 		scanner = new NfcScanner(handleSerial, (e) => toast(e.message, false));
@@ -118,15 +141,6 @@
 		scanner = null;
 		scanning = false;
 	}
-
-	// ── Lifecycle ────────────────────────────────────────────────────────────
-	onMount(() => {
-		listStudents().then((s) => (students = s));
-		return () => {
-			scanner?.stop();
-			scanner = null;
-		};
-	});
 </script>
 
 <svelte:head>
@@ -219,10 +233,12 @@
 
 				<h3 class="display-lg mt-8">{scanning ? 'Tap a card' : 'Press start'}</h3>
 				<p class="text-muted-foreground mx-auto mt-2 max-w-md">
-					{#if supported}
-						Cards are read via Web NFC. Keep the device awake while in tap mode.
+					{#if supportedLoading}
+						Checking for NFC Card Reader...
+					{:else if supported}
+						Cards are read via USB NFC Card Reader. Keep the device awake while in tap mode.
 					{:else}
-						Web NFC isn't available — use Manual Log to record attendance.
+						NFC Card Reader not connected — use Manual Log to record attendance.
 					{/if}
 				</p>
 			</div>

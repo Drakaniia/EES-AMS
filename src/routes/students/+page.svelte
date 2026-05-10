@@ -35,7 +35,20 @@
 	let toastMessage = $state<string | null>(null);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-	const supported = nfcSupported() === 'supported';
+	// NFC support state (async)
+	let supported = $state<'connected' | 'disconnected'>('disconnected');
+	let supportedLoading = $state(true);
+
+	// Check NFC support on mount
+	onMount(async () => {
+		try {
+			supported = await nfcSupported();
+		} catch {
+			supported = 'disconnected';
+		} finally {
+			supportedLoading = false;
+		}
+	});
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string) {
@@ -192,11 +205,36 @@
 	<div class="px-6 py-6 md:px-12">
 		<div
 			class="rounded-pill inline-flex w-fit items-center gap-2 border px-3 py-2 font-mono text-xs
-				{supported
-				? 'border-border bg-surface'
-				: 'border-destructive/40 bg-destructive/10 text-destructive'}"
+				{supportedLoading
+				? 'border-muted bg-muted text-muted-foreground'
+				: supported === 'connected'
+					? 'border-border bg-surface'
+					: 'border-destructive/40 bg-destructive/10 text-destructive'}"
 		>
-			{#if supported}
+			{#if supportedLoading}
+				<!-- Loading spinner -->
+				<svg class="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+					<circle
+						cx="12"
+						cy="12"
+						r="10"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-dasharray="31.416"
+						stroke-dashoffset="31.416"
+						class="opacity-25"
+					></circle>
+					<path
+						d="M12 2a10 10 0 0 1 0 20"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						class="opacity-75"
+					></path>
+				</svg>
+				CHECKING NFC READER...
+			{:else if supported === 'connected'}
 				<!-- Wifi icon -->
 				<svg
 					class="size-3.5"
@@ -212,7 +250,7 @@
 						d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"
 					/>
 				</svg>
-				NFC AVAILABLE ON THIS DEVICE
+				NFC CARD READER CONNECTED
 			{:else}
 				<!-- WifiOff icon -->
 				<svg
@@ -230,7 +268,7 @@
 						d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.56 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"
 					/>
 				</svg>
-				NFC UNAVAILABLE — USE MANUAL ENTRY
+				NFC CARD READER NOT CONNECTED
 			{/if}
 		</div>
 	</div>
@@ -445,9 +483,11 @@
 			</div>
 
 			<div class="space-y-4">
-				{#if !supported}
+				{#if supportedLoading}
+					<p class="text-muted-foreground font-mono text-xs">Checking for NFC Card Reader...</p>
+				{:else if !supported}
 					<p class="text-destructive font-mono text-xs">
-						Web NFC unavailable. Enter serial manually.
+						NFC Card Reader not connected. Connect USB reader or enter serial manually.
 					</p>
 				{/if}
 
