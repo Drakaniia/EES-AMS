@@ -7,6 +7,74 @@
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
+		<!-- Loading screen overlay - shows immediately on app launch -->
+		<div
+			id="initial-loading"
+			style="
+				position: fixed;
+				inset: 0;
+				background-color: var(--color-background);
+				z-index: 9999;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			"
+		>
+			<div style="display: flex; gap: 4px; align-items: center">
+				<div
+					style="
+						width: 4px;
+						height: 32px;
+						background-color: #fb923c;
+						border-radius: 2px;
+						animation: spin 1.2s ease-in-out infinite;
+					"
+				></div>
+				<div
+					style="
+						width: 4px;
+						height: 32px;
+						background-color: #fb923c;
+						border-radius: 2px;
+						animation: spin 1.2s ease-in-out infinite 0.1s;
+					"
+				></div>
+				<div
+					style="
+						width: 4px;
+						height: 32px;
+						background-color: #fb923c;
+						border-radius: 2px;
+						animation: spin 1.2s ease-in-out infinite 0.2s;
+					"
+				></div>
+				<div
+					style="
+						width: 4px;
+						height: 32px;
+						background-color: #fb923c;
+						border-radius: 2px;
+						animation: spin 1.2s ease-in-out infinite 0.3s;
+					"
+				></div>
+			</div>
+		</div>
+
+		<style>
+			@keyframes spin {
+				0%,
+				40%,
+				100% {
+					transform: scaleY(0.4);
+					opacity: 0.5;
+				}
+				20% {
+					transform: scaleY(1);
+					opacity: 1;
+				}
+			}
+		</style>
+
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

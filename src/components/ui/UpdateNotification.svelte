@@ -24,7 +24,7 @@
 		try {
 			const result: UpdateInfo = await invoke('check_for_updates');
 			updateInfo = result;
-			
+
 			if (result.available) {
 				showUpdateToast = true;
 			}
@@ -35,10 +35,10 @@
 
 	async function downloadAndInstall() {
 		if (!updateInfo?.available) return;
-		
+
 		isDownloading = true;
 		downloadError = '';
-		
+
 		try {
 			const result: string = await invoke('download_and_install');
 			console.log(result);
@@ -57,20 +57,18 @@
 
 	function formatUpdateMessage(info: UpdateInfo): string {
 		if (!info.version) return 'An update is available';
-		
+
 		let message = `Version ${info.version} is available`;
 		if (info.currentVersion) {
 			message += ` (you have ${info.currentVersion})`;
 		}
-		
+
 		if (info.notes) {
 			// Truncate notes if too long
-			const notes = info.notes.length > 100 
-				? info.notes.substring(0, 100) + '...' 
-				: info.notes;
+			const notes = info.notes.length > 100 ? info.notes.substring(0, 100) + '...' : info.notes;
 			message += `\n\n${notes}`;
 		}
-		
+
 		return message;
 	}
 </script>
@@ -80,7 +78,8 @@
 		type="update"
 		title="Update Available"
 		message={formatUpdateMessage(updateInfo)}
-		duration={0} // Don't auto-hide update notifications
+		duration={0}
+		// Don't auto-hide update notifications
 		closable={!isDownloading}
 		actionText={isDownloading ? 'Downloading...' : 'Download & Install'}
 		action={isDownloading ? undefined : downloadAndInstall}
