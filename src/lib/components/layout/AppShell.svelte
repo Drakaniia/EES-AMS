@@ -3,15 +3,28 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 
-	const navItems = [
-		{ href: '/', label: 'Dashboard', icon: 'dashboard' },
-		{ href: '/students', label: 'Students', icon: 'users' },
-		{ href: '/attendance', label: 'Tap Mode', icon: 'scan' },
-		{ href: '/records', label: 'Records', icon: 'file-text' },
-		{ href: '/settings', label: 'Settings', icon: 'settings' }
+	const navGroups = [
+		{
+			title: 'Main',
+			items: [
+				{ href: '/', label: 'Overview', icon: 'dashboard' },
+				{ href: '/attendance', label: 'Live Session', icon: 'scan' }
+			]
+		},
+		{
+			title: 'Management',
+			items: [
+				{ href: '/students', label: 'Student Roster', icon: 'users' },
+				{ href: '/records', label: 'Attendance Logs', icon: 'file-text' }
+			]
+		},
+		{
+			title: 'System',
+			items: [{ href: '/settings', label: 'Configuration', icon: 'settings' }]
+		}
 	] as const;
 
-	type NavIconName = (typeof navItems)[number]['icon'];
+	type NavIconName = (typeof navGroups)[number]['items'][number]['icon'];
 
 	const iconPaths: Record<NavIconName, string> = {
 		dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
@@ -38,12 +51,12 @@
 	>
 		<!-- Desktop brand -->
 		<div class="hidden px-6 pt-8 pb-6 md:block">
-			<div class="label-mono mb-3">Horizon · Step 01</div>
+			<div class="label-mono mb-3">Horizon · Institutional</div>
 			<h1 class="display-lg leading-none">
-				Attendance<br />Workspace
+				Attendance<br />Management
 			</h1>
 			<p class="text-muted-foreground mt-4 max-w-[14rem] text-sm">
-				Tap-to-attend with NFC ID cards. Local-first, always offline-ready.
+				School-wide attendance tracking with NFC ID integration.
 			</p>
 		</div>
 
@@ -58,38 +71,45 @@
 		</div>
 
 		<!-- Nav -->
-		<nav class="flex overflow-x-auto md:flex-col md:gap-1 md:overflow-visible md:px-3 md:pt-2">
-			{#each navItems as item (item.href)}
-				{@const active = isActive(item.href, $page.url.pathname)}
-				<a
-					href={resolve(item.href)}
-					onclick={(e) => {
-						e.preventDefault();
-						goto(resolve(item.href));
-					}}
-					class="flex items-center gap-3 px-4 py-3 text-sm whitespace-nowrap transition-colors md:rounded-md
-						{active
-						? 'bg-surface text-foreground border-primary md:border-l-primary border-b-2 md:border-b-0 md:border-l-2'
-						: 'text-muted-foreground hover:text-foreground hover:bg-surface/60'}"
-				>
-					<svg
-						class="size-4 shrink-0"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path d={iconPaths[item.icon]} />
-					</svg>
-					<span>{item.label}</span>
-				</a>
+		<nav class="flex overflow-x-auto md:flex-col md:gap-6 md:overflow-visible md:px-3 md:pt-4">
+			{#each navGroups as group}
+				<div class="flex flex-row md:flex-col md:gap-1">
+					<div class="label-mono hidden px-3 pb-2 text-[10px] md:block">{group.title}</div>
+					<div class="flex flex-row md:flex-col md:gap-1">
+						{#each group.items as item (item.href)}
+							{@const active = isActive(item.href, $page.url.pathname)}
+							<a
+								href={resolve(item.href)}
+								onclick={(e) => {
+									e.preventDefault();
+									goto(resolve(item.href));
+								}}
+								class="flex items-center gap-3 px-4 py-3 text-sm whitespace-nowrap transition-colors md:rounded-md
+									{active
+									? 'bg-surface text-foreground border-primary md:border-l-primary border-b-2 md:border-b-0 md:border-l-2'
+									: 'text-muted-foreground hover:text-foreground hover:bg-surface/60'}"
+							>
+								<svg
+									class="size-4 shrink-0"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d={iconPaths[item.icon]} />
+								</svg>
+								<span>{item.label}</span>
+							</a>
+						{/each}
+					</div>
+				</div>
 			{/each}
 		</nav>
 
-		<div class="label-mono mt-auto hidden px-6 py-6 md:block">v1 · local-only</div>
+		<div class="label-mono mt-auto hidden px-6 py-6 md:block text-[10px] opacity-50">Enterprise Edition</div>
 	</aside>
 
 	<!-- Main content -->

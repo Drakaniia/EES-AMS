@@ -135,9 +135,9 @@
 
 <AppShell>
 	<PageHeader
-		step="Step 03 · Live"
-		title="Tap to attend"
-		description="Hold an NFC student card to the back of the device. Each tap toggles between check-in and check-out."
+		category="Live Session"
+		title="Attendance Logging"
+		description="Active monitoring of student check-ins via NFC identification. Deploy this terminal at entry points."
 	>
 		{#snippet actions()}
 			<button

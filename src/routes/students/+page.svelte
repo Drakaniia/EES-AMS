@@ -161,9 +161,9 @@
 
 <AppShell>
 	<PageHeader
-		step="Step 02 · Roster"
-		title="Distribute intelligent attendance cards"
-		description="Add each student and pair an NFC ID card. Cards are identified by their unique serial — no app needed on the card itself."
+		category="Registry Management"
+		title="Student Roster"
+		description="Maintain the institutional student registry and manage NFC identification credentials."
 	>
 		{#snippet actions()}
 			<button
