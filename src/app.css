@@ -55,7 +55,7 @@
 :root {
 	--radius: 16px;
 
-	/* Horizon palette */
+	/* Theme palette */
 	--background: oklch(0.984 0.008 80); /* #FDFBF9 */
 	--surface: oklch(0.945 0.018 80); /* #F0EBE1 */
 	--foreground: oklch(0.18 0.02 265); /* #111827 */

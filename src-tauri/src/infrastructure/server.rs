@@ -275,7 +275,7 @@ async fn wipe_data(State(state): State<Arc<AppState>>) -> Result<StatusCode> {
     conn.execute("DELETE FROM events", [])?;
     conn.execute("DELETE FROM students", [])?;
     conn.execute(
-        "UPDATE settings SET class_name = 'Horizon Class', day_start = '08:30', day_end = '15:30', late_after = '08:45' WHERE id = 1",
+        "UPDATE settings SET class_name = 'My Class', day_start = '08:30', day_end = '15:30', late_after = '08:45' WHERE id = 1",
         [],
     )?;
 

@@ -56,7 +56,7 @@
 	function onExport() {
 		const csv = eventsToCSV(filtered, students, lateAfter);
 		const range = from || to ? `_${from || 'start'}_to_${to || 'end'}` : '';
-		downloadCSV(`horizon-attendance${range}.csv`, csv);
+		downloadCSV(`attendance-records${range}.csv`, csv);
 		toast('CSV exported');
 	}
 
@@ -74,15 +74,15 @@
 </script>
 
 <svelte:head>
-	<title>Records — Horizon Attendance</title>
+	<title>Records — Attendance System</title>
 	<meta name="description" content="Filter, review, and export attendance records as CSV." />
 </svelte:head>
 
 <AppShell>
 	<PageHeader
-		category="Data Archives"
+		category="Archives"
 		title="Attendance Logs"
-		description="Review, filter, and export historical attendance data for institutional reporting and compliance."
+		description="Review and filter historical attendance data for your classes."
 	>
 		{#snippet actions()}
 			<button

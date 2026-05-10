@@ -52,7 +52,7 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
         );
 
         INSERT OR IGNORE INTO settings (id, class_name, day_start, day_end, late_after)
-        VALUES (1, 'Horizon Class', '08:30', '15:30', '08:45');
+        VALUES (1, 'My Class', '08:30', '15:30', '08:45');
         "#,
     )?;
 
