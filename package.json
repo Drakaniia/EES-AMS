@@ -1,7 +1,7 @@
 {
-	"name": "my-app",
+	"name": "espiritu-ams",
+	"description": "Espiritu Elementary School Attendance Management System - Cross-platform desktop application for student attendance management with NFC/USB card reader support",
 	"private": true,
-	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
@@ -11,7 +11,11 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
-		"format": "prettier --write ."
+		"format": "prettier --write .",
+		"typecheck": "svelte-check --tsconfig ./tsconfig.json",
+		"tauri": "tauri",
+		"tauri:dev": "tauri dev",
+		"tauri:build": "tauri build"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.4",
