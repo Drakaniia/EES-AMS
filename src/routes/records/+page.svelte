@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
-	import DatePickerDialog from '$lib/components/ui/DatePickerDialog.svelte';
+	import DateRangePicker from '$lib/components/ui/DateRangePicker.svelte';
 	import {
 		listStudents,
 		listEvents,
@@ -21,9 +21,8 @@
 	let studentId = $state('');
 	let lateAfter = $state('08:45');
 
-	// Date picker dialog state
-	let fromPickerOpen = $state(false);
-	let toPickerOpen = $state(false);
+	// Date range picker dialog state
+	let dateRangePickerOpen = $state(false);
 
 	// Toast
 	let toastMessage = $state<string | null>(null);
@@ -116,42 +115,21 @@
 
 	<!-- ── Filters ──────────────────────────────────────────────────────────── -->
 	<section class="grid gap-4 px-6 py-8 sm:grid-cols-2 md:px-12 lg:grid-cols-4">
-		<!-- From -->
+		<!-- Date Range -->
 		<div class="space-y-2">
-			<div class="label-mono">From</div>
+			<div class="label-mono">Date Range</div>
 			<button
-				onclick={() => (fromPickerOpen = true)}
+				onclick={() => (dateRangePickerOpen = true)}
 				class="border-border bg-background hover:bg-surface focus:ring-primary flex h-10 w-full items-center justify-between rounded-md border px-3 text-left text-sm transition-colors focus:ring-2 focus:outline-none"
 			>
-				<span class={from ? '' : 'text-muted-foreground'}>
-					{from ? new Date(from).toLocaleDateString() : 'Select date'}
-				</span>
-				<svg
-					class="text-muted-foreground size-4"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-					<line x1="16" y1="2" x2="16" y2="6"></line>
-					<line x1="8" y1="2" x2="8" y2="6"></line>
-					<line x1="3" y1="10" x2="21" y2="10"></line>
-				</svg>
-			</button>
-		</div>
-
-		<!-- To -->
-		<div class="space-y-2">
-			<div class="label-mono">To</div>
-			<button
-				onclick={() => (toPickerOpen = true)}
-				class="border-border bg-background hover:bg-surface focus:ring-primary flex h-10 w-full items-center justify-between rounded-md border px-3 text-left text-sm transition-colors focus:ring-2 focus:outline-none"
-			>
-				<span class={to ? '' : 'text-muted-foreground'}>
-					{to ? new Date(to).toLocaleDateString() : 'Select date'}
+				<span class={from || to ? '' : 'text-muted-foreground'}>
+					{from && to
+						? `${new Date(from).toLocaleDateString()} - ${new Date(to).toLocaleDateString()}`
+						: from
+							? `From ${new Date(from).toLocaleDateString()}`
+							: to
+								? `To ${new Date(to).toLocaleDateString()}`
+								: 'Select date range'}
 				</span>
 				<svg
 					class="text-muted-foreground size-4"
@@ -268,20 +246,16 @@
 	</div>
 {/if}
 
-<!-- ── Date Picker Dialogs ─────────────────────────────────────────────────── -->
-<DatePickerDialog
-	open={fromPickerOpen}
-	value={from}
-	on:close={() => (fromPickerOpen = false)}
-	on:select={(e: CustomEvent<{ date: string }>) => (from = e.detail.date)}
-/>
-
-<DatePickerDialog
-	open={toPickerOpen}
-	value={to}
-	min={from}
-	on:close={() => (toPickerOpen = false)}
-	on:select={(e: CustomEvent<{ date: string }>) => (to = e.detail.date)}
+<!-- ── Date Range Picker Dialog ────────────────────────────────────────────── -->
+<DateRangePicker
+	open={dateRangePickerOpen}
+	fromValue={from}
+	toValue={to}
+	on:close={() => (dateRangePickerOpen = false)}
+	on:select={(e: CustomEvent<{ from: string; to: string }>) => {
+		from = e.detail.from;
+		to = e.detail.to;
+	}}
 />
 
 <!-- ── Snippets ───────────────────────────────────────────────────────────── -->

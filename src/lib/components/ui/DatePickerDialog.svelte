@@ -15,12 +15,7 @@
 
 	// Calendar state
 	let currentMonth = $state(new Date());
-	let selectedDate = $state<string | null>(null);
-
-	// Sync selectedDate with value prop
-	$effect(() => {
-		selectedDate = value || null;
-	});
+	let selectedDate = $derived.by(() => value || null);
 
 	// Helper functions
 	function getDaysInMonth(date: Date): number {
