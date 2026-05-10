@@ -20,6 +20,12 @@ impl Default for StudentId {
     }
 }
 
+impl std::fmt::Display for StudentId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Unique identifier for an attendance event
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
