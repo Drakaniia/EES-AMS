@@ -1,11 +1,13 @@
-# EES-AMS - Employee Attendance Management System
+# EES-AMS - Espiritu Elementary School Attendance Management System
+
+[![EES Logo](https://via.placeholder.com/100x100/4A90E2/FFFFFF?text=EES)](https://www.espiritu-elementary.edu.ph)
 
 [![Rust](https://img.shields.io/badge/rust-rust-orange?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![Svelte](https://img.shields.io/badge/svelte-svelte-orange?style=flat-square&logo=svelte&logoColor=white)](https://svelte.dev)
 [![Tauri](https://img.shields.io/badge/tauri-tauri-orange?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
-A cross-platform desktop application for employee attendance management with NFC/USB card reader support. Built with Tauri v2, SvelteKit 5, and Rust.
+A cross-platform desktop application for student attendance management at Espiritu Elementary School with NFC/USB card reader support. Built with Tauri v2, SvelteKit 5, and Rust.
 
 ## Features
 
@@ -62,8 +64,8 @@ A cross-platform desktop application for employee attendance management with NFC
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/your-username/ees-ams.git
-cd ees-ams
+git clone https://github.com/your-username/espíritu-ams.git
+cd espíritu-ams
 ```
 
 ### 2. Install Dependencies
@@ -110,7 +112,7 @@ The built executable will be in `src-tauri/target/release/`.
 
 ### NFC Card Workflow
 
-1. **Register employee cards** in the Students section
+1. **Register student cards** in the Students section
 2. **Tap NFC card** on phone device
 3. **System records** attendance automatically
 4. **Data syncs** instantly to laptop database
@@ -119,7 +121,7 @@ The built executable will be in `src-tauri/target/release/`.
 ## Project Structure
 
 ```
-ees-ams/
+espíritu-ams/
 ├── src/                    # SvelteKit frontend
 │   ├── lib/
 │   │   ├── components/     # Reusable UI components
@@ -288,4 +290,4 @@ For support and questions:
 
 ---
 
-**EES-AMS** - Modern attendance management for the digital age.
+**EES-AMS** - Modern attendance management for Espiritu Elementary School.
