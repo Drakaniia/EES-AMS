@@ -1,9 +1,11 @@
 # Rust Backend - Tauri v2
 
 ## Package Identity
+
 Tauri v2 Rust backend providing SQLite database, HTTP server, NFC/USB card reader support, and desktop integration for attendance management system.
 
 ## Setup & Run
+
 ```bash
 # Install dependencies
 cargo fetch
@@ -22,6 +24,7 @@ cargo test
 ```
 
 ## Patterns & Conventions
+
 - **Domain-Driven Design**: `domain/` for business logic, `infrastructure/` for external concerns
 - **Error Handling**: Use `thiserror` for custom errors, `anyhow` for application errors
 - **Database**: SQLite with `rusqlite` and connection pooling via `r2d2`
@@ -31,6 +34,7 @@ cargo test
 - **NFC/USB**: `rusb` and `pcsc` libraries for card reader integration
 
 Examples with actual file paths:
+
 - DO: Follow command pattern from `src-tauri/src/commands.rs`
 - DO: Database models in `src-tauri/src/domain/models/`
 - DO: HTTP routes in `src-tauri/src/infrastructure/http/`
@@ -38,6 +42,7 @@ Examples with actual file paths:
 - DON'T: Blocking operations in async functions
 
 ## Key Files
+
 - **Main Entry**: `src-tauri/src/main.rs`
 - **Tauri Commands**: `src-tauri/src/commands.rs`
 - **Domain Logic**: `src-tauri/src/domain/`
@@ -47,30 +52,35 @@ Examples with actual file paths:
 - **NFC Reader**: `src-tauri/src/infrastructure/nfc/`
 
 ## JIT Index Hints
+
 - Find Tauri command: `rg -n "#\[tauri::command\]" src-tauri/src`
 - Find database model: `rg -n "struct.*\{" src-tauri/src/domain`
 - Find HTTP route: `rg -n "router\." src-tauri/src/infrastructure`
 - Find error types: `rg -n "enum.*Error" src-tauri/src`
-- Find tests: `find src-tauri/ -name "*test*.rs" -o -name "tests/"
+- Find tests: `find src-tauri/ -name "_test_.rs" -o -name "tests/"
 
 ## Database Patterns
+
 - **Connection Pooling**: Use `r2d2::Pool` for SQLite connections
 - **Migrations**: Schema changes in `src-tauri/src/domain/migrations/`
 - **Queries**: Implement in domain layer, return Result<T, DomainError>
 - **Transactions**: Use connection pool transactions for data consistency
 
 ## NFC/USB Integration
+
 - **Card Readers**: Support both USB (`rusb`) and PCSC (`pcsc`) protocols
 - **Data Encryption**: Encrypt card data at rest in database
 - **Error Handling**: Graceful fallback when readers are unavailable
 
 ## Common Gotchas
+
 - Always handle SQLite connection errors gracefully
 - Use `tokio::spawn` for background tasks, don't block main thread
 - Tauri commands must be `async` if they perform I/O
 - HTTP server runs on separate port from Tauri's built-in server
 
 ## Pre-PR Checks
+
 ```bash
 cargo check && cargo clippy && cargo fmt --check && cargo test
 ```
