@@ -10,14 +10,6 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ServerInfo {
-    pub local_ip: String,
-    pub port: u16,
-    pub url: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct NfcReaderStatus {
     pub connected: bool,
     pub reader_name: Option<String>,
@@ -74,22 +66,6 @@ impl NfcReader {
         // Simulate waiting for card
         std::thread::sleep(std::time::Duration::from_millis(500));
         self.read_card()
-    }
-}
-
-#[tauri::command]
-pub fn get_server_info() -> ServerInfo {
-    let local_ip = local_ip_address::local_ip()
-        .map(|ip| ip.to_string())
-        .unwrap_or_else(|_| "127.0.0.1".to_string());
-
-    let port = crate::DEFAULT_PORT;
-    let url = format!("http://{}:{}", local_ip, port);
-
-    ServerInfo {
-        local_ip,
-        port,
-        url,
     }
 }
 
@@ -420,98 +396,4 @@ pub fn wipe_all(
     ).map_err(|e| e.to_string())?;
 
     Ok(())
-}
-
-// Update commands
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateInfo {
-    pub available: bool,
-    pub version: Option<String>,
-    pub notes: Option<String>,
-    pub pub_date: Option<String>,
-    pub current_version: String,
-}
-
-#[tauri::command]
-pub async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
-    use tauri_plugin_updater::UpdaterExt;
-    
-    let current_version = app.package_info().version.to_string();
-    
-    match app.updater() {
-        Ok(updater) => {
-            match updater.check().await {
-                Ok(Some(update)) => {
-                    Ok(UpdateInfo {
-                        available: true,
-                        version: Some(update.version.clone()),
-                        notes: Some(update.body.clone().unwrap_or_default()),
-                        pub_date: Some(update.date.clone()),
-                        current_version,
-                    })
-                }
-                Ok(None) => {
-                    Ok(UpdateInfo {
-                        available: false,
-                        version: None,
-                        notes: None,
-                        pub_date: None,
-                        current_version,
-                    })
-                }
-                Err(e) => {
-                    log::error!("Failed to check for updates: {}", e);
-                    Err(format!("Failed to check for updates: {}", e))
-                }
-            }
-        }
-        Err(e) => {
-            log::error!("Updater not available: {}", e);
-            Err(format!("Updater not available: {}", e))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn download_and_install(app: tauri::AppHandle) -> Result<String, String> {
-    use tauri_plugin_updater::UpdaterExt;
-    
-    match app.updater() {
-        Ok(updater) => {
-            match updater.check().await {
-                Ok(Some(update)) => {
-                    // Download and install with progress callbacks
-                    update
-                        .download_and_install(
-                            |chunk_length, content_length| {
-                                let progress = chunk_length as f64 / content_length.unwrap_or(1) as f64 * 100.0;
-                                log::info!("Download progress: {:.1}%", progress);
-                            },
-                            || {
-                                log::info!("Download complete, installing...");
-                            }
-                        )
-                        .await
-                        .map_err(|e| {
-                            log::error!("Failed to download and install update: {}", e);
-                            format!("Failed to download and install update: {}", e)
-                        })?;
-                    
-                    Ok("Update downloaded and installed successfully. The app will restart.".to_string())
-                }
-                Ok(None) => {
-                    Err("No update available".to_string())
-                }
-                Err(e) => {
-                    log::error!("Failed to check for updates before download: {}", e);
-                    Err(format!("Failed to check for updates before download: {}", e))
-                }
-            }
-        }
-        Err(e) => {
-            log::error!("Updater not available for download: {}", e);
-            Err(format!("Updater not available for download: {}", e))
-        }
-    }
 }

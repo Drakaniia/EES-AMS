@@ -89,41 +89,41 @@
 
 {#if show}
 	<div
-		class="fixed top-4 right-4 z-50 max-w-sm w-full animate-in slide-in-from-top-full duration-300"
+		class="animate-in slide-in-from-top-full fixed top-4 right-4 z-50 w-full max-w-sm duration-300"
 		role="alert"
 		aria-live="polite"
 	>
-		<div class="flex items-start p-4 border rounded-lg shadow-lg {colorClass}">
+		<div class="flex items-start rounded-lg border p-4 shadow-lg {colorClass}">
 			<div class="shrink-0">
-				<IconComponent class="w-6 h-6 {iconColorClass}" />
+				<IconComponent class="h-6 w-6 {iconColorClass}" />
 			</div>
-			
+
 			<div class="ml-3 flex-1">
 				{#if title}
-					<h3 class="text-sm font-semibold mb-1">{title}</h3>
+					<h3 class="mb-1 text-sm font-semibold">{title}</h3>
 				{/if}
 				{#if message}
 					<p class="text-sm">{message}</p>
 				{/if}
-				
+
 				{#if actionText}
 					<button
 						onclick={handleAction}
-						class="mt-2 px-3 py-1 text-xs font-medium rounded bg-white/20 hover:bg-white/30 transition-colors"
+						class="mt-2 rounded bg-white/20 px-3 py-1 text-xs font-medium transition-colors hover:bg-white/30"
 					>
 						{actionText}
 					</button>
 				{/if}
 			</div>
-			
+
 			{#if closable}
 				<div class="ml-4 shrink-0">
 					<button
 						onclick={close}
-						class="inline-flex rounded-md p-1.5 hover:bg-white/20 transition-colors"
+						class="inline-flex rounded-md p-1.5 transition-colors hover:bg-white/20"
 						aria-label="Close notification"
 					>
-						<X class="w-4 h-4" />
+						<X class="h-4 w-4" />
 					</button>
 				</div>
 			{/if}

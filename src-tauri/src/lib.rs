@@ -4,19 +4,16 @@ mod infrastructure;
 
 use commands::{
     add_event,
-    check_for_updates,
     check_nfc_reader,
     create_class,
     create_student,
     delete_class,
     delete_event,
     delete_student,
-    download_and_install,
     // Export/Import commands
     export_all,
     find_student_by_card,
     get_class,
-    get_server_info,
     // Settings commands
     get_settings,
     get_student,
@@ -37,16 +34,13 @@ use commands::{
     update_student,
     wipe_all,
 };
-use infrastructure::{init_db, start_server, AppState};
+use infrastructure::init_db;
 use tauri::Manager;
-
-const DEFAULT_PORT: u16 = 3030;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            get_server_info,
             check_nfc_reader,
             start_nfc_scanning,
             stop_nfc_scanning,
@@ -77,9 +71,6 @@ pub fn run() {
             export_all,
             import_all,
             wipe_all,
-            // Update commands
-            check_for_updates,
-            download_and_install,
         ])
         .setup(|app| {
             // Setup logging
@@ -106,26 +97,6 @@ pub fn run() {
 
             // Add database pool to Tauri state
             app.manage(pool.clone());
-
-            // Get local IP address
-            let local_ip = local_ip_address::local_ip()
-                .map(|ip| ip.to_string())
-                .unwrap_or_else(|_| "127.0.0.1".to_string());
-
-            log::info!("local IP address: {}", local_ip);
-            log::info!(
-                "server will be accessible at http://{}:{}",
-                local_ip,
-                DEFAULT_PORT
-            );
-
-            // Start HTTP server in background
-            let state = AppState::new(pool);
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = start_server(state, DEFAULT_PORT).await {
-                    log::error!("server error: {}", e);
-                }
-            });
 
             Ok(())
         })
