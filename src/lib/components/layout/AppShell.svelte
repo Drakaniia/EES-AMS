@@ -45,7 +45,7 @@
 	}
 </script>
 
-<div class="bg-background text-foreground flex min-h-screen flex-col md:flex-row">
+<div class="bg-background text-foreground flex h-screen flex-col overflow-hidden md:flex-row">
 	<!-- Sidebar -->
 	<aside
 		class="border-border bg-background flex border-b md:min-h-screen md:w-72 md:flex-col md:border-r md:border-b-0"
@@ -71,7 +71,7 @@
 
 		<!-- Nav -->
 		<nav class="flex overflow-x-auto md:flex-col md:gap-6 md:overflow-visible md:px-3 md:pt-4">
-			{#each navGroups as group}
+			{#each navGroups as group (group.title)}
 				<div class="flex flex-row md:flex-col md:gap-1">
 					<div class="label-mono hidden px-3 pb-2 text-[10px] md:block">{group.title}</div>
 					<div class="flex flex-row md:flex-col md:gap-1">
@@ -110,7 +110,7 @@
 	</aside>
 
 	<!-- Main content -->
-	<main class="min-w-0 flex-1">
+	<main class="min-w-0 flex-1 overflow-auto">
 		{@render children()}
 	</main>
 </div>
