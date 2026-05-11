@@ -16,7 +16,7 @@
 		type Class
 	} from '$lib/db-rust';
 	import { fmtDate, fmtTime } from '$lib/csv';
-import { exportCsvWithFolder } from '$lib/db-rust';
+	import { exportCsvWithFolder } from '$lib/db-rust';
 
 	// ── Types ────────────────────────────────────────────────────────────────
 	type StudentAttendance = {

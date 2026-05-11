@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { Spinner } from 'flowbite-svelte';
 	import { onMount } from 'svelte';
 
 	let isVisible = $state(true);
@@ -25,7 +24,7 @@
 
 			<!-- Loading Spinner -->
 			<div class="spinner-container">
-				<Spinner type="bars" color="orange" />
+				<div class="custom-spinner"></div>
 			</div>
 
 			<!-- Loading Text -->
@@ -67,6 +66,24 @@
 			}
 			50% {
 				opacity: 0.5;
+			}
+		}
+
+		.custom-spinner {
+			width: 40px;
+			height: 40px;
+			border: 4px solid rgba(0, 0, 0, 0.1);
+			border-top: 4px solid #f97316;
+			border-radius: 50%;
+			animation: spin 1s linear infinite;
+		}
+
+		@keyframes spin {
+			0% {
+				transform: rotate(0deg);
+			}
+			100% {
+				transform: rotate(360deg);
 			}
 		}
 	</style>
