@@ -12,9 +12,9 @@ use commands::{
     delete_student,
     // Export/Import commands
     export_all,
+    export_csv_with_folder,
     export_database,
     export_json_with_folder,
-    export_csv_with_folder,
     find_student_by_card,
     get_class,
     // Settings commands

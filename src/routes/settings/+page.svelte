@@ -146,7 +146,7 @@
 	async function onExport() {
 		try {
 			let filePath: string;
-			
+
 			if (exportFormat === 'database') {
 				filePath = await exportDatabase();
 				toast(`Database exported to: ${filePath}`);
@@ -154,7 +154,7 @@
 				filePath = await exportJsonWithFolder();
 				toast(`JSON exported to: ${filePath}`);
 			}
-			
+
 			exportDialogOpen = false;
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : 'Export failed';
@@ -646,7 +646,7 @@
 			</div>
 
 			<div class="space-y-3">
-				<label class="flex items-center gap-3 cursor-pointer">
+				<label class="flex cursor-pointer items-center gap-3">
 					<input
 						type="radio"
 						bind:group={exportFormat}
@@ -661,7 +661,7 @@
 					</div>
 				</label>
 
-				<label class="flex items-center gap-3 cursor-pointer">
+				<label class="flex cursor-pointer items-center gap-3">
 					<input
 						type="radio"
 						bind:group={exportFormat}
