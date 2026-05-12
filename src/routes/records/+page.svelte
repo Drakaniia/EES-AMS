@@ -15,6 +15,7 @@
 		type AttendanceEvent,
 		type Class
 	} from '$lib/db-rust';
+	import { page } from '$app/stores';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { exportCsvWithFolder } from '$lib/db-rust';
 
@@ -37,8 +38,8 @@
 	let classes = $state<Class[]>([]);
 	let from = $state('');
 	let to = $state('');
-	let studentId = $state('');
-	let classId = $state('');
+	let studentId = $state($page.url.searchParams.get('studentId') || '');
+	let classId = $state($page.url.searchParams.get('classId') || '');
 	let lateAfter = $state('08:45');
 
 	// Date range picker dialog state
