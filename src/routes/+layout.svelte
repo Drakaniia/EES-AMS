@@ -3,6 +3,7 @@
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import UpdateNotification from '../components/ui/UpdateNotification.svelte';
+	import ClickSpark from '$lib/components/ui/ClickSpark.svelte';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
@@ -20,4 +21,6 @@
 
 <UpdateNotification />
 
-{@render children()}
+<ClickSpark sparkColor="#FF8A4C" sparkSize={8} sparkRadius={12} sparkCount={6} duration={300}>
+	{@render children()}
+</ClickSpark>
