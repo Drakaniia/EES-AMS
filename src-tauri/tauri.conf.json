@@ -12,11 +12,12 @@
 	"app": {
 		"windows": [
 			{
-				"title": "EES - Attendance Management System",
-				"width": 1000,
-				"height": 700,
+				"title": "",
+				"width": 1500,
+				"height": 900,
 				"resizable": true,
-				"fullscreen": false
+				"fullscreen": false,
+				"decorations": false
 			}
 		],
 		"security": {
