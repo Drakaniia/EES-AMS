@@ -159,18 +159,20 @@
 	</section>
 
 	<!-- Panels -->
-	<section class="grid gap-8 px-6 pb-16 md:px-12 lg:grid-cols-2">
+	<section class="grid gap-8 px-6 pb-16 md:px-12 lg:grid-cols-2 min-h-[calc(100vh-32rem)]">
 		<!-- Currently in the room -->
-		<div class="border-border bg-card rounded-2xl border p-6">
-			<div class="mb-4 flex items-baseline justify-between">
+		<div class="border-border bg-card rounded-2xl border p-6 flex flex-col h-full">
+			<div class="mb-4 flex items-baseline justify-between flex-shrink-0">
 				<h3 class="text-lg font-medium">Currently in the room</h3>
 				<span class="label-mono">Last tap registered as check-in</span>
 			</div>
 
 			{#if checkedIn.length === 0}
-				{@render emptyState('No one is checked in yet. Open Tap Mode to begin.')}
+				<div class="flex-1 flex items-center justify-center">
+					{@render emptyState('No one is checked in yet. Open Tap Mode to begin.')}
+				</div>
 			{:else}
-				<ul class="divide-border divide-y">
+				<ul class="divide-border divide-y flex-1 overflow-y-auto">
 					{#each checkedIn as e (e.id)}
 						{@const s = studentMap.get(e.studentId)}
 						<li class="flex items-center justify-between py-3">
@@ -186,16 +188,18 @@
 		</div>
 
 		<!-- Recent activity -->
-		<div class="border-border bg-card rounded-2xl border p-6">
-			<div class="mb-4 flex items-baseline justify-between">
+		<div class="border-border bg-card rounded-2xl border p-6 flex flex-col h-full">
+			<div class="mb-4 flex items-baseline justify-between flex-shrink-0">
 				<h3 class="text-lg font-medium">Recent activity</h3>
 				<span class="label-mono">Last 8 events</span>
 			</div>
 
 			{#if events.length === 0}
-				{@render emptyState('No events yet.')}
+				<div class="flex-1 flex items-center justify-center">
+					{@render emptyState('No events yet.')}
+				</div>
 			{:else}
-				<ul class="divide-border divide-y">
+				<ul class="divide-border divide-y flex-1 overflow-y-auto">
 					{#each events.slice(0, 8) as e (e.id)}
 						{@const s = studentMap.get(e.studentId)}
 						<li class="flex items-center justify-between py-3">
@@ -215,7 +219,7 @@
 				</ul>
 			{/if}
 
-			<div class="mt-4">
+			<div class="mt-4 flex-shrink-0">
 				<a
 					href={resolve('/records')}
 					onclick={(e) => {
@@ -257,7 +261,7 @@
 
 {#snippet emptyState(text: string)}
 	<div
-		class="text-muted-foreground border-border rounded-xl border border-dashed py-10 text-center text-sm"
+		class="text-muted-foreground border-border rounded-xl border border-dashed p-4 text-center text-sm h-full flex flex-col items-center justify-center w-full"
 	>
 		<svg
 			class="mx-auto mb-2 size-5 opacity-60"

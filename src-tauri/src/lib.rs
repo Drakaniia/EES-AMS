@@ -79,6 +79,7 @@ pub fn run() {
             wipe_all,
         ])
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // Setup logging
             if cfg!(debug_assertions) {
