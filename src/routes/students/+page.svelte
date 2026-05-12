@@ -18,6 +18,9 @@
 	let students = $state<Student[]>([]);
 	let classes = $state<Class[]>([]);
 	let selectedClassId = $state<string>(''); // Filter
+	let searchTerms = $state('');
+	let sortBy = $state<'name' | 'number' | 'date'>('name');
+	let sortOrder = $state<'asc' | 'desc'>('asc');
 
 	let dialogOpen = $state(false);
 	let editing = $state<Student | null>(null);
@@ -52,16 +55,64 @@
 		toastTimer = setTimeout(() => (toastMessage = null), 3000);
 	}
 
+	// Computed filtered and sorted students
+	const filteredStudents = $derived(() => {
+		let result = students;
+
+		// Search
+		if (searchTerms.trim()) {
+			const term = searchTerms.toLowerCase();
+			result = result.filter(
+				(s) =>
+					s.name.toLowerCase().includes(term) ||
+					s.studentNumber.toLowerCase().includes(term) ||
+					s.cardSerial?.toLowerCase().includes(term)
+			);
+		}
+
+		// Sort
+		result = [...result].sort((a, b) => {
+			let valA: string | number = '';
+			let valB: string | number = '';
+
+			if (sortBy === 'name') {
+				valA = a.name;
+				valB = b.name;
+			} else if (sortBy === 'number') {
+				valA = a.studentNumber;
+				valB = b.studentNumber;
+			} else if (sortBy === 'date') {
+				valA = a.createdAt;
+				valB = b.createdAt;
+			}
+
+			if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+			if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+			return 0;
+		});
+
+		return result;
+	});
+
 	// Computed pagination values
-	const totalPages = $derived(Math.ceil(students.length / itemsPerPage));
+	const totalPages = $derived(Math.ceil(filteredStudents().length / itemsPerPage));
 	const paginatedStudents = $derived(() => {
 		const start = (currentPage - 1) * itemsPerPage;
 		const end = start + itemsPerPage;
-		return students.slice(start, end);
+		return filteredStudents().slice(start, end);
 	});
 
 	function handlePageChange(page: number) {
 		currentPage = page;
+	}
+
+	function toggleSort(field: typeof sortBy) {
+		if (sortBy === field) {
+			sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortBy = field;
+			sortOrder = 'asc';
+		}
 	}
 
 	async function reload() {
@@ -74,6 +125,31 @@
 			const msg = err instanceof Error ? err.message : 'Database error';
 			toast(`Failed to load students: ${msg}`);
 		}
+	}
+
+	async function exportStudents() {
+		// Simple CSV export for students
+		const headers = ['Name', 'Student Number', 'Class', 'Card Serial', 'Created At'];
+		const rows = students.map((s) => [
+			s.name,
+			s.studentNumber,
+			getClassName(s.classId),
+			s.cardSerial || '',
+			s.createdAt
+		]);
+
+		const csvContent =
+			'data:text/csv;charset=utf-8,' +
+			[headers.join(','), ...rows.map((r) => r.map((cell) => `"${cell}"`).join(','))].join('\n');
+
+		const encodedUri = encodeURI(csvContent);
+		const link = document.createElement('a');
+		link.setAttribute('href', encodedUri);
+		link.setAttribute('download', 'students_roster.csv');
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		toast('Student list exported');
 	}
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
@@ -269,20 +345,51 @@
 	>
 		{#snippet actions()}
 			<div class="flex items-center gap-3">
-				<!-- Class Filter -->
-				<select
-					bind:value={selectedClassId}
-					class="border-border bg-background focus:ring-primary rounded-pill h-10 border px-4 py-2 text-sm focus:ring-2 focus:outline-none"
+				<a
+					href="/records"
+					class="border-border hover:bg-surface inline-flex h-10 items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors"
 				>
-					<option value="">All Classes</option>
-					{#each classes as c (c.id)}
-						<option value={c.id}>{c.name}</option>
-					{/each}
-				</select>
+					<svg
+						class="size-4"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+						<polyline points="14 2 14 8 20 8" />
+						<line x1="16" y1="13" x2="8" y2="13" />
+						<line x1="16" y1="17" x2="8" y2="17" />
+						<polyline points="10 9 9 9 8 9" />
+					</svg>
+					View Records
+				</a>
+
+				<button
+					onclick={exportStudents}
+					class="border-border hover:bg-surface inline-flex h-10 items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors"
+				>
+					<svg
+						class="size-4"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+						<polyline points="7 10 12 15 17 10" />
+						<line x1="12" y1="15" x2="12" y2="3" />
+					</svg>
+					Export CSV
+				</button>
 
 				<button
 					onclick={openAdd}
-					class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
+					class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex h-10 items-center gap-2 px-6 py-2 text-sm font-medium transition-colors"
 				>
 					<svg
 						class="size-4"
@@ -301,6 +408,59 @@
 		{/snippet}
 	</PageHeader>
 
+	<!-- Tools Bar -->
+	<section class="grid gap-4 px-6 pt-8 md:grid-cols-2 md:px-12 lg:grid-cols-3">
+		<!-- Search -->
+		<div class="space-y-2">
+			<div class="label-mono">Search Students</div>
+			<div class="relative">
+				<svg
+					class="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<circle cx="11" cy="11" r="8" />
+					<path d="m21 21-4.3-4.3" />
+				</svg>
+				<input
+					type="text"
+					bind:value={searchTerms}
+					placeholder="Name, number, or card serial..."
+					class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border pl-10 pr-4 text-sm focus:ring-2 focus:outline-none"
+				/>
+			</div>
+		</div>
+
+		<!-- Class Filter -->
+		<div class="space-y-2">
+			<div class="label-mono">Filter by Class</div>
+			<select
+				bind:value={selectedClassId}
+				class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+			>
+				<option value="">All Classes</option>
+				{#each classes as c (c.id)}
+					<option value={c.id}>{c.name}</option>
+				{/each}
+			</select>
+		</div>
+
+		<!-- Stats -->
+		<div class="space-y-2">
+			<div class="label-mono">Total Students</div>
+			<div class="flex h-10 items-center font-mono text-lg font-bold">
+				{filteredStudents().length}
+				<span class="text-muted-foreground ml-2 text-xs font-normal">
+					(out of {students.length})
+				</span>
+			</div>
+		</div>
+	</section>
+
 	<!-- Student roster -->
 	<section class="px-6 pb-16 md:px-12">
 		{#if students.length === 0}
@@ -310,11 +470,47 @@
 				<table class="w-full text-sm">
 					<thead class="bg-surface text-left">
 						<tr>
-							{@render th('Name')}
-							{@render th('Student #')}
-							{@render th('Class')}
-							{@render th('Card')}
-							{@render th('Actions', 'w-36 text-right')}
+							<th class="label-mono px-4 py-3">
+								<button
+									onclick={() => toggleSort('name')}
+									class="inline-flex items-center gap-1 hover:text-primary transition-colors"
+								>
+									Name
+									{#if sortBy === 'name'}
+										<svg
+											class="size-3"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+										>
+											<path d={sortOrder === 'asc' ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'} />
+										</svg>
+									{/if}
+								</button>
+							</th>
+							<th class="label-mono px-4 py-3">
+								<button
+									onclick={() => toggleSort('number')}
+									class="inline-flex items-center gap-1 hover:text-primary transition-colors"
+								>
+									Student #
+									{#if sortBy === 'number'}
+										<svg
+											class="size-3"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+										>
+											<path d={sortOrder === 'asc' ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'} />
+										</svg>
+									{/if}
+								</button>
+							</th>
+							<th class="label-mono px-4 py-3">Class</th>
+							<th class="label-mono px-4 py-3">Card</th>
+							<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
 						</tr>
 					</thead>
 					<tbody class="divide-border divide-y">
@@ -338,6 +534,28 @@
 								</td>
 								<td class="px-4 py-3 text-right">
 									<div class="inline-flex gap-1">
+										<!-- View Records -->
+										<a
+											href="/records?studentId={s.id}"
+											class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
+											title="View attendance records"
+										>
+											<svg
+												class="size-3.5"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+												<polyline points="14 2 14 8 20 8" />
+												<line x1="16" y1="13" x2="8" y2="13" />
+												<line x1="16" y1="17" x2="8" y2="17" />
+												<polyline points="10 9 9 9 8 9" />
+											</svg>
+										</a>
 										<!-- Pair card -->
 										<button
 											onclick={() => (scanFor = s)}

@@ -7,11 +7,11 @@ always use @tauri-v2
 always use @svelte-best-practices
 always use @svelte-code-writer
 
-# EES-AMS - Employee Attendance Management System
+# EES-AMS - Teacher Attendance Management System
 
 ## Project Snapshot
 
-Tauri v2 desktop application for employee attendance management with NFC/USB card reader support. SvelteKit 5 frontend with Rust backend, SQLite database, and modular feature architecture.
+Tauri v2 desktop application for teacher attendance management with NFC/USB card reader support. SvelteKit 5 frontend with Rust backend, SQLite database, and modular feature architecture.
 
 ## Root Setup Commands
 
