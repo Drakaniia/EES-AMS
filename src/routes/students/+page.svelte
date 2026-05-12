@@ -904,7 +904,7 @@
 {/if}
 
 {#snippet emptyState()}
-	<div class="border-border bg-surface/50 rounded-2xl border border-dashed p-12 text-center">
+	<div class="border-border bg-surface/50 rounded-2xl border border-dashed p-12 text-center mt-8">
 		<p class="text-muted-foreground">
 			{#if selectedClassId}
 				No students assigned to this class yet.
