@@ -13,6 +13,7 @@
 		type Class
 	} from '$lib/db-rust';
 	import { NfcScanner, nfcSupported } from '$lib/nfc';
+	import { resolve } from '$app/paths';
 
 	// ── State ────────────────────────────────────────────────────────────────
 	let students = $state<Student[]>([]);
@@ -46,7 +47,24 @@
 
 	// Pagination
 	let currentPage = $state(1);
-	let itemsPerPage = $state(10);
+	let availableHeight = $state(0);
+	const itemsPerPage = $derived.by(() => {
+		if (availableHeight === 0) return 10;
+		// availableHeight is bound to the <section> which has pb-20 (80px).
+		// The table container has mt-8 (32px).
+		// We need a conservative buffer to ensure no row is partially covered.
+		const rowHeight = 60; // Safer estimate for row height including borders
+		const headerHeight = 48; // Table header height
+		const verticalBuffer = 120; // Accounts for mt-8 (32px), pb-20 (80px), and extra safety
+		const calculated = Math.floor((availableHeight - headerHeight - verticalBuffer) / rowHeight);
+		return Math.max(1, calculated);
+	});
+
+	$effect(() => {
+		if (currentPage > totalPages && totalPages > 0) {
+			currentPage = totalPages;
+		}
+	});
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string) {
@@ -338,19 +356,85 @@
 </svelte:head>
 
 <AppShell>
-	<PageHeader
-		category="Students"
-		title="Student Roster"
-		description="Manage your student list and their NFC identification cards."
-	>
-		{#snippet actions()}
-			<div class="flex items-center gap-3">
-				<a
-					href="/records"
-					class="border-border hover:bg-surface inline-flex h-10 items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors"
-				>
+	<div class="flex h-full flex-col overflow-hidden">
+		<PageHeader
+			category="Students"
+			title="Student Roster"
+			description="Manage your student list and their NFC identification cards."
+		>
+			{#snippet actions()}
+				<div class="flex items-center gap-3">
+					<a
+						href={resolve('/records')}
+						class="border-border hover:bg-surface inline-flex h-10 items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors"
+					>
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+							<polyline points="14 2 14 8 20 8" />
+							<line x1="16" y1="13" x2="8" y2="13" />
+							<line x1="16" y1="17" x2="8" y2="17" />
+							<polyline points="10 9 9 9 8 9" />
+						</svg>
+						View Records
+					</a>
+
+					<button
+						onclick={exportStudents}
+						class="border-border hover:bg-surface inline-flex h-10 items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors"
+					>
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+							<polyline points="7 10 12 15 17 10" />
+							<line x1="12" y1="15" x2="12" y2="3" />
+						</svg>
+						Export CSV
+					</button>
+
+					<button
+						onclick={openAdd}
+						class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex h-10 items-center gap-2 px-6 py-2 text-sm font-medium transition-colors"
+					>
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M12 5v14M5 12h14" />
+						</svg>
+						Add student
+					</button>
+				</div>
+			{/snippet}
+		</PageHeader>
+
+		<!-- Tools Bar -->
+		<section class="grid gap-4 px-6 pt-8 md:grid-cols-2 md:px-12 lg:grid-cols-3">
+			<!-- Search -->
+			<div class="space-y-2">
+				<div class="label-mono">Search Students</div>
+				<div class="relative">
 					<svg
-						class="size-4"
+						class="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
 						viewBox="0 0 24 24"
 						fill="none"
 						stroke="currentColor"
@@ -358,275 +442,211 @@
 						stroke-linecap="round"
 						stroke-linejoin="round"
 					>
-						<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-						<polyline points="14 2 14 8 20 8" />
-						<line x1="16" y1="13" x2="8" y2="13" />
-						<line x1="16" y1="17" x2="8" y2="17" />
-						<polyline points="10 9 9 9 8 9" />
+						<circle cx="11" cy="11" r="8" />
+						<path d="m21 21-4.3-4.3" />
 					</svg>
-					View Records
-				</a>
-
-				<button
-					onclick={exportStudents}
-					class="border-border hover:bg-surface inline-flex h-10 items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors"
-				>
-					<svg
-						class="size-4"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-						<polyline points="7 10 12 15 17 10" />
-						<line x1="12" y1="15" x2="12" y2="3" />
-					</svg>
-					Export CSV
-				</button>
-
-				<button
-					onclick={openAdd}
-					class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex h-10 items-center gap-2 px-6 py-2 text-sm font-medium transition-colors"
-				>
-					<svg
-						class="size-4"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<path d="M12 5v14M5 12h14" />
-					</svg>
-					Add student
-				</button>
+					<input
+						type="text"
+						bind:value={searchTerms}
+						placeholder="Name, number, or card serial..."
+						class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border pr-4 pl-10 text-sm focus:ring-2 focus:outline-none"
+					/>
+				</div>
 			</div>
-		{/snippet}
-	</PageHeader>
 
-	<!-- Tools Bar -->
-	<section class="grid gap-4 px-6 pt-8 md:grid-cols-2 md:px-12 lg:grid-cols-3">
-		<!-- Search -->
-		<div class="space-y-2">
-			<div class="label-mono">Search Students</div>
-			<div class="relative">
-				<svg
-					class="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
+			<!-- Class Filter -->
+			<div class="space-y-2">
+				<div class="label-mono">Filter by Class</div>
+				<select
+					bind:value={selectedClassId}
+					class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
 				>
-					<circle cx="11" cy="11" r="8" />
-					<path d="m21 21-4.3-4.3" />
-				</svg>
-				<input
-					type="text"
-					bind:value={searchTerms}
-					placeholder="Name, number, or card serial..."
-					class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border pl-10 pr-4 text-sm focus:ring-2 focus:outline-none"
-				/>
+					<option value="">All Classes</option>
+					{#each classes as c (c.id)}
+						<option value={c.id}>{c.name}</option>
+					{/each}
+				</select>
 			</div>
-		</div>
 
-		<!-- Class Filter -->
-		<div class="space-y-2">
-			<div class="label-mono">Filter by Class</div>
-			<select
-				bind:value={selectedClassId}
-				class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
-			>
-				<option value="">All Classes</option>
-				{#each classes as c (c.id)}
-					<option value={c.id}>{c.name}</option>
-				{/each}
-			</select>
-		</div>
-
-		<!-- Stats -->
-		<div class="space-y-2">
-			<div class="label-mono">Total Students</div>
-			<div class="flex h-10 items-center font-mono text-lg font-bold">
-				{filteredStudents().length}
-				<span class="text-muted-foreground ml-2 text-xs font-normal">
-					(out of {students.length})
-				</span>
+			<!-- Stats -->
+			<div class="space-y-2">
+				<div class="label-mono">Total Students</div>
+				<div class="flex h-10 items-center font-mono text-lg font-bold">
+					{filteredStudents().length}
+					<span class="text-muted-foreground ml-2 text-xs font-normal">
+						(out of {students.length})
+					</span>
+				</div>
 			</div>
-		</div>
-	</section>
+		</section>
 
-	<!-- Student roster -->
-	<section class="px-6 pb-16 md:px-12">
-		{#if students.length === 0}
-			{@render emptyState()}
-		{:else}
-			<div class="border-border bg-card mt-8 overflow-hidden rounded-2xl border">
-				<table class="w-full text-sm">
-					<thead class="bg-surface text-left">
-						<tr>
-							<th class="label-mono px-4 py-3">
-								<button
-									onclick={() => toggleSort('name')}
-									class="inline-flex items-center gap-1 hover:text-primary transition-colors"
-								>
-									Name
-									{#if sortBy === 'name'}
-										<svg
-											class="size-3"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-										>
-											<path d={sortOrder === 'asc' ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'} />
-										</svg>
-									{/if}
-								</button>
-							</th>
-							<th class="label-mono px-4 py-3">
-								<button
-									onclick={() => toggleSort('number')}
-									class="inline-flex items-center gap-1 hover:text-primary transition-colors"
-								>
-									Student #
-									{#if sortBy === 'number'}
-										<svg
-											class="size-3"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-										>
-											<path d={sortOrder === 'asc' ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'} />
-										</svg>
-									{/if}
-								</button>
-							</th>
-							<th class="label-mono px-4 py-3">Class</th>
-							<th class="label-mono px-4 py-3">Card</th>
-							<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
-						</tr>
-					</thead>
-					<tbody class="divide-border divide-y">
-						{#each paginatedStudents() as s (s.id)}
+		<!-- Student roster -->
+		<section class="min-h-0 flex-1 px-6 pb-20 md:px-12" bind:clientHeight={availableHeight}>
+			{#if students.length === 0}
+				{@render emptyState()}
+			{:else}
+				<div class="border-border bg-card mt-8 overflow-hidden rounded-2xl border">
+					<table class="w-full text-sm">
+						<thead class="bg-surface text-left">
 							<tr>
-								{@render td(s.name, 'font-medium')}
-								{@render td(s.studentNumber, 'font-mono')}
-								<td class="px-4 py-3">
-									<span class="rounded-pill bg-surface border-border border px-2 py-0.5 text-xs">
-										{getClassName(s.classId)}
-									</span>
-								</td>
-								<td class="px-4 py-3 font-mono text-xs">
-									{#if s.cardSerial}
-										<span class="rounded-pill bg-surface border-border border px-2 py-1"
-											>{s.cardSerial}</span
-										>
-									{:else}
-										<span class="text-muted-foreground">—</span>
-									{/if}
-								</td>
-								<td class="px-4 py-3 text-right">
-									<div class="inline-flex gap-1">
-										<!-- View Records -->
-										<a
-											href="/records?studentId={s.id}"
-											class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
-											title="View attendance records"
-										>
+								<th class="label-mono px-4 py-3">
+									<button
+										onclick={() => toggleSort('name')}
+										class="hover:text-primary inline-flex items-center gap-1 transition-colors"
+									>
+										Name
+										{#if sortBy === 'name'}
 											<svg
-												class="size-3.5"
+												class="size-3"
 												viewBox="0 0 24 24"
 												fill="none"
 												stroke="currentColor"
 												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
 											>
-												<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-												<polyline points="14 2 14 8 20 8" />
-												<line x1="16" y1="13" x2="8" y2="13" />
-												<line x1="16" y1="17" x2="8" y2="17" />
-												<polyline points="10 9 9 9 8 9" />
+												<path d={sortOrder === 'asc' ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'} />
 											</svg>
-										</a>
-										<!-- Pair card -->
-										<button
-											onclick={() => (scanFor = s)}
-											class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
-											title="Pair NFC card"
-										>
+										{/if}
+									</button>
+								</th>
+								<th class="label-mono px-4 py-3">
+									<button
+										onclick={() => toggleSort('number')}
+										class="hover:text-primary inline-flex items-center gap-1 transition-colors"
+									>
+										Student #
+										{#if sortBy === 'number'}
 											<svg
-												class="size-3.5"
+												class="size-3"
 												viewBox="0 0 24 24"
 												fill="none"
 												stroke="currentColor"
 												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
 											>
-												<rect x="2" y="5" width="20" height="14" rx="2" />
-												<path d="M2 10h20" />
+												<path d={sortOrder === 'asc' ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'} />
 											</svg>
-										</button>
-										<!-- Edit -->
-										<button
-											onclick={() => openEdit(s)}
-											class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
-											title="Edit student"
-										>
-											<svg
-												class="size-3.5"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-											>
-												<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-												<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-											</svg>
-										</button>
-										<!-- Delete -->
-										<button
-											onclick={() => onDelete(s)}
-											class="border-border bg-background hover:bg-surface text-destructive inline-flex size-8 items-center justify-center rounded-md border transition-colors"
-											title="Delete student"
-										>
-											<svg
-												class="size-3.5"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-											>
-												<polyline points="3 6 5 6 21 6" />
-												<path
-													d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
-												/>
-											</svg>
-										</button>
-									</div>
-								</td>
+										{/if}
+									</button>
+								</th>
+								<th class="label-mono px-4 py-3">Class</th>
+								<th class="label-mono px-4 py-3">Card</th>
+								<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
 							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-	</section>
+						</thead>
+						<tbody class="divide-border divide-y">
+							{#each paginatedStudents() as s (s.id)}
+								<tr>
+									{@render td(s.name, 'font-medium')}
+									{@render td(s.studentNumber, 'font-mono')}
+									<td class="px-4 py-3">
+										<span class="rounded-pill bg-surface border-border border px-2 py-0.5 text-xs">
+											{getClassName(s.classId)}
+										</span>
+									</td>
+									<td class="px-4 py-3 font-mono text-xs">
+										{#if s.cardSerial}
+											<span class="rounded-pill bg-surface border-border border px-2 py-1"
+												>{s.cardSerial}</span
+											>
+										{:else}
+											<span class="text-muted-foreground">—</span>
+										{/if}
+									</td>
+									<td class="px-4 py-3 text-right">
+										<div class="inline-flex gap-1">
+											<!-- View Records -->
+											<a
+												href={resolve(`/records?studentId=${s.id}`)}
+												class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
+												title="View attendance records"
+											>
+												<svg
+													class="size-3.5"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+													<polyline points="14 2 14 8 20 8" />
+													<line x1="16" y1="13" x2="8" y2="13" />
+													<line x1="16" y1="17" x2="8" y2="17" />
+													<polyline points="10 9 9 9 8 9" />
+												</svg>
+											</a>
+											<!-- Pair card -->
+											<button
+												onclick={() => (scanFor = s)}
+												class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
+												title="Pair NFC card"
+											>
+												<svg
+													class="size-3.5"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													<rect x="2" y="5" width="20" height="14" rx="2" />
+													<path d="M2 10h20" />
+												</svg>
+											</button>
+											<!-- Edit -->
+											<button
+												onclick={() => openEdit(s)}
+												class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
+												title="Edit student"
+											>
+												<svg
+													class="size-3.5"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+													<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+												</svg>
+											</button>
+											<!-- Delete -->
+											<button
+												onclick={() => onDelete(s)}
+												class="border-border bg-background hover:bg-surface text-destructive inline-flex size-8 items-center justify-center rounded-md border transition-colors"
+												title="Delete student"
+											>
+												<svg
+													class="size-3.5"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													<polyline points="3 6 5 6 21 6" />
+													<path
+														d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+													/>
+												</svg>
+											</button>
+										</div>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</section>
 
-	<div class="fixed right-6 bottom-6 z-10">
-		<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
+		<div class="fixed right-6 bottom-6 z-10">
+			<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
+		</div>
 	</div>
 </AppShell>
 
@@ -893,10 +913,6 @@
 			{/if}
 		</p>
 	</div>
-{/snippet}
-
-{#snippet th(label: string, extraClass?: string)}
-	<th class="label-mono px-4 py-3 {extraClass ?? ''}">{label}</th>
 {/snippet}
 
 {#snippet td(value: string, extraClass?: string)}
