@@ -145,8 +145,7 @@
 		color: var(--color-foreground);
 		font-family: var(--font-sans);
 		-webkit-font-smoothing: antialiased;
-		overflow-x: hidden;
-		overflow-y: auto;
+		overflow: hidden;
 		width: 100vw;
 		max-width: 100vw;
 		position: fixed;
@@ -154,19 +153,17 @@
 		max-height: 100vh;
 	}
 
-	/* Hide scrollbars on small screens */
-	@media (max-width: 768px) {
-		html,
-		body,
-		* {
-			scrollbar-width: none;
-			-ms-overflow-style: none;
-		}
-		html::-webkit-scrollbar,
-		body::-webkit-scrollbar,
-		*::-webkit-scrollbar {
-			display: none;
-		}
+	/* Hide scrollbars globally */
+	html,
+	body,
+	* {
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+	html::-webkit-scrollbar,
+	body::-webkit-scrollbar,
+	*::-webkit-scrollbar {
+		display: none;
 	}
 }
 
