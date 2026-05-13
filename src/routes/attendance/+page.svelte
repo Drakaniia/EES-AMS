@@ -387,7 +387,7 @@
 								<div>
 									<div class="group-hover:text-primary font-bold transition-colors">{s.name}</div>
 									<div class="label-mono text-xs opacity-60">
-										Room {s.room} · {s.dayStart} – {s.dayEnd}
+										{s.room ? `Room ${s.room} · ` : ''}{s.dayStart} – {s.dayEnd}
 									</div>
 								</div>
 								<svg

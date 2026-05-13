@@ -724,7 +724,7 @@
 					<input
 						id="field-card"
 						bind:value={formCardSerial}
-						placeholder="e.g. 04:a3:b1:..."
+						placeholder=""
 						class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 font-mono text-sm focus:ring-2 focus:outline-none"
 					/>
 				</div>

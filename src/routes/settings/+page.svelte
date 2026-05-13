@@ -104,7 +104,7 @@
 	function openEditClass(c: Class) {
 		editingClass = c;
 		formClassName = c.name;
-		formRoom = c.room;
+		formRoom = c.room ?? '';
 		formDayStart = c.dayStart;
 		formDayEnd = c.dayEnd;
 		formLateAfter = c.lateAfter;
@@ -119,7 +119,7 @@
 		const c: Class = {
 			id: editingClass?.id ?? '',
 			name,
-			room: formRoom,
+			room: formRoom.trim() || undefined,
 			dayStart: formDayStart,
 			dayEnd: formDayEnd,
 			lateAfter: formLateAfter,
@@ -249,7 +249,9 @@
 									<div class="space-y-1">
 										<div class="font-medium">{c.name}</div>
 										<div class="text-muted-foreground label-mono flex gap-4 text-xs">
-											<span>Room {c.room}</span>
+											{#if c.room}
+												<span>Room {c.room}</span>
+											{/if}
 											<span>{c.dayStart} – {c.dayEnd}</span>
 											<span class="text-accent">Late after {c.lateAfter}</span>
 										</div>
@@ -434,18 +436,17 @@
 				<input
 					id="className"
 					bind:value={formClassName}
-					placeholder="e.g. Grade 6 - Apple"
+					placeholder=""
 					required
 					class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
 				/>
 			</div>
 			<div class="space-y-1.5">
-				<label for="room" class="label-mono">Room</label>
+				<label for="room" class="label-mono">Room <span class="text-muted-foreground font-normal">(optional)</span></label>
 				<input
 					id="room"
 					bind:value={formRoom}
-					placeholder="e.g. 101"
-					required
+					placeholder=" "
 					class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
 				/>
 			</div>

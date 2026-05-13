@@ -135,7 +135,7 @@
 
 	const dynamicDescription = $derived(() => {
 		if (activeClass) {
-			return `Room ${activeClass.room} • ${activeClass.dayStart} – ${activeClass.dayEnd} • Session ${manualActiveClassId ? 'primed' : 'in progress'}`;
+			return `${activeClass.room ? `Room ${activeClass.room} • ` : ''}${activeClass.dayStart} – ${activeClass.dayEnd} • Session ${manualActiveClassId ? 'primed' : 'in progress'}`;
 		}
 		if (nextClass) {
 			return `Welcome back. Your next session, ${nextClass.cls.name}, begins in ${nextClass.minutes} minutes.`;
@@ -340,7 +340,7 @@
 			{:else if !activeClass && nextClass}
 				<div class="flex flex-1 flex-col">
 					<div class="text-muted-foreground mb-4 text-sm">
-						Preparing for <strong>{nextClass.cls.name}</strong> (Room {nextClass.cls.room}) at {nextClass
+						Preparing for <strong>{nextClass.cls.name}</strong>{nextClass.cls.room ? ` (Room ${nextClass.cls.room})` : ''} at {nextClass
 							.cls.dayStart}
 					</div>
 					{#if nextClassStudents.length === 0}

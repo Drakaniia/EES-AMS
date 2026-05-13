@@ -654,10 +654,11 @@ impl ClassRepository {
 
         let classes = stmt
             .query_map([], |row| {
+                let room: Option<String> = row.get(2)?;
                 Ok(Class {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    room: row.get(2)?,
+                    room: room.filter(|r| !r.is_empty()),
                     day_start: row.get(3)?,
                     day_end: row.get(4)?,
                     late_after: row.get(5)?,
@@ -681,10 +682,11 @@ impl ClassRepository {
                  WHERE id = ?1",
                 params![id],
                 |row| {
+                    let room: Option<String> = row.get(2)?;
                     Ok(Class {
                         id: row.get(0)?,
                         name: row.get(1)?,
-                        room: row.get(2)?,
+                        room: room.filter(|r| !r.is_empty()),
                         day_start: row.get(3)?,
                         day_end: row.get(4)?,
                         late_after: row.get(5)?,
@@ -701,10 +703,11 @@ impl ClassRepository {
 
     /// Create a new class
     pub fn create(&self, req: CreateClassRequest) -> Result<Class> {
+        let room = req.room.filter(|r| !r.trim().is_empty());
         let class = Class {
             id: uuid::Uuid::new_v4().to_string(),
             name: req.name,
-            room: req.room,
+            room,
             day_start: req.day_start,
             day_end: req.day_end,
             late_after: req.late_after,
@@ -739,7 +742,8 @@ impl ClassRepository {
             class.name = name;
         }
         if let Some(room) = req.room {
-            class.room = room;
+            // Empty string clears the room
+            class.room = if room.trim().is_empty() { None } else { Some(room) };
         }
         if let Some(day_start) = req.day_start {
             class.day_start = day_start;
