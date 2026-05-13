@@ -163,7 +163,7 @@
 		const encodedUri = encodeURI(csvContent);
 		const link = document.createElement('a');
 		link.setAttribute('href', encodedUri);
-		link.setAttribute('download', 'students_roster.csv');
+		link.setAttribute('download', 'class_list.csv');
 		document.body.appendChild(link);
 		link.click();
 		document.body.removeChild(link);
@@ -359,7 +359,7 @@
 	<div class="flex h-full flex-col overflow-hidden">
 		<PageHeader
 			category="Students"
-			title="Student Roster"
+			title="Class List"
 			description="Manage your student list and their NFC identification cards."
 		>
 			{#snippet actions()}
@@ -480,7 +480,7 @@
 			</div>
 		</section>
 
-		<!-- Student roster -->
+		<!-- Class List -->
 		<section class="min-h-0 flex-1 px-6 pb-20 md:px-12" bind:clientHeight={availableHeight}>
 			{#if students.length === 0}
 				{@render emptyState()}
