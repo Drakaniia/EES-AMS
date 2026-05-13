@@ -29,7 +29,9 @@
 	"plugins": {
 		"updater": {
 			"active": true,
-			"endpoints": ["https://api.github.com/repos/Drakaniia/EES-AMS/releases/latest"],
+			"endpoints": [
+				"https://github.com/Drakaniia/EES-AMS/releases/latest/download/latest.json"
+			],
 			"dialog": false,
 			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU5QjE4QjZGMEU3NjU4QzQKUldSWkVWbE0vVVNITjJQK3JwV3ZVY3FQb1pqa3dQcEJQV0JqYVVRQ0pJd2EvUjJGQlJkQ2cK"
 		}

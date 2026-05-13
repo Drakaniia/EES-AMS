@@ -5,11 +5,14 @@ mod infrastructure;
 use commands::{
     add_event,
     check_nfc_reader,
+    // Updater commands
+    check_for_updates,
     create_class,
     create_student,
     delete_class,
     delete_event,
     delete_student,
+    download_and_install,
     // Export/Import commands
     export_all,
     export_csv_with_folder,
@@ -77,6 +80,9 @@ pub fn run() {
             export_csv_with_folder,
             import_all,
             wipe_all,
+            // Updater commands
+            check_for_updates,
+            download_and_install,
         ])
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
