@@ -148,9 +148,11 @@
 		overflow: hidden;
 		width: 100vw;
 		max-width: 100vw;
+		min-width: 1500px;
 		position: fixed;
 		height: 100vh;
 		max-height: 100vh;
+		min-height: 900px;
 	}
 
 	/* Hide scrollbars globally */
