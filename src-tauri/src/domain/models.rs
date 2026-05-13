@@ -72,6 +72,7 @@ pub enum AttendanceType {
 pub struct Class {
     pub id: String,
     pub name: String,
+    pub room: String,
     pub day_start: String,
     pub day_end: String,
     pub late_after: String,
@@ -145,6 +146,7 @@ pub struct UpdateStudentRequest {
 #[serde(rename_all = "camelCase")]
 pub struct CreateClassRequest {
     pub name: String,
+    pub room: String,
     pub day_start: String,
     pub day_end: String,
     pub late_after: String,
@@ -156,6 +158,8 @@ pub struct CreateClassRequest {
 pub struct UpdateClassRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub room: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub day_start: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

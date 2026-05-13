@@ -296,7 +296,9 @@
 		{/snippet}
 	</PageHeader>
 
-	<section class="grid gap-8 px-6 py-10 md:px-12 lg:grid-cols-[1.2fr_1fr] min-h-[calc(100vh-28rem)]">
+	<section
+		class="grid min-h-[calc(100vh-28rem)] gap-8 px-6 py-10 md:px-12 lg:grid-cols-[1.2fr_1fr]"
+	>
 		<div
 			class="border-border bg-surface relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-3xl border p-10
 				{scanning ? 'ring-primary/40 ring-2' : ''}"
@@ -350,8 +352,8 @@
 			</div>
 		</div>
 
-		<div class="border-border bg-card flex flex-col rounded-2xl border p-6 h-full">
-			<div class="mb-4 flex items-baseline justify-between shrink-0">
+		<div class="border-border bg-card flex h-full flex-col rounded-2xl border p-6">
+			<div class="mb-4 flex shrink-0 items-baseline justify-between">
 				<h3 class="text-lg font-medium">Session log</h3>
 				<span class="label-mono">Latest activity</span>
 			</div>
@@ -359,7 +361,7 @@
 			<div class="flex-1 overflow-y-auto">
 				{#if log.length === 0}
 					<div
-						class="text-muted-foreground border-border rounded-xl border border-dashed p-4 text-center text-sm h-full flex flex-col items-center justify-center w-full"
+						class="text-muted-foreground border-border flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed p-4 text-center text-sm"
 					>
 						No activity recorded in this session.
 					</div>

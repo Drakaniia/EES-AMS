@@ -32,7 +32,12 @@
 	// Last event per student today — determine who's currently checked in
 	const checkedIn = $derived.by(() => {
 		const lastByStudent = new SvelteMap<string, AttendanceEvent>();
-		for (const e of [...todayEvents].sort((a, b) => {
+		// Filter events to only include those from today and optionally for the active class
+		const relevantEvents = activeClass
+			? todayEvents.filter((e) => e.classId === activeClass.id)
+			: todayEvents;
+
+		for (const e of [...relevantEvents].sort((a, b) => {
 			const aTime = typeof a.timestamp === 'string' ? new Date(a.timestamp).getTime() : a.timestamp;
 			const bTime = typeof b.timestamp === 'string' ? new Date(b.timestamp).getTime() : b.timestamp;
 			return aTime - bTime;
@@ -43,11 +48,6 @@
 	});
 
 	// ── Utility Functions ────────────────────────────────────────────────────────
-
-	function getTimeOfDay(): 'Morning' | 'Afternoon' {
-		const hour = new Date().getHours();
-		return hour < 12 ? 'Morning' : 'Afternoon';
-	}
 
 	function getActiveClass(): Class | null {
 		const now = new Date();
@@ -66,22 +66,54 @@
 		return null;
 	}
 
-	// ── Dynamic Title Logic ────────────────────────────────────────────────────
+	function getNextClass(): { cls: Class; minutes: number } | null {
+		const now = new Date();
+		const currentTime = now.getHours() * 60 + now.getMinutes();
+
+		let next: { cls: Class; minutes: number } | null = null;
+
+		for (const cls of classes) {
+			const [startHour, startMin] = cls.dayStart.split(':').map(Number);
+			const startTime = startHour * 60 + startMin;
+
+			if (startTime > currentTime) {
+				const diff = startTime - currentTime;
+				if (!next || diff < next.minutes) {
+					next = { cls, minutes: diff };
+				}
+			}
+		}
+		return next;
+	}
+
+	// ── Dynamic Logic ──────────────────────────────────────────────────────────
 
 	const activeClass = $derived(getActiveClass());
-	const timeOfDay = $derived(getTimeOfDay());
+	const nextClass = $derived(getNextClass());
+
+	const activeClassStudents = $derived(
+		activeClass ? students.filter((s) => s.classId === activeClass.id) : students
+	);
+
+	const nextClassStudents = $derived(
+		nextClass ? students.filter((s) => s.classId === nextClass.cls.id) : []
+	);
+
 	const dynamicTitle = $derived(() => {
 		if (activeClass) {
-			return `${timeOfDay} ${activeClass.name} Attendance`;
+			return `Currently Teaching: ${activeClass.name}`;
 		}
-		return 'Attendance Overview';
+		return 'Dashboard';
 	});
 
 	const dynamicDescription = $derived(() => {
 		if (activeClass) {
-			return `Ready to record attendance for ${timeOfDay.toLowerCase()} ${activeClass.name} (${activeClass.dayStart} – ${activeClass.dayEnd})`;
+			return `Room ${activeClass.room} • ${activeClass.dayStart} – ${activeClass.dayEnd} • Session in progress`;
 		}
-		return "A simple overview of today's attendance. Monitor real-time logs and manage student check-ins.";
+		if (nextClass) {
+			return `Welcome back. Your next session, ${nextClass.cls.name}, begins in ${nextClass.minutes} minutes.`;
+		}
+		return 'No active sessions at the moment. Use this time to prepare or view your schedule.';
 	});
 </script>
 
@@ -92,7 +124,7 @@
 
 <AppShell>
 	<PageHeader
-		category="Attendance Overview"
+		category={activeClass ? 'Live' : 'Dashboard'}
 		title={dynamicTitle()}
 		description={dynamicDescription()}
 	>
@@ -130,6 +162,14 @@
 				}}
 				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
 			>
+				{#if activeClass}
+					<span class="relative flex h-2 w-2">
+						<span
+							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"
+						></span>
+						<span class="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
+					</span>
+				{/if}
 				<svg
 					class="size-4"
 					viewBox="0 0 24 24"
@@ -146,33 +186,64 @@
 					<path d="M7 21H5a2 2 0 0 1-2-2v-2" />
 					<line x1="7" y1="12" x2="17" y2="12" />
 				</svg>
-				Open Tap Mode
+				Start Attendance
 			</a>
 		{/snippet}
 	</PageHeader>
 
 	<!-- Stats row -->
 	<section class="grid gap-4 px-6 py-10 sm:grid-cols-2 md:px-12 lg:grid-cols-3">
-		{@render statCard('Students enrolled', students.length)}
-		{@render statCard('Logged today', todayEvents.length, true)}
+		{@render statCard('Class Size', activeClassStudents.length)}
+		{@render statCard('Total Attendance', todayEvents.length, true)}
 		{@render statCard('Currently checked in', checkedIn.length)}
 	</section>
 
 	<!-- Panels -->
-	<section class="grid gap-8 px-6 pb-16 md:px-12 lg:grid-cols-2 min-h-[calc(100vh-32rem)]">
+	<section class="grid min-h-[calc(100vh-32rem)] gap-8 px-6 pb-16 md:px-12 lg:grid-cols-2">
 		<!-- Currently in the room -->
-		<div class="border-border bg-card rounded-2xl border p-6 flex flex-col h-full">
-			<div class="mb-4 flex items-baseline justify-between flex-shrink-0">
-				<h3 class="text-lg font-medium">Currently in the room</h3>
-				<span class="label-mono">Last tap registered as check-in</span>
+		<div class="border-border bg-card flex h-full flex-col rounded-2xl border p-6">
+			<div class="mb-4 flex flex-shrink-0 items-baseline justify-between">
+				<h3 class="text-lg font-medium">
+					{activeClass ? 'Currently in the room' : 'Next Session Roster'}
+				</h3>
+				<span class="label-mono">
+					{activeClass ? 'Last tap registered as check-in' : `${nextClassStudents.length} Students`}
+				</span>
 			</div>
 
-			{#if checkedIn.length === 0}
-				<div class="flex-1 flex items-center justify-center">
-					{@render emptyState('No one is checked in yet. Open Tap Mode to begin.')}
+			{#if activeClass && checkedIn.length === 0}
+				<div class="flex flex-1 items-center justify-center">
+					{@render emptyState('No one is checked in yet. Start attendance to begin.')}
+				</div>
+			{:else if !activeClass && nextClass}
+				<div class="flex flex-1 flex-col">
+					<div class="text-muted-foreground mb-4 text-sm">
+						Preparing for <strong>{nextClass.cls.name}</strong> (Room {nextClass.cls.room}) at {nextClass
+							.cls.dayStart}
+					</div>
+					{#if nextClassStudents.length === 0}
+						<div class="flex flex-1 items-center justify-center">
+							{@render emptyState('No students enrolled in the next class.', true)}
+						</div>
+					{:else}
+						<ul class="divide-border flex-1 divide-y overflow-y-auto">
+							{#each nextClassStudents as s (s.id)}
+								<li class="flex items-center justify-between py-3">
+									<div>
+										<div class="font-medium">{s.name}</div>
+										<div class="label-mono">#{s.studentNumber}</div>
+									</div>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			{:else if checkedIn.length === 0}
+				<div class="flex flex-1 items-center justify-center">
+					{@render emptyState('No active sessions at the moment.', true)}
 				</div>
 			{:else}
-				<ul class="divide-border divide-y flex-1 overflow-y-auto">
+				<ul class="divide-border flex-1 divide-y overflow-y-auto">
 					{#each checkedIn as e (e.id)}
 						{@const s = studentMap.get(e.studentId)}
 						<li class="flex items-center justify-between py-3">
@@ -188,18 +259,18 @@
 		</div>
 
 		<!-- Recent activity -->
-		<div class="border-border bg-card rounded-2xl border p-6 flex flex-col h-full">
-			<div class="mb-4 flex items-baseline justify-between flex-shrink-0">
+		<div class="border-border bg-card flex h-full flex-col rounded-2xl border p-6">
+			<div class="mb-4 flex flex-shrink-0 items-baseline justify-between">
 				<h3 class="text-lg font-medium">Recent activity</h3>
 				<span class="label-mono">Last 8 events</span>
 			</div>
 
 			{#if events.length === 0}
-				<div class="flex-1 flex items-center justify-center">
+				<div class="flex flex-1 items-center justify-center">
 					{@render emptyState('No events yet.')}
 				</div>
 			{:else}
-				<ul class="divide-border divide-y flex-1 overflow-y-auto">
+				<ul class="divide-border flex-1 divide-y overflow-y-auto">
 					{#each events.slice(0, 8) as e (e.id)}
 						{@const s = studentMap.get(e.studentId)}
 						<li class="flex items-center justify-between py-3">
@@ -259,26 +330,40 @@
 	</div>
 {/snippet}
 
-{#snippet emptyState(text: string)}
+{#snippet emptyState(text: string, showScheduleAction = false)}
 	<div
-		class="text-muted-foreground border-border rounded-xl border border-dashed p-4 text-center text-sm h-full flex flex-col items-center justify-center w-full"
+		class="text-muted-foreground border-border flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed p-8 text-center text-sm"
 	>
-		<svg
-			class="mx-auto mb-2 size-5 opacity-60"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-			<polyline points="14 2 14 8 20 8" />
-			<line x1="16" y1="13" x2="8" y2="13" />
-			<line x1="16" y1="17" x2="8" y2="17" />
-			<polyline points="10 9 9 9 8 9" />
-		</svg>
-		{text}
+		<div class="bg-surface mb-4 rounded-full p-3">
+			<svg
+				class="size-6 opacity-60"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+				<polyline points="14 2 14 8 20 8" />
+				<line x1="16" y1="13" x2="8" y2="13" />
+				<line x1="16" y1="17" x2="8" y2="17" />
+				<polyline points="10 9 9 9 8 9" />
+			</svg>
+		</div>
+		<p class="mb-6 max-w-[200px]">{text}</p>
+		{#if showScheduleAction}
+			<a
+				href={resolve('/settings')}
+				onclick={(e) => {
+					e.preventDefault();
+					goto(resolve('/settings'));
+				}}
+				class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-xs font-medium transition-colors"
+			>
+				View full schedule
+			</a>
+		{/if}
 	</div>
 {/snippet}

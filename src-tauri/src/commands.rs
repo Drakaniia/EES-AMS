@@ -339,6 +339,7 @@ pub fn import_all(
     for class in payload.classes {
         let req = CreateClassRequest {
             name: class.name,
+            room: class.room,
             day_start: class.day_start,
             day_end: class.day_end,
             late_after: class.late_after,
@@ -502,7 +503,7 @@ pub async fn export_csv_with_folder(
     let mut csv_content = String::new();
 
     // Header
-    csv_content.push_str("Date,Class,Student #,Name,Check-in,Check-out,Hours,Late\n");
+    csv_content.push_str("Date,Class,Room,Student #,Name,Check-in,Check-out,Hours,Late\n");
 
     // Group events by student and date
     use std::collections::HashMap;
@@ -592,15 +593,23 @@ pub async fn export_csv_with_folder(
             .map(|c| c.name.as_str())
             .unwrap_or("Unknown");
 
+        let room_name = student
+            .class_id
+            .as_ref()
+            .and_then(|id| class_map.get(id))
+            .map(|c| c.room.as_str())
+            .unwrap_or("N/A");
+
         let date = events
             .first()
             .map(|e| e.timestamp.format("%Y-%m-%d").to_string())
             .unwrap_or_default();
 
         csv_content.push_str(&format!(
-            "{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{}\n",
             date,
             class_name,
+            room_name,
             student.student_number,
             student.name,
             check_in_time.unwrap_or_default(),

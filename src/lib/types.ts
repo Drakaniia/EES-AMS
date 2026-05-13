@@ -12,6 +12,7 @@ export interface Student {
 export interface Class {
 	id: string;
 	name: string;
+	room: string;
 	dayStart: string;
 	dayEnd: string;
 	lateAfter: string;
@@ -52,6 +53,7 @@ export interface UpdateStudentRequest {
 
 export interface CreateClassRequest {
 	name: string;
+	room: string;
 	dayStart: string;
 	dayEnd: string;
 	lateAfter: string;
@@ -59,6 +61,7 @@ export interface CreateClassRequest {
 
 export interface UpdateClassRequest {
 	name?: string;
+	room?: string;
 	dayStart?: string;
 	dayEnd?: string;
 	lateAfter?: string;
