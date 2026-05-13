@@ -15,6 +15,8 @@
 				"title": "",
 				"width": 1500,
 				"height": 900,
+				"minWidth": 1500,
+				"minHeight": 900,
 				"resizable": true,
 				"fullscreen": false,
 				"decorations": false
