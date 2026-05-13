@@ -30,6 +30,7 @@
 	let classDialogOpen = $state(false);
 	let editingClass = $state<Class | null>(null);
 	let formClassName = $state('');
+	let formRoom = $state('');
 	let formDayStart = $state('');
 	let formDayEnd = $state('');
 	let formLateAfter = $state('');
@@ -93,6 +94,7 @@
 	function openAddClass() {
 		editingClass = null;
 		formClassName = '';
+		formRoom = '';
 		formDayStart = defaultDayStart;
 		formDayEnd = defaultDayEnd;
 		formLateAfter = defaultLateAfter;
@@ -102,6 +104,7 @@
 	function openEditClass(c: Class) {
 		editingClass = c;
 		formClassName = c.name;
+		formRoom = c.room;
 		formDayStart = c.dayStart;
 		formDayEnd = c.dayEnd;
 		formLateAfter = c.lateAfter;
@@ -116,6 +119,7 @@
 		const c: Class = {
 			id: editingClass?.id ?? '',
 			name,
+			room: formRoom,
 			dayStart: formDayStart,
 			dayEnd: formDayEnd,
 			lateAfter: formLateAfter,
@@ -245,6 +249,7 @@
 									<div class="space-y-1">
 										<div class="font-medium">{c.name}</div>
 										<div class="text-muted-foreground label-mono flex gap-4 text-xs">
+											<span>Room {c.room}</span>
 											<span>{c.dayStart} – {c.dayEnd}</span>
 											<span class="text-accent">Late after {c.lateAfter}</span>
 										</div>
@@ -423,15 +428,27 @@
 	on:close={() => (classDialogOpen = false)}
 >
 	<form onsubmit={onSaveClass} class="space-y-4">
-		<div class="space-y-1.5">
-			<label for="className" class="label-mono">Class Name</label>
-			<input
-				id="className"
-				bind:value={formClassName}
-				placeholder="e.g. Grade 6 - Apple"
-				required
-				class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
-			/>
+		<div class="grid grid-cols-2 gap-4">
+			<div class="space-y-1.5">
+				<label for="className" class="label-mono">Class Name</label>
+				<input
+					id="className"
+					bind:value={formClassName}
+					placeholder="e.g. Grade 6 - Apple"
+					required
+					class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<label for="room" class="label-mono">Room</label>
+				<input
+					id="room"
+					bind:value={formRoom}
+					placeholder="e.g. 101"
+					required
+					class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+				/>
+			</div>
 		</div>
 
 		<div class="grid grid-cols-3 gap-4">

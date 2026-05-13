@@ -149,8 +149,4 @@
 		background: var(--color-destructive);
 		color: var(--color-destructive-foreground);
 	}
-
-	.window-control svg {
-		pointer-events: none;
-	}
 </style>

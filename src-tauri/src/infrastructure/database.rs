@@ -30,6 +30,11 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
         conn.execute("PRAGMA user_version = 1", [])?;
     }
 
+    if user_version < 2 {
+        migrate_to_v2(&conn)?;
+        conn.execute("PRAGMA user_version = 2", [])?;
+    }
+
     Ok(pool)
 }
 
@@ -185,6 +190,27 @@ fn migrate_to_v1(conn: &rusqlite::Connection) -> Result<()> {
         )?;
     }
 
+    Ok(())
+}
+
+/// Migrate database to version 2 (add room to classes)
+fn migrate_to_v2(conn: &rusqlite::Connection) -> Result<()> {
+    // Check if room column exists
+    let has_room: bool = conn
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('classes') WHERE name='room'",
+            [],
+            |row| row.get::<_, i32>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !has_room {
+        conn.execute(
+            "ALTER TABLE classes ADD COLUMN room TEXT NOT NULL DEFAULT 'N/A'",
+            [],
+        )?;
+    }
     Ok(())
 }
 
@@ -621,7 +647,7 @@ impl ClassRepository {
     pub fn list(&self) -> Result<Vec<Class>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(
-            "SELECT id, name, day_start, day_end, late_after, created_at 
+            "SELECT id, name, room, day_start, day_end, late_after, created_at 
              FROM classes 
              ORDER BY name ASC",
         )?;
@@ -631,10 +657,11 @@ impl ClassRepository {
                 Ok(Class {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    day_start: row.get(2)?,
-                    day_end: row.get(3)?,
-                    late_after: row.get(4)?,
-                    created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
+                    room: row.get(2)?,
+                    day_start: row.get(3)?,
+                    day_end: row.get(4)?,
+                    late_after: row.get(5)?,
+                    created_at: DateTime::from_timestamp(row.get::<_, i64>(6)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
                 })
@@ -649,7 +676,7 @@ impl ClassRepository {
         let conn = self.pool.get()?;
         let class = conn
             .query_row(
-                "SELECT id, name, day_start, day_end, late_after, created_at 
+                "SELECT id, name, room, day_start, day_end, late_after, created_at 
                  FROM classes 
                  WHERE id = ?1",
                 params![id],
@@ -657,10 +684,11 @@ impl ClassRepository {
                     Ok(Class {
                         id: row.get(0)?,
                         name: row.get(1)?,
-                        day_start: row.get(2)?,
-                        day_end: row.get(3)?,
-                        late_after: row.get(4)?,
-                        created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
+                        room: row.get(2)?,
+                        day_start: row.get(3)?,
+                        day_end: row.get(4)?,
+                        late_after: row.get(5)?,
+                        created_at: DateTime::from_timestamp(row.get::<_, i64>(6)?, 0)
                             .unwrap()
                             .with_timezone(&Utc),
                     })
@@ -676,6 +704,7 @@ impl ClassRepository {
         let class = Class {
             id: uuid::Uuid::new_v4().to_string(),
             name: req.name,
+            room: req.room,
             day_start: req.day_start,
             day_end: req.day_end,
             late_after: req.late_after,
@@ -684,11 +713,12 @@ impl ClassRepository {
 
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT INTO classes (id, name, day_start, day_end, late_after, created_at) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO classes (id, name, room, day_start, day_end, late_after, created_at) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 class.id,
                 class.name,
+                class.room,
                 class.day_start,
                 class.day_end,
                 class.late_after,
@@ -708,6 +738,9 @@ impl ClassRepository {
         if let Some(name) = req.name {
             class.name = name;
         }
+        if let Some(room) = req.room {
+            class.room = room;
+        }
         if let Some(day_start) = req.day_start {
             class.day_start = day_start;
         }
@@ -721,10 +754,11 @@ impl ClassRepository {
         let conn = self.pool.get()?;
         conn.execute(
             "UPDATE classes 
-             SET name = ?1, day_start = ?2, day_end = ?3, late_after = ?4 
-             WHERE id = ?5",
+             SET name = ?1, room = ?2, day_start = ?3, day_end = ?4, late_after = ?5 
+             WHERE id = ?6",
             params![
                 class.name,
+                class.room,
                 class.day_start,
                 class.day_end,
                 class.late_after,

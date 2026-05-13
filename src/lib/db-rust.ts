@@ -49,6 +49,7 @@ export async function listClasses(): Promise<Class[]> {
 	const backendClasses = (await invoke('list_classes')) as Array<{
 		id: string;
 		name: string;
+		room: string;
 		dayStart: string;
 		dayEnd: string;
 		lateAfter: string;
@@ -58,6 +59,7 @@ export async function listClasses(): Promise<Class[]> {
 	return backendClasses.map((cls) => ({
 		id: cls.id,
 		name: cls.name,
+		room: cls.room,
 		dayStart: cls.dayStart,
 		dayEnd: cls.dayEnd,
 		lateAfter: cls.lateAfter,
@@ -70,6 +72,7 @@ export async function getClass(id: string): Promise<Class | undefined> {
 		| {
 				id: string;
 				name: string;
+				room: string;
 				dayStart: string;
 				dayEnd: string;
 				lateAfter: string;
@@ -83,6 +86,7 @@ export async function getClass(id: string): Promise<Class | undefined> {
 	return {
 		id: backendClass.id,
 		name: backendClass.name,
+		room: backendClass.room,
 		dayStart: backendClass.dayStart,
 		dayEnd: backendClass.dayEnd,
 		lateAfter: backendClass.lateAfter,
@@ -94,6 +98,7 @@ export async function saveClass(classData: Class, isUpdate: boolean = false): Pr
 	let backendClass: {
 		id: string;
 		name: string;
+		room: string;
 		dayStart: string;
 		dayEnd: string;
 		lateAfter: string;
@@ -106,6 +111,7 @@ export async function saveClass(classData: Class, isUpdate: boolean = false): Pr
 			id: classData.id,
 			req: {
 				name: classData.name,
+				room: classData.room,
 				dayStart: classData.dayStart,
 				dayEnd: classData.dayEnd,
 				lateAfter: classData.lateAfter
@@ -116,6 +122,7 @@ export async function saveClass(classData: Class, isUpdate: boolean = false): Pr
 		backendClass = await invoke('create_class', {
 			req: {
 				name: classData.name,
+				room: classData.room,
 				dayStart: classData.dayStart,
 				dayEnd: classData.dayEnd,
 				lateAfter: classData.lateAfter
@@ -127,6 +134,7 @@ export async function saveClass(classData: Class, isUpdate: boolean = false): Pr
 	return {
 		id: backendClass.id,
 		name: backendClass.name,
+		room: backendClass.room,
 		dayStart: backendClass.dayStart,
 		dayEnd: backendClass.dayEnd,
 		lateAfter: backendClass.lateAfter,
