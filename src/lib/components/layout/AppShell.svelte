@@ -15,7 +15,7 @@
 		{
 			title: 'Management',
 			items: [
-				{ href: '/students', label: 'Student Roster', icon: 'users' },
+				{ href: '/students', label: 'Class List', icon: 'users' },
 				{ href: '/records', label: 'Attendance Logs', icon: 'file-text' }
 			]
 		},

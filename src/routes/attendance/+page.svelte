@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
@@ -64,6 +65,22 @@
 				supportedLoading = false;
 			}
 			await reload();
+
+			// Handle classId from URL or auto-detect
+			const classIdFromUrl = page.url.searchParams.get('classId');
+			if (classIdFromUrl) {
+				selectedClassId = classIdFromUrl;
+			} else {
+				const active = getActiveClass();
+				if (active) {
+					selectedClassId = active.id;
+				}
+			}
+
+			// Handle manual parameter
+			if (page.url.searchParams.get('manual') === 'true') {
+				pickerOpen = true;
+			}
 		})();
 
 		return () => {
@@ -76,9 +93,10 @@
 		const [s, c] = await Promise.all([listStudents(), listClasses()]);
 		students = s;
 		classes = c;
-		// Auto-select first class if none selected
+		// Auto-select first class if none selected and no active class found later
 		if (!selectedClassId && c.length > 0) {
-			selectedClassId = c[0].id;
+			const active = getActiveClass();
+			selectedClassId = active?.id || c[0].id;
 		}
 	}
 
@@ -94,6 +112,23 @@
 	);
 
 	let currentClass = $derived(classes.find((c) => c.id === selectedClassId));
+
+	let remainingSessions = $derived.by(() => {
+		const now = new Date();
+		const currentTime = now.getHours() * 60 + now.getMinutes();
+
+		return classes
+			.filter((cls) => {
+				const [startHour, startMin] = cls.dayStart.split(':').map(Number);
+				const startTime = startHour * 60 + startMin;
+				return startTime >= currentTime;
+			})
+			.sort((a, b) => {
+				const [aH, aM] = a.dayStart.split(':').map(Number);
+				const [bH, bM] = b.dayStart.split(':').map(Number);
+				return aH * 60 + aM - (bH * 60 + bM);
+			});
+	});
 
 	// ── Utility Functions ────────────────────────────────────────────────────────
 
@@ -117,6 +152,28 @@
 			}
 		}
 		return null;
+	}
+
+	function endSession() {
+		if (!selectedClassId) {
+			import('$app/navigation').then((n) => n.goto('/'));
+			return;
+		}
+
+		const classObj = classes.find((c) => c.id === selectedClassId);
+		const classStudents = students.filter((s) => s.classId === selectedClassId);
+		const total = classStudents.length;
+
+		// Count unique students who checked in during this log session
+		const presentCount = new Set(log.filter((l) => l.type === 'in').map((l) => l.studentNumber))
+			.size;
+		const summary = `${presentCount}/${total} students present`;
+
+		import('$app/navigation').then((n) =>
+			n.goto(
+				`/?sessionEnd=true&summary=${encodeURIComponent(summary)}&className=${encodeURIComponent(classObj?.name || '')}`
+			)
+		);
 	}
 
 	// ── Dynamic Title Logic ────────────────────────────────────────────────────
@@ -292,6 +349,13 @@
 						Start
 					</button>
 				{/if}
+
+				<button
+					onclick={endSession}
+					class="rounded-pill border-border bg-background hover:bg-surface inline-flex h-10 items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+				>
+					End Session
+				</button>
 			</div>
 		{/snippet}
 	</PageHeader>
@@ -309,53 +373,106 @@
 				style="background: radial-gradient(60% 60% at 50% 40%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 70%)"
 			></div>
 
-			<div class="relative text-center">
-				<div class="label-mono mb-4">
-					{#if scanning}
-						<span class="text-primary animate-pulse">●</span> Listening for taps
-					{:else}
-						Scanner idle
-					{/if}
-				</div>
+			{#if !selectedClassId}
+				<div class="relative w-full max-w-md text-center">
+					<h3 class="display-lg mb-2">Which class are you starting?</h3>
+					<p class="text-muted-foreground mb-8">Select a class to begin recording attendance.</p>
 
-				<div
-					class="mx-auto grid size-40 place-items-center rounded-full border-2
+					<div class="grid gap-3 text-left">
+						{#each remainingSessions as s (s.id)}
+							<button
+								onclick={() => (selectedClassId = s.id)}
+								class="border-border bg-background hover:border-primary/50 hover:bg-primary/5 group flex items-center justify-between rounded-2xl border p-4 transition-all"
+							>
+								<div>
+									<div class="group-hover:text-primary font-bold transition-colors">{s.name}</div>
+									<div class="label-mono text-xs opacity-60">
+										Room {s.room} · {s.dayStart} – {s.dayEnd}
+									</div>
+								</div>
+								<svg
+									class="text-muted-foreground group-hover:text-primary size-5 transition-all group-hover:translate-x-1"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
+								</svg>
+							</button>
+						{/each}
+
+						{#if remainingSessions.length === 0}
+							<div
+								class="border-border text-muted-foreground rounded-2xl border border-dashed py-8 text-center italic"
+							>
+								No more sessions scheduled for today.
+							</div>
+						{/if}
+					</div>
+				</div>
+			{:else}
+				<div class="relative text-center">
+					<div class="label-mono mb-4">
+						{#if scanning}
+							<span class="text-primary animate-pulse">●</span> Listening for taps
+						{:else}
+							Scanner idle
+						{/if}
+					</div>
+
+					<div
+						class="mx-auto grid size-40 place-items-center rounded-full border-2
 						{scanning ? 'border-primary animate-pulse shadow-[0_0_30px_-5px_var(--primary)]' : 'border-border'}"
-				>
-					<svg
-						class="size-16 {scanning ? 'text-primary' : 'text-muted-foreground'}"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
 					>
-						<path d="M3 7V5a2 2 0 0 1 2-2h2" />
-						<path d="M17 3h2a2 2 0 0 1 2 2v2" />
-						<path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-						<path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-						<line x1="7" y1="12" x2="17" y2="12" />
-					</svg>
-				</div>
+						<svg
+							class="size-16 {scanning ? 'text-primary' : 'text-muted-foreground'}"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M3 7V5a2 2 0 0 1 2-2h2" />
+							<path d="M17 3h2a2 2 0 0 1 2 2v2" />
+							<path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+							<path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+							<line x1="7" y1="12" x2="17" y2="12" />
+						</svg>
+					</div>
 
-				<h3 class="display-lg mt-8">{scanning ? 'Tap a card' : 'Press start'}</h3>
-				<p class="text-muted-foreground mx-auto mt-2 max-w-md">
-					{#if supportedLoading}
-						Checking hardware…
-					{:else if supported === 'connected'}
-						USB NFC Card Reader detected. Keep the device awake.
-					{:else}
-						NFC Card Reader not found. Use manual log or check connection.
-					{/if}
-				</p>
-			</div>
+					<h3 class="display-lg mt-8">{scanning ? 'Tap a card' : 'Press start'}</h3>
+					<p class="text-muted-foreground mx-auto mt-2 max-w-md">
+						{#if supportedLoading}
+							Checking hardware…
+						{:else if supported === 'connected'}
+							USB NFC Card Reader detected. Keep the device awake.
+						{:else}
+							NFC Card Reader not found. Use manual log or check connection.
+						{/if}
+					</p>
+				</div>
+			{/if}
 		</div>
 
 		<div class="border-border bg-card flex h-full flex-col rounded-2xl border p-6">
 			<div class="mb-4 flex shrink-0 items-baseline justify-between">
-				<h3 class="text-lg font-medium">Session log</h3>
-				<span class="label-mono">Latest activity</span>
+				<div class="flex flex-col">
+					<h3 class="text-lg font-medium">Session log</h3>
+					<span class="label-mono text-xs opacity-60">Latest activity</span>
+				</div>
+				<button
+					onclick={() => {
+						pickerQuery = '';
+						pickerOpen = true;
+					}}
+					class="rounded-pill border-border bg-background hover:bg-surface inline-flex h-8 items-center gap-1.5 border px-3 text-xs font-medium transition-colors"
+				>
+					Manual Check-in
+				</button>
 			</div>
 
 			<div class="flex-1 overflow-y-auto">

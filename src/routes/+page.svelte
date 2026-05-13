@@ -3,6 +3,7 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import {
@@ -18,9 +19,28 @@
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
 	let classes = $state<Class[]>([]);
+	let manualActiveClassId = $state<string | null>(null);
+
+	let sessionSummary = $state<{ summary: string; className: string } | null>(null);
 
 	onMount(async () => {
 		[students, events, classes] = await Promise.all([listStudents(), listEvents(), listClasses()]);
+		const active = getActiveClass();
+		if (active) {
+			manualActiveClassId = active.id;
+		}
+
+		const sessionEnd = page.url.searchParams.get('sessionEnd');
+		if (sessionEnd === 'true') {
+			sessionSummary = {
+				summary: page.url.searchParams.get('summary') || '',
+				className: page.url.searchParams.get('className') || ''
+			};
+			// Clear URL params
+			goto(resolve('/'), { replaceState: true });
+			// Auto-hide after 10 seconds
+			setTimeout(() => (sessionSummary = null), 10000);
+		}
 	});
 
 	const today = fmtDate(Date.now());
@@ -88,7 +108,12 @@
 
 	// ── Dynamic Logic ──────────────────────────────────────────────────────────
 
-	const activeClass = $derived(getActiveClass());
+	const activeClass = $derived.by(() => {
+		if (manualActiveClassId) {
+			return classes.find((c) => c.id === manualActiveClassId) || null;
+		}
+		return getActiveClass();
+	});
 	const nextClass = $derived(getNextClass());
 
 	const activeClassStudents = $derived(
@@ -101,14 +126,16 @@
 
 	const dynamicTitle = $derived(() => {
 		if (activeClass) {
-			return `Currently Teaching: ${activeClass.name}`;
+			return manualActiveClassId
+				? `Manual Session: ${activeClass.name}`
+				: `Currently Teaching: ${activeClass.name}`;
 		}
 		return 'Dashboard';
 	});
 
 	const dynamicDescription = $derived(() => {
 		if (activeClass) {
-			return `Room ${activeClass.room} • ${activeClass.dayStart} – ${activeClass.dayEnd} • Session in progress`;
+			return `Room ${activeClass.room} • ${activeClass.dayStart} – ${activeClass.dayEnd} • Session ${manualActiveClassId ? 'primed' : 'in progress'}`;
 		}
 		if (nextClass) {
 			return `Welcome back. Your next session, ${nextClass.cls.name}, begins in ${nextClass.minutes} minutes.`;
@@ -129,13 +156,41 @@
 		description={dynamicDescription()}
 	>
 		{#snippet actions()}
+			{#if classes.length > 0}
+				<div class="relative inline-flex items-center">
+					<select
+						bind:value={manualActiveClassId}
+						class="rounded-pill border-border bg-background hover:bg-surface focus:ring-primary/20 h-10 appearance-none border px-4 py-2 pr-10 text-sm font-medium transition-colors focus:ring-2 focus:outline-none"
+						aria-label="Manual Session Start"
+					>
+						<option value={null}>Auto-detect Session</option>
+						{#each classes as cls (cls.id)}
+							<option value={cls.id}>{cls.name} ({cls.dayStart})</option>
+						{/each}
+					</select>
+					<div class="pointer-events-none absolute right-3 flex items-center">
+						<svg
+							class="text-muted-foreground size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="m6 9 6 6 6-6" />
+						</svg>
+					</div>
+				</div>
+			{/if}
+
 			<a
 				href={resolve('/students')}
 				onclick={(e) => {
 					e.preventDefault();
 					goto(resolve('/students'));
 				}}
-				class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+				class="rounded-pill border-border bg-background hover:bg-surface inline-flex h-10 items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
 			>
 				<svg
 					class="size-4"
@@ -155,12 +210,16 @@
 				Manage students
 			</a>
 			<a
-				href={resolve('/attendance')}
+				href={activeClass
+					? resolve(`/attendance?classId=${activeClass.id}`)
+					: resolve('/attendance')}
 				onclick={(e) => {
 					e.preventDefault();
-					goto(resolve('/attendance'));
+					goto(
+						activeClass ? resolve(`/attendance?classId=${activeClass.id}`) : resolve('/attendance')
+					);
 				}}
-				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
+				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex h-10 items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
 			>
 				{#if activeClass}
 					<span class="relative flex h-2 w-2">
@@ -191,6 +250,53 @@
 		{/snippet}
 	</PageHeader>
 
+	{#if sessionSummary}
+		<div class="px-6 pt-10 md:px-12">
+			<div
+				class="bg-primary/10 border-primary/20 text-primary flex items-center justify-between rounded-2xl border p-6"
+			>
+				<div class="flex items-center gap-4">
+					<div
+						class="bg-primary text-primary-foreground grid size-12 place-items-center rounded-full"
+					>
+						<svg
+							class="size-6"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<polyline points="20 6 9 17 4 12" />
+						</svg>
+					</div>
+					<div>
+						<h4 class="text-lg font-bold">Session Complete: {sessionSummary.className}</h4>
+						<p class="text-sm font-medium opacity-80">{sessionSummary.summary}</p>
+					</div>
+				</div>
+				<button
+					onclick={() => (sessionSummary = null)}
+					class="hover:bg-primary/10 rounded-full p-2 transition-colors"
+					aria-label="Close session summary"
+				>
+					<svg
+						class="size-5"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M18 6 6 18" /><path d="m6 6 12 12" />
+					</svg>
+				</button>
+			</div>
+		</div>
+	{/if}
+
 	<!-- Stats row -->
 	<section class="grid gap-4 px-6 py-10 sm:grid-cols-2 md:px-12 lg:grid-cols-3">
 		{@render statCard('Class Size', activeClassStudents.length)}
@@ -203,12 +309,28 @@
 		<!-- Currently in the room -->
 		<div class="border-border bg-card flex h-full flex-col rounded-2xl border p-6">
 			<div class="mb-4 flex flex-shrink-0 items-baseline justify-between">
-				<h3 class="text-lg font-medium">
-					{activeClass ? 'Currently in the room' : 'Next Session Roster'}
-				</h3>
-				<span class="label-mono">
-					{activeClass ? 'Last tap registered as check-in' : `${nextClassStudents.length} Students`}
-				</span>
+				<div class="flex flex-col">
+					<h3 class="text-lg font-medium">
+						{activeClass ? 'Currently in the room' : 'Next Session Class List'}
+					</h3>
+					<span class="label-mono text-xs opacity-60">
+						{activeClass
+							? 'Last tap registered as check-in'
+							: `${nextClassStudents.length} Students`}
+					</span>
+				</div>
+				{#if activeClass}
+					<a
+						href={resolve(`/attendance?classId=${activeClass.id}&manual=true`)}
+						onclick={(e) => {
+							e.preventDefault();
+							goto(resolve(`/attendance?classId=${activeClass.id}&manual=true`));
+						}}
+						class="rounded-pill border-border bg-background hover:bg-surface inline-flex h-8 items-center gap-1.5 border px-3 text-xs font-medium transition-colors"
+					>
+						Manual Check-in
+					</a>
+				{/if}
 			</div>
 
 			{#if activeClass && checkedIn.length === 0}
