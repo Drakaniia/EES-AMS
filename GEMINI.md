@@ -1,75 +1,58 @@
-!always follow @DESIGN.md and /reference when generating UI
-!we start by converting typescript (/reference) into svelte
-!always run `bun run check && bun run lint && bun run typecheck` / `cargo check` and `clippy fmt --check` after implementation to ensure quality
-read @rust-skills before implementing rust code
-read @rust-skills before implementing rust code
-read @rust-skills before implementing rust code
-read @rust-skills before implementing rust code
-always read @rust-skills when implimenting code
-always use @tauri-v2
-always use @svelte-best-practices
-always use @svelte-code-writer
+# EES-AMS Project Context & Instructions
 
-# EES-AMS - Teacher Attendance Management System
+This project is the **Espiritu Elementary School Attendance Management System (EES-AMS)**, a cross-platform desktop application for student attendance tracking.
 
-## Project Snapshot
+## 🚀 Project Overview
 
-Tauri v2 desktop application for teacher attendance management with NFC/USB card reader support. SvelteKit 5 frontend with Rust backend, SQLite database, and modular feature architecture.
+- **Core Purpose**: Manage student attendance using NFC/USB card readers in a local school environment.
+- **Target Platform**: Desktop (Windows, macOS, Linux) with mobile connectivity for card scanning.
+- **Key Technologies**:
+    - **Frontend**: SvelteKit 5 (Runes), TypeScript, Tailwind CSS 4, Vite 8.
+    - **Backend**: Rust (Tauri v2), SQLite (rusqlite + r2d2).
+    - **Hardware**: USB NFC card readers (PCSC/USB).
+- **Architecture**: Local-first with a laptop acting as the central hub. Mobile devices connect via the local network to a REST API (planned/partial) to scan cards.
 
-## Root Setup Commands
+## 🛠 Building and Running
 
-```bash
-# Install dependencies
-bun install
-cd src-tauri && cargo fetch
+### Prerequisites
+- Node.js 18+ & Bun (Package Manager)
+- Rust 1.77+
+- Tauri dependencies (platform-specific)
 
-# Development (both frontend and backend)
-bun run tauri dev
+### Commands
+- **Development**: `bun run tauri dev` (Starts frontend and backend)
+- **Production Build**: `bun run tauri build`
+- **Frontend Checks**: `bun run check` / `bun run lint` / `bun run typecheck`
+- **Backend Checks**: `cd src-tauri && cargo check && cargo clippy`
+- **Database**: Initialized automatically in the app data directory (`attendance.db`).
 
-# Build for production
-bun run tauri build
+## 📂 Project Structure
 
-# Quality checks
-bun run check && bun run lint && bun run typecheck
-cd src-tauri && cargo check && cargo clippy
-```
+- `src/`: SvelteKit frontend.
+    - `lib/db-rust.ts`: Tauri command wrappers (Primary frontend-to-backend interface).
+    - `lib/api.ts`: REST API client for mobile/external connectivity (Port 3030).
+    - `routes/`: Application pages (Dashboard, Students, Attendance, etc.).
+- `src-tauri/`: Rust backend.
+    - `src/commands.rs`: Implementation of all Tauri `#[tauri::command]` functions.
+    - `src/domain/`: Business logic and data models.
+    - `src/infrastructure/`: Database access and hardware integration.
+- `static/`: Static assets (Logos, icons).
 
-## Universal Conventions
+## 📝 Development Conventions
 
-- **Code Style**: Prettier for frontend, rustfmt for backend
-- **Commit Format**: Conventional commits (feat:, fix:, docs:, etc.)
-- **Branch Strategy**: main for production, develop for integration
-- **PR Requirements**: All checks must pass, include tests for new features
-- **File Naming**: kebab-case for files, PascalCase for components/types
+### Backend (Rust)
+- **Domain-Driven Design**: Keep business logic in `domain/` and implementation details in `infrastructure/`.
+- **Error Handling**: Use `AppError` (defined in `domain/error.rs`) with `thiserror`.
+- **Type Safety**: Ensure Rust structs match TypeScript interfaces in `src/lib/types.ts`.
+- **Concurrency**: Use `tokio` for async operations and `r2d2` for database connection pooling.
 
-## Security & Secrets
+### Frontend (Svelte)
+- **Svelte 5 Runes**: Strictly use `$state`, `$derived`, and `$effect` for reactivity.
+- **Component Design**: Modular components in `src/lib/components/`.
+- **API Communication**: Prefer `db-rust.ts` for desktop features. `api.ts` is intended for mobile/LAN access.
 
-- Never commit API keys, tokens, or sensitive data
-- Use .env files for environment variables (gitignored)
-- Handle PII data carefully in SQLite database
-- NFC card data should be encrypted at rest
+## ⚠️ Known Discrepancies & TODOs
 
-## JIT Index
-
-### Package Structure
-
-- Frontend: `src/` -> [see src/AGENTS.md](src/AGENTS.md)
-- Rust Backend: `src-tauri/` -> [see src-tauri/AGENTS.md](src-tauri/AGENTS.md)
-- Feature Routes: `src/routes/` -> [see src/routes/AGENTS.md](src/routes/AGENTS.md)
-
-### Quick Find Commands
-
-- Search function: `rg -n "functionName" src/ src-tauri/`
-- Find component: `rg -n "export.*ComponentName" src/lib/components`
-- Find Tauri command: `rg -n "#\[tauri::command\]" src-tauri/`
-- Find API route: `rg -n "export const (GET|POST)" src/routes`
-- Find database schema: `rg -n "CREATE TABLE" src-tauri/src/domain/`
-
-## Definition of Done
-
-- All TypeScript checks pass (`bun run check`)
-- All Rust checks pass (`cargo check && cargo clippy`)
-- Code formatted (`bun run format` and `cargo fmt`)
-- Tests pass for new functionality
-- Documentation updated for new features
-- NFC reader functionality tested (if applicable)
+- **HTTP Server**: Documentation (README.md, AGENTS.md) mentions an Axum-based HTTP server on port 3030 for mobile connectivity. However, the current implementation in `src-tauri` does not yet include the `axum` dependency or the server logic.
+- **NFC Drivers**: The current NFC implementation in `commands.rs` is partially simulated; hardware integration using `rusb`/`pcsc` is in progress.
+- **Authentication**: The system currently operates without authentication, designed for single-teacher local use.

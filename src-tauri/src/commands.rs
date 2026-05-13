@@ -598,7 +598,7 @@ pub async fn export_csv_with_folder(
             .class_id
             .as_ref()
             .and_then(|id| class_map.get(id))
-            .map(|c| c.room.as_str())
+            .and_then(|c| c.room.as_deref())
             .unwrap_or("N/A");
 
         let date = events
