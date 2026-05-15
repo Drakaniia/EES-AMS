@@ -180,13 +180,15 @@ export async function getSettings(): Promise<Settings> {
 		dayStart: string;
 		dayEnd: string;
 		lateAfter: string;
+		quarter: string;
 	};
 	// Backend already returns camelCase due to serde(rename_all = "camelCase")
 	return {
 		id: backendSettings.id,
 		dayStart: backendSettings.dayStart,
 		dayEnd: backendSettings.dayEnd,
-		lateAfter: backendSettings.lateAfter
+		lateAfter: backendSettings.lateAfter,
+		quarter: backendSettings.quarter
 	};
 }
 
@@ -196,7 +198,8 @@ export async function saveSettings(settings: Settings): Promise<Settings> {
 		id: settings.id,
 		dayStart: settings.dayStart,
 		dayEnd: settings.dayEnd,
-		lateAfter: settings.lateAfter
+		lateAfter: settings.lateAfter,
+		quarter: settings.quarter
 	};
 	return await invoke('save_settings', { settings: backendSettings });
 }

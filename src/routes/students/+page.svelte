@@ -366,7 +366,7 @@
 				<div class="flex items-center gap-3">
 					<a
 						href={resolve('/records')}
-						class="border-border hover:bg-surface inline-flex h-10 items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors"
+						class="inline-flex h-10 items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 					>
 						<svg
 							class="size-4"
@@ -388,7 +388,7 @@
 
 					<button
 						onclick={exportStudents}
-						class="border-border hover:bg-surface inline-flex h-10 items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors"
+						class="inline-flex h-10 items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 					>
 						<svg
 							class="size-4"
@@ -408,7 +408,7 @@
 
 					<button
 						onclick={openAdd}
-						class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex h-10 items-center gap-2 px-6 py-2 text-sm font-medium transition-colors"
+						class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-6 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 					>
 						<svg
 							class="size-4"
@@ -434,7 +434,7 @@
 				<div class="label-mono">Search Students</div>
 				<div class="relative">
 					<svg
-						class="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
+						class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
 						viewBox="0 0 24 24"
 						fill="none"
 						stroke="currentColor"
@@ -449,7 +449,7 @@
 						type="text"
 						bind:value={searchTerms}
 						placeholder="Name, number, or card serial..."
-						class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border pr-4 pl-10 text-sm focus:ring-2 focus:outline-none"
+						class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
 			</div>
@@ -459,7 +459,7 @@
 				<div class="label-mono">Filter by Class</div>
 				<select
 					bind:value={selectedClassId}
-					class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 				>
 					<option value="">All Classes</option>
 					{#each classes as c (c.id)}
@@ -473,7 +473,7 @@
 				<div class="label-mono">Total Students</div>
 				<div class="flex h-10 items-center font-mono text-lg font-bold">
 					{filteredStudents().length}
-					<span class="text-muted-foreground ml-2 text-xs font-normal">
+					<span class="ml-2 text-xs font-normal text-muted-foreground">
 						(out of {students.length})
 					</span>
 				</div>
@@ -485,14 +485,14 @@
 			{#if students.length === 0}
 				{@render emptyState()}
 			{:else}
-				<div class="border-border bg-card mt-8 overflow-hidden rounded-2xl border">
+				<div class="mt-8 overflow-hidden rounded-2xl border border-border bg-card">
 					<table class="w-full text-sm">
 						<thead class="bg-surface text-left">
 							<tr>
 								<th class="label-mono px-4 py-3">
 									<button
 										onclick={() => toggleSort('name')}
-										class="hover:text-primary inline-flex items-center gap-1 transition-colors"
+										class="inline-flex items-center gap-1 transition-colors hover:text-primary"
 									>
 										Name
 										{#if sortBy === 'name'}
@@ -511,7 +511,7 @@
 								<th class="label-mono px-4 py-3">
 									<button
 										onclick={() => toggleSort('number')}
-										class="hover:text-primary inline-flex items-center gap-1 transition-colors"
+										class="inline-flex items-center gap-1 transition-colors hover:text-primary"
 									>
 										Student #
 										{#if sortBy === 'number'}
@@ -532,19 +532,19 @@
 								<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
 							</tr>
 						</thead>
-						<tbody class="divide-border divide-y">
+						<tbody class="divide-y divide-border">
 							{#each paginatedStudents() as s (s.id)}
 								<tr>
 									{@render td(s.name, 'font-medium')}
 									{@render td(s.studentNumber, 'font-mono')}
 									<td class="px-4 py-3">
-										<span class="rounded-pill bg-surface border-border border px-2 py-0.5 text-xs">
+										<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs">
 											{getClassName(s.classId)}
 										</span>
 									</td>
 									<td class="px-4 py-3 font-mono text-xs">
 										{#if s.cardSerial}
-											<span class="rounded-pill bg-surface border-border border px-2 py-1"
+											<span class="rounded-pill border border-border bg-surface px-2 py-1"
 												>{s.cardSerial}</span
 											>
 										{:else}
@@ -556,7 +556,7 @@
 											<!-- View Records -->
 											<a
 												href={resolve(`/records?studentId=${s.id}`)}
-												class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
+												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
 												title="View attendance records"
 											>
 												<svg
@@ -578,7 +578,7 @@
 											<!-- Pair card -->
 											<button
 												onclick={() => (scanFor = s)}
-												class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
+												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
 												title="Pair NFC card"
 											>
 												<svg
@@ -597,7 +597,7 @@
 											<!-- Edit -->
 											<button
 												onclick={() => openEdit(s)}
-												class="border-border bg-background hover:bg-surface inline-flex size-8 items-center justify-center rounded-md border transition-colors"
+												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
 												title="Edit student"
 											>
 												<svg
@@ -616,7 +616,7 @@
 											<!-- Delete -->
 											<button
 												onclick={() => onDelete(s)}
-												class="border-border bg-background hover:bg-surface text-destructive inline-flex size-8 items-center justify-center rounded-md border transition-colors"
+												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
 												title="Delete student"
 											>
 												<svg
@@ -666,13 +666,13 @@
 		aria-labelledby="dialog-title"
 	>
 		<div
-			class="border-border bg-background w-full max-w-md space-y-5 rounded-2xl border p-6 shadow-xl"
+			class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
 		>
 			<div>
 				<h2 id="dialog-title" class="text-lg font-semibold">
 					{editing ? 'Edit student' : 'Add student'}
 				</h2>
-				<p class="text-muted-foreground mt-1 text-sm">
+				<p class="mt-1 text-sm text-muted-foreground">
 					Assign to a class and pair an NFC card later.
 				</p>
 			</div>
@@ -684,7 +684,7 @@
 						id="field-name"
 						bind:value={formName}
 						required
-						class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+						class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
 				<div class="space-y-1.5">
@@ -693,7 +693,7 @@
 						id="field-number"
 						bind:value={formStudentNumber}
 						required
-						class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+						class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
 				<div class="space-y-1.5">
@@ -702,7 +702,7 @@
 						id="field-class"
 						bind:value={formClassId}
 						required={classes.length > 0}
-						class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+						class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					>
 						{#if classes.length === 0}
 							<option value="">No classes available</option>
@@ -714,7 +714,7 @@
 						{/if}
 					</select>
 					{#if classes.length === 0}
-						<p class="text-muted-foreground mt-1 text-xs">
+						<p class="mt-1 text-xs text-muted-foreground">
 							Create a class first to assign students, or add student without class assignment.
 						</p>
 					{/if}
@@ -725,20 +725,20 @@
 						id="field-card"
 						bind:value={formCardSerial}
 						placeholder=""
-						class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 font-mono text-sm focus:ring-2 focus:outline-none"
+						class="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
 				<div class="flex justify-end gap-2 pt-1">
 					<button
 						type="button"
 						onclick={closeDialog}
-						class="border-border hover:bg-surface rounded-md border px-4 py-2 text-sm transition-colors"
+						class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 					>
 						Cancel
 					</button>
 					<button
 						type="submit"
-						class="rounded-pill bg-primary text-primary-foreground hover:bg-accent px-4 py-2 text-sm font-medium transition-colors"
+						class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 					>
 						{editing ? 'Save Changes' : 'Add Student'}
 					</button>
@@ -764,18 +764,18 @@
 		aria-labelledby="card-dialog-title"
 	>
 		<div
-			class="border-border bg-background w-full max-w-md space-y-5 rounded-2xl border p-6 shadow-xl"
+			class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
 		>
 			<div>
 				<h2 id="card-dialog-title" class="text-lg font-semibold">Pair NFC card</h2>
-				<p class="text-muted-foreground mt-1 text-sm">Tap the card for {scanFor.name}.</p>
+				<p class="mt-1 text-sm text-muted-foreground">Tap the card for {scanFor.name}.</p>
 			</div>
 
 			<div class="space-y-4">
-				<div class="border-border bg-surface/50 rounded-2xl border border-dashed p-8 text-center">
+				<div class="rounded-2xl border border-dashed border-border bg-surface/50 p-8 text-center">
 					<svg
 						class="mx-auto mb-3 size-10 {scanning
-							? 'text-primary animate-pulse'
+							? 'animate-pulse text-primary'
 							: 'text-muted-foreground'}"
 						viewBox="0 0 24 24"
 						fill="none"
@@ -804,26 +804,26 @@
 					<input
 						id="manual-serial"
 						bind:value={cardSerial}
-						class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 font-mono text-sm focus:ring-2 focus:outline-none"
+						class="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
 
 				{#if cardError}
-					<p class="text-destructive text-sm">{cardError}</p>
+					<p class="text-sm text-destructive">{cardError}</p>
 				{/if}
 			</div>
 
 			<div class="flex justify-end gap-2">
 				<button
 					onclick={() => (scanFor = null)}
-					class="border-border hover:bg-surface rounded-md border px-4 py-2 text-sm transition-colors"
+					class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={onSaveCard}
 					disabled={!cardSerial}
-					class="rounded-pill bg-primary text-primary-foreground hover:bg-accent px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+					class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					Save
 				</button>
@@ -848,12 +848,12 @@
 		aria-labelledby="delete-dialog-title"
 	>
 		<div
-			class="border-border bg-background w-full max-w-sm space-y-5 rounded-2xl border p-6 shadow-xl"
+			class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
 		>
 			<div class="flex flex-col items-center gap-3 text-center">
-				<div class="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
+				<div class="flex size-12 items-center justify-center rounded-full bg-destructive/10">
 					<svg
-						class="text-destructive size-6"
+						class="size-6 text-destructive"
 						viewBox="0 0 24 24"
 						fill="none"
 						stroke="currentColor"
@@ -869,8 +869,8 @@
 				</div>
 				<div>
 					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete student?</h2>
-					<p class="text-muted-foreground mt-1 text-sm">
-						<span class="text-foreground font-medium">{deleteTarget.name}</span> will be permanently removed.
+					<p class="mt-1 text-sm text-muted-foreground">
+						<span class="font-medium text-foreground">{deleteTarget.name}</span> will be permanently removed.
 					</p>
 				</div>
 			</div>
@@ -878,13 +878,13 @@
 			<div class="flex gap-2">
 				<button
 					onclick={() => (deleteTarget = null)}
-					class="border-border hover:bg-surface flex-1 rounded-md border px-4 py-2 text-sm transition-colors"
+					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={confirmDelete}
-					class="rounded-pill bg-destructive flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 				>
 					Delete
 				</button>
@@ -895,7 +895,7 @@
 
 {#if toastMessage}
 	<div
-		class="border-border bg-background fixed right-6 bottom-6 z-60 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg"
+		class="fixed right-6 bottom-6 z-60 rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium shadow-lg"
 		role="status"
 		aria-live="polite"
 	>
@@ -904,7 +904,7 @@
 {/if}
 
 {#snippet emptyState()}
-	<div class="border-border bg-surface/50 mt-8 rounded-2xl border border-dashed p-12 text-center">
+	<div class="mt-8 rounded-2xl border border-dashed border-border bg-surface/50 p-12 text-center">
 		<p class="text-muted-foreground">
 			{#if selectedClassId}
 				No students assigned to this class yet.

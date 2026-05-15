@@ -35,6 +35,16 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
         conn.execute("PRAGMA user_version = 2", [])?;
     }
 
+    if user_version < 3 {
+        migrate_to_v3(&conn)?;
+        conn.execute("PRAGMA user_version = 3", [])?;
+    }
+
+    if user_version < 4 {
+        migrate_to_v4(&conn)?;
+        conn.execute("PRAGMA user_version = 4", [])?;
+    }
+
     Ok(pool)
 }
 
@@ -91,12 +101,13 @@ fn migrate_to_v1(conn: &rusqlite::Connection) -> Result<()> {
             id TEXT PRIMARY KEY NOT NULL,
             day_start TEXT NOT NULL,
             day_end TEXT NOT NULL,
-            late_after TEXT NOT NULL
+            late_after TEXT NOT NULL,
+            quarter TEXT NOT NULL DEFAULT '1st Quarter'
         );
 
         -- Insert default settings
-        INSERT OR IGNORE INTO settings (id, day_start, day_end, late_after)
-        VALUES ('app', '08:30', '15:30', '08:45');
+        INSERT OR IGNORE INTO settings (id, day_start, day_end, late_after, quarter)
+        VALUES ('app', '08:30', '15:30', '08:45', '1st Quarter');
         "#,
     )?;
 
@@ -210,6 +221,53 @@ fn migrate_to_v2(conn: &rusqlite::Connection) -> Result<()> {
             "ALTER TABLE classes ADD COLUMN room TEXT NOT NULL DEFAULT 'N/A'",
             [],
         )?;
+    }
+    Ok(())
+}
+
+/// Migrate database to version 3 (add quarter to settings)
+fn migrate_to_v3(conn: &rusqlite::Connection) -> Result<()> {
+    // Check if quarter column exists
+    let has_quarter: bool = conn
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('settings') WHERE name='quarter'",
+            [],
+            |row| row.get::<_, i32>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !has_quarter {
+        conn.execute(
+            "ALTER TABLE settings ADD COLUMN quarter TEXT NOT NULL DEFAULT '1st Quarter'",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
+/// Migrate database to version 4 (add quarter dates to settings)
+fn migrate_to_v4(conn: &rusqlite::Connection) -> Result<()> {
+    let columns = [
+        "q1_start", "q1_end", "q2_start", "q2_end", "q3_start", "q3_end", "q4_start", "q4_end",
+    ];
+
+    for col in columns {
+        let has_col: bool = conn
+            .query_row(
+                &format!(
+                    "SELECT count(*) FROM pragma_table_info('settings') WHERE name='{}'",
+                    col
+                ),
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+
+        if !has_col {
+            conn.execute(&format!("ALTER TABLE settings ADD COLUMN {} TEXT", col), [])?;
+        }
     }
     Ok(())
 }
@@ -599,7 +657,7 @@ impl SettingsRepository {
         let conn = self.pool.get()?;
         let settings = conn
             .query_row(
-                "SELECT id, day_start, day_end, late_after FROM settings WHERE id = 'app'",
+                "SELECT id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, q4_start, q4_end FROM settings WHERE id = 'app'",
                 [],
                 |row| {
                     Ok(Settings {
@@ -607,6 +665,15 @@ impl SettingsRepository {
                         day_start: row.get(1)?,
                         day_end: row.get(2)?,
                         late_after: row.get(3)?,
+                        quarter: row.get(4)?,
+                        q1_start: row.get(5)?,
+                        q1_end: row.get(6)?,
+                        q2_start: row.get(7)?,
+                        q2_end: row.get(8)?,
+                        q3_start: row.get(9)?,
+                        q3_end: row.get(10)?,
+                        q4_start: row.get(11)?,
+                        q4_end: row.get(12)?,
                     })
                 },
             )
@@ -619,13 +686,22 @@ impl SettingsRepository {
     pub fn update(&self, settings: Settings) -> Result<Settings> {
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after) 
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, q4_start, q4_end) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 settings.id,
                 settings.day_start,
                 settings.day_end,
                 settings.late_after,
+                settings.quarter,
+                settings.q1_start,
+                settings.q1_end,
+                settings.q2_start,
+                settings.q2_end,
+                settings.q3_start,
+                settings.q3_end,
+                settings.q4_start,
+                settings.q4_end,
             ],
         )?;
 

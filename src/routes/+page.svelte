@@ -160,7 +160,7 @@
 				<div class="relative inline-flex items-center">
 					<select
 						bind:value={manualActiveClassId}
-						class="rounded-pill border-border bg-background hover:bg-surface focus:ring-primary/20 h-10 appearance-none border px-4 py-2 pr-10 text-sm font-medium transition-colors focus:ring-2 focus:outline-none"
+						class="h-10 appearance-none rounded-pill border border-border bg-background px-4 py-2 pr-10 text-sm font-medium transition-colors hover:bg-surface focus:ring-2 focus:ring-primary/20 focus:outline-none"
 						aria-label="Manual Session Start"
 					>
 						<option value={null}>Auto-detect Session</option>
@@ -170,7 +170,7 @@
 					</select>
 					<div class="pointer-events-none absolute right-3 flex items-center">
 						<svg
-							class="text-muted-foreground size-4"
+							class="size-4 text-muted-foreground"
 							viewBox="0 0 24 24"
 							fill="none"
 							stroke="currentColor"
@@ -190,7 +190,7 @@
 					e.preventDefault();
 					goto(resolve('/students'));
 				}}
-				class="rounded-pill border-border bg-background hover:bg-surface inline-flex h-10 items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+				class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 			>
 				<svg
 					class="size-4"
@@ -219,7 +219,7 @@
 						activeClass ? resolve(`/attendance?classId=${activeClass.id}`) : resolve('/attendance')
 					);
 				}}
-				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex h-10 items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
+				class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 			>
 				{#if activeClass}
 					<span class="relative flex h-2 w-2">
@@ -253,11 +253,11 @@
 	{#if sessionSummary}
 		<div class="px-6 pt-10 md:px-12">
 			<div
-				class="bg-primary/10 border-primary/20 text-primary flex items-center justify-between rounded-2xl border p-6"
+				class="flex items-center justify-between rounded-2xl border border-primary/20 bg-primary/10 p-6 text-primary"
 			>
 				<div class="flex items-center gap-4">
 					<div
-						class="bg-primary text-primary-foreground grid size-12 place-items-center rounded-full"
+						class="grid size-12 place-items-center rounded-full bg-primary text-primary-foreground"
 					>
 						<svg
 							class="size-6"
@@ -278,7 +278,7 @@
 				</div>
 				<button
 					onclick={() => (sessionSummary = null)}
-					class="hover:bg-primary/10 rounded-full p-2 transition-colors"
+					class="rounded-full p-2 transition-colors hover:bg-primary/10"
 					aria-label="Close session summary"
 				>
 					<svg
@@ -307,7 +307,7 @@
 	<!-- Panels -->
 	<section class="grid min-h-[calc(100vh-32rem)] gap-8 px-6 pb-16 md:px-12 lg:grid-cols-2">
 		<!-- Currently in the room -->
-		<div class="border-border bg-card flex h-full flex-col rounded-2xl border p-6">
+		<div class="flex h-full flex-col rounded-2xl border border-border bg-card p-6">
 			<div class="mb-4 flex flex-shrink-0 items-baseline justify-between">
 				<div class="flex flex-col">
 					<h3 class="text-lg font-medium">
@@ -326,7 +326,7 @@
 							e.preventDefault();
 							goto(resolve(`/attendance?classId=${activeClass.id}&manual=true`));
 						}}
-						class="rounded-pill border-border bg-background hover:bg-surface inline-flex h-8 items-center gap-1.5 border px-3 text-xs font-medium transition-colors"
+						class="inline-flex h-8 items-center gap-1.5 rounded-pill border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-surface"
 					>
 						Manual Check-in
 					</a>
@@ -339,16 +339,17 @@
 				</div>
 			{:else if !activeClass && nextClass}
 				<div class="flex flex-1 flex-col">
-					<div class="text-muted-foreground mb-4 text-sm">
-						Preparing for <strong>{nextClass.cls.name}</strong>{nextClass.cls.room ? ` (Room ${nextClass.cls.room})` : ''} at {nextClass
-							.cls.dayStart}
+					<div class="mb-4 text-sm text-muted-foreground">
+						Preparing for <strong>{nextClass.cls.name}</strong>{nextClass.cls.room
+							? ` (Room ${nextClass.cls.room})`
+							: ''} at {nextClass.cls.dayStart}
 					</div>
 					{#if nextClassStudents.length === 0}
 						<div class="flex flex-1 items-center justify-center">
 							{@render emptyState('No students enrolled in the next class.', true)}
 						</div>
 					{:else}
-						<ul class="divide-border flex-1 divide-y overflow-y-auto">
+						<ul class="flex-1 divide-y divide-border overflow-y-auto">
 							{#each nextClassStudents as s (s.id)}
 								<li class="flex items-center justify-between py-3">
 									<div>
@@ -365,7 +366,7 @@
 					{@render emptyState('No active sessions at the moment.', true)}
 				</div>
 			{:else}
-				<ul class="divide-border flex-1 divide-y overflow-y-auto">
+				<ul class="flex-1 divide-y divide-border overflow-y-auto">
 					{#each checkedIn as e (e.id)}
 						{@const s = studentMap.get(e.studentId)}
 						<li class="flex items-center justify-between py-3">
@@ -373,7 +374,7 @@
 								<div class="font-medium">{s?.name ?? 'Unknown'}</div>
 								<div class="label-mono">#{s?.studentNumber}</div>
 							</div>
-							<div class="text-muted-foreground font-mono text-sm">in · {fmtTime(e.timestamp)}</div>
+							<div class="font-mono text-sm text-muted-foreground">in · {fmtTime(e.timestamp)}</div>
 						</li>
 					{/each}
 				</ul>
@@ -381,7 +382,7 @@
 		</div>
 
 		<!-- Recent activity -->
-		<div class="border-border bg-card flex h-full flex-col rounded-2xl border p-6">
+		<div class="flex h-full flex-col rounded-2xl border border-border bg-card p-6">
 			<div class="mb-4 flex flex-shrink-0 items-baseline justify-between">
 				<h3 class="text-lg font-medium">Recent activity</h3>
 				<span class="label-mono">Last 8 events</span>
@@ -392,7 +393,7 @@
 					{@render emptyState('No events yet.')}
 				</div>
 			{:else}
-				<ul class="divide-border flex-1 divide-y overflow-y-auto">
+				<ul class="flex-1 divide-y divide-border overflow-y-auto">
 					{#each events.slice(0, 8) as e (e.id)}
 						{@const s = studentMap.get(e.studentId)}
 						<li class="flex items-center justify-between py-3">
@@ -403,7 +404,7 @@
 							<span
 								class="rounded-pill px-2 py-1 font-mono text-xs {e.type === 'in'
 									? 'bg-primary text-primary-foreground'
-									: 'bg-surface text-foreground border-border border'}"
+									: 'border border-border bg-surface text-foreground'}"
 							>
 								{e.type === 'in' ? 'CHECK-IN' : 'CHECK-OUT'}
 							</span>
@@ -419,7 +420,7 @@
 						e.preventDefault();
 						goto(resolve('/records'));
 					}}
-					class="text-primary hover:text-accent inline-flex items-center gap-1 font-mono text-sm transition-colors"
+					class="inline-flex items-center gap-1 font-mono text-sm text-primary transition-colors hover:text-accent"
 				>
 					View all records
 					<svg
@@ -443,7 +444,7 @@
 
 {#snippet statCard(label: string, value: number, accent = false)}
 	<div
-		class="border-border rounded-2xl border p-6 {accent
+		class="rounded-2xl border border-border p-6 {accent
 			? 'bg-primary text-primary-foreground'
 			: 'bg-surface'}"
 	>
@@ -454,9 +455,9 @@
 
 {#snippet emptyState(text: string, showScheduleAction = false)}
 	<div
-		class="text-muted-foreground border-border flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed p-8 text-center text-sm"
+		class="flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
 	>
-		<div class="bg-surface mb-4 rounded-full p-3">
+		<div class="mb-4 rounded-full bg-surface p-3">
 			<svg
 				class="size-6 opacity-60"
 				viewBox="0 0 24 24"
@@ -482,7 +483,7 @@
 					e.preventDefault();
 					goto(resolve('/settings'));
 				}}
-				class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-xs font-medium transition-colors"
+				class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-xs font-medium transition-colors hover:bg-surface"
 			>
 				View full schedule
 			</a>

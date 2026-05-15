@@ -9,6 +9,8 @@
 
 A cross-platform desktop application for student attendance management at Espiritu Elementary School with NFC/USB card reader support. Built with Tauri v2, SvelteKit 5, and Rust.
 
+> **🏫 Elementary School Focused**: This system is specifically designed and optimized for elementary school environments (EES - Elementary Education System), with features tailored to the unique needs of primary education institutions.
+
 ## Features
 
 - Cross-platform desktop app - Windows, macOS, Linux
@@ -290,4 +292,4 @@ For support and questions:
 
 ---
 
-**EES-AMS** - Modern attendance management for Espiritu Elementary School.
+**EES-AMS** - Modern attendance management system designed exclusively for elementary schools (EES - Elementary Education System).

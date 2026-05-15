@@ -35,6 +35,15 @@ export interface Settings {
 	dayStart: string;
 	dayEnd: string;
 	lateAfter: string;
+	quarter: string;
+	q1Start?: string;
+	q1End?: string;
+	q2Start?: string;
+	q2End?: string;
+	q3Start?: string;
+	q3End?: string;
+	q4Start?: string;
+	q4End?: string;
 }
 
 export interface CreateStudentRequest {

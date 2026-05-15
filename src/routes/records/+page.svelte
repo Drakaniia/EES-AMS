@@ -235,7 +235,7 @@
 			{#snippet actions()}
 				<button
 					onclick={onExport}
-					class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
+					class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 				>
 					<svg
 						class="size-4"
@@ -263,7 +263,7 @@
 				<div class="label-mono">Date Range</div>
 				<button
 					onclick={() => (dateRangePickerOpen = true)}
-					class="border-border bg-background hover:bg-surface focus:ring-primary flex h-10 w-full items-center justify-between rounded-md border px-3 text-left text-sm transition-colors focus:ring-2 focus:outline-none"
+					class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
 				>
 					<span class={from || to ? '' : 'text-muted-foreground'}>
 						{from && to
@@ -275,7 +275,7 @@
 									: 'Select date range'}
 					</span>
 					<svg
-						class="text-muted-foreground size-4"
+						class="size-4 text-muted-foreground"
 						viewBox="0 0 24 24"
 						fill="none"
 						stroke="currentColor"
@@ -296,7 +296,7 @@
 				<div class="label-mono">Class</div>
 				<select
 					bind:value={classId}
-					class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 				>
 					<option value="">All classes</option>
 					{#each classes as c (c.id)}
@@ -310,7 +310,7 @@
 				<div class="label-mono">Student</div>
 				<select
 					bind:value={studentId}
-					class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 				>
 					<option value="">All students</option>
 					{#each students as s (s.id)}
@@ -328,7 +328,7 @@
 
 		<!-- ── Table ────────────────────────────────────────────────────────────── -->
 		<section class="min-h-0 flex-1 px-6 pb-20 md:px-12" bind:clientHeight={availableHeight}>
-			<div class="border-border bg-card overflow-hidden rounded-2xl border">
+			<div class="overflow-hidden rounded-2xl border border-border bg-card">
 				<table class="w-full text-sm">
 					<thead class="bg-surface text-left">
 						<tr>
@@ -340,12 +340,12 @@
 							<th class="label-mono w-20 px-4 py-3 text-right"> </th>
 						</tr>
 					</thead>
-					<tbody class="divide-border divide-y">
+					<tbody class="divide-y divide-border">
 						{#if groupedAttendance().length === 0}
 							{@render emptyState()}
 						{:else}
 							{#each paginatedFiltered() as record (record.studentId + record.date)}
-								<tr class="hover:bg-surface/40 transition-colors">
+								<tr class="transition-colors hover:bg-surface/40">
 									<td class="px-4 py-3 align-top font-mono">{record.date}</td>
 									<td class="px-4 py-3 align-top">
 										<div class="font-medium">{record.studentName}</div>
@@ -353,7 +353,7 @@
 									</td>
 									<td class="px-4 py-3 align-top">
 										<span
-											class="rounded-pill bg-surface border-border border px-2 py-0.5 text-[10px]"
+											class="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10px]"
 										>
 											{record.className}
 										</span>
@@ -364,14 +364,14 @@
 												{@render checkInPill(record.checkInTime, record.isLate)}
 											</div>
 										{:else}
-											<span class="text-muted-foreground font-mono text-xs">—</span>
+											<span class="font-mono text-xs text-muted-foreground">—</span>
 										{/if}
 									</td>
 									<td class="px-4 py-3 align-top">
 										{#if record.checkOutTime}
 											{@render checkOutPill(record.checkOutTime)}
 										{:else}
-											<span class="text-muted-foreground font-mono text-xs">—</span>
+											<span class="font-mono text-xs text-muted-foreground">—</span>
 										{/if}
 									</td>
 									<td class="px-4 py-3 text-right align-top">
@@ -385,7 +385,7 @@
 													};
 												}}
 												aria-label="Delete attendance record"
-												class="border-border text-destructive hover:bg-destructive/10 inline-flex size-8 items-center justify-center rounded-md border transition-colors"
+												class="inline-flex size-8 items-center justify-center rounded-md border border-border text-destructive transition-colors hover:bg-destructive/10"
 											>
 												<svg
 													class="size-3.5"
@@ -422,8 +422,8 @@
 	<div
 		class="fixed right-6 bottom-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
 					{toastOk
-			? 'bg-background border-border text-foreground'
-			: 'bg-destructive/10 border-destructive/40 text-destructive'}"
+			? 'border-border bg-background text-foreground'
+			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
 		role="status"
 		aria-live="polite"
 	>
@@ -444,7 +444,7 @@
 
 {#snippet emptyState()}
 	<tr>
-		<td colspan={6} class="text-muted-foreground px-4 py-12 text-center">
+		<td colspan={6} class="px-4 py-12 text-center text-muted-foreground">
 			No attendance records match the filters.
 		</td>
 	</tr>
@@ -463,7 +463,7 @@
 
 {#snippet checkOutPill(time: string)}
 	<span
-		class="rounded-pill bg-surface border-border text-foreground border px-2 py-1 font-mono text-xs"
+		class="rounded-pill border border-border bg-surface px-2 py-1 font-mono text-xs text-foreground"
 	>
 		{time}
 	</span>
@@ -485,12 +485,12 @@
 		aria-labelledby="delete-dialog-title"
 	>
 		<div
-			class="border-border bg-background w-full max-w-sm space-y-5 rounded-2xl border p-6 shadow-xl"
+			class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
 		>
 			<div class="flex flex-col items-center gap-3 text-center">
-				<div class="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
+				<div class="flex size-12 items-center justify-center rounded-full bg-destructive/10">
 					<svg
-						class="text-destructive size-6"
+						class="size-6 text-destructive"
 						viewBox="0 0 24 24"
 						fill="none"
 						stroke="currentColor"
@@ -506,9 +506,9 @@
 				</div>
 				<div>
 					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete attendance records?</h2>
-					<p class="text-muted-foreground mt-1 text-sm">
-						<span class="text-foreground font-medium">{deleteTarget.studentName}</span> attendance
-						on <span class="text-foreground font-medium">{deleteTarget.date}</span> will be permanently
+					<p class="mt-1 text-sm text-muted-foreground">
+						<span class="font-medium text-foreground">{deleteTarget.studentName}</span> attendance
+						on <span class="font-medium text-foreground">{deleteTarget.date}</span> will be permanently
 						removed.
 					</p>
 				</div>
@@ -517,7 +517,7 @@
 			<div class="flex gap-2">
 				<button
 					onclick={() => (deleteTarget = null)}
-					class="border-border hover:bg-surface flex-1 rounded-md border px-4 py-2 text-sm transition-colors"
+					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 				>
 					Cancel
 				</button>
@@ -529,7 +529,7 @@
 						deleteTarget = null;
 						reload();
 					}}
-					class="rounded-pill bg-destructive flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 				>
 					Delete
 				</button>
