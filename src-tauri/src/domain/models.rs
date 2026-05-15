@@ -103,6 +103,15 @@ pub struct Settings {
     pub day_start: String,  // "08:30"
     pub day_end: String,    // "15:30"
     pub late_after: String, // "08:45"
+    pub quarter: String,    // "1st Quarter"
+    pub q1_start: Option<String>,
+    pub q1_end: Option<String>,
+    pub q2_start: Option<String>,
+    pub q2_end: Option<String>,
+    pub q3_start: Option<String>,
+    pub q3_end: Option<String>,
+    pub q4_start: Option<String>,
+    pub q4_end: Option<String>,
 }
 
 impl Default for Settings {
@@ -112,6 +121,15 @@ impl Default for Settings {
             day_start: "08:30".to_string(),
             day_end: "15:30".to_string(),
             late_after: "08:45".to_string(),
+            quarter: "1st Quarter".to_string(),
+            q1_start: None,
+            q1_end: None,
+            q2_start: None,
+            q2_end: None,
+            q3_start: None,
+            q3_end: None,
+            q4_start: None,
+            q4_end: None,
         }
     }
 }

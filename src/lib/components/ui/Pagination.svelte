@@ -59,13 +59,13 @@
 
 <!-- Pagination controls -->
 <div
-	class="border-border bg-background inline-flex items-center gap-1 rounded-lg border p-1 shadow-sm"
+	class="inline-flex items-center gap-1 rounded-lg border border-border bg-background p-1 shadow-sm"
 >
 	<!-- Previous button -->
 	<button
 		onclick={prevPage}
 		disabled={currentPage === 1}
-		class="border-border hover:bg-surface inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+		class="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 		aria-label="Previous page"
 	>
 		<svg
@@ -86,12 +86,12 @@
 	<div class="flex gap-1">
 		{#each pages as p, i (i)}
 			{#if p === 'ellipsis'}
-				<span class="text-muted-foreground px-2 py-2 text-sm">...</span>
+				<span class="px-2 py-2 text-sm text-muted-foreground">...</span>
 			{:else}
 				{@const isCurrent = p === currentPage}
 				{#if isCurrent}
 					<button
-						class="bg-surface rounded-md px-3 py-2 text-sm font-medium shadow-sm"
+						class="rounded-md bg-surface px-3 py-2 text-sm font-medium shadow-sm"
 						aria-label="Go to page {p}"
 						aria-current="page"
 					>
@@ -100,7 +100,7 @@
 				{:else}
 					<button
 						onclick={() => goToPage(p as number)}
-						class="border-border hover:bg-surface rounded-md border px-3 py-2 text-sm font-medium transition-colors"
+						class="rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-surface"
 						aria-label="Go to page {p}"
 					>
 						{p}
@@ -114,7 +114,7 @@
 	<button
 		onclick={nextPage}
 		disabled={currentPage === totalPages}
-		class="border-border hover:bg-surface inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+		class="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 		aria-label="Next page"
 	>
 		<span class="hidden sm:inline">Next</span>

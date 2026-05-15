@@ -74,18 +74,18 @@
 			<!-- Header -->
 			<div class="flex items-start justify-between gap-4">
 				<div class="flex-1">
-					<h2 id="dialog-title" class="text-foreground text-lg font-semibold">
+					<h2 id="dialog-title" class="text-lg font-semibold text-foreground">
 						{title}
 					</h2>
 					{#if description}
-						<p class="text-muted-foreground mt-1 text-sm">{description}</p>
+						<p class="mt-1 text-sm text-muted-foreground">{description}</p>
 					{/if}
 				</div>
 				{#if showCloseButton}
 					<button
 						type="button"
 						onclick={handleClose}
-						class="text-muted-foreground hover:text-foreground transition-colors"
+						class="text-muted-foreground transition-colors hover:text-foreground"
 						aria-label="Close dialog"
 					>
 						<svg

@@ -310,7 +310,7 @@
 				<!-- Class Selector -->
 				<select
 					bind:value={selectedClassId}
-					class="border-border bg-background focus:ring-primary rounded-pill h-10 border px-4 py-2 text-sm focus:ring-2 focus:outline-none"
+					class="h-10 rounded-pill border border-border bg-background px-4 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 				>
 					<option value="">No Active Class</option>
 					{#each classes as c (c.id)}
@@ -323,7 +323,7 @@
 						pickerQuery = '';
 						pickerOpen = true;
 					}}
-					class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+					class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 				>
 					Manual log
 				</button>
@@ -331,7 +331,7 @@
 				{#if scanning}
 					<button
 						onclick={stopScanning}
-						class="rounded-pill border-destructive/40 text-destructive hover:bg-destructive/10 inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+						class="inline-flex items-center gap-2 rounded-pill border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
 					>
 						<svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 							<rect x="3" y="3" width="18" height="18" rx="2" />
@@ -341,7 +341,7 @@
 				{:else}
 					<button
 						onclick={startScanning}
-						class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
+						class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 					>
 						<svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 							<polygon points="5,3 19,12 5,21" />
@@ -352,7 +352,7 @@
 
 				<button
 					onclick={endSession}
-					class="rounded-pill border-border bg-background hover:bg-surface inline-flex h-10 items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+					class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 				>
 					End Session
 				</button>
@@ -364,8 +364,8 @@
 		class="grid min-h-[calc(100vh-28rem)] gap-8 px-6 py-10 md:px-12 lg:grid-cols-[1.2fr_1fr]"
 	>
 		<div
-			class="border-border bg-surface relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-3xl border p-10
-				{scanning ? 'ring-primary/40 ring-2' : ''}"
+			class="relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-3xl border border-border bg-surface p-10
+				{scanning ? 'ring-2 ring-primary/40' : ''}"
 		>
 			<div
 				aria-hidden="true"
@@ -376,22 +376,22 @@
 			{#if !selectedClassId}
 				<div class="relative w-full max-w-md text-center">
 					<h3 class="display-lg mb-2">Which class are you starting?</h3>
-					<p class="text-muted-foreground mb-8">Select a class to begin recording attendance.</p>
+					<p class="mb-8 text-muted-foreground">Select a class to begin recording attendance.</p>
 
 					<div class="grid gap-3 text-left">
 						{#each remainingSessions as s (s.id)}
 							<button
 								onclick={() => (selectedClassId = s.id)}
-								class="border-border bg-background hover:border-primary/50 hover:bg-primary/5 group flex items-center justify-between rounded-2xl border p-4 transition-all"
+								class="group flex items-center justify-between rounded-2xl border border-border bg-background p-4 transition-all hover:border-primary/50 hover:bg-primary/5"
 							>
 								<div>
-									<div class="group-hover:text-primary font-bold transition-colors">{s.name}</div>
+									<div class="font-bold transition-colors group-hover:text-primary">{s.name}</div>
 									<div class="label-mono text-xs opacity-60">
 										{s.room ? `Room ${s.room} · ` : ''}{s.dayStart} – {s.dayEnd}
 									</div>
 								</div>
 								<svg
-									class="text-muted-foreground group-hover:text-primary size-5 transition-all group-hover:translate-x-1"
+									class="size-5 text-muted-foreground transition-all group-hover:translate-x-1 group-hover:text-primary"
 									viewBox="0 0 24 24"
 									fill="none"
 									stroke="currentColor"
@@ -406,7 +406,7 @@
 
 						{#if remainingSessions.length === 0}
 							<div
-								class="border-border text-muted-foreground rounded-2xl border border-dashed py-8 text-center italic"
+								class="rounded-2xl border border-dashed border-border py-8 text-center text-muted-foreground italic"
 							>
 								No more sessions scheduled for today.
 							</div>
@@ -417,7 +417,7 @@
 				<div class="relative text-center">
 					<div class="label-mono mb-4">
 						{#if scanning}
-							<span class="text-primary animate-pulse">●</span> Listening for taps
+							<span class="animate-pulse text-primary">●</span> Listening for taps
 						{:else}
 							Scanner idle
 						{/if}
@@ -425,7 +425,7 @@
 
 					<div
 						class="mx-auto grid size-40 place-items-center rounded-full border-2
-						{scanning ? 'border-primary animate-pulse shadow-[0_0_30px_-5px_var(--primary)]' : 'border-border'}"
+						{scanning ? 'animate-pulse border-primary shadow-[0_0_30px_-5px_var(--primary)]' : 'border-border'}"
 					>
 						<svg
 							class="size-16 {scanning ? 'text-primary' : 'text-muted-foreground'}"
@@ -445,7 +445,7 @@
 					</div>
 
 					<h3 class="display-lg mt-8">{scanning ? 'Tap a card' : 'Press start'}</h3>
-					<p class="text-muted-foreground mx-auto mt-2 max-w-md">
+					<p class="mx-auto mt-2 max-w-md text-muted-foreground">
 						{#if supportedLoading}
 							Checking hardware…
 						{:else if supported === 'connected'}
@@ -458,7 +458,7 @@
 			{/if}
 		</div>
 
-		<div class="border-border bg-card flex h-full flex-col rounded-2xl border p-6">
+		<div class="flex h-full flex-col rounded-2xl border border-border bg-card p-6">
 			<div class="mb-4 flex shrink-0 items-baseline justify-between">
 				<div class="flex flex-col">
 					<h3 class="text-lg font-medium">Session log</h3>
@@ -469,7 +469,7 @@
 						pickerQuery = '';
 						pickerOpen = true;
 					}}
-					class="rounded-pill border-border bg-background hover:bg-surface inline-flex h-8 items-center gap-1.5 border px-3 text-xs font-medium transition-colors"
+					class="inline-flex h-8 items-center gap-1.5 rounded-pill border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-surface"
 				>
 					Manual Check-in
 				</button>
@@ -478,12 +478,12 @@
 			<div class="flex-1 overflow-y-auto">
 				{#if log.length === 0}
 					<div
-						class="text-muted-foreground border-border flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed p-4 text-center text-sm"
+						class="flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground"
 					>
 						No activity recorded in this session.
 					</div>
 				{:else}
-					<ul class="divide-border divide-y">
+					<ul class="divide-y divide-border">
 						{#each log as line (line.id)}
 							<li class="flex items-center justify-between gap-3 py-3">
 								<div class="min-w-0">
@@ -493,7 +493,7 @@
 								<div class="flex items-center gap-2">
 									{#if line.isLate}
 										<span
-											class="rounded-pill bg-destructive/10 text-destructive border-destructive/20 border px-2 py-0.5 font-mono text-[10px] font-bold"
+											class="rounded-pill border border-destructive/20 bg-destructive/10 px-2 py-0.5 font-mono text-[10px] font-bold text-destructive"
 										>
 											LATE
 										</span>
@@ -515,8 +515,8 @@
 		<div
 			class="pointer-events-auto flex items-center gap-4 rounded-3xl border px-8 py-5 shadow-2xl
 				{lastResult.ok
-				? 'bg-background border-border text-foreground'
-				: 'bg-destructive text-destructive-foreground border-destructive'}"
+				? 'border-border bg-background text-foreground'
+				: 'border-destructive bg-destructive text-destructive-foreground'}"
 		>
 			<div
 				class="grid size-12 place-items-center rounded-full
@@ -556,7 +556,7 @@
 			<div>
 				<div class="text-xl font-bold">{lastResult.name}</div>
 				<div class="label-mono flex gap-2">
-					<span class={lastResult.isLate ? 'text-destructive font-bold' : ''}>
+					<span class={lastResult.isLate ? 'font-bold text-destructive' : ''}>
 						{lastResult.type === 'in' ? (lastResult.isLate ? 'LATE' : 'CHECK-IN') : 'CHECK-OUT'}
 					</span>
 					<span class="text-muted-foreground">·</span>
@@ -576,12 +576,12 @@
 	<input
 		placeholder="Search name or student number…"
 		bind:value={pickerQuery}
-		class="border-border bg-background focus:ring-primary w-full rounded-md border px-4 py-2 text-sm focus:ring-2 focus:outline-none"
+		class="w-full rounded-md border border-border bg-background px-4 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 	/>
 
-	<ul class="divide-border border-border max-h-[300px] divide-y overflow-y-auto rounded-xl border">
+	<ul class="max-h-[300px] divide-y divide-border overflow-y-auto rounded-xl border border-border">
 		{#if filteredStudents.length === 0}
-			<li class="text-muted-foreground py-10 text-center text-sm">
+			<li class="py-10 text-center text-sm text-muted-foreground">
 				No students found {selectedClassId ? 'in this class' : ''}.
 			</li>
 		{:else}
@@ -592,13 +592,13 @@
 							await logForStudent(s);
 							pickerOpen = false;
 						}}
-						class="hover:bg-surface flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
+						class="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-surface"
 					>
 						<span>
 							<div class="font-medium">{s.name}</div>
 							<div class="label-mono text-xs opacity-60">#{s.studentNumber}</div>
 						</span>
-						<span class="label-mono text-primary text-xs font-bold">LOG →</span>
+						<span class="label-mono text-xs font-bold text-primary">LOG →</span>
 					</button>
 				</li>
 			{/each}
@@ -608,7 +608,7 @@
 	<div class="flex justify-end pt-2">
 		<button
 			onclick={() => (pickerOpen = false)}
-			class="border-border hover:bg-surface rounded-md border px-4 py-2 text-sm transition-colors"
+			class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 		>
 			Close
 		</button>
@@ -619,8 +619,8 @@
 	<div
 		class="fixed right-6 bottom-6 z-60 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
 			{toastOk
-			? 'bg-background border-border text-foreground'
-			: 'bg-destructive/10 border-destructive/40 text-destructive'}"
+			? 'border-border bg-background text-foreground'
+			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
 		role="status"
 		aria-live="polite"
 	>
@@ -630,11 +630,11 @@
 
 {#snippet pill(type: 'in' | 'out' | 'error')}
 	<span
-		class="rounded-pill shrink-0 px-2 py-1 font-mono text-[10px] font-bold
+		class="shrink-0 rounded-pill px-2 py-1 font-mono text-[10px] font-bold
 			{type === 'in'
 			? 'bg-primary text-primary-foreground'
 			: type === 'out'
-				? 'bg-surface text-foreground border-border border'
+				? 'border border-border bg-surface text-foreground'
 				: 'bg-destructive text-destructive-foreground'}"
 	>
 		{type === 'in' ? 'IN' : type === 'out' ? 'OUT' : 'ERROR'}

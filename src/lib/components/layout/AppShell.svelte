@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import logo from '$lib/assets/logo-seal.png';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 
 	const navGroups = [
 		{
@@ -43,30 +44,52 @@
 	function isActive(href: string, pathname: string) {
 		return href === '/' ? pathname === '/' : pathname.startsWith(href);
 	}
+
+	function getSchoolYear() {
+		const now = new Date();
+		const year = now.getFullYear();
+		const month = now.getMonth(); // 0-indexed, 0 = Jan, 7 = Aug
+		if (month < 7) {
+			// Before August, we are in the second half of the school year
+			return `${year - 1}–${year}`;
+		} else {
+			// From August onwards, we are in the first half of a new school year
+			return `${year}–${year + 1}`;
+		}
+	}
 </script>
 
-<div class="bg-background text-foreground flex h-screen flex-col overflow-hidden md:flex-row">
+<div class="flex h-screen flex-col overflow-hidden bg-background text-foreground md:flex-row">
 	<!-- Sidebar -->
 	<aside
-		class="border-border bg-background flex border-b md:min-h-screen md:w-72 md:flex-col md:border-r md:border-b-0"
+		class="flex border-b border-border bg-background md:min-h-screen md:w-72 md:flex-col md:border-r md:border-b-0"
 	>
 		<!-- Desktop brand -->
-		<div class="hidden px-6 pt-8 pb-6 md:block">
+		<div class="hidden px-5 pt-6 pb-6 md:block">
 			<div class="flex items-center gap-3">
-				<img src={logo} alt="School Logo" class="size-10 object-contain" />
-				<h1 class="text-xl font-bold tracking-tight">
-					Attendance<br />System
-				</h1>
+				<img src={logo} alt="School Logo" class="size-16 shrink-0 object-contain" />
+				<div class="flex flex-col justify-center gap-0.5">
+					<h1 class="text-2xl leading-none font-black tracking-tight whitespace-nowrap uppercase">
+						EES AMS
+					</h1>
+					<div class="flex flex-col text-xs leading-snug font-medium text-muted-foreground">
+						<span>{getSchoolYear()}</span>
+						<span>{settingsStore.settings?.quarter ?? '1st Quarter'}</span>
+					</div>
+				</div>
 			</div>
-			<p class="text-muted-foreground mt-4 max-w-[14rem] text-sm">
-				Manage student attendance with ease.
-			</p>
 		</div>
 
 		<!-- Mobile brand bar -->
-		<div class="border-border flex w-full items-center gap-3 border-b px-4 py-3 md:hidden">
-			<img src={logo} alt="School Logo" class="size-8 object-contain" />
-			<div class="font-medium">Attendance System</div>
+		<div class="flex w-full items-center gap-3 border-b border-border px-4 py-3 md:hidden">
+			<img src={logo} alt="School Logo" class="size-16 object-contain" />
+			<div class="flex flex-col justify-center leading-tight">
+				<div class="text-lg font-black tracking-tight uppercase">EES AMS</div>
+				<div class="flex flex-col text-xs font-medium text-muted-foreground">
+					<span>{getSchoolYear()}</span>
+					<span>{settingsStore.settings?.quarter ?? '1st Quarter'}</span>
+				</div>
+			</div>
 		</div>
 
 		<!-- Nav -->
@@ -85,8 +108,8 @@
 								}}
 								class="flex items-center gap-3 px-4 py-3 text-sm whitespace-nowrap transition-colors md:rounded-md
 									{active
-									? 'bg-surface text-foreground border-primary md:border-l-primary border-b-2 md:border-b-0 md:border-l-2'
-									: 'text-muted-foreground hover:text-foreground hover:bg-surface/60'}"
+									? 'border-b-2 border-primary bg-surface text-foreground md:border-b-0 md:border-l-2 md:border-l-primary'
+									: 'text-muted-foreground hover:bg-surface/60 hover:text-foreground'}"
 							>
 								<svg
 									class="size-4 shrink-0"
