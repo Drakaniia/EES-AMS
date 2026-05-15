@@ -205,15 +205,30 @@
 	}
 
 	function checkLate(classObj: Class | undefined, timestamp: number): boolean {
-		if (!classObj || !classObj.lateAfter) return false;
+		if (!classObj) return false;
 
 		const now = new Date(timestamp);
-		const [h, m] = classObj.lateAfter.split(':').map(Number);
-		const originalDate = new Date(timestamp);
+		const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+		let lateAfter = classObj.lateAfter;
+
+		// Find session matching current time
+		if (classObj.sessions && classObj.sessions.length > 0) {
+			for (const session of classObj.sessions) {
+				if (timeStr >= session.startTime && timeStr <= session.endTime) {
+					lateAfter = session.lateAfter;
+					break;
+				}
+			}
+		}
+
+		if (!lateAfter) return false;
+
+		const [h, m] = lateAfter.split(':').map(Number);
 		const lateTime = new Date(
-			originalDate.getFullYear(),
-			originalDate.getMonth(),
-			originalDate.getDate(),
+			now.getFullYear(),
+			now.getMonth(),
+			now.getDate(),
 			h,
 			m,
 			0,

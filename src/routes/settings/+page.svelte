@@ -13,7 +13,8 @@
 		importAll,
 		wipeAll,
 		type Settings,
-		type Class
+		type Class,
+		type Session
 	} from '$lib/db-rust';
 
 	// ── State ────────────────────────────────────────────────────────────────
@@ -45,6 +46,8 @@
 	let formDayStart = $state('');
 	let formDayEnd = $state('');
 	let formLateAfter = $state('');
+	let formSessions = $state<Session[]>([]);
+	let sessionMode = $state<'single' | 'morning-afternoon' | 'custom'>('single');
 
 	// Toast
 	let toastMessage = $state<string | null>(null);
@@ -129,6 +132,15 @@
 		formDayStart = defaultDayStart;
 		formDayEnd = defaultDayEnd;
 		formLateAfter = defaultLateAfter;
+		formSessions = [
+			{
+				name: 'Full Day',
+				startTime: defaultDayStart,
+				endTime: defaultDayEnd,
+				lateAfter: defaultLateAfter
+			}
+		];
+		sessionMode = 'single';
 		classDialogOpen = true;
 	}
 
@@ -139,7 +151,66 @@
 		formDayStart = c.dayStart;
 		formDayEnd = c.dayEnd;
 		formLateAfter = c.lateAfter;
+		formSessions =
+			c.sessions && c.sessions.length > 0
+				? JSON.parse(JSON.stringify(c.sessions))
+				: [
+						{
+							name: 'Full Day',
+							startTime: c.dayStart,
+							endTime: c.dayEnd,
+							lateAfter: c.lateAfter
+						}
+					];
+
+		if (formSessions.length === 1 && formSessions[0].name === 'Full Day') {
+			sessionMode = 'single';
+		} else if (
+			formSessions.length === 2 &&
+			formSessions[0].name === 'Morning' &&
+			formSessions[1].name === 'Afternoon'
+		) {
+			sessionMode = 'morning-afternoon';
+		} else {
+			sessionMode = 'custom';
+		}
+
 		classDialogOpen = true;
+	}
+
+	function handleSessionModeChange(mode: typeof sessionMode) {
+		sessionMode = mode;
+		if (mode === 'single') {
+			formSessions = [
+				{
+					name: 'Full Day',
+					startTime: defaultDayStart,
+					endTime: defaultDayEnd,
+					lateAfter: defaultLateAfter
+				}
+			];
+		} else if (mode === 'morning-afternoon') {
+			formSessions = [
+				{ name: 'Morning', startTime: '07:30', endTime: '11:30', lateAfter: '07:45' },
+				{ name: 'Afternoon', startTime: '13:00', endTime: '17:00', lateAfter: '13:15' }
+			];
+		}
+	}
+
+	function addSession() {
+		formSessions = [
+			...formSessions,
+			{
+				name: `Session ${formSessions.length + 1}`,
+				startTime: '08:00',
+				endTime: '12:00',
+				lateAfter: '08:15'
+			}
+		];
+	}
+
+	function removeSession(index: number) {
+		formSessions = formSessions.filter((_, i) => i !== index);
 	}
 
 	async function onSaveClass(e: SubmitEvent) {
@@ -147,13 +218,21 @@
 		const name = formClassName.trim();
 		if (!name) return;
 
+		// Use the first session as primary times for backwards compatibility
+		const primary = formSessions[0] || {
+			startTime: formDayStart,
+			endTime: formDayEnd,
+			lateAfter: formLateAfter
+		};
+
 		const c: Class = {
 			id: editingClass?.id ?? '',
 			name,
 			room: formRoom.trim() || undefined,
-			dayStart: formDayStart,
-			dayEnd: formDayEnd,
-			lateAfter: formLateAfter,
+			dayStart: primary.startTime,
+			dayEnd: primary.endTime,
+			lateAfter: primary.lateAfter,
+			sessions: formSessions,
 			createdAt: editingClass?.createdAt ?? ''
 		};
 
@@ -284,12 +363,23 @@
 								>
 									<div class="space-y-1">
 										<div class="font-medium">{c.name}</div>
-										<div class="label-mono flex gap-4 text-xs text-muted-foreground">
+										<div
+											class="label-mono flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
+										>
 											{#if c.room}
 												<span>Room {c.room}</span>
 											{/if}
-											<span>{c.dayStart} – {c.dayEnd}</span>
-											<span class="text-accent">Late after {c.lateAfter}</span>
+											{#if c.sessions && c.sessions.length > 0}
+												{#each c.sessions as s}
+													<span class="inline-flex items-center gap-1">
+														<span class="font-medium text-foreground">{s.name}:</span>
+														{s.startTime}–{s.endTime}
+													</span>
+												{/each}
+											{:else}
+												<span>{c.dayStart} – {c.dayEnd}</span>
+												<span class="text-accent">Late after {c.lateAfter}</span>
+											{/if}
 										</div>
 									</div>
 									<div class="flex gap-2">
@@ -627,36 +717,123 @@
 			</div>
 		</div>
 
-		<div class="grid grid-cols-3 gap-4">
-			<div class="space-y-1.5">
-				<label for="dayStart" class="label-mono">Start</label>
-				<input
-					id="dayStart"
-					type="time"
-					bind:value={formDayStart}
-					required
-					class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-				/>
+		<!-- Session Mode Selector -->
+		<div class="space-y-1.5">
+			<label class="label-mono">Session Mode</label>
+			<div class="flex gap-2">
+				<button
+					type="button"
+					onclick={() => handleSessionModeChange('single')}
+					class="flex-1 rounded-md border px-3 py-2 text-sm transition-colors {sessionMode ===
+					'single'
+						? 'border-primary bg-primary text-primary-foreground'
+						: 'border-border bg-background hover:bg-surface'}"
+				>
+					Single Day
+				</button>
+				<button
+					type="button"
+					onclick={() => handleSessionModeChange('morning-afternoon')}
+					class="flex-1 rounded-md border px-3 py-2 text-sm transition-colors {sessionMode ===
+					'morning-afternoon'
+						? 'border-primary bg-primary text-primary-foreground'
+						: 'border-border bg-background hover:bg-surface'}"
+				>
+					Morning & Afternoon
+				</button>
+				<button
+					type="button"
+					onclick={() => (sessionMode = 'custom')}
+					class="flex-1 rounded-md border px-3 py-2 text-sm transition-colors {sessionMode ===
+					'custom'
+						? 'border-primary bg-primary text-primary-foreground'
+						: 'border-border bg-background hover:bg-surface'}"
+				>
+					Custom
+				</button>
 			</div>
-			<div class="space-y-1.5">
-				<label for="dayEnd" class="label-mono">End</label>
-				<input
-					id="dayEnd"
-					type="time"
-					bind:value={formDayEnd}
-					required
-					class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-				/>
+		</div>
+
+		<!-- Sessions List -->
+		<div class="space-y-3">
+			<div class="flex items-center justify-between">
+				<h4 class="label-mono text-xs uppercase text-muted-foreground">Sessions</h4>
+				{#if sessionMode === 'custom'}
+					<button
+						type="button"
+						onclick={addSession}
+						class="text-xs font-medium text-accent hover:underline"
+					>
+						+ Add Session
+					</button>
+				{/if}
 			</div>
-			<div class="space-y-1.5">
-				<label for="lateAfter" class="label-mono">Late After</label>
-				<input
-					id="lateAfter"
-					type="time"
-					bind:value={formLateAfter}
-					required
-					class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-				/>
+
+			<div class="max-h-64 space-y-4 overflow-y-auto pr-1">
+				{#each formSessions as session, i}
+					<div class="relative space-y-3 rounded-xl border border-border p-4">
+						{#if sessionMode === 'custom' && formSessions.length > 1}
+							<button
+								type="button"
+								onclick={() => removeSession(i)}
+								class="absolute top-3 right-3 text-muted-foreground hover:text-destructive"
+							>
+								<svg
+									class="size-4"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+								>
+									<path d="M18 6L6 18M6 6l12 12" />
+								</svg>
+							</button>
+						{/if}
+
+						<div class="grid grid-cols-2 gap-4">
+							<div class="space-y-1">
+								<label class="text-xs font-medium text-muted-foreground">Session Name</label>
+								<input
+									bind:value={session.name}
+									placeholder="e.g. Morning"
+									required
+									readonly={sessionMode !== 'custom'}
+									class="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+								/>
+							</div>
+							<div class="space-y-1">
+								<label class="text-xs font-medium text-muted-foreground">Late After</label>
+								<input
+									type="time"
+									bind:value={session.lateAfter}
+									required
+									class="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+								/>
+							</div>
+						</div>
+
+						<div class="grid grid-cols-2 gap-4">
+							<div class="space-y-1">
+								<label class="text-xs font-medium text-muted-foreground">Start Time</label>
+								<input
+									type="time"
+									bind:value={session.startTime}
+									required
+									class="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+								/>
+							</div>
+							<div class="space-y-1">
+								<label class="text-xs font-medium text-muted-foreground">End Time</label>
+								<input
+									type="time"
+									bind:value={session.endTime}
+									required
+									class="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+								/>
+							</div>
+						</div>
+					</div>
+				{/each}
 			</div>
 		</div>
 

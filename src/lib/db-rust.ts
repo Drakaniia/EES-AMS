@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Student, Class, AttendanceEvent, Settings, ExportData } from './types';
-export type { Student, Class, AttendanceEvent, Settings, ExportData };
+import type { Student, Class, Session, AttendanceEvent, Settings, ExportData } from './types';
+export type { Student, Class, Session, AttendanceEvent, Settings, ExportData };
 
 // ── Student Operations ───────────────────────────────────────────────────────
 
@@ -46,15 +46,7 @@ export async function deleteStudent(id: string): Promise<void> {
 // ── Class Operations ─────────────────────────────────────────────────────────
 
 export async function listClasses(): Promise<Class[]> {
-	const backendClasses = (await invoke('list_classes')) as Array<{
-		id: string;
-		name: string;
-		room: string;
-		dayStart: string;
-		dayEnd: string;
-		lateAfter: string;
-		createdAt: string;
-	}>;
+	const backendClasses = (await invoke('list_classes')) as Array<Class>;
 	// Backend already returns camelCase due to serde(rename_all = "camelCase")
 	return backendClasses.map((cls) => ({
 		id: cls.id,
@@ -63,22 +55,13 @@ export async function listClasses(): Promise<Class[]> {
 		dayStart: cls.dayStart,
 		dayEnd: cls.dayEnd,
 		lateAfter: cls.lateAfter,
+		sessions: cls.sessions,
 		createdAt: cls.createdAt
 	}));
 }
 
 export async function getClass(id: string): Promise<Class | undefined> {
-	const backendClass = (await invoke('get_class', { id })) as
-		| {
-				id: string;
-				name: string;
-				room: string;
-				dayStart: string;
-				dayEnd: string;
-				lateAfter: string;
-				createdAt: string;
-		  }
-		| undefined;
+	const backendClass = (await invoke('get_class', { id })) as Class | undefined;
 
 	if (!backendClass) return undefined;
 
@@ -90,20 +73,13 @@ export async function getClass(id: string): Promise<Class | undefined> {
 		dayStart: backendClass.dayStart,
 		dayEnd: backendClass.dayEnd,
 		lateAfter: backendClass.lateAfter,
+		sessions: backendClass.sessions,
 		createdAt: backendClass.createdAt
 	};
 }
 
 export async function saveClass(classData: Class, isUpdate: boolean = false): Promise<Class> {
-	let backendClass: {
-		id: string;
-		name: string;
-		room: string;
-		dayStart: string;
-		dayEnd: string;
-		lateAfter: string;
-		createdAt: string;
-	};
+	let backendClass: Class;
 
 	if (isUpdate) {
 		// Update existing class
@@ -114,7 +90,8 @@ export async function saveClass(classData: Class, isUpdate: boolean = false): Pr
 				room: classData.room,
 				dayStart: classData.dayStart,
 				dayEnd: classData.dayEnd,
-				lateAfter: classData.lateAfter
+				lateAfter: classData.lateAfter,
+				sessions: classData.sessions
 			}
 		});
 	} else {
@@ -125,7 +102,8 @@ export async function saveClass(classData: Class, isUpdate: boolean = false): Pr
 				room: classData.room,
 				dayStart: classData.dayStart,
 				dayEnd: classData.dayEnd,
-				lateAfter: classData.lateAfter
+				lateAfter: classData.lateAfter,
+				sessions: classData.sessions
 			}
 		});
 	}
@@ -138,6 +116,7 @@ export async function saveClass(classData: Class, isUpdate: boolean = false): Pr
 		dayStart: backendClass.dayStart,
 		dayEnd: backendClass.dayEnd,
 		lateAfter: backendClass.lateAfter,
+		sessions: backendClass.sessions,
 		createdAt: backendClass.createdAt
 	};
 }
