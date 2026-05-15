@@ -311,7 +311,8 @@ fn migrate_to_v5(conn: &rusqlite::Connection) -> Result<()> {
                 end_time: day_end,
                 late_after,
             }];
-            let sessions_json = serde_json::to_string(&sessions).unwrap_or_else(|_| "[]".to_string());
+            let sessions_json =
+                serde_json::to_string(&sessions).unwrap_or_else(|_| "[]".to_string());
             conn.execute(
                 "UPDATE classes SET sessions = ?1 WHERE id = ?2",
                 params![sessions_json, id],
@@ -841,7 +842,8 @@ impl ClassRepository {
     /// Create a new class
     pub fn create(&self, req: CreateClassRequest) -> Result<Class> {
         let room = req.room.filter(|r| !r.trim().is_empty());
-        let sessions_json = serde_json::to_string(&req.sessions).unwrap_or_else(|_| "[]".to_string());
+        let sessions_json =
+            serde_json::to_string(&req.sessions).unwrap_or_else(|_| "[]".to_string());
 
         let class = Class {
             id: uuid::Uuid::new_v4().to_string(),
@@ -884,7 +886,11 @@ impl ClassRepository {
         }
         if let Some(room) = req.room {
             // Empty string clears the room
-            class.room = if room.trim().is_empty() { None } else { Some(room) };
+            class.room = if room.trim().is_empty() {
+                None
+            } else {
+                Some(room)
+            };
         }
         if let Some(day_start) = req.day_start {
             class.day_start = day_start;

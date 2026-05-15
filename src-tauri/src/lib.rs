@@ -4,9 +4,9 @@ mod infrastructure;
 
 use commands::{
     add_event,
-    check_nfc_reader,
     // Updater commands
     check_for_updates,
+    check_nfc_reader,
     create_class,
     create_student,
     delete_class,

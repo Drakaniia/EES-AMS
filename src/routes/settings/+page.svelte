@@ -370,7 +370,7 @@
 												<span>Room {c.room}</span>
 											{/if}
 											{#if c.sessions && c.sessions.length > 0}
-												{#each c.sessions as s}
+												{#each c.sessions as s (s.name)}
 													<span class="inline-flex items-center gap-1">
 														<span class="font-medium text-foreground">{s.name}:</span>
 														{s.startTime}–{s.endTime}
@@ -595,22 +595,24 @@
 		</div>
 
 		<div class="space-y-4">
-			<h3 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+			<h3 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
 				Quarter Dates
 			</h3>
 
 			<div class="grid grid-cols-2 gap-4">
 				<div class="space-y-1">
-					<label class="text-xs font-medium text-muted-foreground">Q1 Start</label>
+					<label for="q1Start" class="text-xs font-medium text-muted-foreground">Q1 Start</label>
 					<input
+						id="q1Start"
 						type="date"
 						bind:value={q1Start}
 						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
 				<div class="space-y-1">
-					<label class="text-xs font-medium text-muted-foreground">Q1 End</label>
+					<label for="q1End" class="text-xs font-medium text-muted-foreground">Q1 End</label>
 					<input
+						id="q1End"
 						type="date"
 						bind:value={q1End}
 						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
@@ -620,16 +622,18 @@
 
 			<div class="grid grid-cols-2 gap-4">
 				<div class="space-y-1">
-					<label class="text-xs font-medium text-muted-foreground">Q2 Start</label>
+					<label for="q2Start" class="text-xs font-medium text-muted-foreground">Q2 Start</label>
 					<input
+						id="q2Start"
 						type="date"
 						bind:value={q2Start}
 						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
 				<div class="space-y-1">
-					<label class="text-xs font-medium text-muted-foreground">Q2 End</label>
+					<label for="q2End" class="text-xs font-medium text-muted-foreground">Q2 End</label>
 					<input
+						id="q2End"
 						type="date"
 						bind:value={q2End}
 						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
@@ -639,16 +643,18 @@
 
 			<div class="grid grid-cols-2 gap-4">
 				<div class="space-y-1">
-					<label class="text-xs font-medium text-muted-foreground">Q3 Start</label>
+					<label for="q3Start" class="text-xs font-medium text-muted-foreground">Q3 Start</label>
 					<input
+						id="q3Start"
 						type="date"
 						bind:value={q3Start}
 						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
 				<div class="space-y-1">
-					<label class="text-xs font-medium text-muted-foreground">Q3 End</label>
+					<label for="q3End" class="text-xs font-medium text-muted-foreground">Q3 End</label>
 					<input
+						id="q3End"
 						type="date"
 						bind:value={q3End}
 						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
@@ -658,16 +664,18 @@
 
 			<div class="grid grid-cols-2 gap-4">
 				<div class="space-y-1">
-					<label class="text-xs font-medium text-muted-foreground">Q4 Start</label>
+					<label for="q4Start" class="text-xs font-medium text-muted-foreground">Q4 Start</label>
 					<input
+						id="q4Start"
 						type="date"
 						bind:value={q4Start}
 						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
 				<div class="space-y-1">
-					<label class="text-xs font-medium text-muted-foreground">Q4 End</label>
+					<label for="q4End" class="text-xs font-medium text-muted-foreground">Q4 End</label>
 					<input
+						id="q4End"
 						type="date"
 						bind:value={q4End}
 						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
@@ -718,8 +726,8 @@
 		</div>
 
 		<!-- Session Mode Selector -->
-		<div class="space-y-1.5">
-			<label class="label-mono">Session Mode</label>
+		<fieldset class="space-y-1.5">
+			<legend class="label-mono">Session Mode</legend>
 			<div class="flex gap-2">
 				<button
 					type="button"
@@ -752,12 +760,12 @@
 					Custom
 				</button>
 			</div>
-		</div>
+		</fieldset>
 
 		<!-- Sessions List -->
 		<div class="space-y-3">
 			<div class="flex items-center justify-between">
-				<h4 class="label-mono text-xs uppercase text-muted-foreground">Sessions</h4>
+				<h4 class="label-mono text-xs text-muted-foreground uppercase">Sessions</h4>
 				{#if sessionMode === 'custom'}
 					<button
 						type="button"
@@ -770,11 +778,12 @@
 			</div>
 
 			<div class="max-h-64 space-y-4 overflow-y-auto pr-1">
-				{#each formSessions as session, i}
+				{#each formSessions as session, i (i)}
 					<div class="relative space-y-3 rounded-xl border border-border p-4">
 						{#if sessionMode === 'custom' && formSessions.length > 1}
 							<button
 								type="button"
+								aria-label="Remove session {i + 1}"
 								onclick={() => removeSession(i)}
 								class="absolute top-3 right-3 text-muted-foreground hover:text-destructive"
 							>
@@ -792,44 +801,52 @@
 
 						<div class="grid grid-cols-2 gap-4">
 							<div class="space-y-1">
-								<label class="text-xs font-medium text-muted-foreground">Session Name</label>
-								<input
-									bind:value={session.name}
-									placeholder="e.g. Morning"
-									required
-									readonly={sessionMode !== 'custom'}
-									class="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-								/>
+								<label class="text-xs font-medium text-muted-foreground">
+									Session Name
+									<input
+										bind:value={session.name}
+										placeholder="e.g. Morning"
+										required
+										readonly={sessionMode !== 'custom'}
+										class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+									/>
+								</label>
 							</div>
 							<div class="space-y-1">
-								<label class="text-xs font-medium text-muted-foreground">Late After</label>
-								<input
-									type="time"
-									bind:value={session.lateAfter}
-									required
-									class="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-								/>
+								<label class="text-xs font-medium text-muted-foreground">
+									Late After
+									<input
+										type="time"
+										bind:value={session.lateAfter}
+										required
+										class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+									/>
+								</label>
 							</div>
 						</div>
 
 						<div class="grid grid-cols-2 gap-4">
 							<div class="space-y-1">
-								<label class="text-xs font-medium text-muted-foreground">Start Time</label>
-								<input
-									type="time"
-									bind:value={session.startTime}
-									required
-									class="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-								/>
+								<label class="text-xs font-medium text-muted-foreground">
+									Start Time
+									<input
+										type="time"
+										bind:value={session.startTime}
+										required
+										class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+									/>
+								</label>
 							</div>
 							<div class="space-y-1">
-								<label class="text-xs font-medium text-muted-foreground">End Time</label>
-								<input
-									type="time"
-									bind:value={session.endTime}
-									required
-									class="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-								/>
+								<label class="text-xs font-medium text-muted-foreground">
+									End Time
+									<input
+										type="time"
+										bind:value={session.endTime}
+										required
+										class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+									/>
+								</label>
 							</div>
 						</div>
 					</div>
