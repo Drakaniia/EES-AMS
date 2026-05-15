@@ -344,6 +344,7 @@ pub fn import_all(
             day_start: class.day_start,
             day_end: class.day_end,
             late_after: class.late_after,
+            sessions: class.sessions,
         };
         class_repo.create(req).map_err(|e| e.to_string())?;
     }
@@ -548,7 +549,19 @@ pub async fn export_csv_with_folder(
                         let event_time = event
                             .timestamp
                             .with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
-                        let parts: Vec<&str> = class.late_after.split(':').collect();
+
+                        // Find matching session or use default
+                        let mut late_after = &class.late_after;
+                        let time_str = event_time.format("%H:%M").to_string();
+
+                        for session in &class.sessions {
+                            if time_str >= session.start_time && time_str <= session.end_time {
+                                late_after = &session.late_after;
+                                break;
+                            }
+                        }
+
+                        let parts: Vec<&str> = late_after.split(':').collect();
                         let [h, m] = [
                             parts
                                 .first()

@@ -9,6 +9,13 @@ export interface Student {
 	createdAt: string;
 }
 
+export interface Session {
+	name: string;
+	startTime: string;
+	endTime: string;
+	lateAfter: string;
+}
+
 export interface Class {
 	id: string;
 	name: string;
@@ -16,6 +23,7 @@ export interface Class {
 	dayStart: string;
 	dayEnd: string;
 	lateAfter: string;
+	sessions: Session[];
 	createdAt: string;
 }
 
@@ -66,6 +74,7 @@ export interface CreateClassRequest {
 	dayStart: string;
 	dayEnd: string;
 	lateAfter: string;
+	sessions: Session[];
 }
 
 export interface UpdateClassRequest {
@@ -74,6 +83,7 @@ export interface UpdateClassRequest {
 	dayStart?: string;
 	dayEnd?: string;
 	lateAfter?: string;
+	sessions?: Session[];
 }
 
 export interface CreateEventRequest {

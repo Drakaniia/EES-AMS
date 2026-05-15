@@ -66,6 +66,16 @@ pub enum AttendanceType {
     Out,
 }
 
+/// Session record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Session {
+    pub name: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub late_after: String,
+}
+
 /// Class record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,6 +87,8 @@ pub struct Class {
     pub day_start: String,
     pub day_end: String,
     pub late_after: String,
+    #[serde(default)]
+    pub sessions: Vec<Session>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -170,6 +182,8 @@ pub struct CreateClassRequest {
     pub day_start: String,
     pub day_end: String,
     pub late_after: String,
+    #[serde(default)]
+    pub sessions: Vec<Session>,
 }
 
 /// Request to update a class
@@ -186,6 +200,8 @@ pub struct UpdateClassRequest {
     pub day_end: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub late_after: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sessions: Option<Vec<Session>>,
 }
 
 /// Request to create an attendance event

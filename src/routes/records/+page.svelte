@@ -115,19 +115,33 @@
 
 					// Check if late
 					const studentClass = classes.find((c) => c.id === student.classId);
-					if (studentClass && studentClass.lateAfter) {
+					if (studentClass) {
 						const eventTime = new Date(event.timestamp);
-						const [h, m] = studentClass.lateAfter.split(':').map(Number);
-						const lateTime = new Date(
-							eventTime.getFullYear(),
-							eventTime.getMonth(),
-							eventTime.getDate(),
-							h,
-							m,
-							0,
-							0
-						);
-						group.isLate = eventTime > lateTime;
+						const timeStr = `${String(eventTime.getHours()).padStart(2, '0')}:${String(eventTime.getMinutes()).padStart(2, '0')}`;
+
+						let lateAfter = studentClass.lateAfter;
+						if (studentClass.sessions && studentClass.sessions.length > 0) {
+							for (const session of studentClass.sessions) {
+								if (timeStr >= session.startTime && timeStr <= session.endTime) {
+									lateAfter = session.lateAfter;
+									break;
+								}
+							}
+						}
+
+						if (lateAfter) {
+							const [h, m] = lateAfter.split(':').map(Number);
+							const lateTime = new Date(
+								eventTime.getFullYear(),
+								eventTime.getMonth(),
+								eventTime.getDate(),
+								h,
+								m,
+								0,
+								0
+							);
+							group.isLate = eventTime > lateTime;
+						}
 					}
 				}
 			} else if (event.type === 'out') {
