@@ -225,15 +225,7 @@
 		if (!lateAfter) return false;
 
 		const [h, m] = lateAfter.split(':').map(Number);
-		const lateTime = new Date(
-			now.getFullYear(),
-			now.getMonth(),
-			now.getDate(),
-			h,
-			m,
-			0,
-			0
-		);
+		const lateTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
 
 		return now > lateTime;
 	}
