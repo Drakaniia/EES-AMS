@@ -6,7 +6,6 @@ use commands::{
     add_event,
     // Updater commands
     check_for_updates,
-    check_nfc_reader,
     create_class,
     create_student,
     delete_class,
@@ -32,10 +31,7 @@ use commands::{
     list_events_for_student,
     // Student commands
     list_students,
-    read_nfc_card,
     save_settings,
-    start_nfc_scanning,
-    stop_nfc_scanning,
     update_class,
     update_student,
     wipe_all,
@@ -47,10 +43,6 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            check_nfc_reader,
-            start_nfc_scanning,
-            stop_nfc_scanning,
-            read_nfc_card,
             // Student commands
             list_students,
             get_student,
