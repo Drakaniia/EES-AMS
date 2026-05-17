@@ -47,6 +47,7 @@
 	let formDayEnd = $state('');
 	let formLateAfter = $state('');
 	let formSessions = $state<Session[]>([]);
+	let formDays = $state<number[]>([1, 2, 3, 4, 5]);
 	let sessionMode = $state<'single' | 'morning-afternoon' | 'custom'>('single');
 
 	// Toast
@@ -140,6 +141,7 @@
 				lateAfter: defaultLateAfter
 			}
 		];
+		formDays = [1, 2, 3, 4, 5];
 		sessionMode = 'single';
 		classDialogOpen = true;
 	}
@@ -162,6 +164,7 @@
 							lateAfter: c.lateAfter
 						}
 					];
+		formDays = c.days && c.days.length > 0 ? [...c.days] : [1, 2, 3, 4, 5];
 
 		if (formSessions.length === 1 && formSessions[0].name === 'Full Day') {
 			sessionMode = 'single';
@@ -233,6 +236,7 @@
 			dayEnd: primary.endTime,
 			lateAfter: primary.lateAfter,
 			sessions: formSessions,
+			days: formDays,
 			createdAt: editingClass?.createdAt ?? ''
 		};
 
@@ -300,6 +304,21 @@
 		wipeTarget = true;
 	}
 
+	function getDaysLabel(days: number[]) {
+		if (!days || days.length === 0) return 'None';
+		if (days.length === 7) return 'Everyday';
+		const weekdays = [1, 2, 3, 4, 5];
+		if (days.length === 5 && weekdays.every((d) => days.includes(d))) return 'Weekdays';
+
+		const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+		const shortDayNames = ['S', 'M', 'T', 'W', 'TH', 'F', 'S'];
+		return days
+			.slice()
+			.sort((a, b) => a - b)
+			.map((d) => shortDayNames[d])
+			.join(' ');
+	}
+
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
 		reload();
@@ -362,7 +381,16 @@
 									class="flex items-center justify-between p-6 transition-colors hover:bg-surface"
 								>
 									<div class="space-y-1">
-										<div class="font-medium">{c.name}</div>
+										<div class="flex items-center gap-3">
+											<div class="font-medium">{c.name}</div>
+											{#if c.days}
+												<span
+													class="rounded-md bg-accent/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-accent uppercase"
+												>
+													{getDaysLabel(c.days)}
+												</span>
+											{/if}
+										</div>
 										<div
 											class="label-mono flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
 										>
@@ -722,6 +750,36 @@
 					placeholder=" "
 					class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 				/>
+			</div>
+		</div>
+
+		<!-- Days of Week Selector -->
+		<div class="space-y-1.5">
+			<label class="label-mono flex items-center justify-between">
+				<span>Scheduled Days</span>
+				<span class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+					{getDaysLabel(formDays)}
+				</span>
+			</label>
+			<div class="flex justify-between gap-1">
+				{#each ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as day, i}
+					<button
+						type="button"
+						onclick={() => {
+							if (formDays.includes(i)) {
+								formDays = formDays.filter((d) => d !== i);
+							} else {
+								formDays = [...formDays, i].sort();
+							}
+						}}
+						class="flex size-9 items-center justify-center rounded-md border text-xs font-semibold transition-colors
+							{formDays.includes(i)
+							? 'border-primary bg-primary text-primary-foreground'
+							: 'border-border bg-background hover:bg-surface'}"
+					>
+						{day}{i === 4 ? 'H' : ''}
+					</button>
+				{/each}
 			</div>
 		</div>
 
