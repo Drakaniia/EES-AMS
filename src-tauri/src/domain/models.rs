@@ -66,15 +66,31 @@ pub enum AttendanceType {
     Out,
 }
 
+/// Session record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Session {
+    pub name: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub late_after: String,
+}
+
 /// Class record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Class {
     pub id: String,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub room: Option<String>,
     pub day_start: String,
     pub day_end: String,
     pub late_after: String,
+    #[serde(default)]
+    pub sessions: Vec<Session>,
+    #[serde(default)]
+    pub days: Vec<i32>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -101,6 +117,15 @@ pub struct Settings {
     pub day_start: String,  // "08:30"
     pub day_end: String,    // "15:30"
     pub late_after: String, // "08:45"
+    pub quarter: String,    // "1st Quarter"
+    pub q1_start: Option<String>,
+    pub q1_end: Option<String>,
+    pub q2_start: Option<String>,
+    pub q2_end: Option<String>,
+    pub q3_start: Option<String>,
+    pub q3_end: Option<String>,
+    pub q4_start: Option<String>,
+    pub q4_end: Option<String>,
 }
 
 impl Default for Settings {
@@ -110,6 +135,15 @@ impl Default for Settings {
             day_start: "08:30".to_string(),
             day_end: "15:30".to_string(),
             late_after: "08:45".to_string(),
+            quarter: "1st Quarter".to_string(),
+            q1_start: None,
+            q1_end: None,
+            q2_start: None,
+            q2_end: None,
+            q3_start: None,
+            q3_end: None,
+            q4_start: None,
+            q4_end: None,
         }
     }
 }
@@ -145,9 +179,15 @@ pub struct UpdateStudentRequest {
 #[serde(rename_all = "camelCase")]
 pub struct CreateClassRequest {
     pub name: String,
+    #[serde(default)]
+    pub room: Option<String>,
     pub day_start: String,
     pub day_end: String,
     pub late_after: String,
+    #[serde(default)]
+    pub sessions: Vec<Session>,
+    #[serde(default)]
+    pub days: Vec<i32>,
 }
 
 /// Request to update a class
@@ -157,11 +197,17 @@ pub struct UpdateClassRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub room: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub day_start: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub day_end: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub late_after: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sessions: Option<Vec<Session>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub days: Option<Vec<i32>>,
 }
 
 /// Request to create an attendance event

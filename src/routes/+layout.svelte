@@ -1,5 +1,4 @@
 <script lang="ts">
-	import '../app.css';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import UpdateNotification from '../components/ui/UpdateNotification.svelte';
@@ -22,10 +21,10 @@
 
 <div class="app-container">
 	<TitleBar />
-	
+
 	<div class="content-container">
 		<UpdateNotification />
-		
+
 		<ClickSpark sparkColor="#FF8A4C" sparkSize={8} sparkRadius={12} sparkCount={6} duration={300}>
 			{@render children()}
 		</ClickSpark>
@@ -39,7 +38,7 @@
 		flex-direction: column;
 		overflow: hidden;
 	}
-	
+
 	.content-container {
 		flex: 1;
 		display: flex;
