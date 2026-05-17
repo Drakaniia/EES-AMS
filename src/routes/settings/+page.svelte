@@ -3,9 +3,8 @@
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import {
-		getSettings,
-		saveSettings,
 		listClasses,
 		saveClass,
 		deleteClass,
@@ -14,25 +13,42 @@
 		importAll,
 		wipeAll,
 		type Settings,
-		type Class
+		type Class,
+		type Session
 	} from '$lib/db-rust';
 
 	// ── State ────────────────────────────────────────────────────────────────
-	let settings = $state<Settings | null>(null);
 	let classes = $state<Class[]>([]);
 
-	// Global settings fields
+	// Global settings fields - derived from store
 	let defaultDayStart = $state('08:30');
 	let defaultDayEnd = $state('15:30');
 	let defaultLateAfter = $state('08:45');
+	let defaultQuarter = $state('1st Quarter');
+
+	let q1Start = $state('');
+	let q1End = $state('');
+	let q2Start = $state('');
+	let q2End = $state('');
+	let q3Start = $state('');
+	let q3End = $state('');
+	let q4Start = $state('');
+	let q4End = $state('');
+
+	// Quarter Dialog state
+	let quarterDialogOpen = $state(false);
 
 	// Class Dialog state
 	let classDialogOpen = $state(false);
 	let editingClass = $state<Class | null>(null);
 	let formClassName = $state('');
+	let formRoom = $state('');
 	let formDayStart = $state('');
 	let formDayEnd = $state('');
 	let formLateAfter = $state('');
+	let formSessions = $state<Session[]>([]);
+	let formDays = $state<number[]>([1, 2, 3, 4, 5]);
+	let sessionMode = $state<'single' | 'morning-afternoon' | 'custom'>('single');
 
 	// Toast
 	let toastMessage = $state<string | null>(null);
@@ -60,52 +76,144 @@
 
 	async function reload() {
 		try {
-			const [s, c] = await Promise.all([getSettings(), listClasses()]);
-			settings = s;
+			const [c] = await Promise.all([listClasses(), settingsStore.load()]);
 			classes = c;
-			if (s) {
-				defaultDayStart = s.dayStart;
-				defaultDayEnd = s.dayEnd;
-				defaultLateAfter = s.lateAfter;
+			// Update form fields from the store
+			if (settingsStore.settings) {
+				defaultDayStart = settingsStore.settings.dayStart;
+				defaultDayEnd = settingsStore.settings.dayEnd;
+				defaultLateAfter = settingsStore.settings.lateAfter;
+				defaultQuarter = settingsStore.settings.quarter;
+				q1Start = settingsStore.settings.q1Start ?? '';
+				q1End = settingsStore.settings.q1End ?? '';
+				q2Start = settingsStore.settings.q2Start ?? '';
+				q2End = settingsStore.settings.q2End ?? '';
+				q3Start = settingsStore.settings.q3Start ?? '';
+				q3End = settingsStore.settings.q3End ?? '';
+				q4Start = settingsStore.settings.q4Start ?? '';
+				q4End = settingsStore.settings.q4End ?? '';
 			}
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : 'Database error';
 			toast(`Failed to load: ${msg}`, false);
-			// Set a fallback state so it doesn't spin forever
-			settings = settings || { id: 'app', dayStart: '08:30', dayEnd: '15:30', lateAfter: '08:45' };
 		}
 	}
 
 	// ── Actions ──────────────────────────────────────────────────────────────
 	async function onSaveGlobal(e: SubmitEvent) {
 		e.preventDefault();
-		const next: Settings = {
-			id: 'app',
-			dayStart: defaultDayStart,
-			dayEnd: defaultDayEnd,
-			lateAfter: defaultLateAfter
-		};
-		await saveSettings(next);
-		settings = next;
-		toast('Global defaults saved');
+		try {
+			const next: Settings = {
+				id: 'app',
+				dayStart: defaultDayStart,
+				dayEnd: defaultDayEnd,
+				lateAfter: defaultLateAfter,
+				quarter: defaultQuarter,
+				q1Start,
+				q1End,
+				q2Start,
+				q2End,
+				q3Start,
+				q3End,
+				q4Start,
+				q4End
+			};
+			await settingsStore.save(next);
+			toast('Global configuration saved');
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : 'Failed to save settings';
+			toast(`Save failed: ${msg}`, false);
+		}
 	}
 
 	function openAddClass() {
 		editingClass = null;
 		formClassName = '';
+		formRoom = '';
 		formDayStart = defaultDayStart;
 		formDayEnd = defaultDayEnd;
 		formLateAfter = defaultLateAfter;
+		formSessions = [
+			{
+				name: 'Full Day',
+				startTime: defaultDayStart,
+				endTime: defaultDayEnd,
+				lateAfter: defaultLateAfter
+			}
+		];
+		formDays = [1, 2, 3, 4, 5];
+		sessionMode = 'single';
 		classDialogOpen = true;
 	}
 
 	function openEditClass(c: Class) {
 		editingClass = c;
 		formClassName = c.name;
+		formRoom = c.room ?? '';
 		formDayStart = c.dayStart;
 		formDayEnd = c.dayEnd;
 		formLateAfter = c.lateAfter;
+		formSessions =
+			c.sessions && c.sessions.length > 0
+				? JSON.parse(JSON.stringify(c.sessions))
+				: [
+						{
+							name: 'Full Day',
+							startTime: c.dayStart,
+							endTime: c.dayEnd,
+							lateAfter: c.lateAfter
+						}
+					];
+		formDays = c.days && c.days.length > 0 ? [...c.days] : [1, 2, 3, 4, 5];
+
+		if (formSessions.length === 1 && formSessions[0].name === 'Full Day') {
+			sessionMode = 'single';
+		} else if (
+			formSessions.length === 2 &&
+			formSessions[0].name === 'Morning' &&
+			formSessions[1].name === 'Afternoon'
+		) {
+			sessionMode = 'morning-afternoon';
+		} else {
+			sessionMode = 'custom';
+		}
+
 		classDialogOpen = true;
+	}
+
+	function handleSessionModeChange(mode: typeof sessionMode) {
+		sessionMode = mode;
+		if (mode === 'single') {
+			formSessions = [
+				{
+					name: 'Full Day',
+					startTime: defaultDayStart,
+					endTime: defaultDayEnd,
+					lateAfter: defaultLateAfter
+				}
+			];
+		} else if (mode === 'morning-afternoon') {
+			formSessions = [
+				{ name: 'Morning', startTime: '07:30', endTime: '11:30', lateAfter: '07:45' },
+				{ name: 'Afternoon', startTime: '13:00', endTime: '17:00', lateAfter: '13:15' }
+			];
+		}
+	}
+
+	function addSession() {
+		formSessions = [
+			...formSessions,
+			{
+				name: `Session ${formSessions.length + 1}`,
+				startTime: '08:00',
+				endTime: '12:00',
+				lateAfter: '08:15'
+			}
+		];
+	}
+
+	function removeSession(index: number) {
+		formSessions = formSessions.filter((_, i) => i !== index);
 	}
 
 	async function onSaveClass(e: SubmitEvent) {
@@ -113,12 +221,22 @@
 		const name = formClassName.trim();
 		if (!name) return;
 
+		// Use the first session as primary times for backwards compatibility
+		const primary = formSessions[0] || {
+			startTime: formDayStart,
+			endTime: formDayEnd,
+			lateAfter: formLateAfter
+		};
+
 		const c: Class = {
 			id: editingClass?.id ?? '',
 			name,
-			dayStart: formDayStart,
-			dayEnd: formDayEnd,
-			lateAfter: formLateAfter,
+			room: formRoom.trim() || undefined,
+			dayStart: primary.startTime,
+			dayEnd: primary.endTime,
+			lateAfter: primary.lateAfter,
+			sessions: formSessions,
+			days: formDays,
 			createdAt: editingClass?.createdAt ?? ''
 		};
 
@@ -186,6 +304,20 @@
 		wipeTarget = true;
 	}
 
+	function getDaysLabel(days: number[]) {
+		if (!days || days.length === 0) return 'None';
+		if (days.length === 7) return 'Everyday';
+		const weekdays = [1, 2, 3, 4, 5];
+		if (days.length === 5 && weekdays.every((d) => days.includes(d))) return 'Weekdays';
+
+		const shortDayNames = ['S', 'M', 'T', 'W', 'TH', 'F', 'S'];
+		return days
+			.slice()
+			.sort((a, b) => a - b)
+			.map((d) => shortDayNames[d])
+			.join(' ');
+	}
+
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
 		reload();
@@ -204,18 +336,23 @@
 		description="Manage your class schedule and system-wide attendance rules."
 	/>
 
-	{#if settings === null}
-		<div class="text-muted-foreground px-6 py-12 text-sm md:px-12">Loading…</div>
+	{#if settingsStore.loading}
+		<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading…</div>
+	{:else if settingsStore.error}
+		<div class="px-6 py-12 text-sm text-destructive md:px-12">
+			Error: {settingsStore.error}
+			<button onclick={reload} class="ml-2 underline">Retry</button>
+		</div>
 	{:else}
 		<div class="grid gap-8 px-6 py-10 md:px-12 lg:grid-cols-12">
 			<!-- ── Class Management ────────────────────────────────────────── -->
 			<div class="space-y-6 lg:col-span-8">
-				<section class="border-border bg-card overflow-hidden rounded-2xl border">
+				<section class="overflow-hidden rounded-2xl border border-border bg-card">
 					<div class="flex items-center justify-between p-6 pb-4">
 						<h3 class="text-lg font-medium">Classes & Schedule</h3>
 						<button
 							onclick={openAddClass}
-							class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
+							class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 						>
 							<svg
 								class="size-4"
@@ -232,27 +369,50 @@
 						</button>
 					</div>
 
-					<div class="divide-border border-border divide-y border-t pt-5">
+					<div class="divide-y divide-border border-t border-border pt-5">
 						{#if classes.length === 0}
-							<div class="text-muted-foreground p-12 text-center text-sm">
+							<div class="p-12 text-center text-sm text-muted-foreground">
 								No classes configured. Add a class to start tracking attendance.
 							</div>
 						{:else}
 							{#each classes as c (c.id)}
 								<div
-									class="hover:bg-surface flex items-center justify-between p-6 transition-colors"
+									class="flex items-center justify-between p-6 transition-colors hover:bg-surface"
 								>
 									<div class="space-y-1">
-										<div class="font-medium">{c.name}</div>
-										<div class="text-muted-foreground label-mono flex gap-4 text-xs">
-											<span>{c.dayStart} – {c.dayEnd}</span>
-											<span class="text-accent">Late after {c.lateAfter}</span>
+										<div class="flex items-center gap-3">
+											<div class="font-medium">{c.name}</div>
+											{#if c.days}
+												<span
+													class="rounded-md bg-accent/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-accent uppercase"
+												>
+													{getDaysLabel(c.days)}
+												</span>
+											{/if}
+										</div>
+										<div
+											class="label-mono flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
+										>
+											{#if c.room}
+												<span>Room {c.room}</span>
+											{/if}
+											{#if c.sessions && c.sessions.length > 0}
+												{#each c.sessions as s (s.name)}
+													<span class="inline-flex items-center gap-1">
+														<span class="font-medium text-foreground">{s.name}:</span>
+														{s.startTime}–{s.endTime}
+													</span>
+												{/each}
+											{:else}
+												<span>{c.dayStart} – {c.dayEnd}</span>
+												<span class="text-accent">Late after {c.lateAfter}</span>
+											{/if}
 										</div>
 									</div>
 									<div class="flex gap-2">
 										<button
 											onclick={() => openEditClass(c)}
-											class="border-border bg-background hover:bg-surface inline-flex size-9 items-center justify-center rounded-md border transition-colors"
+											class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
 											title="Edit class"
 										>
 											<svg
@@ -270,7 +430,7 @@
 										</button>
 										<button
 											onclick={() => onDeleteClass(c.id)}
-											class="border-border bg-background hover:bg-surface text-destructive inline-flex size-9 items-center justify-center rounded-md border transition-colors"
+											class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
 											title="Delete class"
 										>
 											<svg
@@ -296,16 +456,16 @@
 				</section>
 
 				<!-- ── Backups ───────────────────────────────────────────────────── -->
-				<section class="border-border bg-card space-y-5 rounded-2xl border p-6">
+				<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
 					<h3 class="text-lg font-medium">Data Management</h3>
-					<p class="text-muted-foreground text-sm">
+					<p class="text-sm text-muted-foreground">
 						Your data is stored locally. Use backups to transfer data between devices or browsers.
 					</p>
 
 					<div class="flex flex-wrap gap-2">
 						<button
 							onclick={openExportDialog}
-							class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 						>
 							<svg
 								class="size-4"
@@ -325,7 +485,7 @@
 
 						<button
 							onclick={() => fileInput?.click()}
-							class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 						>
 							<svg
 								class="size-4"
@@ -351,10 +511,10 @@
 						/>
 					</div>
 
-					<div class="border-border space-y-3 border-t pt-5">
+					<div class="space-y-3 border-t border-border pt-5">
 						<button
 							onclick={onWipe}
-							class="rounded-pill border-destructive/40 text-destructive hover:bg-destructive/10 inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+							class="inline-flex items-center gap-2 rounded-pill border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
 						>
 							Wipe all data
 						</button>
@@ -366,11 +526,11 @@
 			<div class="space-y-6 lg:col-span-4">
 				<form
 					onsubmit={onSaveGlobal}
-					class="border-border bg-card space-y-5 rounded-2xl border p-6"
+					class="space-y-5 rounded-2xl border border-border bg-card p-6"
 				>
 					<div class="space-y-1">
 						<h3 class="text-lg font-medium">Global Defaults</h3>
-						<p class="text-muted-foreground text-xs">Used as templates for new classes.</p>
+						<p class="text-xs text-muted-foreground">Used as templates for new classes.</p>
 					</div>
 
 					<div class="space-y-4">
@@ -380,7 +540,7 @@
 								id="defDayStart"
 								type="time"
 								bind:value={defaultDayStart}
-								class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+								class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 							/>
 						</div>
 						<div class="space-y-2">
@@ -389,7 +549,7 @@
 								id="defDayEnd"
 								type="time"
 								bind:value={defaultDayEnd}
-								class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+								class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 							/>
 						</div>
 						<div class="space-y-2">
@@ -398,22 +558,167 @@
 								id="defLateAfter"
 								type="time"
 								bind:value={defaultLateAfter}
-								class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
+								class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 							/>
+						</div>
+						<div class="space-y-2">
+							<label for="defQuarter" class="label-mono">Current Quarter</label>
+							<button
+								type="button"
+								onclick={() => (quarterDialogOpen = true)}
+								class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-sm transition-colors hover:bg-accent/50 focus:ring-2 focus:ring-primary focus:outline-none"
+							>
+								<span>{defaultQuarter}</span>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									class="opacity-50"
+								>
+									<path d="m6 9 6 6 6-6" />
+								</svg>
+							</button>
 						</div>
 					</div>
 
 					<button
 						type="submit"
-						class="rounded-pill bg-primary text-primary-foreground hover:bg-accent w-full px-4 py-2 text-sm font-medium transition-colors"
+						class="w-full rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 					>
-						Save Defaults
+						Save Configuration
 					</button>
 				</form>
 			</div>
 		</div>
 	{/if}
 </AppShell>
+
+<!-- ── Quarter Dialog ───────────────────────────────────────────────────────── -->
+<Dialog
+	open={quarterDialogOpen}
+	title="School Year Quarters"
+	description="Set the current quarter and define the start/end dates for each period."
+	on:close={() => (quarterDialogOpen = false)}
+>
+	<div class="space-y-6">
+		<div class="space-y-2">
+			<label for="currentQuarter" class="label-mono">Active Quarter</label>
+			<select
+				id="currentQuarter"
+				bind:value={defaultQuarter}
+				class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+			>
+				<option value="1st Quarter">1st Quarter</option>
+				<option value="2nd Quarter">2nd Quarter</option>
+				<option value="3rd Quarter">3rd Quarter</option>
+				<option value="4th Quarter">4th Quarter</option>
+			</select>
+		</div>
+
+		<div class="space-y-4">
+			<h3 class="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+				Quarter Dates
+			</h3>
+
+			<div class="grid grid-cols-2 gap-4">
+				<div class="space-y-1">
+					<label for="q1Start" class="text-xs font-medium text-muted-foreground">Q1 Start</label>
+					<input
+						id="q1Start"
+						type="date"
+						bind:value={q1Start}
+						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</div>
+				<div class="space-y-1">
+					<label for="q1End" class="text-xs font-medium text-muted-foreground">Q1 End</label>
+					<input
+						id="q1End"
+						type="date"
+						bind:value={q1End}
+						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</div>
+			</div>
+
+			<div class="grid grid-cols-2 gap-4">
+				<div class="space-y-1">
+					<label for="q2Start" class="text-xs font-medium text-muted-foreground">Q2 Start</label>
+					<input
+						id="q2Start"
+						type="date"
+						bind:value={q2Start}
+						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</div>
+				<div class="space-y-1">
+					<label for="q2End" class="text-xs font-medium text-muted-foreground">Q2 End</label>
+					<input
+						id="q2End"
+						type="date"
+						bind:value={q2End}
+						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</div>
+			</div>
+
+			<div class="grid grid-cols-2 gap-4">
+				<div class="space-y-1">
+					<label for="q3Start" class="text-xs font-medium text-muted-foreground">Q3 Start</label>
+					<input
+						id="q3Start"
+						type="date"
+						bind:value={q3Start}
+						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</div>
+				<div class="space-y-1">
+					<label for="q3End" class="text-xs font-medium text-muted-foreground">Q3 End</label>
+					<input
+						id="q3End"
+						type="date"
+						bind:value={q3End}
+						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</div>
+			</div>
+
+			<div class="grid grid-cols-2 gap-4">
+				<div class="space-y-1">
+					<label for="q4Start" class="text-xs font-medium text-muted-foreground">Q4 Start</label>
+					<input
+						id="q4Start"
+						type="date"
+						bind:value={q4Start}
+						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</div>
+				<div class="space-y-1">
+					<label for="q4End" class="text-xs font-medium text-muted-foreground">Q4 End</label>
+					<input
+						id="q4End"
+						type="date"
+						bind:value={q4End}
+						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</div>
+			</div>
+		</div>
+
+		<button
+			onclick={() => (quarterDialogOpen = false)}
+			class="w-full rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+		>
+			Done
+		</button>
+	</div>
+</Dialog>
 
 <!-- ── Class Dialog ───────────────────────────────────────────────────────── -->
 <Dialog
@@ -423,47 +728,186 @@
 	on:close={() => (classDialogOpen = false)}
 >
 	<form onsubmit={onSaveClass} class="space-y-4">
-		<div class="space-y-1.5">
-			<label for="className" class="label-mono">Class Name</label>
-			<input
-				id="className"
-				bind:value={formClassName}
-				placeholder="e.g. Grade 6 - Apple"
-				required
-				class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
-			/>
+		<div class="grid grid-cols-2 gap-4">
+			<div class="space-y-1.5">
+				<label for="className" class="label-mono">Class Name</label>
+				<input
+					id="className"
+					bind:value={formClassName}
+					placeholder=""
+					required
+					class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<label for="room" class="label-mono"
+					>Room <span class="font-normal text-muted-foreground">(optional)</span></label
+				>
+				<input
+					id="room"
+					bind:value={formRoom}
+					placeholder=" "
+					class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				/>
+			</div>
 		</div>
 
-		<div class="grid grid-cols-3 gap-4">
-			<div class="space-y-1.5">
-				<label for="dayStart" class="label-mono">Start</label>
-				<input
-					id="dayStart"
-					type="time"
-					bind:value={formDayStart}
-					required
-					class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
-				/>
+		<!-- Days of Week Selector -->
+		<fieldset class="space-y-1.5">
+			<legend class="label-mono flex items-center justify-between">
+				<span>Scheduled Days</span>
+				<span class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+					{getDaysLabel(formDays)}
+				</span>
+			</legend>
+			<div class="flex justify-between gap-1">
+				{#each ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as day, i (i)}
+					<button
+						type="button"
+						onclick={() => {
+							if (formDays.includes(i)) {
+								formDays = formDays.filter((d) => d !== i);
+							} else {
+								formDays = [...formDays, i].sort();
+							}
+						}}
+						class="flex size-9 items-center justify-center rounded-md border text-xs font-semibold transition-colors
+							{formDays.includes(i)
+							? 'border-primary bg-primary text-primary-foreground'
+							: 'border-border bg-background hover:bg-surface'}"
+					>
+						{day}{i === 4 ? 'H' : ''}
+					</button>
+				{/each}
 			</div>
-			<div class="space-y-1.5">
-				<label for="dayEnd" class="label-mono">End</label>
-				<input
-					id="dayEnd"
-					type="time"
-					bind:value={formDayEnd}
-					required
-					class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
-				/>
+		</fieldset>
+
+		<!-- Session Mode Selector -->
+		<fieldset class="space-y-1.5">
+			<legend class="label-mono">Session Mode</legend>
+			<div class="flex gap-2">
+				<button
+					type="button"
+					onclick={() => handleSessionModeChange('single')}
+					class="flex-1 rounded-md border px-3 py-2 text-sm transition-colors {sessionMode ===
+					'single'
+						? 'border-primary bg-primary text-primary-foreground'
+						: 'border-border bg-background hover:bg-surface'}"
+				>
+					Single Day
+				</button>
+				<button
+					type="button"
+					onclick={() => handleSessionModeChange('morning-afternoon')}
+					class="flex-1 rounded-md border px-3 py-2 text-sm transition-colors {sessionMode ===
+					'morning-afternoon'
+						? 'border-primary bg-primary text-primary-foreground'
+						: 'border-border bg-background hover:bg-surface'}"
+				>
+					Morning & Afternoon
+				</button>
+				<button
+					type="button"
+					onclick={() => (sessionMode = 'custom')}
+					class="flex-1 rounded-md border px-3 py-2 text-sm transition-colors {sessionMode ===
+					'custom'
+						? 'border-primary bg-primary text-primary-foreground'
+						: 'border-border bg-background hover:bg-surface'}"
+				>
+					Custom
+				</button>
 			</div>
-			<div class="space-y-1.5">
-				<label for="lateAfter" class="label-mono">Late After</label>
-				<input
-					id="lateAfter"
-					type="time"
-					bind:value={formLateAfter}
-					required
-					class="border-border bg-background focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
-				/>
+		</fieldset>
+
+		<!-- Sessions List -->
+		<div class="space-y-3">
+			<div class="flex items-center justify-between">
+				<h4 class="label-mono text-xs text-muted-foreground uppercase">Sessions</h4>
+				{#if sessionMode === 'custom'}
+					<button
+						type="button"
+						onclick={addSession}
+						class="text-xs font-medium text-accent hover:underline"
+					>
+						+ Add Session
+					</button>
+				{/if}
+			</div>
+
+			<div class="max-h-64 space-y-4 overflow-y-auto pr-1">
+				{#each formSessions as session, i (i)}
+					<div class="relative space-y-3 rounded-xl border border-border p-4">
+						{#if sessionMode === 'custom' && formSessions.length > 1}
+							<button
+								type="button"
+								aria-label="Remove session {i + 1}"
+								onclick={() => removeSession(i)}
+								class="absolute top-3 right-3 text-muted-foreground hover:text-destructive"
+							>
+								<svg
+									class="size-4"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+								>
+									<path d="M18 6L6 18M6 6l12 12" />
+								</svg>
+							</button>
+						{/if}
+
+						<div class="grid grid-cols-2 gap-4">
+							<div class="space-y-1">
+								<label class="text-xs font-medium text-muted-foreground">
+									Session Name
+									<input
+										bind:value={session.name}
+										placeholder="e.g. Morning"
+										required
+										readonly={sessionMode !== 'custom'}
+										class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+									/>
+								</label>
+							</div>
+							<div class="space-y-1">
+								<label class="text-xs font-medium text-muted-foreground">
+									Late After
+									<input
+										type="time"
+										bind:value={session.lateAfter}
+										required
+										class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+									/>
+								</label>
+							</div>
+						</div>
+
+						<div class="grid grid-cols-2 gap-4">
+							<div class="space-y-1">
+								<label class="text-xs font-medium text-muted-foreground">
+									Start Time
+									<input
+										type="time"
+										bind:value={session.startTime}
+										required
+										class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+									/>
+								</label>
+							</div>
+							<div class="space-y-1">
+								<label class="text-xs font-medium text-muted-foreground">
+									End Time
+									<input
+										type="time"
+										bind:value={session.endTime}
+										required
+										class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+									/>
+								</label>
+							</div>
+						</div>
+					</div>
+				{/each}
 			</div>
 		</div>
 
@@ -471,13 +915,13 @@
 			<button
 				type="button"
 				onclick={() => (classDialogOpen = false)}
-				class="border-border hover:bg-surface rounded-md border px-4 py-2 text-sm transition-colors"
+				class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 			>
 				Cancel
 			</button>
 			<button
 				type="submit"
-				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent px-4 py-2 text-sm font-medium transition-colors"
+				class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 			>
 				{editingClass ? 'Save Changes' : 'Create Class'}
 			</button>
@@ -501,12 +945,12 @@
 		aria-labelledby="delete-dialog-title"
 	>
 		<div
-			class="border-border bg-background w-full max-w-sm space-y-5 rounded-2xl border p-6 shadow-xl"
+			class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
 		>
 			<div class="flex flex-col items-center gap-3 text-center">
-				<div class="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
+				<div class="flex size-12 items-center justify-center rounded-full bg-destructive/10">
 					<svg
-						class="text-destructive size-6"
+						class="size-6 text-destructive"
 						viewBox="0 0 24 24"
 						fill="none"
 						stroke="currentColor"
@@ -522,8 +966,8 @@
 				</div>
 				<div>
 					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete class?</h2>
-					<p class="text-muted-foreground mt-1 text-sm">
-						<span class="text-foreground font-medium">{deleteTarget.name}</span> will be permanently removed.
+					<p class="mt-1 text-sm text-muted-foreground">
+						<span class="font-medium text-foreground">{deleteTarget.name}</span> will be permanently removed.
 						Students will remain but will be unassigned.
 					</p>
 				</div>
@@ -532,7 +976,7 @@
 			<div class="flex gap-2">
 				<button
 					onclick={() => (deleteTarget = null)}
-					class="border-border hover:bg-surface flex-1 rounded-md border px-4 py-2 text-sm transition-colors"
+					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 				>
 					Cancel
 				</button>
@@ -544,7 +988,7 @@
 						deleteTarget = null;
 						reload();
 					}}
-					class="rounded-pill bg-destructive flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 				>
 					Delete
 				</button>
@@ -569,12 +1013,12 @@
 		aria-labelledby="wipe-dialog-title"
 	>
 		<div
-			class="border-border bg-background w-full max-w-sm space-y-5 rounded-2xl border p-6 shadow-xl"
+			class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
 		>
 			<div class="flex flex-col items-center gap-3 text-center">
-				<div class="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
+				<div class="flex size-12 items-center justify-center rounded-full bg-destructive/10">
 					<svg
-						class="text-destructive size-6"
+						class="size-6 text-destructive"
 						viewBox="0 0 24 24"
 						fill="none"
 						stroke="currentColor"
@@ -590,7 +1034,7 @@
 				</div>
 				<div>
 					<h2 id="wipe-dialog-title" class="text-lg font-semibold">Erase ALL data?</h2>
-					<p class="text-muted-foreground mt-1 text-sm">
+					<p class="mt-1 text-sm text-muted-foreground">
 						This will permanently erase ALL students, events, classes, and settings. This action
 						cannot be undone.
 					</p>
@@ -600,7 +1044,7 @@
 			<div class="flex gap-2">
 				<button
 					onclick={() => (wipeTarget = false)}
-					class="border-border hover:bg-surface flex-1 rounded-md border px-4 py-2 text-sm transition-colors"
+					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 				>
 					Cancel
 				</button>
@@ -611,7 +1055,7 @@
 						toast('All data wiped');
 						wipeTarget = false;
 					}}
-					class="rounded-pill bg-destructive flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 				>
 					Wipe All
 				</button>
@@ -636,11 +1080,11 @@
 		aria-labelledby="export-dialog-title"
 	>
 		<div
-			class="border-border bg-background w-full max-w-md space-y-5 rounded-2xl border p-6 shadow-xl"
+			class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
 		>
 			<div>
 				<h2 id="export-dialog-title" class="text-lg font-semibold">Export Data</h2>
-				<p class="text-muted-foreground mt-1 text-sm">
+				<p class="mt-1 text-sm text-muted-foreground">
 					Choose the format for your data export. You'll be able to select the save location.
 				</p>
 			</div>
@@ -655,7 +1099,7 @@
 					/>
 					<div>
 						<div class="font-medium">JSON Format</div>
-						<div class="text-muted-foreground text-sm">
+						<div class="text-sm text-muted-foreground">
 							Human-readable format, easy to share and import back into the system
 						</div>
 					</div>
@@ -670,7 +1114,7 @@
 					/>
 					<div>
 						<div class="font-medium">SQLite Database (.db)</div>
-						<div class="text-muted-foreground text-sm">
+						<div class="text-sm text-muted-foreground">
 							Complete database file, can be opened with SQLite tools
 						</div>
 					</div>
@@ -680,13 +1124,13 @@
 			<div class="flex gap-2">
 				<button
 					onclick={() => (exportDialogOpen = false)}
-					class="border-border hover:bg-surface flex-1 rounded-md border px-4 py-2 text-sm transition-colors"
+					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={onExport}
-					class="rounded-pill bg-primary flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+					class="flex-1 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 				>
 					Export
 				</button>
@@ -698,10 +1142,10 @@
 <!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 {#if toastMessage}
 	<div
-		class="fixed right-6 bottom-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
+		class="fixed top-12 right-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
 			{toastOk
-			? 'bg-background border-border text-foreground'
-			: 'bg-destructive/10 border-destructive/40 text-destructive'}"
+			? 'border-border bg-background text-foreground'
+			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
 		role="status"
 		aria-live="polite"
 	>

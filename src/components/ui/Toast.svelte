@@ -89,7 +89,7 @@
 
 {#if show}
 	<div
-		class="animate-in slide-in-from-top-full fixed top-4 right-4 z-50 w-full max-w-sm duration-300"
+		class="fixed top-4 right-4 z-50 w-full max-w-sm animate-in duration-300 slide-in-from-top-full"
 		role="alert"
 		aria-live="polite"
 	>

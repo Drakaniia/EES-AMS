@@ -135,7 +135,7 @@
 	<div class="mb-4 flex items-center justify-between">
 		<button
 			onclick={() => navigateMonth(-1)}
-			class="text-muted-foreground hover:text-foreground p-1 transition-colors"
+			class="p-1 text-muted-foreground transition-colors hover:text-foreground"
 			aria-label="Previous month"
 		>
 			<svg
@@ -153,12 +153,12 @@
 
 		<div class="text-center">
 			<div class="font-medium">{monthNames[currentMonth.getMonth()]}</div>
-			<div class="text-muted-foreground text-sm">{currentMonth.getFullYear()}</div>
+			<div class="text-sm text-muted-foreground">{currentMonth.getFullYear()}</div>
 		</div>
 
 		<button
 			onclick={() => navigateMonth(1)}
-			class="text-muted-foreground hover:text-foreground p-1 transition-colors"
+			class="p-1 text-muted-foreground transition-colors hover:text-foreground"
 			aria-label="Next month"
 		>
 			<svg
@@ -179,7 +179,7 @@
 	<div class="mb-4 grid grid-cols-7 gap-1">
 		<!-- Week day headers -->
 		{#each weekDays as day, i (`header-${i}`)}
-			<div class="text-muted-foreground py-2 text-center font-mono text-xs">{day}</div>
+			<div class="py-2 text-center font-mono text-xs text-muted-foreground">{day}</div>
 		{/each}
 
 		<!-- Calendar days -->
@@ -194,10 +194,10 @@
 					onclick={() => handleDateSelect(day as Date)}
 					disabled={isDateDisabled}
 					class="relative rounded-md p-2 text-sm transition-colors
-						{isDateDisabled ? 'text-muted-foreground/30 cursor-not-allowed' : ''}
-						{!isDateDisabled && !isDateSelected ? 'hover:bg-surface cursor-pointer' : ''}
-						{isDateSelected ? 'bg-primary text-primary-foreground cursor-default' : ''}
-						{isDateToday && !isDateSelected ? 'border-border border' : ''}"
+						{isDateDisabled ? 'cursor-not-allowed text-muted-foreground/30' : ''}
+						{!isDateDisabled && !isDateSelected ? 'cursor-pointer hover:bg-surface' : ''}
+						{isDateSelected ? 'cursor-default bg-primary text-primary-foreground' : ''}
+						{isDateToday && !isDateSelected ? 'border border-border' : ''}"
 				>
 					{(day as Date).getDate()}
 				</button>
@@ -206,24 +206,24 @@
 	</div>
 
 	<!-- Action buttons -->
-	<div class="border-border flex justify-between gap-2 border-t pt-2">
+	<div class="flex justify-between gap-2 border-t border-border pt-2">
 		<div class="flex gap-2">
 			<button
 				onclick={handleClear}
-				class="border-border hover:bg-surface rounded-md border px-3 py-1.5 text-sm transition-colors"
+				class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
 			>
 				Clear
 			</button>
 			<button
 				onclick={handleToday}
-				class="border-border hover:bg-surface rounded-md border px-3 py-1.5 text-sm transition-colors"
+				class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
 			>
 				Today
 			</button>
 		</div>
 		<button
 			onclick={handleConfirm}
-			class="rounded-pill bg-primary text-primary-foreground hover:bg-accent px-4 py-1.5 text-sm font-medium transition-colors"
+			class="rounded-pill bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 		>
 			Select
 		</button>

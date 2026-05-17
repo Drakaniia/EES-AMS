@@ -9,12 +9,22 @@ export interface Student {
 	createdAt: string;
 }
 
+export interface Session {
+	name: string;
+	startTime: string;
+	endTime: string;
+	lateAfter: string;
+}
+
 export interface Class {
 	id: string;
 	name: string;
+	room?: string;
 	dayStart: string;
 	dayEnd: string;
 	lateAfter: string;
+	sessions: Session[];
+	days: number[];
 	createdAt: string;
 }
 
@@ -34,6 +44,15 @@ export interface Settings {
 	dayStart: string;
 	dayEnd: string;
 	lateAfter: string;
+	quarter: string;
+	q1Start?: string;
+	q1End?: string;
+	q2Start?: string;
+	q2End?: string;
+	q3Start?: string;
+	q3End?: string;
+	q4Start?: string;
+	q4End?: string;
 }
 
 export interface CreateStudentRequest {
@@ -52,16 +71,22 @@ export interface UpdateStudentRequest {
 
 export interface CreateClassRequest {
 	name: string;
+	room?: string;
 	dayStart: string;
 	dayEnd: string;
 	lateAfter: string;
+	sessions: Session[];
+	days: number[];
 }
 
 export interface UpdateClassRequest {
 	name?: string;
+	room?: string;
 	dayStart?: string;
 	dayEnd?: string;
 	lateAfter?: string;
+	sessions?: Session[];
+	days?: number[];
 }
 
 export interface CreateEventRequest {
