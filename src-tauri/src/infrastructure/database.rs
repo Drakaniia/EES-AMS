@@ -50,6 +50,11 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
         conn.execute("PRAGMA user_version = 5", [])?;
     }
 
+    if user_version < 6 {
+        migrate_to_v6(&conn)?;
+        conn.execute("PRAGMA user_version = 6", [])?;
+    }
+
     Ok(pool)
 }
 
@@ -318,6 +323,29 @@ fn migrate_to_v5(conn: &rusqlite::Connection) -> Result<()> {
                 params![sessions_json, id],
             )?;
         }
+    }
+    Ok(())
+}
+
+/// Migrate database to version 6 (add days to classes)
+fn migrate_to_v6(conn: &rusqlite::Connection) -> Result<()> {
+    // Check if days column exists
+    let has_days: bool = conn
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('classes') WHERE name='days'",
+            [],
+            |row| row.get::<_, i32>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !has_days {
+        conn.execute("ALTER TABLE classes ADD COLUMN days TEXT", [])?;
+
+        // Initialize days for existing classes to Monday-Friday [1, 2, 3, 4, 5]
+        let days = vec![1, 2, 3, 4, 5];
+        let days_json = serde_json::to_string(&days).unwrap_or_else(|_| "[]".to_string());
+        conn.execute("UPDATE classes SET days = ?1", params![days_json])?;
     }
     Ok(())
 }
@@ -773,7 +801,7 @@ impl ClassRepository {
     pub fn list(&self) -> Result<Vec<Class>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(
-            "SELECT id, name, room, day_start, day_end, late_after, created_at, sessions 
+            "SELECT id, name, room, day_start, day_end, late_after, created_at, sessions, days 
              FROM classes 
              ORDER BY name ASC",
         )?;
@@ -785,6 +813,10 @@ impl ClassRepository {
                 let sessions: Vec<Session> = sessions_json
                     .and_then(|s| serde_json::from_str(&s).ok())
                     .unwrap_or_default();
+                let days_json: Option<String> = row.get(8)?;
+                let days: Vec<i32> = days_json
+                    .and_then(|s| serde_json::from_str(&s).ok())
+                    .unwrap_or_else(|| vec![1, 2, 3, 4, 5]);
 
                 Ok(Class {
                     id: row.get(0)?,
@@ -794,6 +826,7 @@ impl ClassRepository {
                     day_end: row.get(4)?,
                     late_after: row.get(5)?,
                     sessions,
+                    days,
                     created_at: DateTime::from_timestamp(row.get::<_, i64>(6)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
@@ -809,7 +842,7 @@ impl ClassRepository {
         let conn = self.pool.get()?;
         let class = conn
             .query_row(
-                "SELECT id, name, room, day_start, day_end, late_after, created_at, sessions 
+                "SELECT id, name, room, day_start, day_end, late_after, created_at, sessions, days 
                  FROM classes 
                  WHERE id = ?1",
                 params![id],
@@ -819,6 +852,10 @@ impl ClassRepository {
                     let sessions: Vec<Session> = sessions_json
                         .and_then(|s| serde_json::from_str(&s).ok())
                         .unwrap_or_default();
+                    let days_json: Option<String> = row.get(8)?;
+                    let days: Vec<i32> = days_json
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                        .unwrap_or_else(|| vec![1, 2, 3, 4, 5]);
 
                     Ok(Class {
                         id: row.get(0)?,
@@ -828,6 +865,7 @@ impl ClassRepository {
                         day_end: row.get(4)?,
                         late_after: row.get(5)?,
                         sessions,
+                        days,
                         created_at: DateTime::from_timestamp(row.get::<_, i64>(6)?, 0)
                             .unwrap()
                             .with_timezone(&Utc),
@@ -844,6 +882,7 @@ impl ClassRepository {
         let room = req.room.filter(|r| !r.trim().is_empty());
         let sessions_json =
             serde_json::to_string(&req.sessions).unwrap_or_else(|_| "[]".to_string());
+        let days_json = serde_json::to_string(&req.days).unwrap_or_else(|_| "[]".to_string());
 
         let class = Class {
             id: uuid::Uuid::new_v4().to_string(),
@@ -853,13 +892,14 @@ impl ClassRepository {
             day_end: req.day_end,
             late_after: req.late_after,
             sessions: req.sessions,
+            days: req.days,
             created_at: Utc::now(),
         };
 
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT INTO classes (id, name, room, day_start, day_end, late_after, sessions, created_at) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO classes (id, name, room, day_start, day_end, late_after, sessions, days, created_at) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 class.id,
                 class.name,
@@ -868,6 +908,7 @@ impl ClassRepository {
                 class.day_end,
                 class.late_after,
                 sessions_json,
+                days_json,
                 class.created_at.timestamp(),
             ],
         )?;
@@ -904,15 +945,19 @@ impl ClassRepository {
         if let Some(sessions) = req.sessions {
             class.sessions = sessions;
         }
+        if let Some(days) = req.days {
+            class.days = days;
+        }
 
         let sessions_json =
             serde_json::to_string(&class.sessions).unwrap_or_else(|_| "[]".to_string());
+        let days_json = serde_json::to_string(&class.days).unwrap_or_else(|_| "[]".to_string());
 
         let conn = self.pool.get()?;
         conn.execute(
             "UPDATE classes 
-             SET name = ?1, room = ?2, day_start = ?3, day_end = ?4, late_after = ?5, sessions = ?6 
-             WHERE id = ?7",
+             SET name = ?1, room = ?2, day_start = ?3, day_end = ?4, late_after = ?5, sessions = ?6, days = ?7 
+             WHERE id = ?8",
             params![
                 class.name,
                 class.room,
@@ -920,6 +965,7 @@ impl ClassRepository {
                 class.day_end,
                 class.late_after,
                 sessions_json,
+                days_json,
                 id,
             ],
         )?;

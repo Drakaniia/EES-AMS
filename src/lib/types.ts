@@ -24,6 +24,7 @@ export interface Class {
 	dayEnd: string;
 	lateAfter: string;
 	sessions: Session[];
+	days: number[];
 	createdAt: string;
 }
 
@@ -75,6 +76,7 @@ export interface CreateClassRequest {
 	dayEnd: string;
 	lateAfter: string;
 	sessions: Session[];
+	days: number[];
 }
 
 export interface UpdateClassRequest {
@@ -84,6 +86,7 @@ export interface UpdateClassRequest {
 	dayEnd?: string;
 	lateAfter?: string;
 	sessions?: Session[];
+	days?: number[];
 }
 
 export interface CreateEventRequest {

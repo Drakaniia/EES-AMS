@@ -89,6 +89,8 @@ pub struct Class {
     pub late_after: String,
     #[serde(default)]
     pub sessions: Vec<Session>,
+    #[serde(default)]
+    pub days: Vec<i32>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -184,6 +186,8 @@ pub struct CreateClassRequest {
     pub late_after: String,
     #[serde(default)]
     pub sessions: Vec<Session>,
+    #[serde(default)]
+    pub days: Vec<i32>,
 }
 
 /// Request to update a class
@@ -202,6 +206,8 @@ pub struct UpdateClassRequest {
     pub late_after: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sessions: Option<Vec<Session>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub days: Option<Vec<i32>>,
 }
 
 /// Request to create an attendance event

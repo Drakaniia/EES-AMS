@@ -72,8 +72,12 @@
 	function getActiveClass(): Class | null {
 		const now = new Date();
 		const currentTime = now.getHours() * 60 + now.getMinutes();
+		const currentDay = now.getDay();
 
 		for (const cls of classes) {
+			// Skip classes not scheduled for today
+			if (cls.days && !cls.days.includes(currentDay)) continue;
+
 			const [startHour, startMin] = cls.dayStart.split(':').map(Number);
 			const [endHour, endMin] = cls.dayEnd.split(':').map(Number);
 			const startTime = startHour * 60 + startMin;
@@ -89,10 +93,14 @@
 	function getNextClass(): { cls: Class; minutes: number } | null {
 		const now = new Date();
 		const currentTime = now.getHours() * 60 + now.getMinutes();
+		const currentDay = now.getDay();
 
 		let next: { cls: Class; minutes: number } | null = null;
 
 		for (const cls of classes) {
+			// Skip classes not scheduled for today
+			if (cls.days && !cls.days.includes(currentDay)) continue;
+
 			const [startHour, startMin] = cls.dayStart.split(':').map(Number);
 			const startTime = startHour * 60 + startMin;
 

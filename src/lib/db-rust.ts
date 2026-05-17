@@ -56,6 +56,7 @@ export async function listClasses(): Promise<Class[]> {
 		dayEnd: cls.dayEnd,
 		lateAfter: cls.lateAfter,
 		sessions: cls.sessions,
+		days: cls.days,
 		createdAt: cls.createdAt
 	}));
 }
@@ -74,6 +75,7 @@ export async function getClass(id: string): Promise<Class | undefined> {
 		dayEnd: backendClass.dayEnd,
 		lateAfter: backendClass.lateAfter,
 		sessions: backendClass.sessions,
+		days: backendClass.days,
 		createdAt: backendClass.createdAt
 	};
 }
@@ -91,7 +93,8 @@ export async function saveClass(classData: Class, isUpdate: boolean = false): Pr
 				dayStart: classData.dayStart,
 				dayEnd: classData.dayEnd,
 				lateAfter: classData.lateAfter,
-				sessions: classData.sessions
+				sessions: classData.sessions,
+				days: classData.days
 			}
 		});
 	} else {
@@ -103,7 +106,8 @@ export async function saveClass(classData: Class, isUpdate: boolean = false): Pr
 				dayStart: classData.dayStart,
 				dayEnd: classData.dayEnd,
 				lateAfter: classData.lateAfter,
-				sessions: classData.sessions
+				sessions: classData.sessions,
+				days: classData.days
 			}
 		});
 	}
@@ -117,6 +121,7 @@ export async function saveClass(classData: Class, isUpdate: boolean = false): Pr
 		dayEnd: backendClass.dayEnd,
 		lateAfter: backendClass.lateAfter,
 		sessions: backendClass.sessions,
+		days: backendClass.days,
 		createdAt: backendClass.createdAt
 	};
 }
