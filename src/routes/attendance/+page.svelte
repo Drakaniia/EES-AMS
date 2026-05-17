@@ -14,7 +14,6 @@
 		type Student,
 		type Class
 	} from '$lib/db-rust';
-	import { NfcScanner, nfcSupported } from '$lib/nfc';
 	import { fmtTime } from '$lib/csv';
 
 	// ── Types ────────────────────────────────────────────────────────────────
@@ -29,7 +28,6 @@
 	};
 
 	// ── State ────────────────────────────────────────────────────────────────
-	let scanning = $state(false);
 	let log = $state<LogLine[]>([]);
 	let students = $state<Student[]>([]);
 	let classes = $state<Class[]>([]);
@@ -45,28 +43,18 @@
 		isLate?: boolean;
 	} | null>(null);
 
+	let cardInput = $state('');
+
 	// Toast
 	let toastMessage = $state<string | null>(null);
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-	// NFC support state
-	let supported = $state<'connected' | 'disconnected'>('disconnected');
-	let supportedLoading = $state(true);
-
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
 		(async () => {
-			try {
-				supported = await nfcSupported();
-			} catch {
-				supported = 'disconnected';
-			} finally {
-				supportedLoading = false;
-			}
 			await reload();
 
-			// Handle classId from URL or auto-detect
 			const classIdFromUrl = page.url.searchParams.get('classId');
 			if (classIdFromUrl) {
 				selectedClassId = classIdFromUrl;
@@ -77,23 +65,16 @@
 				}
 			}
 
-			// Handle manual parameter
 			if (page.url.searchParams.get('manual') === 'true') {
 				pickerOpen = true;
 			}
 		})();
-
-		return () => {
-			scanner?.stop();
-			scanner = null;
-		};
 	});
 
 	async function reload() {
 		const [s, c] = await Promise.all([listStudents(), listClasses()]);
 		students = s;
 		classes = c;
-		// Auto-select first class if none selected and no active class found later
 		if (!selectedClassId && c.length > 0) {
 			const active = getActiveClass();
 			selectedClassId = active?.id || c[0].id;
@@ -116,9 +97,13 @@
 	let remainingSessions = $derived.by(() => {
 		const now = new Date();
 		const currentTime = now.getHours() * 60 + now.getMinutes();
+		const currentDay = now.getDay();
 
 		return classes
 			.filter((cls) => {
+				// Only show classes scheduled for today
+				if (cls.days && !cls.days.includes(currentDay)) return false;
+
 				const [startHour, startMin] = cls.dayStart.split(':').map(Number);
 				const startTime = startHour * 60 + startMin;
 				return startTime >= currentTime;
@@ -140,8 +125,12 @@
 	function getActiveClass(): Class | null {
 		const now = new Date();
 		const currentTime = now.getHours() * 60 + now.getMinutes();
+		const currentDay = now.getDay();
 
 		for (const cls of classes) {
+			// Skip classes not scheduled for today
+			if (cls.days && !cls.days.includes(currentDay)) continue;
+
 			const [startHour, startMin] = cls.dayStart.split(':').map(Number);
 			const [endHour, endMin] = cls.dayEnd.split(':').map(Number);
 			const startTime = startHour * 60 + startMin;
@@ -164,7 +153,6 @@
 		const classStudents = students.filter((s) => s.classId === selectedClassId);
 		const total = classStudents.length;
 
-		// Count unique students who checked in during this log session
 		const presentCount = new Set(log.filter((l) => l.type === 'in').map((l) => l.studentNumber))
 			.size;
 		const summary = `${presentCount}/${total} students present`;
@@ -212,7 +200,6 @@
 
 		let lateAfter = classObj.lateAfter;
 
-		// Find session matching current time
 		if (classObj.sessions && classObj.sessions.length > 0) {
 			for (const session of classObj.sessions) {
 				if (timeStr >= session.startTime && timeStr <= session.endTime) {
@@ -230,16 +217,19 @@
 		return now > lateTime;
 	}
 
-	// ── NFC scanner ──────────────────────────────────────────────────────────
-	let scanner: NfcScanner | null = null;
+	// ── Card input handler ───────────────────────────────────────────────────
+	async function handleCardSubmit(serial: string) {
+		const trimmed = serial.trim();
+		if (!trimmed) return;
 
-	async function handleSerial(serial: string) {
-		const student = await findStudentByCard(serial);
+		cardInput = '';
+
+		const student = await findStudentByCard(trimmed);
 		if (!student) {
 			const line: LogLine = {
 				id: uid(),
 				studentName: 'Unknown card',
-				studentNumber: serial,
+				studentNumber: trimmed,
 				type: 'error',
 				message: 'Not paired to any student',
 				timestamp: Date.now()
@@ -256,7 +246,6 @@
 		const type: 'in' | 'out' = !last || last.type === 'out' ? 'in' : 'out';
 		const ts = Date.now();
 
-		// Determine if late (only for check-in)
 		const studentClass = classes.find((c) => c.id === student.classId) || currentClass;
 		const isLate = type === 'in' && checkLate(studentClass, ts);
 
@@ -287,23 +276,6 @@
 		);
 		setTimeout(() => (lastResult = null), 2500);
 	}
-
-	function startScanning() {
-		if (scanner) return;
-		if (supported === 'disconnected') {
-			toast('NFC Card Reader not connected.', false);
-			return;
-		}
-		scanner = new NfcScanner(handleSerial, (e) => toast(e.message, false));
-		scanner.start();
-		scanning = true;
-	}
-
-	function stopScanning() {
-		scanner?.stop();
-		scanner = null;
-		scanning = false;
-	}
 </script>
 
 <svelte:head>
@@ -314,7 +286,6 @@
 	<PageHeader category="Tap Mode" title={dynamicTitle()} description={dynamicDescription()}>
 		{#snippet actions()}
 			<div class="flex items-center gap-3">
-				<!-- Class Selector -->
 				<select
 					bind:value={selectedClassId}
 					class="h-10 rounded-pill border border-border bg-background px-4 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
@@ -335,28 +306,6 @@
 					Manual log
 				</button>
 
-				{#if scanning}
-					<button
-						onclick={stopScanning}
-						class="inline-flex items-center gap-2 rounded-pill border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
-					>
-						<svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-							<rect x="3" y="3" width="18" height="18" rx="2" />
-						</svg>
-						Stop
-					</button>
-				{:else}
-					<button
-						onclick={startScanning}
-						class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
-					>
-						<svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-							<polygon points="5,3 19,12 5,21" />
-						</svg>
-						Start
-					</button>
-				{/if}
-
 				<button
 					onclick={endSession}
 					class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
@@ -371,8 +320,7 @@
 		class="grid min-h-[calc(100vh-28rem)] gap-8 px-6 py-10 md:px-12 lg:grid-cols-[1.2fr_1fr]"
 	>
 		<div
-			class="relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-3xl border border-border bg-surface p-10
-				{scanning ? 'ring-2 ring-primary/40' : ''}"
+			class="relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-3xl border border-border bg-surface p-10"
 		>
 			<div
 				aria-hidden="true"
@@ -421,21 +369,16 @@
 					</div>
 				</div>
 			{:else}
-				<div class="relative text-center">
-					<div class="label-mono mb-4">
-						{#if scanning}
-							<span class="animate-pulse text-primary">●</span> Listening for taps
-						{:else}
-							Scanner idle
-						{/if}
+				<div class="relative w-full max-w-md text-center">
+					<div class="label-mono mb-4 text-primary">
+						<span class="animate-pulse">●</span> Ready for card taps
 					</div>
 
 					<div
-						class="mx-auto grid size-40 place-items-center rounded-full border-2
-						{scanning ? 'animate-pulse border-primary shadow-[0_0_30px_-5px_var(--primary)]' : 'border-border'}"
+						class="mx-auto grid size-40 place-items-center rounded-full border-2 border-primary shadow-[0_0_30px_-5px_var(--primary)]"
 					>
 						<svg
-							class="size-16 {scanning ? 'text-primary' : 'text-muted-foreground'}"
+							class="size-16 text-primary"
 							viewBox="0 0 24 24"
 							fill="none"
 							stroke="currentColor"
@@ -451,16 +394,25 @@
 						</svg>
 					</div>
 
-					<h3 class="display-lg mt-8">{scanning ? 'Tap a card' : 'Press start'}</h3>
+					<h3 class="display-lg mt-8">Tap a card</h3>
 					<p class="mx-auto mt-2 max-w-md text-muted-foreground">
-						{#if supportedLoading}
-							Checking hardware…
-						{:else if supported === 'connected'}
-							USB NFC Card Reader detected. Keep the device awake.
-						{:else}
-							NFC Card Reader not found. Use manual log or check connection.
-						{/if}
+						Tap an ID card on the reader or type the serial below.
 					</p>
+
+					<form
+						onsubmit={(e) => {
+							e.preventDefault();
+							handleCardSubmit(cardInput);
+						}}
+						class="mx-auto mt-6 max-w-sm"
+					>
+						<input
+							type="text"
+							bind:value={cardInput}
+							placeholder="Tap card or enter serial…"
+							class="w-full rounded-md border border-border bg-background px-4 py-3 text-center font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+						/>
+					</form>
 				</div>
 			{/if}
 		</div>
@@ -471,15 +423,20 @@
 					<h3 class="text-lg font-medium">Session log</h3>
 					<span class="label-mono text-xs opacity-60">Latest activity</span>
 				</div>
-				<button
-					onclick={() => {
-						pickerQuery = '';
-						pickerOpen = true;
+				<form
+					onsubmit={(e) => {
+						e.preventDefault();
+						handleCardSubmit(cardInput);
 					}}
-					class="inline-flex h-8 items-center gap-1.5 rounded-pill border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-surface"
+					class="w-56"
 				>
-					Manual Check-in
-				</button>
+					<input
+						type="text"
+						bind:value={cardInput}
+						placeholder="Tap card or enter serial…"
+						class="w-full rounded-pill border border-border bg-background px-4 py-1.5 font-mono text-xs focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</form>
 			</div>
 
 			<div class="flex-1 overflow-y-auto">
