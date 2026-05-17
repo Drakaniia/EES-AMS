@@ -10,7 +10,7 @@
 		findStudentByCard,
 		lastEventForStudent,
 		addEvent,
-		uid,
+		deleteEvent,
 		type Student,
 		type Class
 	} from '$lib/db-rust';
@@ -41,6 +41,7 @@
 		type: 'in' | 'out';
 		time: number;
 		isLate?: boolean;
+		eventId?: string;
 	} | null>(null);
 
 	let cardInput = $state('');
@@ -50,6 +51,13 @@
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Cooldown lock to prevent rapid duplicate taps
+	let isProcessing = $state(false);
+
+	// Undo tracking
+	let lastEventId = $state<string | null>(null);
+	let undoTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
 		(async () => {
@@ -57,7 +65,11 @@
 
 			const classIdFromUrl = page.url.searchParams.get('classId');
 			if (classIdFromUrl) {
-				selectedClassId = classIdFromUrl;
+				const currentDay = new Date().getDay();
+				const urlClass = classes.find((c) => c.id === classIdFromUrl);
+				if (urlClass && urlClass.days && urlClass.days.includes(currentDay)) {
+					selectedClassId = classIdFromUrl;
+				}
 			} else {
 				const active = getActiveClass();
 				if (active) {
@@ -75,10 +87,6 @@
 		const [s, c] = await Promise.all([listStudents(), listClasses()]);
 		students = s;
 		classes = c;
-		if (!selectedClassId && c.length > 0) {
-			const active = getActiveClass();
-			selectedClassId = active?.id || c[0].id;
-		}
 	}
 
 	// ── Derived ──────────────────────────────────────────────────────────────
@@ -94,16 +102,23 @@
 
 	let currentClass = $derived(classes.find((c) => c.id === selectedClassId));
 
+	let todayClasses = $derived.by(() => {
+		const currentDay = new Date().getDay();
+		return classes
+			.filter((cls) => cls.days && cls.days.includes(currentDay))
+			.sort((a, b) => {
+				const [aH, aM] = a.dayStart.split(':').map(Number);
+				const [bH, bM] = b.dayStart.split(':').map(Number);
+				return aH * 60 + aM - (bH * 60 + bM);
+			});
+	});
+
 	let remainingSessions = $derived.by(() => {
 		const now = new Date();
 		const currentTime = now.getHours() * 60 + now.getMinutes();
-		const currentDay = now.getDay();
 
-		return classes
+		return todayClasses
 			.filter((cls) => {
-				// Only show classes scheduled for today
-				if (cls.days && !cls.days.includes(currentDay)) return false;
-
 				const [startHour, startMin] = cls.dayStart.split(':').map(Number);
 				const startTime = startHour * 60 + startMin;
 				return startTime >= currentTime;
@@ -192,6 +207,25 @@
 		toastTimer = setTimeout(() => (toastMessage = null), 3000);
 	}
 
+	async function undoLast() {
+		if (!lastEventId || !lastResult) return;
+
+		try {
+			await deleteEvent(lastEventId);
+
+			const eventIdToRemove = lastEventId;
+			log = log.filter((l) => l.id !== eventIdToRemove);
+
+			toast(`Undid ${lastResult.name} ${lastResult.type === 'in' ? 'check-in' : 'check-out'}`);
+		} catch {
+			toast('Failed to undo last action', false);
+		} finally {
+			lastEventId = null;
+			lastResult = null;
+			if (undoTimer) clearTimeout(undoTimer);
+		}
+	}
+
 	function checkLate(classObj: Class | undefined, timestamp: number): boolean {
 		if (!classObj) return false;
 
@@ -222,23 +256,32 @@
 		const trimmed = serial.trim();
 		if (!trimmed) return;
 
-		cardInput = '';
-
-		const student = await findStudentByCard(trimmed);
-		if (!student) {
-			const line: LogLine = {
-				id: uid(),
-				studentName: 'Unknown card',
-				studentNumber: trimmed,
-				type: 'error',
-				message: 'Not paired to any student',
-				timestamp: Date.now()
-			};
-			log = [line, ...log].slice(0, 30);
-			toast('Unknown card — not paired to any student', false);
+		// Prevent rapid duplicate taps
+		if (isProcessing) {
+			toast('Please wait — processing previous tap', false);
 			return;
 		}
-		await logForStudent(student);
+
+		cardInput = '';
+		isProcessing = true;
+
+		try {
+			const student = await findStudentByCard(trimmed);
+			if (!student) {
+				toast('Unknown card — not paired to any student', false);
+				return;
+			}
+			await logForStudent(student);
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err);
+			if (message.includes('duplicate check-in') || message.includes('already checked in')) {
+				toast('Already checked in today — no duplicate allowed', false);
+			} else {
+				toast(`Error: ${message}`, false);
+			}
+		} finally {
+			isProcessing = false;
+		}
 	}
 
 	async function logForStudent(student: Student) {
@@ -249,32 +292,53 @@
 		const studentClass = classes.find((c) => c.id === student.classId) || currentClass;
 		const isLate = type === 'in' && checkLate(studentClass, ts);
 
-		await addEvent({
-			studentId: student.id,
-			classId: student.classId || selectedClassId || undefined,
-			type,
-			note: isLate ? 'Late' : undefined
-		});
-
-		lastResult = { ok: true, name: student.name, type, time: ts, isLate };
-		log = [
-			{
-				id: uid(),
-				studentName: student.name,
-				studentNumber: student.studentNumber,
+		try {
+			const createdEvent = await addEvent({
+				studentId: student.id,
+				classId: student.classId || selectedClassId || undefined,
 				type,
-				isLate,
-				message: type === 'in' ? (isLate ? 'Checked in (LATE)' : 'Checked in') : 'Checked out',
-				timestamp: ts
-			},
-			...log
-		].slice(0, 30);
+				note: isLate ? 'Late' : undefined
+			});
+			lastEventId = createdEvent.id;
 
-		toast(
-			`${student.name} · ${type === 'in' ? (isLate ? 'LATE' : 'Checked in') : 'Checked out'}`,
-			!isLate
-		);
-		setTimeout(() => (lastResult = null), 2500);
+			lastResult = {
+				ok: true,
+				name: student.name,
+				type,
+				time: ts,
+				isLate,
+				eventId: createdEvent.id
+			};
+			log = [
+				{
+					id: createdEvent.id,
+					studentName: student.name,
+					studentNumber: student.studentNumber,
+					type,
+					isLate,
+					message: type === 'in' ? (isLate ? 'Checked in (LATE)' : 'Checked in') : 'Checked out',
+					timestamp: ts
+				},
+				...log
+			].slice(0, 30);
+
+			toast(
+				`${student.name} · ${type === 'in' ? (isLate ? 'LATE' : 'Checked in') : 'Checked out'}`,
+				!isLate
+			);
+			if (undoTimer) clearTimeout(undoTimer);
+			undoTimer = setTimeout(() => {
+				lastResult = null;
+				lastEventId = null;
+			}, 5000);
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err);
+			if (message.includes('duplicate check-in') || message.includes('already checked in')) {
+				toast(`${student.name} already checked in today`, false);
+				return;
+			}
+			throw err;
+		}
 	}
 </script>
 
@@ -286,15 +350,30 @@
 	<PageHeader category="Tap Mode" title={dynamicTitle()} description={dynamicDescription()}>
 		{#snippet actions()}
 			<div class="flex items-center gap-3">
-				<select
-					bind:value={selectedClassId}
-					class="h-10 rounded-pill border border-border bg-background px-4 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-				>
-					<option value="">No Active Class</option>
-					{#each classes as c (c.id)}
-						<option value={c.id}>{c.name}</option>
-					{/each}
-				</select>
+				<div class="relative">
+					<select
+						bind:value={selectedClassId}
+						class="h-10 w-auto appearance-none rounded-pill border border-border bg-background px-4 py-2 pr-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					>
+						<option value="">No Active Class</option>
+						{#each todayClasses as c (c.id)}
+							<option value={c.id}>{c.name}</option>
+						{/each}
+					</select>
+					<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4">
+						<svg
+							class="size-4 text-muted-foreground"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="m6 9 6 6 6-6" />
+						</svg>
+					</div>
+				</div>
 
 				<button
 					onclick={() => {
@@ -330,43 +409,50 @@
 
 			{#if !selectedClassId}
 				<div class="relative w-full max-w-md text-center">
-					<h3 class="display-lg mb-2">Which class are you starting?</h3>
-					<p class="mb-8 text-muted-foreground">Select a class to begin recording attendance.</p>
+					{#if todayClasses.length === 0}
+						<h3 class="display-lg mb-2">No Classes Today</h3>
+						<p class="mb-8 text-muted-foreground">
+							No classes are scheduled for today. Configure class days in Settings.
+						</p>
+					{:else}
+						<h3 class="display-lg mb-2">Which class are you starting?</h3>
+						<p class="mb-8 text-muted-foreground">Select a class to begin recording attendance.</p>
 
-					<div class="grid gap-3 text-left">
-						{#each remainingSessions as s (s.id)}
-							<button
-								onclick={() => (selectedClassId = s.id)}
-								class="group flex items-center justify-between rounded-2xl border border-border bg-background p-4 transition-all hover:border-primary/50 hover:bg-primary/5"
-							>
-								<div>
-									<div class="font-bold transition-colors group-hover:text-primary">{s.name}</div>
-									<div class="label-mono text-xs opacity-60">
-										{s.room ? `Room ${s.room} · ` : ''}{s.dayStart} – {s.dayEnd}
-									</div>
-								</div>
-								<svg
-									class="size-5 text-muted-foreground transition-all group-hover:translate-x-1 group-hover:text-primary"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
+						<div class="grid gap-3 text-left">
+							{#each remainingSessions as s (s.id)}
+								<button
+									onclick={() => (selectedClassId = s.id)}
+									class="group flex items-center justify-between rounded-2xl border border-border bg-background p-4 transition-all hover:border-primary/50 hover:bg-primary/5"
 								>
-									<path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
-								</svg>
-							</button>
-						{/each}
+									<div>
+										<div class="font-bold transition-colors group-hover:text-primary">{s.name}</div>
+										<div class="label-mono text-xs opacity-60">
+											{s.room ? `Room ${s.room} · ` : ''}{s.dayStart} – {s.dayEnd}
+										</div>
+									</div>
+									<svg
+										class="size-5 text-muted-foreground transition-all group-hover:translate-x-1 group-hover:text-primary"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
+									</svg>
+								</button>
+							{/each}
 
-						{#if remainingSessions.length === 0}
-							<div
-								class="rounded-2xl border border-dashed border-border py-8 text-center text-muted-foreground italic"
-							>
-								No more sessions scheduled for today.
-							</div>
-						{/if}
-					</div>
+							{#if remainingSessions.length === 0}
+								<div
+									class="rounded-2xl border border-dashed border-border py-8 text-center text-muted-foreground italic"
+								>
+									No more sessions scheduled for today.
+								</div>
+							{/if}
+						</div>
+					{/if}
 				</div>
 			{:else}
 				<div class="relative w-full max-w-md text-center">
@@ -553,8 +639,19 @@
 				<li>
 					<button
 						onclick={async () => {
-							await logForStudent(s);
-							pickerOpen = false;
+							if (isProcessing) {
+								toast('Please wait — processing previous request', false);
+								return;
+							}
+							isProcessing = true;
+							try {
+								await logForStudent(s);
+								pickerOpen = false;
+							} catch {
+								// Error already handled in logForStudent
+							} finally {
+								isProcessing = false;
+							}
 						}}
 						class="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-surface"
 					>
@@ -581,14 +678,22 @@
 
 {#if toastMessage}
 	<div
-		class="fixed right-6 bottom-6 z-60 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
+		class="fixed top-12 right-6 z-60 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
 			{toastOk
 			? 'border-border bg-background text-foreground'
 			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
 		role="status"
 		aria-live="polite"
 	>
-		{toastMessage}
+		<span>{toastMessage}</span>
+		{#if lastEventId && toastOk}
+			<button
+				onclick={undoLast}
+				class="rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+			>
+				UNDO
+			</button>
+		{/if}
 	</div>
 {/if}
 

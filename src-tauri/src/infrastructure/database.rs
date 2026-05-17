@@ -675,6 +675,42 @@ impl EventRepository {
 
     /// Create an attendance event
     pub fn create(&self, req: CreateEventRequest) -> Result<AttendanceEvent> {
+        let conn = self.pool.get()?;
+
+        // Check for duplicate check-in: prevent multiple "in" events on the same day
+        if req.event_type == AttendanceType::In {
+            let today_start = Utc::now()
+                .date_naive()
+                .and_hms_opt(0, 0, 0)
+                .unwrap()
+                .and_utc()
+                .timestamp();
+            let today_end = Utc::now()
+                .date_naive()
+                .and_hms_opt(23, 59, 59)
+                .unwrap()
+                .and_utc()
+                .timestamp();
+
+            let existing_count: i32 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM events 
+                     WHERE student_id = ?1 
+                     AND event_type = 'in' 
+                     AND timestamp >= ?2 
+                     AND timestamp <= ?3",
+                    params![req.student_id.0.to_string(), today_start, today_end],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+
+            if existing_count > 0 {
+                return Err(AppError::DuplicateCheckIn(
+                    "Student already checked in today".to_string(),
+                ));
+            }
+        }
+
         let event = AttendanceEvent {
             id: EventId::new(),
             student_id: req.student_id,
@@ -684,7 +720,6 @@ impl EventRepository {
             note: req.note,
         };
 
-        let conn = self.pool.get()?;
         conn.execute(
             "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note) 
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",

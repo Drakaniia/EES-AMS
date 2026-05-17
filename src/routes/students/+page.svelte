@@ -800,7 +800,7 @@
 
 {#if toastMessage}
 	<div
-		class="fixed right-6 bottom-6 z-60 rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium shadow-lg"
+		class="fixed top-12 right-6 z-60 rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium shadow-lg"
 		role="status"
 		aria-live="polite"
 	>

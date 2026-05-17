@@ -434,7 +434,7 @@
 
 {#if toastMessage}
 	<div
-		class="fixed right-6 bottom-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
+		class="fixed top-12 right-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
 					{toastOk
 			? 'border-border bg-background text-foreground'
 			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
