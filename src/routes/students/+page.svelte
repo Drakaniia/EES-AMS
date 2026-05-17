@@ -8,17 +8,15 @@
 		saveStudent,
 		deleteStudent,
 		listClasses,
-		findStudentByCard,
 		type Student,
 		type Class
 	} from '$lib/db-rust';
-	import { NfcScanner, nfcSupported } from '$lib/nfc';
 	import { resolve } from '$app/paths';
 
 	// ── State ────────────────────────────────────────────────────────────────
 	let students = $state<Student[]>([]);
 	let classes = $state<Class[]>([]);
-	let selectedClassId = $state<string>(''); // Filter
+	let selectedClassId = $state<string>('');
 	let searchTerms = $state('');
 	let sortBy = $state<'name' | 'number' | 'date'>('name');
 	let sortOrder = $state<'asc' | 'desc'>('asc');
@@ -27,21 +25,15 @@
 	let editing = $state<Student | null>(null);
 	let scanFor = $state<Student | null>(null);
 
-	// Add/edit form fields
 	let formName = $state('');
 	let formStudentNumber = $state('');
 	let formCardSerial = $state('');
 	let formClassId = $state('');
 
-	// Delete confirmation dialog
 	let deleteTarget = $state<Student | null>(null);
 
-	// Register-card dialog state
 	let cardSerial = $state('');
-	let scanning = $state(false);
-	let cardError = $state<string | null>(null);
 
-	// Toast
 	let toastMessage = $state<string | null>(null);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -81,10 +73,7 @@
 		if (searchTerms.trim()) {
 			const term = searchTerms.toLowerCase();
 			result = result.filter(
-				(s) =>
-					s.name.toLowerCase().includes(term) ||
-					s.studentNumber.toLowerCase().includes(term) ||
-					s.cardSerial?.toLowerCase().includes(term)
+				(s) => s.name.toLowerCase().includes(term) || s.studentNumber.toLowerCase().includes(term)
 			);
 		}
 
@@ -180,58 +169,6 @@
 		if (selectedClassId !== undefined) {
 			reload();
 		}
-	});
-
-	// ── NFC scanner for register-card dialog ─────────────────────────────────
-	let scanner: NfcScanner | null = null;
-
-	$effect(() => {
-		if (!scanFor) {
-			cardSerial = '';
-			cardError = null;
-			scanning = false;
-			scanner?.stop();
-			scanner = null;
-			return;
-		}
-
-		(async () => {
-			try {
-				const supported = await nfcSupported();
-				if (!supported) {
-					cardError = 'NFC Card Reader not connected. Connect USB reader or enter serial manually.';
-					scanning = false;
-					return;
-				}
-
-				scanning = true;
-				const student = scanFor;
-				scanner = new NfcScanner(
-					async (s) => {
-						cardSerial = s;
-						scanning = false;
-						const existing = await findStudentByCard(s);
-						if (existing && existing.id !== student.id) {
-							cardError = `This card is already paired to ${existing.name}.`;
-						}
-						scanner?.stop();
-					},
-					(e) => {
-						cardError = e.message;
-						scanning = false;
-					}
-				);
-				scanner.start();
-			} catch {
-				cardError = 'Failed to check NFC Card Reader. Please try again.';
-				scanning = false;
-			}
-		})();
-
-		return () => {
-			scanner?.stop();
-			scanner = null;
-		};
 	});
 
 	// ── Dialog helpers ───────────────────────────────────────────────────────
@@ -352,7 +289,7 @@
 
 <svelte:head>
 	<title>Students — Attendance System</title>
-	<meta name="description" content="Manage students and register their NFC cards." />
+	<meta name="description" content="Manage students and their ID cards." />
 </svelte:head>
 
 <AppShell>
@@ -360,7 +297,7 @@
 		<PageHeader
 			category="Students"
 			title="Class List"
-			description="Manage your student list and their NFC identification cards."
+			description="Manage your student list and their identification cards."
 		>
 			{#snippet actions()}
 				<div class="flex items-center gap-3">
@@ -448,7 +385,7 @@
 					<input
 						type="text"
 						bind:value={searchTerms}
-						placeholder="Name, number, or card serial..."
+						placeholder="Name or student number…"
 						class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
@@ -579,7 +516,7 @@
 											<button
 												onclick={() => (scanFor = s)}
 												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
-												title="Pair NFC card"
+												title="Pair card"
 											>
 												<svg
 													class="size-3.5"
@@ -672,9 +609,7 @@
 				<h2 id="dialog-title" class="text-lg font-semibold">
 					{editing ? 'Edit student' : 'Add student'}
 				</h2>
-				<p class="mt-1 text-sm text-muted-foreground">
-					Assign to a class and pair an NFC card later.
-				</p>
+				<p class="mt-1 text-sm text-muted-foreground">Assign to a class and pair a card later.</p>
 			</div>
 
 			<form onsubmit={onSubmit} class="space-y-4">
@@ -767,50 +702,20 @@
 			class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
 		>
 			<div>
-				<h2 id="card-dialog-title" class="text-lg font-semibold">Pair NFC card</h2>
-				<p class="mt-1 text-sm text-muted-foreground">Tap the card for {scanFor.name}.</p>
+				<h2 id="card-dialog-title" class="text-lg font-semibold">Pair card</h2>
+				<p class="mt-1 text-sm text-muted-foreground">Enter the card serial for {scanFor.name}.</p>
 			</div>
 
 			<div class="space-y-4">
-				<div class="rounded-2xl border border-dashed border-border bg-surface/50 p-8 text-center">
-					<svg
-						class="mx-auto mb-3 size-10 {scanning
-							? 'animate-pulse text-primary'
-							: 'text-muted-foreground'}"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<rect x="2" y="5" width="20" height="14" rx="2" />
-						<path d="M2 10h20" />
-					</svg>
-					<div class="label-mono">
-						{#if scanning}
-							Waiting for tap…
-						{:else if cardSerial}
-							Card detected
-						{:else}
-							Idle
-						{/if}
-					</div>
-					<div class="mt-2 font-mono text-sm break-all">{cardSerial || '—'}</div>
-				</div>
-
 				<div class="space-y-1.5">
-					<label for="manual-serial" class="label-mono">Or enter serial manually</label>
+					<label for="manual-serial" class="label-mono">Card serial</label>
 					<input
 						id="manual-serial"
 						bind:value={cardSerial}
+						placeholder="Tap card on reader or type serial…"
 						class="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
-
-				{#if cardError}
-					<p class="text-sm text-destructive">{cardError}</p>
-				{/if}
 			</div>
 
 			<div class="flex justify-end gap-2">
