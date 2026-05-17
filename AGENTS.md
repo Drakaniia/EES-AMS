@@ -14,7 +14,7 @@ always use @svelte-code-writer
 
 ## Project Snapshot
 
-Tauri v2 desktop application for teacher attendance management with NFC/USB card reader support. SvelteKit 5 frontend with Rust backend, SQLite database, and modular feature architecture.
+Tauri v2 desktop application for teacher attendance management with ID card reader support. SvelteKit 5 frontend with Rust backend, SQLite database, and modular feature architecture.
 
 ## Root Setup Commands
 
@@ -47,7 +47,6 @@ cd src-tauri && cargo check && cargo clippy
 - Never commit API keys, tokens, or sensitive data
 - Use .env files for environment variables (gitignored)
 - Handle PII data carefully in SQLite database
-- NFC card data should be encrypted at rest
 
 ## JIT Index
 
@@ -72,4 +71,4 @@ cd src-tauri && cargo check && cargo clippy
 - Code formatted (`bun run format` and `cargo fmt`)
 - Tests pass for new functionality
 - Documentation updated for new features
-- NFC reader functionality tested (if applicable)
+- Card reader input tested (if applicable)

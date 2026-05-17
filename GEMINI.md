@@ -4,13 +4,13 @@ This project is the **Espiritu Elementary School Attendance Management System (E
 
 ## 🚀 Project Overview
 
-- **Core Purpose**: Manage student attendance using NFC/USB card readers in a local school environment.
-- **Target Platform**: Desktop (Windows, macOS, Linux) with mobile connectivity for card scanning.
+- **Core Purpose**: Manage student attendance using ID card readers in a local school environment.
+- **Target Platform**: Desktop (Windows, macOS, Linux) with card reader support.
 - **Key Technologies**:
   - **Frontend**: SvelteKit 5 (Runes), TypeScript, Tailwind CSS 4, Vite 8.
   - **Backend**: Rust (Tauri v2), SQLite (rusqlite + r2d2).
-  - **Hardware**: USB NFC card readers (PCSC/USB).
-- **Architecture**: Local-first with a laptop acting as the central hub. Mobile devices connect via the local network to a REST API (planned/partial) to scan cards.
+  - **Hardware**: USB card readers (keyboard wedge/HID mode).
+- **Architecture**: Local-first desktop application. Card readers act as keyboard input devices, auto-typing card serials into focused text fields.
 
 ## 🛠 Building and Running
 
@@ -58,5 +58,4 @@ This project is the **Espiritu Elementary School Attendance Management System (E
 ## ⚠️ Known Discrepancies & TODOs
 
 - **HTTP Server**: Documentation (README.md, AGENTS.md) mentions an Axum-based HTTP server on port 3030 for mobile connectivity. However, the current implementation in `src-tauri` does not yet include the `axum` dependency or the server logic.
-- **NFC Drivers**: The current NFC implementation in `commands.rs` is partially simulated; hardware integration using `rusb`/`pcsc` is in progress.
 - **Authentication**: The system currently operates without authentication, designed for single-teacher local use.

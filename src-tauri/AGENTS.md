@@ -2,7 +2,7 @@
 
 ## Package Identity
 
-Tauri v2 Rust backend providing SQLite database, HTTP server, NFC/USB card reader support, and desktop integration for attendance management system.
+Tauri v2 Rust backend providing SQLite database, card reader support, and desktop integration for attendance management system.
 
 ## Setup & Run
 
@@ -30,8 +30,6 @@ cargo test
 - **Database**: SQLite with `rusqlite` and connection pooling via `r2d2`
 - **Async**: Use `tokio` runtime, `async/await` for I/O operations
 - **Commands**: All Tauri commands in `commands.rs` with `#[tauri::command]` macro
-- **HTTP Server**: Axum framework for REST API endpoints
-- **NFC/USB**: `rusb` and `pcsc` libraries for card reader integration
 
 Examples with actual file paths:
 
@@ -48,8 +46,6 @@ Examples with actual file paths:
 - **Domain Logic**: `src-tauri/src/domain/`
 - **Infrastructure**: `src-tauri/src/infrastructure/`
 - **Database Schema**: `src-tauri/src/domain/schema.rs`
-- **HTTP Server**: `src-tauri/src/infrastructure/http/server.rs`
-- **NFC Reader**: `src-tauri/src/infrastructure/nfc/`
 
 ## JIT Index Hints
 
@@ -65,12 +61,6 @@ Examples with actual file paths:
 - **Migrations**: Schema changes in `src-tauri/src/domain/migrations/`
 - **Queries**: Implement in domain layer, return Result<T, DomainError>
 - **Transactions**: Use connection pool transactions for data consistency
-
-## NFC/USB Integration
-
-- **Card Readers**: Support both USB (`rusb`) and PCSC (`pcsc`) protocols
-- **Data Encryption**: Encrypt card data at rest in database
-- **Error Handling**: Graceful fallback when readers are unavailable
 
 ## Common Gotchas
 

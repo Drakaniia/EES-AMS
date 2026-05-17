@@ -7,14 +7,14 @@
 [![Tauri](https://img.shields.io/badge/tauri-tauri-orange?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
-A cross-platform desktop application for student attendance management at Espiritu Elementary School with NFC/USB card reader support. Built with Tauri v2, SvelteKit 5, and Rust.
+A cross-platform desktop application for student attendance management at Espiritu Elementary School with ID card reader support. Built with Tauri v2, SvelteKit 5, and Rust.
 
 > **🏫 Elementary School Focused**: This system is specifically designed and optimized for elementary school environments (EES - Elementary Education System), with features tailored to the unique needs of primary education institutions.
 
 ## Features
 
 - Cross-platform desktop app - Windows, macOS, Linux
-- NFC card support - USB and mobile NFC readers
+- ID card reader support - Works with USB card readers as keyboard input
 - Real-time attendance tracking - Instant data synchronization
 - Local network architecture - Phone connects via WiFi/hotspot
 - Offline-first design - No internet required
@@ -29,29 +29,17 @@ A cross-platform desktop application for student attendance management at Espiri
 │                    Laptop (Tauri App)                       │
 │                                                             │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
-│  │   Svelte UI  │───▶│  HTTP Server │───▶│   SQLite DB  │ │
-│  │  (Frontend)  │    │  (Axum/Rust) │    │  (Persistent)│ │
+│  │   Svelte UI  │───▶│  Tauri Cmds  │───▶│   SQLite DB  │ │
+│  │  (Frontend)  │    │    (Rust)    │    │  (Persistent)│ │
 │  └──────────────┘    └──────────────┘    └──────────────┘ │
-│         │                    │                             │
-│         │              Bound to 0.0.0.0:3030               │
-│         │              (accessible on LAN)                 │
-└─────────┼────────────────────┼─────────────────────────────┘
-          │                    │
-          │                    │ HTTP API
-          │                    │
-┌─────────┼────────────────────┼─────────────────────────────┐
-│         │                    │                             │
-│  ┌──────▼──────┐    ┌────────▼────────┐                   │
-│  │   Svelte UI │───▶│   HTTP Requests │                   │
-│  │  (Browser)  │    │  to Laptop API  │                   │
-│  └─────────────┘    └─────────────────┘                   │
-│         │                                                  │
+│         │                                                   │
 │    ┌────▼────┐                                             │
-│    │ Web NFC │  Tap card → POST /api/events               │
+│    │  Card   │  Tap card → auto-types serial → lookup     │
+│    │ Reader  │                                             │
 │    └─────────┘                                             │
 │                                                            │
-│              Phone (Android Chrome)                        │
-└────────────────────────────────────────────────────────────┘
+│              USB/Bluetooth Card Reader                      │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
@@ -59,7 +47,7 @@ A cross-platform desktop application for student attendance management at Espiri
 - **Node.js** 18+ (for frontend development)
 - **Rust** 1.77+ (for backend development)
 - **Bun** (recommended package manager)
-- **Android device** with Chrome for NFC scanning (optional)
+- **USB card reader** (keyboard wedge mode, optional)
 
 ## Installation
 
@@ -105,20 +93,19 @@ bun run tauri build
 
 The built executable will be in `src-tauri/target/release/`.
 
-### Mobile Device Setup
+### Card Reader Setup
 
-1. **Connect to same network** as the laptop (WiFi or hotspot)
-2. **Open Chrome** on Android device
-3. **Navigate to URL** shown in laptop app (e.g., `http://192.168.1.100:3030`)
-4. **Start NFC scanning** on the Attendance page
+1. **Connect card reader** to laptop via USB
+2. **Open Attendance page** in the app
+3. **Tap a card** on the reader — serial auto-fills into the input
+4. **System records** attendance automatically
 
-### NFC Card Workflow
+### Card Workflow
 
-1. **Register student cards** in the Students section
-2. **Tap NFC card** on phone device
-3. **System records** attendance automatically
-4. **Data syncs** instantly to laptop database
-5. **View reports** in real-time on both devices
+1. **Register student cards** in the Students section (enter serial manually)
+2. **Tap ID card** on the card reader during attendance
+3. **System matches** serial to student and records attendance
+4. **View reports** in real-time
 
 ## Project Structure
 
@@ -184,7 +171,7 @@ The HTTP server exposes the following REST API:
 - `GET /api/students/:id` - Get student by ID
 - `PUT /api/students/:id` - Update student
 - `DELETE /api/students/:id` - Delete student
-- `GET /api/students/card/:serial` - Find student by NFC card
+- `GET /api/students/card/:serial` - Find student by card serial
 
 ### Attendance Events
 
@@ -204,7 +191,6 @@ The HTTP server exposes the following REST API:
 
 - **Local network only** - No internet connectivity required
 - **No authentication** - Designed for single-teacher use case
-- **Data encryption** - NFC card data encrypted at rest
 - **CORS enabled** - Cross-origin requests for mobile access
 
 > **Note**: For production deployment, consider adding API key authentication or JWT tokens.
@@ -237,14 +223,13 @@ taskkill /PID <PID> /F
 3. Try accessing `http://<laptop-ip>:3030/api/health` from phone browser
 4. Disable VPN on phone if enabled
 
-### NFC Issues
+### Card Reader Issues
 
-**Problem**: NFC not working on phone
+**Problem**: Card reader not typing into input
 
-1. Use Android Chrome (not Firefox/Samsung Internet)
-2. Enable NFC in phone settings
-3. Ensure cards are NFC-compatible
-4. Try different tapping positions
+1. Ensure reader is in keyboard wedge/HID mode
+2. Check that the input field is focused
+3. Try typing the serial manually to verify lookup works
 
 ## Performance
 
