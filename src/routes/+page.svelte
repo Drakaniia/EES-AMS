@@ -19,16 +19,11 @@
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
 	let classes = $state<Class[]>([]);
-	let manualActiveClassId = $state<string | null>(null);
 
 	let sessionSummary = $state<{ summary: string; className: string } | null>(null);
 
 	onMount(async () => {
 		[students, events, classes] = await Promise.all([listStudents(), listEvents(), listClasses()]);
-		const active = getActiveClass();
-		if (active) {
-			manualActiveClassId = active.id;
-		}
 
 		const sessionEnd = page.url.searchParams.get('sessionEnd');
 		if (sessionEnd === 'true') {
@@ -116,12 +111,7 @@
 
 	// ── Dynamic Logic ──────────────────────────────────────────────────────────
 
-	const activeClass = $derived.by(() => {
-		if (manualActiveClassId) {
-			return classes.find((c) => c.id === manualActiveClassId) || null;
-		}
-		return getActiveClass();
-	});
+	const activeClass = $derived(getActiveClass());
 	const nextClass = $derived(getNextClass());
 
 	const activeClassStudents = $derived(
@@ -134,16 +124,14 @@
 
 	const dynamicTitle = $derived(() => {
 		if (activeClass) {
-			return manualActiveClassId
-				? `Manual Session: ${activeClass.name}`
-				: `Currently Teaching: ${activeClass.name}`;
+			return `Currently Teaching: ${activeClass.name}`;
 		}
 		return 'Dashboard';
 	});
 
 	const dynamicDescription = $derived(() => {
 		if (activeClass) {
-			return `${activeClass.room ? `Room ${activeClass.room} • ` : ''}${activeClass.dayStart} – ${activeClass.dayEnd} • Session ${manualActiveClassId ? 'primed' : 'in progress'}`;
+			return `${activeClass.room ? `Room ${activeClass.room} • ` : ''}${activeClass.dayStart} – ${activeClass.dayEnd} • Session in progress`;
 		}
 		if (nextClass) {
 			return `Welcome back. Your next session, ${nextClass.cls.name}, begins in ${nextClass.minutes} minutes.`;
@@ -164,34 +152,6 @@
 		description={dynamicDescription()}
 	>
 		{#snippet actions()}
-			{#if classes.length > 0}
-				<div class="relative inline-flex items-center">
-					<select
-						bind:value={manualActiveClassId}
-						class="h-10 appearance-none rounded-pill border border-border bg-background px-4 py-2 pr-10 text-sm font-medium transition-colors hover:bg-surface focus:ring-2 focus:ring-primary/20 focus:outline-none"
-						aria-label="Manual Session Start"
-					>
-						<option value={null}>Auto-detect Session</option>
-						{#each classes as cls (cls.id)}
-							<option value={cls.id}>{cls.name} ({cls.dayStart})</option>
-						{/each}
-					</select>
-					<div class="pointer-events-none absolute right-3 flex items-center">
-						<svg
-							class="size-4 text-muted-foreground"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="m6 9 6 6 6-6" />
-						</svg>
-					</div>
-				</div>
-			{/if}
-
 			<a
 				href={resolve('/students')}
 				onclick={(e) => {

@@ -310,7 +310,6 @@
 		const weekdays = [1, 2, 3, 4, 5];
 		if (days.length === 5 && weekdays.every((d) => days.includes(d))) return 'Weekdays';
 
-		const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 		const shortDayNames = ['S', 'M', 'T', 'W', 'TH', 'F', 'S'];
 		return days
 			.slice()
@@ -754,15 +753,15 @@
 		</div>
 
 		<!-- Days of Week Selector -->
-		<div class="space-y-1.5">
-			<label class="label-mono flex items-center justify-between">
+		<fieldset class="space-y-1.5">
+			<legend class="label-mono flex items-center justify-between">
 				<span>Scheduled Days</span>
 				<span class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
 					{getDaysLabel(formDays)}
 				</span>
-			</label>
+			</legend>
 			<div class="flex justify-between gap-1">
-				{#each ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as day, i}
+				{#each ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as day, i (i)}
 					<button
 						type="button"
 						onclick={() => {
@@ -781,7 +780,7 @@
 					</button>
 				{/each}
 			</div>
-		</div>
+		</fieldset>
 
 		<!-- Session Mode Selector -->
 		<fieldset class="space-y-1.5">
@@ -1143,7 +1142,7 @@
 <!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 {#if toastMessage}
 	<div
-		class="fixed right-6 bottom-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
+		class="fixed top-12 right-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
 			{toastOk
 			? 'border-border bg-background text-foreground'
 			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
