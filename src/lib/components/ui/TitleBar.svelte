@@ -43,7 +43,7 @@
 			console.log('Toggling maximize...');
 			const currentlyMaximized = await appWindow.isMaximized();
 			console.log('Current maximized state:', currentlyMaximized);
-			
+
 			if (currentlyMaximized) {
 				await appWindow.unmaximize();
 				isMaximized = false;
@@ -76,16 +76,18 @@
 <div class="title-bar" data-tauri-drag-region>
 	<div class="title-bar-content" data-tauri-drag-region>
 		<!-- App title or logo can go here -->
-		<div class="app-title" data-tauri-drag-region>
-			EES - Attendance Management System
-		</div>
+		<div class="app-title" data-tauri-drag-region>EES - Attendance Management System</div>
 	</div>
-	
+
 	<div class="window-controls">
 		<button class="window-control minimize" onclick={minimize} title="Minimize">
 			<Minus size={14} />
 		</button>
-		<button class="window-control maximize" onclick={maximize} title={isMaximized ? 'Restore' : 'Maximize'}>
+		<button
+			class="window-control maximize"
+			onclick={maximize}
+			title={isMaximized ? 'Restore' : 'Maximize'}
+		>
 			<Square size={14} />
 		</button>
 		<button class="window-control close" onclick={close} title="Close">
@@ -146,9 +148,5 @@
 	.window-control.close:hover {
 		background: var(--color-destructive);
 		color: var(--color-destructive-foreground);
-	}
-
-	.window-control svg {
-		pointer-events: none;
 	}
 </style>

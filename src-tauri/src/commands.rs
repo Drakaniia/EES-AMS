@@ -7,122 +7,9 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use serde::Serialize;
 use std::fs;
-use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NfcReaderStatus {
-    pub connected: bool,
-    pub reader_name: Option<String>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NfcCardData {
-    pub serial_number: String,
-    pub data: Option<String>,
-}
-
-// Global NFC reader state
-static NFC_READER: Mutex<Option<Arc<Mutex<NfcReader>>>> = Mutex::new(None);
-
-struct NfcReader {
-    connected: bool,
-}
-
-impl NfcReader {
-    fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        // For now, simulate NFC reader detection
-        // In a real implementation, this would use PC/SC or USB APIs
-        // Return error to simulate no reader connected
-        Err("No NFC reader detected".into())
-    }
-
-    fn connect_to_reader(&mut self, _reader_name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.connected = true;
-        Ok(())
-    }
-
-    fn read_card(&mut self) -> Result<NfcCardData, Box<dyn std::error::Error>> {
-        if !self.connected {
-            return Err("NFC reader not connected".into());
-        }
-
-        // Simulate card reading
-        // In a real implementation, this would read from actual NFC hardware
-        Ok(NfcCardData {
-            serial_number: format!(
-                "{:02x}:{:02x}:{:02x}:{:02x}",
-                rand::random::<u8>(),
-                rand::random::<u8>(),
-                rand::random::<u8>(),
-                rand::random::<u8>()
-            ),
-            data: None,
-        })
-    }
-
-    fn wait_for_card(&mut self) -> Result<NfcCardData, Box<dyn std::error::Error>> {
-        // Simulate waiting for card
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        self.read_card()
-    }
-}
-
-#[tauri::command]
-pub fn check_nfc_reader() -> Result<NfcReaderStatus, String> {
-    match NfcReader::new() {
-        Ok(_reader) => Ok(NfcReaderStatus {
-            connected: _reader.connected,
-            reader_name: Some("Simulated NFC Reader".to_string()),
-            error: None,
-        }),
-        Err(e) => Ok(NfcReaderStatus {
-            connected: false,
-            reader_name: None,
-            error: Some(format!("Failed to initialize NFC: {}", e)),
-        }),
-    }
-}
-
-#[tauri::command]
-pub fn start_nfc_scanning() -> Result<String, String> {
-    let mut reader = NfcReader::new().map_err(|e| e.to_string())?;
-
-    reader
-        .connect_to_reader("simulated_reader")
-        .map_err(|e| e.to_string())?;
-
-    // Store reader globally
-    {
-        let mut global_reader = NFC_READER.lock().unwrap();
-        *global_reader = Some(Arc::new(Mutex::new(reader)));
-    }
-
-    Ok("Simulated NFC Reader".to_string())
-}
-
-#[tauri::command]
-pub fn stop_nfc_scanning() -> Result<(), String> {
-    let mut global_reader = NFC_READER.lock().unwrap();
-    *global_reader = None;
-    Ok(())
-}
-
-#[tauri::command]
-pub fn read_nfc_card() -> Result<NfcCardData, String> {
-    let global_reader = NFC_READER.lock().unwrap();
-    let reader = global_reader
-        .as_ref()
-        .ok_or_else(|| "NFC scanner not started".to_string())?
-        .clone();
-
-    let mut reader = reader.lock().unwrap();
-    reader.wait_for_card().map_err(|e| e.to_string())
-}
+use tauri_plugin_updater::UpdaterExt;
 
 // ── Student Commands ───────────────────────────────────────────────────────
 
@@ -339,9 +226,12 @@ pub fn import_all(
     for class in payload.classes {
         let req = CreateClassRequest {
             name: class.name,
+            room: class.room,
             day_start: class.day_start,
             day_end: class.day_end,
             late_after: class.late_after,
+            sessions: class.sessions,
+            days: class.days,
         };
         class_repo.create(req).map_err(|e| e.to_string())?;
     }
@@ -502,7 +392,7 @@ pub async fn export_csv_with_folder(
     let mut csv_content = String::new();
 
     // Header
-    csv_content.push_str("Date,Class,Student #,Name,Check-in,Check-out,Hours,Late\n");
+    csv_content.push_str("Date,Class,Room,Student #,Name,Check-in,Check-out,Hours,Late\n");
 
     // Group events by student and date
     use std::collections::HashMap;
@@ -546,7 +436,19 @@ pub async fn export_csv_with_folder(
                         let event_time = event
                             .timestamp
                             .with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
-                        let parts: Vec<&str> = class.late_after.split(':').collect();
+
+                        // Find matching session or use default
+                        let mut late_after = &class.late_after;
+                        let time_str = event_time.format("%H:%M").to_string();
+
+                        for session in &class.sessions {
+                            if time_str >= session.start_time && time_str <= session.end_time {
+                                late_after = &session.late_after;
+                                break;
+                            }
+                        }
+
+                        let parts: Vec<&str> = late_after.split(':').collect();
                         let [h, m] = [
                             parts
                                 .first()
@@ -592,15 +494,23 @@ pub async fn export_csv_with_folder(
             .map(|c| c.name.as_str())
             .unwrap_or("Unknown");
 
+        let room_name = student
+            .class_id
+            .as_ref()
+            .and_then(|id| class_map.get(id))
+            .and_then(|c| c.room.as_deref())
+            .unwrap_or("N/A");
+
         let date = events
             .first()
             .map(|e| e.timestamp.format("%Y-%m-%d").to_string())
             .unwrap_or_default();
 
         csv_content.push_str(&format!(
-            "{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{}\n",
             date,
             class_name,
+            room_name,
             student.student_number,
             student.name,
             check_in_time.unwrap_or_default(),
@@ -638,4 +548,56 @@ pub async fn export_csv_with_folder(
     fs::write(&file_path_buf, csv_content).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(file_path_buf.to_string_lossy().to_string())
+}
+
+// ── Updater Commands ───────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInfo {
+    pub available: bool,
+    pub version: Option<String>,
+    pub notes: Option<String>,
+    pub pub_date: Option<String>,
+    pub current_version: String,
+}
+
+#[tauri::command]
+pub async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
+    let current_version = app.package_info().version.to_string();
+
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    match updater.check().await.map_err(|e| e.to_string())? {
+        Some(update) => Ok(UpdateInfo {
+            available: true,
+            version: Some(update.version.clone()),
+            notes: update.body.clone(),
+            pub_date: update.date.map(|d| d.to_string()),
+            current_version,
+        }),
+        None => Ok(UpdateInfo {
+            available: false,
+            version: None,
+            notes: None,
+            pub_date: None,
+            current_version,
+        }),
+    }
+}
+
+#[tauri::command]
+pub async fn download_and_install(app: tauri::AppHandle) -> Result<String, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No update available".to_string())?;
+
+    update
+        .download_and_install(|_chunk, _total| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok("Update installed. The app will restart shortly.".to_string())
 }

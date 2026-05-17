@@ -1,77 +1,77 @@
 version: 2
 updates:
   # Frontend dependencies (package.json)
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: 'npm'
+    directory: '/'
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
     open-pull-requests-limit: 5
     reviewers:
-      - "dependabot[bot]"
+      - 'dependabot[bot]'
     assignees:
-      - "dependabot[bot]"
+      - 'dependabot[bot]'
     commit-message:
-      prefix: "deps"
-      include: "scope"
+      prefix: 'deps'
+      include: 'scope'
     labels:
-      - "dependencies"
-      - "frontend"
+      - 'dependencies'
+      - 'frontend'
     allow:
-      - dependency-type: "direct"
-      - dependency-type: "indirect"
+      - dependency-type: 'direct'
+      - dependency-type: 'indirect'
     ignore:
       # Ignore major version updates for stability
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   # Rust dependencies (Cargo.toml)
-  - package-ecosystem: "cargo"
-    directory: "/src-tauri"
+  - package-ecosystem: 'cargo'
+    directory: '/src-tauri'
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
     open-pull-requests-limit: 5
     reviewers:
-      - "dependabot[bot]"
+      - 'dependabot[bot]'
     assignees:
-      - "dependabot[bot]"
+      - 'dependabot[bot]'
     commit-message:
-      prefix: "deps"
-      include: "scope"
+      prefix: 'deps'
+      include: 'scope'
     labels:
-      - "dependencies"
-      - "rust"
-      - "backend"
+      - 'dependencies'
+      - 'rust'
+      - 'backend'
     allow:
-      - dependency-type: "direct"
-      - dependency-type: "indirect"
+      - dependency-type: 'direct'
+      - dependency-type: 'indirect'
     ignore:
       # Ignore major version updates for stability
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   # GitHub Actions
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: 'github-actions'
+    directory: '/'
     schedule:
-      interval: "monthly"
-      day: "monday"
-      time: "09:00"
+      interval: 'monthly'
+      day: 'monday'
+      time: '09:00'
     open-pull-requests-limit: 3
     reviewers:
-      - "dependabot[bot]"
+      - 'dependabot[bot]'
     assignees:
-      - "dependabot[bot]"
+      - 'dependabot[bot]'
     commit-message:
-      prefix: "ci"
-      include: "scope"
+      prefix: 'ci'
+      include: 'scope'
     labels:
-      - "dependencies"
-      - "github-actions"
+      - 'dependencies'
+      - 'github-actions'
     ignore:
       # Keep major action versions stable
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']

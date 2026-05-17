@@ -55,7 +55,7 @@ Examples with actual file paths:
 ### Attendance Routes
 
 - Live attendance tracking interface
-- NFC card reader integration
+- Card reader input integration
 - Manual attendance entry
 - Attendance validation
 
@@ -77,7 +77,6 @@ Examples with actual file paths:
 
 - System configuration
 - User preferences
-- NFC reader setup
 - Database management
 
 ## JIT Index Hints

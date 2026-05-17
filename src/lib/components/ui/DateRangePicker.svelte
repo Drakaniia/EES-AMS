@@ -195,14 +195,14 @@
 		>
 			<div class="space-y-4">
 				<div class="text-center">
-					<div class="text-muted-foreground text-sm font-medium">Select FROM date</div>
+					<div class="text-sm font-medium text-muted-foreground">Select FROM date</div>
 				</div>
 
 				<!-- Month navigation for FROM -->
 				<div class="flex items-center justify-between">
 					<button
 						onclick={() => navigateMonth(-1, 'from')}
-						class="text-muted-foreground hover:text-foreground p-1 transition-colors"
+						class="p-1 text-muted-foreground transition-colors hover:text-foreground"
 						aria-label="Previous month"
 					>
 						<svg
@@ -220,12 +220,12 @@
 
 					<div class="text-center">
 						<div class="font-medium">{monthNames[fromMonth.getMonth()]}</div>
-						<div class="text-muted-foreground text-sm">{fromMonth.getFullYear()}</div>
+						<div class="text-sm text-muted-foreground">{fromMonth.getFullYear()}</div>
 					</div>
 
 					<button
 						onclick={() => navigateMonth(1, 'from')}
-						class="text-muted-foreground hover:text-foreground p-1 transition-colors"
+						class="p-1 text-muted-foreground transition-colors hover:text-foreground"
 						aria-label="Next month"
 					>
 						<svg
@@ -246,7 +246,7 @@
 				<div class="grid grid-cols-7 gap-1">
 					<!-- Week day headers -->
 					{#each weekDays as day, i (`from-header-${i}`)}
-						<div class="text-muted-foreground py-2 text-center font-mono text-xs">{day}</div>
+						<div class="py-2 text-center font-mono text-xs text-muted-foreground">{day}</div>
 					{/each}
 
 					<!-- Calendar days -->
@@ -261,10 +261,10 @@
 								onclick={() => handleDateSelect(day as Date, 'from')}
 								disabled={isDateDisabled}
 								class="relative rounded-md p-2 text-sm transition-colors
-									{isDateDisabled ? 'text-muted-foreground/30 cursor-not-allowed' : ''}
-									{!isDateDisabled && !isDateSelected ? 'hover:bg-surface cursor-pointer' : ''}
-									{isDateSelected ? 'bg-primary text-primary-foreground cursor-default' : ''}
-									{isDateToday && !isDateSelected ? 'border-border border' : ''}"
+									{isDateDisabled ? 'cursor-not-allowed text-muted-foreground/30' : ''}
+									{!isDateDisabled && !isDateSelected ? 'cursor-pointer hover:bg-surface' : ''}
+									{isDateSelected ? 'cursor-default bg-primary text-primary-foreground' : ''}
+									{isDateToday && !isDateSelected ? 'border border-border' : ''}"
 							>
 								{(day as Date).getDate()}
 							</button>
@@ -273,17 +273,17 @@
 				</div>
 
 				<!-- Action buttons for FROM -->
-				<div class="border-border flex justify-between gap-2 border-t pt-2">
+				<div class="flex justify-between gap-2 border-t border-border pt-2">
 					<div class="flex gap-2">
 						<button
 							onclick={handleClear}
-							class="border-border hover:bg-surface rounded-md border px-3 py-1.5 text-sm transition-colors"
+							class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
 						>
 							Clear
 						</button>
 						<button
 							onclick={() => handleToday('from')}
-							class="border-border hover:bg-surface rounded-md border px-3 py-1.5 text-sm transition-colors"
+							class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
 						>
 							Today
 						</button>
@@ -291,7 +291,7 @@
 					<button
 						onclick={handleFromConfirm}
 						disabled={!selectedFromDate}
-						class="rounded-pill bg-primary text-primary-foreground hover:bg-accent px-4 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+						class="rounded-pill bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						Select
 					</button>
@@ -309,9 +309,9 @@
 		>
 			<div class="space-y-4">
 				<div class="text-center">
-					<div class="text-muted-foreground text-sm font-medium">Select TO date</div>
+					<div class="text-sm font-medium text-muted-foreground">Select TO date</div>
 					{#if selectedFromDate}
-						<div class="text-foreground text-xs">
+						<div class="text-xs text-foreground">
 							From: {new Date(selectedFromDate).toLocaleDateString()}
 						</div>
 					{/if}
@@ -321,7 +321,7 @@
 				<div class="flex items-center justify-between">
 					<button
 						onclick={() => navigateMonth(-1, 'to')}
-						class="text-muted-foreground hover:text-foreground p-1 transition-colors"
+						class="p-1 text-muted-foreground transition-colors hover:text-foreground"
 						aria-label="Previous month"
 					>
 						<svg
@@ -339,12 +339,12 @@
 
 					<div class="text-center">
 						<div class="font-medium">{monthNames[toMonth.getMonth()]}</div>
-						<div class="text-muted-foreground text-sm">{toMonth.getFullYear()}</div>
+						<div class="text-sm text-muted-foreground">{toMonth.getFullYear()}</div>
 					</div>
 
 					<button
 						onclick={() => navigateMonth(1, 'to')}
-						class="text-muted-foreground hover:text-foreground p-1 transition-colors"
+						class="p-1 text-muted-foreground transition-colors hover:text-foreground"
 						aria-label="Next month"
 					>
 						<svg
@@ -365,7 +365,7 @@
 				<div class="grid grid-cols-7 gap-1">
 					<!-- Week day headers -->
 					{#each weekDays as day, i (`to-header-${i}`)}
-						<div class="text-muted-foreground py-2 text-center font-mono text-xs">{day}</div>
+						<div class="py-2 text-center font-mono text-xs text-muted-foreground">{day}</div>
 					{/each}
 
 					<!-- Calendar days -->
@@ -380,10 +380,10 @@
 								onclick={() => handleDateSelect(day as Date, 'to')}
 								disabled={isDateDisabled}
 								class="relative rounded-md p-2 text-sm transition-colors
-									{isDateDisabled ? 'text-muted-foreground/30 cursor-not-allowed' : ''}
-									{!isDateDisabled && !isDateSelected ? 'hover:bg-surface cursor-pointer' : ''}
-									{isDateSelected ? 'bg-primary text-primary-foreground cursor-default' : ''}
-									{isDateToday && !isDateSelected ? 'border-border border' : ''}"
+									{isDateDisabled ? 'cursor-not-allowed text-muted-foreground/30' : ''}
+									{!isDateDisabled && !isDateSelected ? 'cursor-pointer hover:bg-surface' : ''}
+									{isDateSelected ? 'cursor-default bg-primary text-primary-foreground' : ''}
+									{isDateToday && !isDateSelected ? 'border border-border' : ''}"
 							>
 								{(day as Date).getDate()}
 							</button>
@@ -392,17 +392,17 @@
 				</div>
 
 				<!-- Action buttons for TO -->
-				<div class="border-border flex justify-between gap-2 border-t pt-2">
+				<div class="flex justify-between gap-2 border-t border-border pt-2">
 					<div class="flex gap-2">
 						<button
 							onclick={handleClear}
-							class="border-border hover:bg-surface rounded-md border px-3 py-1.5 text-sm transition-colors"
+							class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
 						>
 							Clear
 						</button>
 						<button
 							onclick={() => handleToday('to')}
-							class="border-border hover:bg-surface rounded-md border px-3 py-1.5 text-sm transition-colors"
+							class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
 						>
 							Today
 						</button>
@@ -410,14 +410,14 @@
 					<div class="flex gap-2">
 						<button
 							onclick={handlePrevious}
-							class="border-border hover:bg-surface rounded-md border px-3 py-1.5 text-sm transition-colors"
+							class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
 						>
 							Previous
 						</button>
 						<button
 							onclick={handleToConfirm}
 							disabled={!selectedToDate}
-							class="rounded-pill bg-primary text-primary-foreground hover:bg-accent px-4 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+							class="rounded-pill bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							Select
 						</button>

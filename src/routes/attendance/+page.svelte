@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
@@ -9,11 +10,10 @@
 		findStudentByCard,
 		lastEventForStudent,
 		addEvent,
-		uid,
+		deleteEvent,
 		type Student,
 		type Class
 	} from '$lib/db-rust';
-	import { NfcScanner, nfcSupported } from '$lib/nfc';
 	import { fmtTime } from '$lib/csv';
 
 	// ── Types ────────────────────────────────────────────────────────────────
@@ -28,7 +28,6 @@
 	};
 
 	// ── State ────────────────────────────────────────────────────────────────
-	let scanning = $state(false);
 	let log = $state<LogLine[]>([]);
 	let students = $state<Student[]>([]);
 	let classes = $state<Class[]>([]);
@@ -42,44 +41,52 @@
 		type: 'in' | 'out';
 		time: number;
 		isLate?: boolean;
+		eventId?: string;
 	} | null>(null);
+
+	let cardInput = $state('');
 
 	// Toast
 	let toastMessage = $state<string | null>(null);
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-	// NFC support state
-	let supported = $state<'connected' | 'disconnected'>('disconnected');
-	let supportedLoading = $state(true);
+	// Cooldown lock to prevent rapid duplicate taps
+	let isProcessing = $state(false);
+
+	// Undo tracking
+	let lastEventId = $state<string | null>(null);
+	let undoTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
 		(async () => {
-			try {
-				supported = await nfcSupported();
-			} catch {
-				supported = 'disconnected';
-			} finally {
-				supportedLoading = false;
-			}
 			await reload();
-		})();
 
-		return () => {
-			scanner?.stop();
-			scanner = null;
-		};
+			const classIdFromUrl = page.url.searchParams.get('classId');
+			if (classIdFromUrl) {
+				const currentDay = new Date().getDay();
+				const urlClass = classes.find((c) => c.id === classIdFromUrl);
+				if (urlClass && urlClass.days && urlClass.days.includes(currentDay)) {
+					selectedClassId = classIdFromUrl;
+				}
+			} else {
+				const active = getActiveClass();
+				if (active) {
+					selectedClassId = active.id;
+				}
+			}
+
+			if (page.url.searchParams.get('manual') === 'true') {
+				pickerOpen = true;
+			}
+		})();
 	});
 
 	async function reload() {
 		const [s, c] = await Promise.all([listStudents(), listClasses()]);
 		students = s;
 		classes = c;
-		// Auto-select first class if none selected
-		if (!selectedClassId && c.length > 0) {
-			selectedClassId = c[0].id;
-		}
 	}
 
 	// ── Derived ──────────────────────────────────────────────────────────────
@@ -95,6 +102,34 @@
 
 	let currentClass = $derived(classes.find((c) => c.id === selectedClassId));
 
+	let todayClasses = $derived.by(() => {
+		const currentDay = new Date().getDay();
+		return classes
+			.filter((cls) => cls.days && cls.days.includes(currentDay))
+			.sort((a, b) => {
+				const [aH, aM] = a.dayStart.split(':').map(Number);
+				const [bH, bM] = b.dayStart.split(':').map(Number);
+				return aH * 60 + aM - (bH * 60 + bM);
+			});
+	});
+
+	let remainingSessions = $derived.by(() => {
+		const now = new Date();
+		const currentTime = now.getHours() * 60 + now.getMinutes();
+
+		return todayClasses
+			.filter((cls) => {
+				const [startHour, startMin] = cls.dayStart.split(':').map(Number);
+				const startTime = startHour * 60 + startMin;
+				return startTime >= currentTime;
+			})
+			.sort((a, b) => {
+				const [aH, aM] = a.dayStart.split(':').map(Number);
+				const [bH, bM] = b.dayStart.split(':').map(Number);
+				return aH * 60 + aM - (bH * 60 + bM);
+			});
+	});
+
 	// ── Utility Functions ────────────────────────────────────────────────────────
 
 	function getTimeOfDay(): 'Morning' | 'Afternoon' {
@@ -105,8 +140,12 @@
 	function getActiveClass(): Class | null {
 		const now = new Date();
 		const currentTime = now.getHours() * 60 + now.getMinutes();
+		const currentDay = now.getDay();
 
 		for (const cls of classes) {
+			// Skip classes not scheduled for today
+			if (cls.days && !cls.days.includes(currentDay)) continue;
+
 			const [startHour, startMin] = cls.dayStart.split(':').map(Number);
 			const [endHour, endMin] = cls.dayEnd.split(':').map(Number);
 			const startTime = startHour * 60 + startMin;
@@ -117,6 +156,27 @@
 			}
 		}
 		return null;
+	}
+
+	function endSession() {
+		if (!selectedClassId) {
+			import('$app/navigation').then((n) => n.goto('/'));
+			return;
+		}
+
+		const classObj = classes.find((c) => c.id === selectedClassId);
+		const classStudents = students.filter((s) => s.classId === selectedClassId);
+		const total = classStudents.length;
+
+		const presentCount = new Set(log.filter((l) => l.type === 'in').map((l) => l.studentNumber))
+			.size;
+		const summary = `${presentCount}/${total} students present`;
+
+		import('$app/navigation').then((n) =>
+			n.goto(
+				`/?sessionEnd=true&summary=${encodeURIComponent(summary)}&className=${encodeURIComponent(classObj?.name || '')}`
+			)
+		);
 	}
 
 	// ── Dynamic Title Logic ────────────────────────────────────────────────────
@@ -147,44 +207,81 @@
 		toastTimer = setTimeout(() => (toastMessage = null), 3000);
 	}
 
+	async function undoLast() {
+		if (!lastEventId || !lastResult) return;
+
+		try {
+			await deleteEvent(lastEventId);
+
+			const eventIdToRemove = lastEventId;
+			log = log.filter((l) => l.id !== eventIdToRemove);
+
+			toast(`Undid ${lastResult.name} ${lastResult.type === 'in' ? 'check-in' : 'check-out'}`);
+		} catch {
+			toast('Failed to undo last action', false);
+		} finally {
+			lastEventId = null;
+			lastResult = null;
+			if (undoTimer) clearTimeout(undoTimer);
+		}
+	}
+
 	function checkLate(classObj: Class | undefined, timestamp: number): boolean {
-		if (!classObj || !classObj.lateAfter) return false;
+		if (!classObj) return false;
 
 		const now = new Date(timestamp);
-		const [h, m] = classObj.lateAfter.split(':').map(Number);
-		const originalDate = new Date(timestamp);
-		const lateTime = new Date(
-			originalDate.getFullYear(),
-			originalDate.getMonth(),
-			originalDate.getDate(),
-			h,
-			m,
-			0,
-			0
-		);
+		const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+		let lateAfter = classObj.lateAfter;
+
+		if (classObj.sessions && classObj.sessions.length > 0) {
+			for (const session of classObj.sessions) {
+				if (timeStr >= session.startTime && timeStr <= session.endTime) {
+					lateAfter = session.lateAfter;
+					break;
+				}
+			}
+		}
+
+		if (!lateAfter) return false;
+
+		const [h, m] = lateAfter.split(':').map(Number);
+		const lateTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
 
 		return now > lateTime;
 	}
 
-	// ── NFC scanner ──────────────────────────────────────────────────────────
-	let scanner: NfcScanner | null = null;
+	// ── Card input handler ───────────────────────────────────────────────────
+	async function handleCardSubmit(serial: string) {
+		const trimmed = serial.trim();
+		if (!trimmed) return;
 
-	async function handleSerial(serial: string) {
-		const student = await findStudentByCard(serial);
-		if (!student) {
-			const line: LogLine = {
-				id: uid(),
-				studentName: 'Unknown card',
-				studentNumber: serial,
-				type: 'error',
-				message: 'Not paired to any student',
-				timestamp: Date.now()
-			};
-			log = [line, ...log].slice(0, 30);
-			toast('Unknown card — not paired to any student', false);
+		// Prevent rapid duplicate taps
+		if (isProcessing) {
+			toast('Please wait — processing previous tap', false);
 			return;
 		}
-		await logForStudent(student);
+
+		cardInput = '';
+		isProcessing = true;
+
+		try {
+			const student = await findStudentByCard(trimmed);
+			if (!student) {
+				toast('Unknown card — not paired to any student', false);
+				return;
+			}
+			await logForStudent(student);
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err);
+			if (message.includes('duplicate check-in') || message.includes('already checked in')) {
+				toast('Already checked in today — no duplicate allowed', false);
+			} else {
+				toast(`Error: ${message}`, false);
+			}
+		} finally {
+			isProcessing = false;
+		}
 	}
 
 	async function logForStudent(student: Student) {
@@ -192,53 +289,56 @@
 		const type: 'in' | 'out' = !last || last.type === 'out' ? 'in' : 'out';
 		const ts = Date.now();
 
-		// Determine if late (only for check-in)
 		const studentClass = classes.find((c) => c.id === student.classId) || currentClass;
 		const isLate = type === 'in' && checkLate(studentClass, ts);
 
-		await addEvent({
-			studentId: student.id,
-			classId: student.classId || selectedClassId || undefined,
-			type,
-			note: isLate ? 'Late' : undefined
-		});
-
-		lastResult = { ok: true, name: student.name, type, time: ts, isLate };
-		log = [
-			{
-				id: uid(),
-				studentName: student.name,
-				studentNumber: student.studentNumber,
+		try {
+			const createdEvent = await addEvent({
+				studentId: student.id,
+				classId: student.classId || selectedClassId || undefined,
 				type,
+				note: isLate ? 'Late' : undefined
+			});
+			lastEventId = createdEvent.id;
+
+			lastResult = {
+				ok: true,
+				name: student.name,
+				type,
+				time: ts,
 				isLate,
-				message: type === 'in' ? (isLate ? 'Checked in (LATE)' : 'Checked in') : 'Checked out',
-				timestamp: ts
-			},
-			...log
-		].slice(0, 30);
+				eventId: createdEvent.id
+			};
+			log = [
+				{
+					id: createdEvent.id,
+					studentName: student.name,
+					studentNumber: student.studentNumber,
+					type,
+					isLate,
+					message: type === 'in' ? (isLate ? 'Checked in (LATE)' : 'Checked in') : 'Checked out',
+					timestamp: ts
+				},
+				...log
+			].slice(0, 30);
 
-		toast(
-			`${student.name} · ${type === 'in' ? (isLate ? 'LATE' : 'Checked in') : 'Checked out'}`,
-			!isLate
-		);
-		setTimeout(() => (lastResult = null), 2500);
-	}
-
-	function startScanning() {
-		if (scanner) return;
-		if (supported === 'disconnected') {
-			toast('NFC Card Reader not connected.', false);
-			return;
+			toast(
+				`${student.name} · ${type === 'in' ? (isLate ? 'LATE' : 'Checked in') : 'Checked out'}`,
+				!isLate
+			);
+			if (undoTimer) clearTimeout(undoTimer);
+			undoTimer = setTimeout(() => {
+				lastResult = null;
+				lastEventId = null;
+			}, 5000);
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err);
+			if (message.includes('duplicate check-in') || message.includes('already checked in')) {
+				toast(`${student.name} already checked in today`, false);
+				return;
+			}
+			throw err;
 		}
-		scanner = new NfcScanner(handleSerial, (e) => toast(e.message, false));
-		scanner.start();
-		scanning = true;
-	}
-
-	function stopScanning() {
-		scanner?.stop();
-		scanner = null;
-		scanning = false;
 	}
 </script>
 
@@ -250,56 +350,56 @@
 	<PageHeader category="Tap Mode" title={dynamicTitle()} description={dynamicDescription()}>
 		{#snippet actions()}
 			<div class="flex items-center gap-3">
-				<!-- Class Selector -->
-				<select
-					bind:value={selectedClassId}
-					class="border-border bg-background focus:ring-primary rounded-pill h-10 border px-4 py-2 text-sm focus:ring-2 focus:outline-none"
-				>
-					<option value="">No Active Class</option>
-					{#each classes as c (c.id)}
-						<option value={c.id}>{c.name}</option>
-					{/each}
-				</select>
+				<div class="relative">
+					<select
+						bind:value={selectedClassId}
+						class="h-10 w-auto appearance-none rounded-pill border border-border bg-background px-4 py-2 pr-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					>
+						<option value="">No Active Class</option>
+						{#each todayClasses as c (c.id)}
+							<option value={c.id}>{c.name}</option>
+						{/each}
+					</select>
+					<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4">
+						<svg
+							class="size-4 text-muted-foreground"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="m6 9 6 6 6-6" />
+						</svg>
+					</div>
+				</div>
 
 				<button
 					onclick={() => {
 						pickerQuery = '';
 						pickerOpen = true;
 					}}
-					class="rounded-pill border-border bg-background hover:bg-surface inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
+					class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 				>
 					Manual log
 				</button>
 
-				{#if scanning}
-					<button
-						onclick={stopScanning}
-						class="rounded-pill border-destructive/40 text-destructive hover:bg-destructive/10 inline-flex items-center gap-2 border px-4 py-2 text-sm font-medium transition-colors"
-					>
-						<svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-							<rect x="3" y="3" width="18" height="18" rx="2" />
-						</svg>
-						Stop
-					</button>
-				{:else}
-					<button
-						onclick={startScanning}
-						class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
-					>
-						<svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-							<polygon points="5,3 19,12 5,21" />
-						</svg>
-						Start
-					</button>
-				{/if}
+				<button
+					onclick={endSession}
+					class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+				>
+					End Session
+				</button>
 			</div>
 		{/snippet}
 	</PageHeader>
 
-	<section class="grid gap-8 px-6 py-10 md:px-12 lg:grid-cols-[1.2fr_1fr]">
+	<section
+		class="grid min-h-[calc(100vh-28rem)] gap-8 px-6 py-10 md:px-12 lg:grid-cols-[1.2fr_1fr]"
+	>
 		<div
-			class="border-border bg-surface relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-3xl border p-10
-				{scanning ? 'ring-primary/40 ring-2' : ''}"
+			class="relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-3xl border border-border bg-surface p-10"
 		>
 			<div
 				aria-hidden="true"
@@ -307,64 +407,133 @@
 				style="background: radial-gradient(60% 60% at 50% 40%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 70%)"
 			></div>
 
-			<div class="relative text-center">
-				<div class="label-mono mb-4">
-					{#if scanning}
-						<span class="text-primary animate-pulse">●</span> Listening for taps
+			{#if !selectedClassId}
+				<div class="relative w-full max-w-md text-center">
+					{#if todayClasses.length === 0}
+						<h3 class="display-lg mb-2">No Classes Today</h3>
+						<p class="mb-8 text-muted-foreground">
+							No classes are scheduled for today. Configure class days in Settings.
+						</p>
 					{:else}
-						Scanner idle
+						<h3 class="display-lg mb-2">Which class are you starting?</h3>
+						<p class="mb-8 text-muted-foreground">Select a class to begin recording attendance.</p>
+
+						<div class="grid gap-3 text-left">
+							{#each remainingSessions as s (s.id)}
+								<button
+									onclick={() => (selectedClassId = s.id)}
+									class="group flex items-center justify-between rounded-2xl border border-border bg-background p-4 transition-all hover:border-primary/50 hover:bg-primary/5"
+								>
+									<div>
+										<div class="font-bold transition-colors group-hover:text-primary">{s.name}</div>
+										<div class="label-mono text-xs opacity-60">
+											{s.room ? `Room ${s.room} · ` : ''}{s.dayStart} – {s.dayEnd}
+										</div>
+									</div>
+									<svg
+										class="size-5 text-muted-foreground transition-all group-hover:translate-x-1 group-hover:text-primary"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
+									</svg>
+								</button>
+							{/each}
+
+							{#if remainingSessions.length === 0}
+								<div
+									class="rounded-2xl border border-dashed border-border py-8 text-center text-muted-foreground italic"
+								>
+									No more sessions scheduled for today.
+								</div>
+							{/if}
+						</div>
 					{/if}
 				</div>
+			{:else}
+				<div class="relative w-full max-w-md text-center">
+					<div class="label-mono mb-4 text-primary">
+						<span class="animate-pulse">●</span> Ready for card taps
+					</div>
 
-				<div
-					class="mx-auto grid size-40 place-items-center rounded-full border-2
-						{scanning ? 'border-primary animate-pulse shadow-[0_0_30px_-5px_var(--primary)]' : 'border-border'}"
-				>
-					<svg
-						class="size-16 {scanning ? 'text-primary' : 'text-muted-foreground'}"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
+					<div
+						class="mx-auto grid size-40 place-items-center rounded-full border-2 border-primary shadow-[0_0_30px_-5px_var(--primary)]"
 					>
-						<path d="M3 7V5a2 2 0 0 1 2-2h2" />
-						<path d="M17 3h2a2 2 0 0 1 2 2v2" />
-						<path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-						<path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-						<line x1="7" y1="12" x2="17" y2="12" />
-					</svg>
-				</div>
+						<svg
+							class="size-16 text-primary"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M3 7V5a2 2 0 0 1 2-2h2" />
+							<path d="M17 3h2a2 2 0 0 1 2 2v2" />
+							<path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+							<path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+							<line x1="7" y1="12" x2="17" y2="12" />
+						</svg>
+					</div>
 
-				<h3 class="display-lg mt-8">{scanning ? 'Tap a card' : 'Press start'}</h3>
-				<p class="text-muted-foreground mx-auto mt-2 max-w-md">
-					{#if supportedLoading}
-						Checking hardware…
-					{:else if supported === 'connected'}
-						USB NFC Card Reader detected. Keep the device awake.
-					{:else}
-						NFC Card Reader not found. Use manual log or check connection.
-					{/if}
-				</p>
-			</div>
+					<h3 class="display-lg mt-8">Tap a card</h3>
+					<p class="mx-auto mt-2 max-w-md text-muted-foreground">
+						Tap an ID card on the reader or type the serial below.
+					</p>
+
+					<form
+						onsubmit={(e) => {
+							e.preventDefault();
+							handleCardSubmit(cardInput);
+						}}
+						class="mx-auto mt-6 max-w-sm"
+					>
+						<input
+							type="text"
+							bind:value={cardInput}
+							placeholder="Tap card or enter serial…"
+							class="w-full rounded-md border border-border bg-background px-4 py-3 text-center font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+						/>
+					</form>
+				</div>
+			{/if}
 		</div>
 
-		<div class="border-border bg-card flex flex-col rounded-2xl border p-6">
-			<div class="mb-4 flex items-baseline justify-between">
-				<h3 class="text-lg font-medium">Session log</h3>
-				<span class="label-mono">Latest activity</span>
+		<div class="flex h-full flex-col rounded-2xl border border-border bg-card p-6">
+			<div class="mb-4 flex shrink-0 items-baseline justify-between">
+				<div class="flex flex-col">
+					<h3 class="text-lg font-medium">Session log</h3>
+					<span class="label-mono text-xs opacity-60">Latest activity</span>
+				</div>
+				<form
+					onsubmit={(e) => {
+						e.preventDefault();
+						handleCardSubmit(cardInput);
+					}}
+					class="w-56"
+				>
+					<input
+						type="text"
+						bind:value={cardInput}
+						placeholder="Tap card or enter serial…"
+						class="w-full rounded-pill border border-border bg-background px-4 py-1.5 font-mono text-xs focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</form>
 			</div>
 
 			<div class="flex-1 overflow-y-auto">
 				{#if log.length === 0}
 					<div
-						class="text-muted-foreground border-border rounded-xl border border-dashed py-12 text-center text-sm"
+						class="flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground"
 					>
 						No activity recorded in this session.
 					</div>
 				{:else}
-					<ul class="divide-border divide-y">
+					<ul class="divide-y divide-border">
 						{#each log as line (line.id)}
 							<li class="flex items-center justify-between gap-3 py-3">
 								<div class="min-w-0">
@@ -374,7 +543,7 @@
 								<div class="flex items-center gap-2">
 									{#if line.isLate}
 										<span
-											class="rounded-pill bg-destructive/10 text-destructive border-destructive/20 border px-2 py-0.5 font-mono text-[10px] font-bold"
+											class="rounded-pill border border-destructive/20 bg-destructive/10 px-2 py-0.5 font-mono text-[10px] font-bold text-destructive"
 										>
 											LATE
 										</span>
@@ -396,8 +565,8 @@
 		<div
 			class="pointer-events-auto flex items-center gap-4 rounded-3xl border px-8 py-5 shadow-2xl
 				{lastResult.ok
-				? 'bg-background border-border text-foreground'
-				: 'bg-destructive text-destructive-foreground border-destructive'}"
+				? 'border-border bg-background text-foreground'
+				: 'border-destructive bg-destructive text-destructive-foreground'}"
 		>
 			<div
 				class="grid size-12 place-items-center rounded-full
@@ -437,7 +606,7 @@
 			<div>
 				<div class="text-xl font-bold">{lastResult.name}</div>
 				<div class="label-mono flex gap-2">
-					<span class={lastResult.isLate ? 'text-destructive font-bold' : ''}>
+					<span class={lastResult.isLate ? 'font-bold text-destructive' : ''}>
 						{lastResult.type === 'in' ? (lastResult.isLate ? 'LATE' : 'CHECK-IN') : 'CHECK-OUT'}
 					</span>
 					<span class="text-muted-foreground">·</span>
@@ -457,12 +626,12 @@
 	<input
 		placeholder="Search name or student number…"
 		bind:value={pickerQuery}
-		class="border-border bg-background focus:ring-primary w-full rounded-md border px-4 py-2 text-sm focus:ring-2 focus:outline-none"
+		class="w-full rounded-md border border-border bg-background px-4 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 	/>
 
-	<ul class="divide-border border-border max-h-[300px] divide-y overflow-y-auto rounded-xl border">
+	<ul class="max-h-[300px] divide-y divide-border overflow-y-auto rounded-xl border border-border">
 		{#if filteredStudents.length === 0}
-			<li class="text-muted-foreground py-10 text-center text-sm">
+			<li class="py-10 text-center text-sm text-muted-foreground">
 				No students found {selectedClassId ? 'in this class' : ''}.
 			</li>
 		{:else}
@@ -470,16 +639,27 @@
 				<li>
 					<button
 						onclick={async () => {
-							await logForStudent(s);
-							pickerOpen = false;
+							if (isProcessing) {
+								toast('Please wait — processing previous request', false);
+								return;
+							}
+							isProcessing = true;
+							try {
+								await logForStudent(s);
+								pickerOpen = false;
+							} catch {
+								// Error already handled in logForStudent
+							} finally {
+								isProcessing = false;
+							}
 						}}
-						class="hover:bg-surface flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
+						class="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-surface"
 					>
 						<span>
 							<div class="font-medium">{s.name}</div>
 							<div class="label-mono text-xs opacity-60">#{s.studentNumber}</div>
 						</span>
-						<span class="label-mono text-primary text-xs font-bold">LOG →</span>
+						<span class="label-mono text-xs font-bold text-primary">LOG →</span>
 					</button>
 				</li>
 			{/each}
@@ -489,7 +669,7 @@
 	<div class="flex justify-end pt-2">
 		<button
 			onclick={() => (pickerOpen = false)}
-			class="border-border hover:bg-surface rounded-md border px-4 py-2 text-sm transition-colors"
+			class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 		>
 			Close
 		</button>
@@ -498,24 +678,32 @@
 
 {#if toastMessage}
 	<div
-		class="fixed right-6 bottom-6 z-60 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
+		class="fixed top-12 right-6 z-60 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
 			{toastOk
-			? 'bg-background border-border text-foreground'
-			: 'bg-destructive/10 border-destructive/40 text-destructive'}"
+			? 'border-border bg-background text-foreground'
+			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
 		role="status"
 		aria-live="polite"
 	>
-		{toastMessage}
+		<span>{toastMessage}</span>
+		{#if lastEventId && toastOk}
+			<button
+				onclick={undoLast}
+				class="rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+			>
+				UNDO
+			</button>
+		{/if}
 	</div>
 {/if}
 
 {#snippet pill(type: 'in' | 'out' | 'error')}
 	<span
-		class="rounded-pill shrink-0 px-2 py-1 font-mono text-[10px] font-bold
+		class="shrink-0 rounded-pill px-2 py-1 font-mono text-[10px] font-bold
 			{type === 'in'
 			? 'bg-primary text-primary-foreground'
 			: type === 'out'
-				? 'bg-surface text-foreground border-border border'
+				? 'border border-border bg-surface text-foreground'
 				: 'bg-destructive text-destructive-foreground'}"
 	>
 		{type === 'in' ? 'IN' : type === 'out' ? 'OUT' : 'ERROR'}

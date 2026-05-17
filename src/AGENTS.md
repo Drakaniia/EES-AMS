@@ -45,7 +45,6 @@ Examples with actual file paths:
 - **Main Layout**: `src/routes/+layout.svelte`
 - **API Client**: `src/lib/api.ts`
 - **Database Interface**: `src/lib/db-rust.ts`
-- **NFC Handling**: `src/lib/nfc.ts`
 - **Type Definitions**: `src/lib/types.ts`
 - **CSV Export**: `src/lib/csv.ts`
 - **UI Components**: `src/lib/components/`

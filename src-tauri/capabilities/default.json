@@ -11,6 +11,7 @@
 		"core:window:allow-close",
 		"core:window:allow-is-maximized",
 		"core:window:allow-show",
-		"core:window:allow-hide"
+		"core:window:allow-hide",
+		"updater:default"
 	]
 }
