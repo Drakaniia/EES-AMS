@@ -13,13 +13,13 @@
 
 {#if isVisible}
 	<div
-		class="loading-screen bg-background fixed inset-0 z-50 flex flex-col items-center justify-center"
+		class="loading-screen fixed inset-0 z-50 flex flex-col items-center justify-center bg-background"
 	>
 		<div class="loading-content flex flex-col items-center gap-6">
 			<!-- App Logo/Branding -->
 			<div class="branding text-center">
-				<h1 class="text-foreground mb-2 text-3xl font-bold">EES</h1>
-				<p class="text-muted-foreground text-sm">Attendance Management System</p>
+				<h1 class="mb-2 text-3xl font-bold text-foreground">EES</h1>
+				<p class="text-sm text-muted-foreground">Attendance Management System</p>
 			</div>
 
 			<!-- Loading Spinner -->
@@ -29,7 +29,7 @@
 
 			<!-- Loading Text -->
 			<div class="loading-text text-center">
-				<p class="text-muted-foreground animate-pulse text-sm">Loading application...</p>
+				<p class="animate-pulse text-sm text-muted-foreground">Loading application...</p>
 			</div>
 		</div>
 	</div>

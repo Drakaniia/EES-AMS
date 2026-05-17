@@ -1,12 +1,12 @@
-# Local Network Attendance System - Implementation Complete
+# Attendance Management System - Implementation
 
 ## What Was Built
 
-A complete local network architecture that allows:
+A desktop application that allows:
 
 - **Laptop** runs Tauri desktop app with SQLite database
-- **Phone** connects via hotspot/LAN and scans NFC cards
-- **Data syncs instantly** between devices over local HTTP API
+- **Card reader** connects via USB and acts as keyboard input
+- **Data records instantly** when cards are tapped
 
 ## Architecture Overview
 
@@ -15,30 +15,48 @@ A complete local network architecture that allows:
 │                    Laptop (Tauri App)                       │
 │                                                             │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
-│  │   Svelte UI  │───▶│  HTTP Server │───▶│   SQLite DB  │ │
-│  │  (Frontend)  │    │  (Axum/Rust) │    │  (Persistent)│ │
+│  │   Svelte UI  │───▶│  Tauri Cmds  │───▶│   SQLite DB  │ │
+│  │  (Frontend)  │    │    (Rust)    │    │  (Persistent)│ │
 │  └──────────────┘    └──────────────┘    └──────────────┘ │
-│         │                    │                             │
-│         │              Bound to 0.0.0.0:3030               │
-│         │              (accessible on LAN)                 │
-└─────────┼────────────────────┼─────────────────────────────┘
-          │                    │
-          │                    │ HTTP API
-          │                    │
-┌─────────┼────────────────────┼─────────────────────────────┐
-│         │                    │                             │
-│  ┌──────▼──────┐    ┌────────▼────────┐                   │
-│  │   Svelte UI │───▶│   HTTP Requests │                   │
-│  │  (Browser)  │    │  to Laptop API  │                   │
-│  └─────────────┘    └─────────────────┘                   │
-│         │                                                  │
+│         │                                                   │
 │    ┌────▼────┐                                             │
-│    │ Web NFC │  Tap card → POST /api/events               │
+│    │  Card   │  Tap card → auto-types serial → lookup     │
+│    │ Reader  │                                             │
 │    └─────────┘                                             │
 │                                                            │
-│              Phone (Android Chrome)                        │
-└────────────────────────────────────────────────────────────┘
+│              USB Card Reader (HID Mode)                     │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+┌─────────────────────────────────────────────────────────────┐
+│ Laptop (Tauri App) │
+│ │
+│ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ │
+│ │ Svelte UI │───▶│ HTTP Server │───▶│ SQLite DB │ │
+│ │ (Frontend) │ │ (Axum/Rust) │ │ (Persistent)│ │
+│ └──────────────┘ └──────────────┘ └──────────────┘ │
+│ │ │ │
+│ │ Bound to 0.0.0.0:3030 │
+│ │ (accessible on LAN) │
+└─────────┼────────────────────┼─────────────────────────────┘
+│ │
+│ │ HTTP API
+│ │
+┌─────────┼────────────────────┼─────────────────────────────┐
+│ │ │ │
+│ ┌──────▼──────┐ ┌────────▼────────┐ │
+│ │ Svelte UI │───▶│ HTTP Requests │ │
+│ │ (Browser) │ │ to Laptop API │ │
+│ └─────────────┘ └─────────────────┘ │
+│ │ │
+│ ┌────▼────┐ │
+│ │ Web NFC │ Tap card → POST /api/events │
+│ └─────────┘ │
+│ │
+│ Phone (Android Chrome) │
+└────────────────────────────────────────────────────────────┘
+
+````
 
 ## Key Components
 
@@ -113,7 +131,7 @@ bun install
 
 # Build Tauri app
 bun run tauri build
-```
+````
 
 ### 2. Run on Laptop
 
@@ -127,66 +145,53 @@ bun run tauri dev
 
 The app will:
 
-- Start HTTP server on port 3030
-- Display local IP address (e.g., `http://192.168.1.100:3030`)
 - Create SQLite database in app data directory
+- Display attendance tracking interface
 
-### 3. Connect Phone
+### 3. Connect Card Reader
 
-**Option A: Same WiFi**
+1. Plug in USB card reader (keyboard wedge/HID mode)
+2. Open Attendance page in the app
+3. Tap a card — serial auto-fills into the input field
+4. System looks up student and records attendance
 
-1. Connect laptop and phone to same WiFi network
-2. Open Chrome on Android
-3. Navigate to the URL shown in laptop app
+### 4. Card Workflow
 
-**Option B: Hotspot**
-
-1. Create mobile hotspot on laptop
-2. Connect phone to laptop's hotspot
-3. Open Chrome on Android
-4. Navigate to the URL shown in laptop app
-
-### 4. Use NFC Scanning
-
-1. On phone, go to Attendance page
-2. Tap "Start scanning"
-3. Hold student NFC cards to phone
-4. Data appears instantly on both phone and laptop
+1. Student taps card on reader
+2. Reader types serial into focused input
+3. System calls `find_student_by_card` to match student
+4. Attendance event is recorded (check-in/check-out)
+5. Confirmation toast appears
 
 ## Data Flow Example
 
 ```
-1. Student taps NFC card on phone
+1. Student taps card on USB reader
    ↓
-2. Phone reads card serial: "04:a3:b1:c2:d3"
+2. Reader types serial into focused input: "04:a3:b1:c2:d3"
    ↓
-3. Phone sends: GET /api/students/card/04:a3:b1:c2:d3
+3. Frontend calls: find_student_by_card("04:a3:b1:c2:d3")
    ↓
-4. Laptop returns: { id: "uuid", name: "John Doe", ... }
+4. Backend queries SQLite and returns: { id: "uuid", name: "John Doe", ... }
    ↓
-5. Phone sends: POST /api/events
-   Body: { studentId: "uuid", type: "in" }
+5. Frontend calls: add_event({ studentId: "uuid", type: "in" })
    ↓
-6. Laptop saves to SQLite
+6. Backend saves to SQLite
    ↓
-7. Laptop UI refreshes (if watching events)
-   ↓
-8. Phone shows confirmation toast
+7. UI shows confirmation toast
 ```
 
 ## Offline Capability
 
 - **Fully offline** - no internet required
-- Only needs local network (WiFi or hotspot)
-- All data stored in laptop's SQLite database
-- Phone is just a thin client for NFC scanning
+- All data stored in local SQLite database
+- Card reader works as standard HID device
 
 ## Security Considerations
 
-- Server bound to `0.0.0.0` - accessible to any device on network
+- Local-only application
 - No authentication (single-teacher use case)
-- For production: add API key or JWT authentication
-- CORS allows all origins (fine for local network)
+- For production: consider adding PIN or user authentication
 
 ## Performance Optimizations
 
@@ -209,18 +214,17 @@ Following Rust best practices:
 
 ### Testing
 
-1. Test on actual Android device with NFC
-2. Test hotspot connection
-3. Test offline operation
-4. Load test with multiple concurrent requests
+1. Test with actual USB card reader
+2. Test card serial lookup
+3. Test manual serial entry
+4. Test attendance recording flow
 
 ### Future Enhancements
 
-1. WebSocket for real-time updates
-2. Authentication/authorization
-3. Multiple teacher support
-4. Cloud backup option
-5. Mobile app (native) for better UX
+1. Multiple teacher support
+2. Cloud backup option
+3. Report generation and export
+4. Dashboard analytics
 
 ## Files Created/Modified
 
@@ -230,17 +234,14 @@ Following Rust best practices:
 - `src-tauri/src/domain/error.rs` - Error types
 - `src-tauri/src/domain/mod.rs` - Domain module
 - `src-tauri/src/infrastructure/database.rs` - Database layer
-- `src-tauri/src/infrastructure/server.rs` - HTTP server
-- `src-tauri/src/infrastructure/mod.rs` - Infrastructure module
 - `src-tauri/src/commands.rs` - Tauri commands
 - `src/lib/api.ts` - API client
 - `src/lib/types.ts` - TypeScript types
-- `src/lib/components/ServerInfo.svelte` - Server info UI
 
 ### Modified Files
 
 - `src-tauri/Cargo.toml` - Added dependencies
-- `src-tauri/src/lib.rs` - Initialize server on startup
+- `src-tauri/src/lib.rs` - Initialize database on startup
 - `README.md` - Updated architecture documentation
 
 ## Dependencies Added
@@ -264,30 +265,24 @@ Following Rust best practices:
 
 ## Troubleshooting
 
-### Server won't start
+### Database issues
 
-- Check if port 3030 is already in use
-- Check firewall settings
-- Ensure SQLite database can be created
+- Check if SQLite database can be created in app data directory
+- Ensure proper file permissions
 
-### Phone can't connect
+### Card reader not working
 
-- Verify both devices on same network
-- Check laptop firewall allows incoming connections
-- Try accessing from laptop browser first: `http://localhost:3030/api/health`
-
-### NFC not working
-
-- Ensure using Android Chrome (not Firefox, Samsung Internet, etc.)
-- Check NFC is enabled in phone settings
-- Must be HTTPS or localhost (local IP counts as localhost)
+1. Ensure reader is in keyboard wedge/HID mode
+2. Check that the input field is focused
+3. Try typing the serial manually to verify lookup works
+4. Check device manager for reader detection
 
 ## Success Criteria
 
-✅ Laptop runs Tauri app with HTTP server
-✅ Phone can connect via local network
-✅ NFC scanning works on phone
-✅ Data syncs instantly to laptop
+✅ Tauri app runs with SQLite database
+✅ Card reader input captures serials
+✅ Student lookup by card serial works
+✅ Attendance records instantly
 ✅ All data persists in SQLite
 ✅ Works completely offline
 ✅ Follows Rust best practices

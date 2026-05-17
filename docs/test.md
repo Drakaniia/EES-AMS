@@ -29,21 +29,20 @@
 
 ## Command Integration
 
-- Tauri commands: Test all 22+ commands with valid/invalid inputs
+- Tauri commands: Test all commands with valid/invalid inputs
 - State management: Test shared state across multiple command invocations
-- Async operations: Test background server startup and NFC scanning
+- Database operations: Test background database initialization
 
 # Mock Testing
 
 ## Hardware Simulation
 
-- NFC reader mocking: Test reader connection/disconnection scenarios
-- Card reading simulation: Test various card data formats and error conditions
-- USB device mocking: Test PC/SC library interactions
+- Card reader mocking: Test keyboard wedge input simulation
+- Serial format testing: Test various card serial formats and edge cases
+- Input handling: Test rapid input and special characters
 
 ## External Dependencies
 
-- Network services: Mock HTTP server endpoints and IP address detection
 - File system: Test database file creation, permissions, and corruption scenarios
 
 # Performance Tests
@@ -71,8 +70,7 @@
 ## Error Recovery
 
 - Database corruption: Test recovery from damaged database files
-- Hardware failures: Test behavior when NFC reader disconnects mid-operation
-- Network issues: Test HTTP server resilience under network stress
+- Input errors: Test behavior when invalid card serials are entered
 
 # Security Tests
 
@@ -97,8 +95,7 @@ src-tauri/tests/
 │   └── services/
 ├── integration/
 │   ├── database/
-│   ├── commands/
-│   └── nfc/
+│   └── commands/
 ├── performance/
 ├── security/
 └── e2e/

@@ -15,6 +15,7 @@
 		type AttendanceEvent,
 		type Class
 	} from '$lib/db-rust';
+	import { page } from '$app/stores';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { exportCsvWithFolder } from '$lib/db-rust';
 
@@ -37,8 +38,8 @@
 	let classes = $state<Class[]>([]);
 	let from = $state('');
 	let to = $state('');
-	let studentId = $state('');
-	let classId = $state('');
+	let studentId = $state($page.url.searchParams.get('studentId') || '');
+	let classId = $state($page.url.searchParams.get('classId') || '');
 	let lateAfter = $state('08:45');
 
 	// Date range picker dialog state
@@ -58,7 +59,24 @@
 
 	// Pagination
 	let currentPage = $state(1);
-	let itemsPerPage = $state(10);
+	let availableHeight = $state(0);
+	const itemsPerPage = $derived.by(() => {
+		if (availableHeight === 0) return 10;
+		// availableHeight is bound to the <section> which has pb-20 (80px).
+		// The table container has overflow-hidden rounded-2xl border.
+		// We need a conservative buffer to ensure no row is partially covered.
+		const rowHeight = 60; // Safer estimate for row height
+		const headerHeight = 48; // Table header height
+		const verticalBuffer = 120; // Accounts for pb-20 (80px) and table margins
+		const calculated = Math.floor((availableHeight - headerHeight - verticalBuffer) / rowHeight);
+		return Math.max(1, calculated);
+	});
+
+	$effect(() => {
+		if (currentPage > totalPages && totalPages > 0) {
+			currentPage = totalPages;
+		}
+	});
 
 	// ── Derived ──────────────────────────────────────────────────────────────
 	let studentMap = $derived(new Map(students.map((s) => [s.id, s])));
@@ -97,19 +115,33 @@
 
 					// Check if late
 					const studentClass = classes.find((c) => c.id === student.classId);
-					if (studentClass && studentClass.lateAfter) {
+					if (studentClass) {
 						const eventTime = new Date(event.timestamp);
-						const [h, m] = studentClass.lateAfter.split(':').map(Number);
-						const lateTime = new Date(
-							eventTime.getFullYear(),
-							eventTime.getMonth(),
-							eventTime.getDate(),
-							h,
-							m,
-							0,
-							0
-						);
-						group.isLate = eventTime > lateTime;
+						const timeStr = `${String(eventTime.getHours()).padStart(2, '0')}:${String(eventTime.getMinutes()).padStart(2, '0')}`;
+
+						let lateAfter = studentClass.lateAfter;
+						if (studentClass.sessions && studentClass.sessions.length > 0) {
+							for (const session of studentClass.sessions) {
+								if (timeStr >= session.startTime && timeStr <= session.endTime) {
+									lateAfter = session.lateAfter;
+									break;
+								}
+							}
+						}
+
+						if (lateAfter) {
+							const [h, m] = lateAfter.split(':').map(Number);
+							const lateTime = new Date(
+								eventTime.getFullYear(),
+								eventTime.getMonth(),
+								eventTime.getDate(),
+								h,
+								m,
+								0,
+								0
+							);
+							group.isLate = eventTime > lateTime;
+						}
 					}
 				}
 			} else if (event.type === 'out') {
@@ -208,202 +240,204 @@
 </svelte:head>
 
 <AppShell>
-	<PageHeader
-		category="Archives"
-		title="Attendance Logs"
-		description="Review and filter historical attendance data for your classes."
-	>
-		{#snippet actions()}
-			<button
-				onclick={onExport}
-				class="rounded-pill bg-primary text-primary-foreground hover:bg-accent inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
-			>
-				<svg
-					class="size-4"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
+	<div class="flex h-full flex-col overflow-hidden">
+		<PageHeader
+			category="Archives"
+			title="Attendance Logs"
+			description="Review and filter historical attendance data for your classes."
+		>
+			{#snippet actions()}
+				<button
+					onclick={onExport}
+					class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 				>
-					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-					<polyline points="7 10 12 15 17 10" />
-					<line x1="12" y1="15" x2="12" y2="3" />
-				</svg>
-				Export CSV
-			</button>
-		{/snippet}
-	</PageHeader>
+					<svg
+						class="size-4"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+						<polyline points="7 10 12 15 17 10" />
+						<line x1="12" y1="15" x2="12" y2="3" />
+					</svg>
+					Export CSV
+				</button>
+			{/snippet}
+		</PageHeader>
 
-	<!-- ── Filters ──────────────────────────────────────────────────────────── -->
-	<section class="grid gap-4 px-6 py-8 sm:grid-cols-2 md:px-12 lg:grid-cols-4">
-		<!-- Date Range -->
-		<div class="space-y-2">
-			<div class="label-mono">Date Range</div>
-			<button
-				onclick={() => (dateRangePickerOpen = true)}
-				class="border-border bg-background hover:bg-surface focus:ring-primary flex h-10 w-full items-center justify-between rounded-md border px-3 text-left text-sm transition-colors focus:ring-2 focus:outline-none"
-			>
-				<span class={from || to ? '' : 'text-muted-foreground'}>
-					{from && to
-						? `${new Date(from).toLocaleDateString()} - ${new Date(to).toLocaleDateString()}`
-						: from
-							? `From ${new Date(from).toLocaleDateString()}`
-							: to
-								? `To ${new Date(to).toLocaleDateString()}`
-								: 'Select date range'}
-				</span>
-				<svg
-					class="text-muted-foreground size-4"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
+		<!-- ── Filters ──────────────────────────────────────────────────────────── -->
+		<section class="grid gap-4 px-6 py-8 sm:grid-cols-2 md:px-12 lg:grid-cols-4">
+			<!-- Date Range -->
+			<div class="space-y-2">
+				<div class="label-mono">Date Range</div>
+				<button
+					onclick={() => (dateRangePickerOpen = true)}
+					class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
 				>
-					<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-					<line x1="16" y1="2" x2="16" y2="6"></line>
-					<line x1="8" y1="2" x2="8" y2="6"></line>
-					<line x1="3" y1="10" x2="21" y2="10"></line>
-				</svg>
-			</button>
-		</div>
+					<span class={from || to ? '' : 'text-muted-foreground'}>
+						{from && to
+							? `${new Date(from).toLocaleDateString()} - ${new Date(to).toLocaleDateString()}`
+							: from
+								? `From ${new Date(from).toLocaleDateString()}`
+								: to
+									? `To ${new Date(to).toLocaleDateString()}`
+									: 'Select date range'}
+					</span>
+					<svg
+						class="size-4 text-muted-foreground"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+						<line x1="16" y1="2" x2="16" y2="6"></line>
+						<line x1="8" y1="2" x2="8" y2="6"></line>
+						<line x1="3" y1="10" x2="21" y2="10"></line>
+					</svg>
+				</button>
+			</div>
 
-		<!-- Class -->
-		<div class="space-y-2">
-			<div class="label-mono">Class</div>
-			<select
-				bind:value={classId}
-				class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
-			>
-				<option value="">All classes</option>
-				{#each classes as c (c.id)}
-					<option value={c.id}>{c.name}</option>
-				{/each}
-			</select>
-		</div>
+			<!-- Class -->
+			<div class="space-y-2">
+				<div class="label-mono">Class</div>
+				<select
+					bind:value={classId}
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				>
+					<option value="">All classes</option>
+					{#each classes as c (c.id)}
+						<option value={c.id}>{c.name}</option>
+					{/each}
+				</select>
+			</div>
 
-		<!-- Student -->
-		<div class="space-y-2">
-			<div class="label-mono">Student</div>
-			<select
-				bind:value={studentId}
-				class="border-border bg-background focus:ring-primary h-10 w-full rounded-md border px-3 text-sm focus:ring-2 focus:outline-none"
-			>
-				<option value="">All students</option>
-				{#each students as s (s.id)}
-					<option value={s.id}>{s.name}</option>
-				{/each}
-			</select>
-		</div>
+			<!-- Student -->
+			<div class="space-y-2">
+				<div class="label-mono">Student</div>
+				<select
+					bind:value={studentId}
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				>
+					<option value="">All students</option>
+					{#each students as s (s.id)}
+						<option value={s.id}>{s.name}</option>
+					{/each}
+				</select>
+			</div>
 
-		<!-- Total -->
-		<div class="space-y-2">
-			<div class="label-mono">Total attendance records</div>
-			<div class="flex h-10 items-center font-mono text-sm">{groupedAttendance().length}</div>
-		</div>
-	</section>
+			<!-- Total -->
+			<div class="space-y-2">
+				<div class="label-mono">Total attendance records</div>
+				<div class="flex h-10 items-center font-mono text-sm">{groupedAttendance().length}</div>
+			</div>
+		</section>
 
-	<!-- ── Table ────────────────────────────────────────────────────────────── -->
-	<section class="px-6 pb-16 md:px-12">
-		<div class="border-border bg-card overflow-hidden rounded-2xl border">
-			<table class="w-full text-sm">
-				<thead class="bg-surface text-left">
-					<tr>
-						<th class="label-mono px-4 py-3">Date</th>
-						<th class="label-mono px-4 py-3">Student</th>
-						<th class="label-mono px-4 py-3">Class</th>
-						<th class="label-mono px-4 py-3">Check In</th>
-						<th class="label-mono px-4 py-3">Check Out</th>
-						<th class="label-mono w-20 px-4 py-3 text-right"> </th>
-					</tr>
-				</thead>
-				<tbody class="divide-border divide-y">
-					{#if groupedAttendance().length === 0}
-						{@render emptyState()}
-					{:else}
-						{#each paginatedFiltered() as record (record.studentId + record.date)}
-							<tr class="hover:bg-surface/40 transition-colors">
-								<td class="px-4 py-3 align-top font-mono">{record.date}</td>
-								<td class="px-4 py-3 align-top">
-									<div class="font-medium">{record.studentName}</div>
-									<div class="label-mono">#{record.studentNumber}</div>
-								</td>
-								<td class="px-4 py-3 align-top">
-									<span
-										class="rounded-pill bg-surface border-border border px-2 py-0.5 text-[10px]"
-									>
-										{record.className}
-									</span>
-								</td>
-								<td class="px-4 py-3 align-top">
-									{#if record.checkInTime}
-										<div class="flex items-center gap-2">
-											{@render checkInPill(record.checkInTime, record.isLate)}
-										</div>
-									{:else}
-										<span class="text-muted-foreground font-mono text-xs">—</span>
-									{/if}
-								</td>
-								<td class="px-4 py-3 align-top">
-									{#if record.checkOutTime}
-										{@render checkOutPill(record.checkOutTime)}
-									{:else}
-										<span class="text-muted-foreground font-mono text-xs">—</span>
-									{/if}
-								</td>
-								<td class="px-4 py-3 text-right align-top">
-									{#if record.events.length > 0}
-										<button
-											onclick={() => {
-												deleteTarget = {
-													studentName: (record as StudentAttendance).studentName,
-													date: (record as StudentAttendance).date,
-													events: (record as StudentAttendance).events
-												};
-											}}
-											aria-label="Delete attendance record"
-											class="border-border text-destructive hover:bg-destructive/10 inline-flex size-8 items-center justify-center rounded-md border transition-colors"
+		<!-- ── Table ────────────────────────────────────────────────────────────── -->
+		<section class="min-h-0 flex-1 px-6 pb-20 md:px-12" bind:clientHeight={availableHeight}>
+			<div class="overflow-hidden rounded-2xl border border-border bg-card">
+				<table class="w-full text-sm">
+					<thead class="bg-surface text-left">
+						<tr>
+							<th class="label-mono px-4 py-3">Date</th>
+							<th class="label-mono px-4 py-3">Student</th>
+							<th class="label-mono px-4 py-3">Class</th>
+							<th class="label-mono px-4 py-3">Check In</th>
+							<th class="label-mono px-4 py-3">Check Out</th>
+							<th class="label-mono w-20 px-4 py-3 text-right"> </th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-border">
+						{#if groupedAttendance().length === 0}
+							{@render emptyState()}
+						{:else}
+							{#each paginatedFiltered() as record (record.studentId + record.date)}
+								<tr class="transition-colors hover:bg-surface/40">
+									<td class="px-4 py-3 align-top font-mono">{record.date}</td>
+									<td class="px-4 py-3 align-top">
+										<div class="font-medium">{record.studentName}</div>
+										<div class="label-mono">#{record.studentNumber}</div>
+									</td>
+									<td class="px-4 py-3 align-top">
+										<span
+											class="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10px]"
 										>
-											<svg
-												class="size-3.5"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												aria-hidden="true"
+											{record.className}
+										</span>
+									</td>
+									<td class="px-4 py-3 align-top">
+										{#if record.checkInTime}
+											<div class="flex items-center gap-2">
+												{@render checkInPill(record.checkInTime, record.isLate)}
+											</div>
+										{:else}
+											<span class="font-mono text-xs text-muted-foreground">—</span>
+										{/if}
+									</td>
+									<td class="px-4 py-3 align-top">
+										{#if record.checkOutTime}
+											{@render checkOutPill(record.checkOutTime)}
+										{:else}
+											<span class="font-mono text-xs text-muted-foreground">—</span>
+										{/if}
+									</td>
+									<td class="px-4 py-3 text-right align-top">
+										{#if record.events.length > 0}
+											<button
+												onclick={() => {
+													deleteTarget = {
+														studentName: (record as StudentAttendance).studentName,
+														date: (record as StudentAttendance).date,
+														events: (record as StudentAttendance).events
+													};
+												}}
+												aria-label="Delete attendance record"
+												class="inline-flex size-8 items-center justify-center rounded-md border border-border text-destructive transition-colors hover:bg-destructive/10"
 											>
-												<polyline points="3 6 5 6 21 6" />
-												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
-												<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-											</svg>
-										</button>
-									{/if}
-								</td>
-							</tr>
-						{/each}
-					{/if}
-				</tbody>
-			</table>
-		</div>
-	</section>
+												<svg
+													class="size-3.5"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+												>
+													<polyline points="3 6 5 6 21 6" />
+													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
+													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+												</svg>
+											</button>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						{/if}
+					</tbody>
+				</table>
+			</div>
+		</section>
 
-	<div class="fixed right-6 bottom-6 z-30">
-		<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
+		<div class="fixed right-6 bottom-6 z-30">
+			<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
+		</div>
 	</div>
 </AppShell>
 
 {#if toastMessage}
 	<div
-		class="fixed right-6 bottom-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
+		class="fixed top-12 right-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
 					{toastOk
-			? 'bg-background border-border text-foreground'
-			: 'bg-destructive/10 border-destructive/40 text-destructive'}"
+			? 'border-border bg-background text-foreground'
+			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
 		role="status"
 		aria-live="polite"
 	>
@@ -424,7 +458,7 @@
 
 {#snippet emptyState()}
 	<tr>
-		<td colspan={6} class="text-muted-foreground px-4 py-12 text-center">
+		<td colspan={6} class="px-4 py-12 text-center text-muted-foreground">
 			No attendance records match the filters.
 		</td>
 	</tr>
@@ -443,7 +477,7 @@
 
 {#snippet checkOutPill(time: string)}
 	<span
-		class="rounded-pill bg-surface border-border text-foreground border px-2 py-1 font-mono text-xs"
+		class="rounded-pill border border-border bg-surface px-2 py-1 font-mono text-xs text-foreground"
 	>
 		{time}
 	</span>
@@ -465,12 +499,12 @@
 		aria-labelledby="delete-dialog-title"
 	>
 		<div
-			class="border-border bg-background w-full max-w-sm space-y-5 rounded-2xl border p-6 shadow-xl"
+			class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
 		>
 			<div class="flex flex-col items-center gap-3 text-center">
-				<div class="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
+				<div class="flex size-12 items-center justify-center rounded-full bg-destructive/10">
 					<svg
-						class="text-destructive size-6"
+						class="size-6 text-destructive"
 						viewBox="0 0 24 24"
 						fill="none"
 						stroke="currentColor"
@@ -486,9 +520,9 @@
 				</div>
 				<div>
 					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete attendance records?</h2>
-					<p class="text-muted-foreground mt-1 text-sm">
-						<span class="text-foreground font-medium">{deleteTarget.studentName}</span> attendance
-						on <span class="text-foreground font-medium">{deleteTarget.date}</span> will be permanently
+					<p class="mt-1 text-sm text-muted-foreground">
+						<span class="font-medium text-foreground">{deleteTarget.studentName}</span> attendance
+						on <span class="font-medium text-foreground">{deleteTarget.date}</span> will be permanently
 						removed.
 					</p>
 				</div>
@@ -497,7 +531,7 @@
 			<div class="flex gap-2">
 				<button
 					onclick={() => (deleteTarget = null)}
-					class="border-border hover:bg-surface flex-1 rounded-md border px-4 py-2 text-sm transition-colors"
+					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 				>
 					Cancel
 				</button>
@@ -509,7 +543,7 @@
 						deleteTarget = null;
 						reload();
 					}}
-					class="rounded-pill bg-destructive flex-1 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 				>
 					Delete
 				</button>

@@ -1,6 +1,6 @@
 {
 	"name": "espiritu-ams",
-	"description": "Espiritu Elementary School Attendance Management System - Cross-platform desktop application for student attendance management with NFC/USB card reader support",
+	"description": "Espiritu Elementary School Attendance Management System - Cross-platform desktop application for student attendance management with ID card reader support",
 	"private": true,
 	"type": "module",
 	"scripts": {

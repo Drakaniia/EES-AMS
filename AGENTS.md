@@ -1,17 +1,20 @@
 !always follow @DESIGN.md and /reference when generating UI
 !we start by converting typescript (/reference) into svelte
 !always run `bun run check && bun run lint && bun run typecheck` / `cargo check` and `clippy fmt --check` after implementation to ensure quality
-
+read @rust-skills before implementing rust code
+read @rust-skills before implementing rust code
+read @rust-skills before implementing rust code
+read @rust-skills before implementing rust code
 always read @rust-skills when implimenting code
 always use @tauri-v2
 always use @svelte-best-practices
 always use @svelte-code-writer
 
-# EES-AMS - Employee Attendance Management System
+# EES-AMS - Teacher Attendance Management System
 
 ## Project Snapshot
 
-Tauri v2 desktop application for employee attendance management with NFC/USB card reader support. SvelteKit 5 frontend with Rust backend, SQLite database, and modular feature architecture.
+Tauri v2 desktop application for teacher attendance management with ID card reader support. SvelteKit 5 frontend with Rust backend, SQLite database, and modular feature architecture.
 
 ## Root Setup Commands
 
@@ -44,7 +47,6 @@ cd src-tauri && cargo check && cargo clippy
 - Never commit API keys, tokens, or sensitive data
 - Use .env files for environment variables (gitignored)
 - Handle PII data carefully in SQLite database
-- NFC card data should be encrypted at rest
 
 ## JIT Index
 
@@ -69,4 +71,4 @@ cd src-tauri && cargo check && cargo clippy
 - Code formatted (`bun run format` and `cargo fmt`)
 - Tests pass for new functionality
 - Documentation updated for new features
-- NFC reader functionality tested (if applicable)
+- Card reader input tested (if applicable)

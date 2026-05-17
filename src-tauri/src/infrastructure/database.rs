@@ -30,6 +30,31 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
         conn.execute("PRAGMA user_version = 1", [])?;
     }
 
+    if user_version < 2 {
+        migrate_to_v2(&conn)?;
+        conn.execute("PRAGMA user_version = 2", [])?;
+    }
+
+    if user_version < 3 {
+        migrate_to_v3(&conn)?;
+        conn.execute("PRAGMA user_version = 3", [])?;
+    }
+
+    if user_version < 4 {
+        migrate_to_v4(&conn)?;
+        conn.execute("PRAGMA user_version = 4", [])?;
+    }
+
+    if user_version < 5 {
+        migrate_to_v5(&conn)?;
+        conn.execute("PRAGMA user_version = 5", [])?;
+    }
+
+    if user_version < 6 {
+        migrate_to_v6(&conn)?;
+        conn.execute("PRAGMA user_version = 6", [])?;
+    }
+
     Ok(pool)
 }
 
@@ -86,12 +111,13 @@ fn migrate_to_v1(conn: &rusqlite::Connection) -> Result<()> {
             id TEXT PRIMARY KEY NOT NULL,
             day_start TEXT NOT NULL,
             day_end TEXT NOT NULL,
-            late_after TEXT NOT NULL
+            late_after TEXT NOT NULL,
+            quarter TEXT NOT NULL DEFAULT '1st Quarter'
         );
 
         -- Insert default settings
-        INSERT OR IGNORE INTO settings (id, day_start, day_end, late_after)
-        VALUES ('app', '08:30', '15:30', '08:45');
+        INSERT OR IGNORE INTO settings (id, day_start, day_end, late_after, quarter)
+        VALUES ('app', '08:30', '15:30', '08:45', '1st Quarter');
         "#,
     )?;
 
@@ -185,6 +211,142 @@ fn migrate_to_v1(conn: &rusqlite::Connection) -> Result<()> {
         )?;
     }
 
+    Ok(())
+}
+
+/// Migrate database to version 2 (add room to classes)
+fn migrate_to_v2(conn: &rusqlite::Connection) -> Result<()> {
+    // Check if room column exists
+    let has_room: bool = conn
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('classes') WHERE name='room'",
+            [],
+            |row| row.get::<_, i32>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !has_room {
+        conn.execute(
+            "ALTER TABLE classes ADD COLUMN room TEXT NOT NULL DEFAULT 'N/A'",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
+/// Migrate database to version 3 (add quarter to settings)
+fn migrate_to_v3(conn: &rusqlite::Connection) -> Result<()> {
+    // Check if quarter column exists
+    let has_quarter: bool = conn
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('settings') WHERE name='quarter'",
+            [],
+            |row| row.get::<_, i32>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !has_quarter {
+        conn.execute(
+            "ALTER TABLE settings ADD COLUMN quarter TEXT NOT NULL DEFAULT '1st Quarter'",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
+/// Migrate database to version 4 (add quarter dates to settings)
+fn migrate_to_v4(conn: &rusqlite::Connection) -> Result<()> {
+    let columns = [
+        "q1_start", "q1_end", "q2_start", "q2_end", "q3_start", "q3_end", "q4_start", "q4_end",
+    ];
+
+    for col in columns {
+        let has_col: bool = conn
+            .query_row(
+                &format!(
+                    "SELECT count(*) FROM pragma_table_info('settings') WHERE name='{}'",
+                    col
+                ),
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+
+        if !has_col {
+            conn.execute(&format!("ALTER TABLE settings ADD COLUMN {} TEXT", col), [])?;
+        }
+    }
+    Ok(())
+}
+
+/// Migrate database to version 5 (add sessions to classes)
+fn migrate_to_v5(conn: &rusqlite::Connection) -> Result<()> {
+    // Check if sessions column exists
+    let has_sessions: bool = conn
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('classes') WHERE name='sessions'",
+            [],
+            |row| row.get::<_, i32>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !has_sessions {
+        conn.execute("ALTER TABLE classes ADD COLUMN sessions TEXT", [])?;
+
+        // Initialize sessions for existing classes based on day_start, day_end, late_after
+        let mut stmt = conn.prepare("SELECT id, day_start, day_end, late_after FROM classes")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?;
+
+        for row in rows {
+            let (id, day_start, day_end, late_after) = row?;
+            let sessions = vec![Session {
+                name: "Full Day".to_string(),
+                start_time: day_start,
+                end_time: day_end,
+                late_after,
+            }];
+            let sessions_json =
+                serde_json::to_string(&sessions).unwrap_or_else(|_| "[]".to_string());
+            conn.execute(
+                "UPDATE classes SET sessions = ?1 WHERE id = ?2",
+                params![sessions_json, id],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Migrate database to version 6 (add days to classes)
+fn migrate_to_v6(conn: &rusqlite::Connection) -> Result<()> {
+    // Check if days column exists
+    let has_days: bool = conn
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('classes') WHERE name='days'",
+            [],
+            |row| row.get::<_, i32>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !has_days {
+        conn.execute("ALTER TABLE classes ADD COLUMN days TEXT", [])?;
+
+        // Initialize days for existing classes to Monday-Friday [1, 2, 3, 4, 5]
+        let days = vec![1, 2, 3, 4, 5];
+        let days_json = serde_json::to_string(&days).unwrap_or_else(|_| "[]".to_string());
+        conn.execute("UPDATE classes SET days = ?1", params![days_json])?;
+    }
     Ok(())
 }
 
@@ -513,6 +675,42 @@ impl EventRepository {
 
     /// Create an attendance event
     pub fn create(&self, req: CreateEventRequest) -> Result<AttendanceEvent> {
+        let conn = self.pool.get()?;
+
+        // Check for duplicate check-in: prevent multiple "in" events on the same day
+        if req.event_type == AttendanceType::In {
+            let today_start = Utc::now()
+                .date_naive()
+                .and_hms_opt(0, 0, 0)
+                .unwrap()
+                .and_utc()
+                .timestamp();
+            let today_end = Utc::now()
+                .date_naive()
+                .and_hms_opt(23, 59, 59)
+                .unwrap()
+                .and_utc()
+                .timestamp();
+
+            let existing_count: i32 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM events 
+                     WHERE student_id = ?1 
+                     AND event_type = 'in' 
+                     AND timestamp >= ?2 
+                     AND timestamp <= ?3",
+                    params![req.student_id.0.to_string(), today_start, today_end],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+
+            if existing_count > 0 {
+                return Err(AppError::DuplicateCheckIn(
+                    "Student already checked in today".to_string(),
+                ));
+            }
+        }
+
         let event = AttendanceEvent {
             id: EventId::new(),
             student_id: req.student_id,
@@ -522,7 +720,6 @@ impl EventRepository {
             note: req.note,
         };
 
-        let conn = self.pool.get()?;
         conn.execute(
             "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note) 
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -573,7 +770,7 @@ impl SettingsRepository {
         let conn = self.pool.get()?;
         let settings = conn
             .query_row(
-                "SELECT id, day_start, day_end, late_after FROM settings WHERE id = 'app'",
+                "SELECT id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, q4_start, q4_end FROM settings WHERE id = 'app'",
                 [],
                 |row| {
                     Ok(Settings {
@@ -581,6 +778,15 @@ impl SettingsRepository {
                         day_start: row.get(1)?,
                         day_end: row.get(2)?,
                         late_after: row.get(3)?,
+                        quarter: row.get(4)?,
+                        q1_start: row.get(5)?,
+                        q1_end: row.get(6)?,
+                        q2_start: row.get(7)?,
+                        q2_end: row.get(8)?,
+                        q3_start: row.get(9)?,
+                        q3_end: row.get(10)?,
+                        q4_start: row.get(11)?,
+                        q4_end: row.get(12)?,
                     })
                 },
             )
@@ -593,13 +799,22 @@ impl SettingsRepository {
     pub fn update(&self, settings: Settings) -> Result<Settings> {
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after) 
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, q4_start, q4_end) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 settings.id,
                 settings.day_start,
                 settings.day_end,
                 settings.late_after,
+                settings.quarter,
+                settings.q1_start,
+                settings.q1_end,
+                settings.q2_start,
+                settings.q2_end,
+                settings.q3_start,
+                settings.q3_end,
+                settings.q4_start,
+                settings.q4_end,
             ],
         )?;
 
@@ -621,20 +836,33 @@ impl ClassRepository {
     pub fn list(&self) -> Result<Vec<Class>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(
-            "SELECT id, name, day_start, day_end, late_after, created_at 
+            "SELECT id, name, room, day_start, day_end, late_after, created_at, sessions, days 
              FROM classes 
              ORDER BY name ASC",
         )?;
 
         let classes = stmt
             .query_map([], |row| {
+                let room: Option<String> = row.get(2)?;
+                let sessions_json: Option<String> = row.get(7)?;
+                let sessions: Vec<Session> = sessions_json
+                    .and_then(|s| serde_json::from_str(&s).ok())
+                    .unwrap_or_default();
+                let days_json: Option<String> = row.get(8)?;
+                let days: Vec<i32> = days_json
+                    .and_then(|s| serde_json::from_str(&s).ok())
+                    .unwrap_or_else(|| vec![1, 2, 3, 4, 5]);
+
                 Ok(Class {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    day_start: row.get(2)?,
-                    day_end: row.get(3)?,
-                    late_after: row.get(4)?,
-                    created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
+                    room: room.filter(|r| !r.is_empty()),
+                    day_start: row.get(3)?,
+                    day_end: row.get(4)?,
+                    late_after: row.get(5)?,
+                    sessions,
+                    days,
+                    created_at: DateTime::from_timestamp(row.get::<_, i64>(6)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
                 })
@@ -649,18 +877,31 @@ impl ClassRepository {
         let conn = self.pool.get()?;
         let class = conn
             .query_row(
-                "SELECT id, name, day_start, day_end, late_after, created_at 
+                "SELECT id, name, room, day_start, day_end, late_after, created_at, sessions, days 
                  FROM classes 
                  WHERE id = ?1",
                 params![id],
                 |row| {
+                    let room: Option<String> = row.get(2)?;
+                    let sessions_json: Option<String> = row.get(7)?;
+                    let sessions: Vec<Session> = sessions_json
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                        .unwrap_or_default();
+                    let days_json: Option<String> = row.get(8)?;
+                    let days: Vec<i32> = days_json
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                        .unwrap_or_else(|| vec![1, 2, 3, 4, 5]);
+
                     Ok(Class {
                         id: row.get(0)?,
                         name: row.get(1)?,
-                        day_start: row.get(2)?,
-                        day_end: row.get(3)?,
-                        late_after: row.get(4)?,
-                        created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
+                        room: room.filter(|r| !r.is_empty()),
+                        day_start: row.get(3)?,
+                        day_end: row.get(4)?,
+                        late_after: row.get(5)?,
+                        sessions,
+                        days,
+                        created_at: DateTime::from_timestamp(row.get::<_, i64>(6)?, 0)
                             .unwrap()
                             .with_timezone(&Utc),
                     })
@@ -673,25 +914,36 @@ impl ClassRepository {
 
     /// Create a new class
     pub fn create(&self, req: CreateClassRequest) -> Result<Class> {
+        let room = req.room.filter(|r| !r.trim().is_empty());
+        let sessions_json =
+            serde_json::to_string(&req.sessions).unwrap_or_else(|_| "[]".to_string());
+        let days_json = serde_json::to_string(&req.days).unwrap_or_else(|_| "[]".to_string());
+
         let class = Class {
             id: uuid::Uuid::new_v4().to_string(),
             name: req.name,
+            room,
             day_start: req.day_start,
             day_end: req.day_end,
             late_after: req.late_after,
+            sessions: req.sessions,
+            days: req.days,
             created_at: Utc::now(),
         };
 
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT INTO classes (id, name, day_start, day_end, late_after, created_at) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO classes (id, name, room, day_start, day_end, late_after, sessions, days, created_at) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 class.id,
                 class.name,
+                class.room,
                 class.day_start,
                 class.day_end,
                 class.late_after,
+                sessions_json,
+                days_json,
                 class.created_at.timestamp(),
             ],
         )?;
@@ -708,6 +960,14 @@ impl ClassRepository {
         if let Some(name) = req.name {
             class.name = name;
         }
+        if let Some(room) = req.room {
+            // Empty string clears the room
+            class.room = if room.trim().is_empty() {
+                None
+            } else {
+                Some(room)
+            };
+        }
         if let Some(day_start) = req.day_start {
             class.day_start = day_start;
         }
@@ -717,17 +977,30 @@ impl ClassRepository {
         if let Some(late_after) = req.late_after {
             class.late_after = late_after;
         }
+        if let Some(sessions) = req.sessions {
+            class.sessions = sessions;
+        }
+        if let Some(days) = req.days {
+            class.days = days;
+        }
+
+        let sessions_json =
+            serde_json::to_string(&class.sessions).unwrap_or_else(|_| "[]".to_string());
+        let days_json = serde_json::to_string(&class.days).unwrap_or_else(|_| "[]".to_string());
 
         let conn = self.pool.get()?;
         conn.execute(
             "UPDATE classes 
-             SET name = ?1, day_start = ?2, day_end = ?3, late_after = ?4 
-             WHERE id = ?5",
+             SET name = ?1, room = ?2, day_start = ?3, day_end = ?4, late_after = ?5, sessions = ?6, days = ?7 
+             WHERE id = ?8",
             params![
                 class.name,
+                class.room,
                 class.day_start,
                 class.day_end,
                 class.late_after,
+                sessions_json,
+                days_json,
                 id,
             ],
         )?;
