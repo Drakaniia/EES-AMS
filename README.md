@@ -23,7 +23,7 @@ A cross-platform desktop application for student attendance management at Espiri
 
 ## Architecture
 
-```
+````
 ┌─────────────────────────────────────────────────────────────┐
 │                    Laptop (Tauri App)                       │
 │                                                             │
@@ -53,7 +53,7 @@ A cross-platform desktop application for student attendance management at Espiri
 ```bash
 git clone https://github.com/your-username/espíritu-ams.git
 cd espíritu-ams
-```
+````
 
 ### 2. Install Dependencies
 
