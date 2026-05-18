@@ -54,6 +54,8 @@ This project is the **Espiritu Elementary School Attendance Management System (E
 - **Component Design**: Modular components in `src/lib/components/`.
 - **API Communication**: Use `db-rust.ts` for all frontend-to-backend communication via Tauri commands.
 
+
+use mcp and skills
 ## ⚠️ Known Discrepancies & TODOs
 
 - **Authentication**: The system currently operates without authentication, designed for single-teacher local use.
