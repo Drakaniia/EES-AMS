@@ -65,7 +65,7 @@ pub async fn export_dtr_excel(
     };
 
     // Helper to draw one DTR side
-    let mut draw_side = |ws: &mut Worksheet, col_offset: u16| -> Result<(), XlsxError> {
+    let draw_side = |ws: &mut Worksheet, col_offset: u16| -> Result<(), XlsxError> {
         // Header
         ws.write_with_format(0, col_offset, "CSC Form 48", &fmt_italic)?;
         ws.merge_range(1, col_offset, 1, col_offset + 6, "DAILY TIME RECORD", &fmt_header)?;
