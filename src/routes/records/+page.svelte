@@ -224,6 +224,29 @@
 		currentPage = 1;
 	}
 
+	async function confirmDeleteAttendanceRecords(target = deleteTarget) {
+		if (!target) return;
+		await Promise.all(target.events.map((event: AttendanceEvent) => deleteEvent(event.id)));
+		toast('Deleted');
+		deleteTarget = null;
+		reload();
+	}
+
+	async function onDeleteAttendanceRecord(event: MouseEvent, record: StudentAttendance) {
+		const target = {
+			studentName: record.studentName,
+			date: record.date,
+			events: record.events
+		};
+
+		if (event.shiftKey) {
+			await confirmDeleteAttendanceRecords(target);
+			return;
+		}
+
+		deleteTarget = target;
+	}
+
 	async function onExport() {
 		try {
 			const filePath = await exportCsvWithFolder(filtered, students, classes, lateAfter);
@@ -471,13 +494,7 @@
 									<td class="px-4 py-3 text-right align-top">
 										{#if record.events.length > 0}
 											<button
-												onclick={() => {
-													deleteTarget = {
-														studentName: (record as StudentAttendance).studentName,
-														date: (record as StudentAttendance).date,
-														events: (record as StudentAttendance).events
-													};
-												}}
+												onclick={(event) => onDeleteAttendanceRecord(event, record)}
 												aria-label="Delete attendance record"
 												class="inline-flex size-8 items-center justify-center rounded-md border border-border text-destructive transition-colors hover:bg-destructive/10"
 											>
@@ -598,12 +615,19 @@
 						/>
 					</svg>
 				</div>
-				<div>
+				<div class="w-full text-left">
 					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete attendance records?</h2>
 					<p class="mt-1 text-sm text-muted-foreground">
 						<span class="font-medium text-foreground">{deleteTarget.studentName}</span> attendance
 						on <span class="font-medium text-foreground">{deleteTarget.date}</span> will be permanently
 						removed.
+					</p>
+					<p class="mt-4 text-xs leading-relaxed text-muted-foreground">
+						<strong class="font-semibold text-accent">PROTIP:</strong>
+						<span class="block">
+							You can hold down <strong class="font-semibold">Shift</strong> when clicking the delete
+							button to bypass this confirmation entirely.
+						</span>
 					</p>
 				</div>
 			</div>
@@ -616,13 +640,7 @@
 					Cancel
 				</button>
 				<button
-					onclick={async () => {
-						if (!deleteTarget) return;
-						await Promise.all(deleteTarget.events.map((e: AttendanceEvent) => deleteEvent(e.id)));
-						toast('Deleted');
-						deleteTarget = null;
-						reload();
-					}}
+					onclick={() => confirmDeleteAttendanceRecords()}
 					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 				>
 					Delete

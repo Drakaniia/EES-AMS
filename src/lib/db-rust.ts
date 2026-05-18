@@ -165,6 +165,14 @@ export async function getSettings(): Promise<Settings> {
 		dayEnd: string;
 		lateAfter: string;
 		quarter: string;
+		q1Start?: string;
+		q1End?: string;
+		q2Start?: string;
+		q2End?: string;
+		q3Start?: string;
+		q3End?: string;
+		q4Start?: string;
+		q4End?: string;
 	};
 	// Backend already returns camelCase due to serde(rename_all = "camelCase")
 	return {
@@ -172,7 +180,15 @@ export async function getSettings(): Promise<Settings> {
 		dayStart: backendSettings.dayStart,
 		dayEnd: backendSettings.dayEnd,
 		lateAfter: backendSettings.lateAfter,
-		quarter: backendSettings.quarter
+		quarter: backendSettings.quarter,
+		q1Start: backendSettings.q1Start,
+		q1End: backendSettings.q1End,
+		q2Start: backendSettings.q2Start,
+		q2End: backendSettings.q2End,
+		q3Start: backendSettings.q3Start,
+		q3End: backendSettings.q3End,
+		q4Start: backendSettings.q4Start,
+		q4End: backendSettings.q4End
 	};
 }
 
@@ -183,7 +199,15 @@ export async function saveSettings(settings: Settings): Promise<Settings> {
 		dayStart: settings.dayStart,
 		dayEnd: settings.dayEnd,
 		lateAfter: settings.lateAfter,
-		quarter: settings.quarter
+		quarter: settings.quarter,
+		q1Start: settings.q1Start,
+		q1End: settings.q1End,
+		q2Start: settings.q2Start,
+		q2End: settings.q2End,
+		q3Start: settings.q3Start,
+		q3End: settings.q3End,
+		q4Start: settings.q4Start,
+		q4End: settings.q4End
 	};
 	return await invoke('save_settings', { settings: backendSettings });
 }

@@ -250,11 +250,25 @@
 		}
 	}
 
-	async function onDeleteClass(id: string) {
+	async function confirmDeleteClass(target = deleteTarget) {
+		if (!target) return;
+		await deleteClass(target.id);
+		toast('Class deleted');
+		deleteTarget = null;
+		reload();
+	}
+
+	async function onDeleteClass(event: MouseEvent, id: string) {
 		const classToDelete = classes.find((c) => c.id === id);
-		if (classToDelete) {
-			deleteTarget = { id: classToDelete.id, name: classToDelete.name };
+		if (!classToDelete) return;
+
+		const target = { id: classToDelete.id, name: classToDelete.name };
+		if (event.shiftKey) {
+			await confirmDeleteClass(target);
+			return;
 		}
+
+		deleteTarget = target;
 	}
 
 	function openExportDialog() {
@@ -429,7 +443,7 @@
 											</svg>
 										</button>
 										<button
-											onclick={() => onDeleteClass(c.id)}
+											onclick={(event) => onDeleteClass(event, c.id)}
 											class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
 											title="Delete class"
 										>
@@ -459,7 +473,8 @@
 				<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
 					<h3 class="text-lg font-medium">Data Management</h3>
 					<p class="text-sm text-muted-foreground">
-						Your data is stored locally. Use backups to transfer data between devices or browsers.
+						Your data is stored locally. Backups include the student list, attendance records,
+						classes, and system configuration.
 					</p>
 
 					<div class="flex flex-wrap gap-2">
@@ -964,11 +979,18 @@
 						/>
 					</svg>
 				</div>
-				<div>
+				<div class="w-full text-left">
 					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete class?</h2>
 					<p class="mt-1 text-sm text-muted-foreground">
 						<span class="font-medium text-foreground">{deleteTarget.name}</span> will be permanently removed.
 						Students will remain but will be unassigned.
+					</p>
+					<p class="mt-4 text-xs leading-relaxed text-muted-foreground">
+						<strong class="font-semibold text-accent">PROTIP:</strong>
+						<span class="block">
+							You can hold down <strong class="font-semibold">Shift</strong> when clicking the delete
+							button to bypass this confirmation entirely.
+						</span>
 					</p>
 				</div>
 			</div>
@@ -981,13 +1003,7 @@
 					Cancel
 				</button>
 				<button
-					onclick={async () => {
-						if (!deleteTarget) return;
-						await deleteClass(deleteTarget.id);
-						toast('Class deleted');
-						deleteTarget = null;
-						reload();
-					}}
+					onclick={() => confirmDeleteClass()}
 					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 				>
 					Delete
@@ -1100,7 +1116,7 @@
 					<div>
 						<div class="font-medium">JSON Format</div>
 						<div class="text-sm text-muted-foreground">
-							Human-readable format, easy to share and import back into the system
+							Includes students, attendance records, classes, and system configuration
 						</div>
 					</div>
 				</label>
