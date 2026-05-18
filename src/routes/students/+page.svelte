@@ -3,6 +3,7 @@
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
+	import StudentAttendanceModal from '$lib/components/students/StudentAttendanceModal.svelte';
 	import {
 		listStudents,
 		saveStudent,
@@ -22,6 +23,8 @@
 	let sortOrder = $state<'asc' | 'desc'>('asc');
 
 	let dialogOpen = $state(false);
+	let attendanceModalOpen = $state(false);
+	let viewingStudent = $state<Student | null>(null);
 	let editing = $state<Student | null>(null);
 	let scanFor = $state<Student | null>(null);
 
@@ -66,7 +69,7 @@
 	}
 
 	// Computed filtered and sorted students
-	const filteredStudents = $derived(() => {
+	const filteredStudents = $derived.by(() => {
 		let result = students;
 
 		// Search
@@ -102,11 +105,11 @@
 	});
 
 	// Computed pagination values
-	const totalPages = $derived(Math.ceil(filteredStudents().length / itemsPerPage));
-	const paginatedStudents = $derived(() => {
+	const totalPages = $derived(Math.ceil(filteredStudents.length / itemsPerPage));
+	const paginatedStudents = $derived.by(() => {
 		const start = (currentPage - 1) * itemsPerPage;
 		const end = start + itemsPerPage;
-		return filteredStudents().slice(start, end);
+		return filteredStudents.slice(start, end);
 	});
 
 	function handlePageChange(page: number) {
@@ -188,6 +191,11 @@
 		formCardSerial = s.cardSerial ?? '';
 		formClassId = s.classId ?? '';
 		dialogOpen = true;
+	}
+
+	function openAttendance(s: Student) {
+		viewingStudent = s;
+		attendanceModalOpen = true;
 	}
 
 	function closeDialog() {
@@ -409,7 +417,7 @@
 			<div class="space-y-2">
 				<div class="label-mono">Total Students</div>
 				<div class="flex h-10 items-center font-mono text-lg font-bold">
-					{filteredStudents().length}
+					{filteredStudents.length}
 					<span class="ml-2 text-xs font-normal text-muted-foreground">
 						(out of {students.length})
 					</span>
@@ -470,9 +478,29 @@
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-border">
-							{#each paginatedStudents() as s (s.id)}
+							{#each paginatedStudents as s (s.id)}
 								<tr>
-									{@render td(s.name, 'font-medium')}
+									<td class="px-4 py-3">
+										<button
+											onclick={() => openAttendance(s)}
+											class="group flex items-center gap-2 text-left font-medium transition-colors hover:text-primary"
+										>
+											{s.name}
+											<svg
+												class="size-3 opacity-0 transition-opacity group-hover:opacity-100"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+												<polyline points="15 3 21 3 21 9" />
+												<line x1="10" y1="14" x2="21" y2="3" />
+											</svg>
+										</button>
+									</td>
 									{@render td(s.studentNumber, 'font-mono')}
 									<td class="px-4 py-3">
 										<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs">
@@ -586,6 +614,12 @@
 		</div>
 	</div>
 </AppShell>
+
+<StudentAttendanceModal
+	open={attendanceModalOpen}
+	student={viewingStudent}
+	onClose={() => (attendanceModalOpen = false)}
+/>
 
 <!-- ── Add / Edit dialog ──────────────────────────────────────────────────── -->
 {#if dialogOpen}
