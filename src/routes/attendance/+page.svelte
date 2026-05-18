@@ -63,18 +63,9 @@
 		(async () => {
 			await reload();
 
-			const classIdFromUrl = page.url.searchParams.get('classId');
-			if (classIdFromUrl) {
-				const currentDay = new Date().getDay();
-				const urlClass = classes.find((c) => c.id === classIdFromUrl);
-				if (urlClass && urlClass.days && urlClass.days.includes(currentDay)) {
-					selectedClassId = classIdFromUrl;
-				}
-			} else {
-				const active = getActiveClass();
-				if (active) {
-					selectedClassId = active.id;
-				}
+			const active = getActiveClass();
+			if (active) {
+				selectedClassId = active.id;
 			}
 
 			if (page.url.searchParams.get('manual') === 'true') {
@@ -106,23 +97,6 @@
 		const currentDay = new Date().getDay();
 		return classes
 			.filter((cls) => cls.days && cls.days.includes(currentDay))
-			.sort((a, b) => {
-				const [aH, aM] = a.dayStart.split(':').map(Number);
-				const [bH, bM] = b.dayStart.split(':').map(Number);
-				return aH * 60 + aM - (bH * 60 + bM);
-			});
-	});
-
-	let remainingSessions = $derived.by(() => {
-		const now = new Date();
-		const currentTime = now.getHours() * 60 + now.getMinutes();
-
-		return todayClasses
-			.filter((cls) => {
-				const [startHour, startMin] = cls.dayStart.split(':').map(Number);
-				const startTime = startHour * 60 + startMin;
-				return startTime >= currentTime;
-			})
 			.sort((a, b) => {
 				const [aH, aM] = a.dayStart.split(':').map(Number);
 				const [bH, bM] = b.dayStart.split(':').map(Number);
@@ -284,12 +258,36 @@
 		}
 	}
 
+	function isWithinClassHours(classObj: Class | undefined, timestamp: number): boolean {
+		if (!classObj) return false;
+
+		const now = new Date(timestamp);
+		const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+		if (classObj.sessions && classObj.sessions.length > 0) {
+			for (const session of classObj.sessions) {
+				if (timeStr >= session.startTime && timeStr <= session.endTime) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		return timeStr >= classObj.dayStart && timeStr <= classObj.dayEnd;
+	}
+
 	async function logForStudent(student: Student) {
+		const studentClass = classes.find((c) => c.id === student.classId) || currentClass;
+
+		if (!isWithinClassHours(studentClass, Date.now())) {
+			toast('Not within class hours — attendance not allowed', false);
+			return;
+		}
+
 		const last = await lastEventForStudent(student.id);
 		const type: 'in' | 'out' = !last || last.type === 'out' ? 'in' : 'out';
 		const ts = Date.now();
 
-		const studentClass = classes.find((c) => c.id === student.classId) || currentClass;
 		const isLate = type === 'in' && checkLate(studentClass, ts);
 
 		try {
@@ -350,37 +348,17 @@
 	<PageHeader category="Tap Mode" title={dynamicTitle()} description={dynamicDescription()}>
 		{#snippet actions()}
 			<div class="flex items-center gap-3">
-				<div class="relative">
-					<select
-						bind:value={selectedClassId}
-						class="h-10 w-auto appearance-none rounded-pill border border-border bg-background px-4 py-2 pr-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					>
-						<option value="">No Active Class</option>
-						{#each todayClasses as c (c.id)}
-							<option value={c.id}>{c.name}</option>
-						{/each}
-					</select>
-					<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4">
-						<svg
-							class="size-4 text-muted-foreground"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="m6 9 6 6 6-6" />
-						</svg>
-					</div>
-				</div>
-
 				<button
+					disabled={todayClasses.length === 0}
 					onclick={() => {
+						if (todayClasses.length === 0) {
+							toast('No classes scheduled for today', false);
+							return;
+						}
 						pickerQuery = '';
 						pickerOpen = true;
 					}}
-					class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+					class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					Manual log
 				</button>
@@ -409,50 +387,10 @@
 
 			{#if !selectedClassId}
 				<div class="relative w-full max-w-md text-center">
-					{#if todayClasses.length === 0}
-						<h3 class="display-lg mb-2">No Classes Today</h3>
-						<p class="mb-8 text-muted-foreground">
-							No classes are scheduled for today. Configure class days in Settings.
-						</p>
-					{:else}
-						<h3 class="display-lg mb-2">Which class are you starting?</h3>
-						<p class="mb-8 text-muted-foreground">Select a class to begin recording attendance.</p>
-
-						<div class="grid gap-3 text-left">
-							{#each remainingSessions as s (s.id)}
-								<button
-									onclick={() => (selectedClassId = s.id)}
-									class="group flex items-center justify-between rounded-2xl border border-border bg-background p-4 transition-all hover:border-primary/50 hover:bg-primary/5"
-								>
-									<div>
-										<div class="font-bold transition-colors group-hover:text-primary">{s.name}</div>
-										<div class="label-mono text-xs opacity-60">
-											{s.room ? `Room ${s.room} · ` : ''}{s.dayStart} – {s.dayEnd}
-										</div>
-									</div>
-									<svg
-										class="size-5 text-muted-foreground transition-all group-hover:translate-x-1 group-hover:text-primary"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
-									</svg>
-								</button>
-							{/each}
-
-							{#if remainingSessions.length === 0}
-								<div
-									class="rounded-2xl border border-dashed border-border py-8 text-center text-muted-foreground italic"
-								>
-									No more sessions scheduled for today.
-								</div>
-							{/if}
-						</div>
-					{/if}
+					<h3 class="display-lg mb-2">No Classes Today</h3>
+					<p class="mb-8 text-muted-foreground">
+						No classes are scheduled for today. Configure class days in Settings.
+					</p>
 				</div>
 			{:else}
 				<div class="relative w-full max-w-md text-center">
