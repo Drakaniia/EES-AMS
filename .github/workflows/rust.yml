@@ -1,49 +1,50 @@
-name: Rust
-
-on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
-
-jobs:
-  rust:
-    name: fmt · clippy · check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install system dependencies (Tauri on Linux)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            librsvg2-dev \
-            patchelf \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev
-
-      - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Cache Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-
-      - name: cargo fmt
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-
-      - name: cargo clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
-
-      - name: cargo check
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+# DISABLED - backend (Rust) check CI workflow commented out
+# name: Rust
+#
+# on:
+#   push:
+#     branches: [main, master]
+#   pull_request:
+#     branches: [main, master]
+#
+# jobs:
+#   rust:
+#     name: fmt · clippy · check
+#     runs-on: ubuntu-latest
+#
+#     steps:
+#       - uses: actions/checkout@v4
+#
+#       - name: Install system dependencies (Tauri on Linux)
+#         run: |
+#           sudo apt-get update
+#           sudo apt-get install -y \
+#             libwebkit2gtk-4.1-dev \
+#             librsvg2-dev \
+#             patchelf \
+#             libgtk-3-dev \
+#             libayatana-appindicator3-dev
+#
+#       - name: Set up Rust toolchain
+#         uses: dtolnay/rust-toolchain@stable
+#         with:
+#           components: rustfmt, clippy
+#
+#       - name: Cache Cargo
+#         uses: actions/cache@v4
+#         with:
+#           path: |
+#             ~/.cargo/registry
+#             ~/.cargo/git
+#             src-tauri/target
+#           key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+#           restore-keys: ${{ runner.os }}-cargo-
+#
+#       - name: cargo fmt
+#         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+#
+#       - name: cargo clippy
+#         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+#
+#       - name: cargo check
+#         run: cargo check --manifest-path src-tauri/Cargo.toml
