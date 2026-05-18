@@ -5,6 +5,7 @@
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import DateRangePicker from '$lib/components/ui/DateRangePicker.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
+	import StudentPicker from '$lib/components/ui/StudentPicker.svelte';
 	import {
 		listStudents,
 		listEvents,
@@ -291,26 +292,47 @@
 			description="Review and filter historical attendance data for your classes."
 		>
 			{#snippet actions()}
-				<button
-					onclick={onExportExcel}
-					class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
-				>
-					<svg
-						class="size-4"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
+				<div class="flex items-center gap-2">
+					<button
+						onclick={onExport}
+						class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 					>
-						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-						<polyline points="7 10 12 15 17 10" />
-						<line x1="12" y1="15" x2="12" y2="3" />
-					</svg>
-					Export DTR (Excel)
-				</button>
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+							<polyline points="7 10 12 15 17 10" />
+							<line x1="12" y1="15" x2="12" y2="3" />
+						</svg>
+						Export CSV
+					</button>
+					<button
+						onclick={onExportExcel}
+						class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+					>
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+							<polyline points="7 10 12 15 17 10" />
+							<line x1="12" y1="15" x2="12" y2="3" />
+						</svg>
+						Export DTR (Excel)
+					</button>
+				</div>
 			{/snippet}
 		</PageHeader>
 
@@ -352,29 +374,35 @@
 			<!-- Class -->
 			<div class="space-y-2">
 				<div class="label-mono">Class</div>
-				<select
-					bind:value={classId}
-					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-				>
-					<option value="">All classes</option>
-					{#each classes as c (c.id)}
-						<option value={c.id}>{c.name}</option>
-					{/each}
-				</select>
+				<div class="relative">
+					<select
+						bind:value={classId}
+						onchange={() => (studentId = '')}
+						class="h-10 w-full appearance-none rounded-md border border-border bg-background px-3 pr-10 text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
+					>
+						<option value="">All classes</option>
+						{#each classes as c (c.id)}
+							<option value={c.id}>{c.name}</option>
+						{/each}
+					</select>
+					<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground">
+						<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="m6 9 6 6 6-6" />
+						</svg>
+					</div>
+				</div>
 			</div>
 
 			<!-- Student -->
 			<div class="space-y-2">
 				<div class="label-mono">Student</div>
-				<select
-					bind:value={studentId}
-					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-				>
-					<option value="">All students</option>
-					{#each students as s (s.id)}
-						<option value={s.id}>{s.name}</option>
-					{/each}
-				</select>
+				<StudentPicker
+					{students}
+					selectedId={studentId}
+					{classId}
+					placeholder="All students"
+					on:select={(e) => (studentId = e.detail.id)}
+				/>
 			</div>
 
 			<!-- Total -->
