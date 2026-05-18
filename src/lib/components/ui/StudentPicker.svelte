@@ -19,23 +19,22 @@
 
 	let filteredStudents = $derived.by(() => {
 		let result = students;
-		
+
 		if (classId) {
-			result = result.filter(s => s.classId === classId);
+			result = result.filter((s) => s.classId === classId);
 		}
 
 		if (query.trim()) {
 			const term = query.toLowerCase();
-			result = result.filter(s => 
-				s.name.toLowerCase().includes(term) || 
-				s.studentNumber.toLowerCase().includes(term)
+			result = result.filter(
+				(s) => s.name.toLowerCase().includes(term) || s.studentNumber.toLowerCase().includes(term)
 			);
 		}
 
 		return result;
 	});
 
-	let selectedStudent = $derived(students.find(s => s.id === selectedId));
+	let selectedStudent = $derived(students.find((s) => s.id === selectedId));
 
 	function handleSelect(id: string) {
 		dispatch('select', { id });
@@ -56,7 +55,7 @@
 		onclick={() => (open = true)}
 		class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
 	>
-		<span class={selectedStudent ? 'text-foreground font-medium' : 'text-muted-foreground'}>
+		<span class={selectedStudent ? 'font-medium text-foreground' : 'text-muted-foreground'}>
 			{selectedStudent ? selectedStudent.name : placeholder}
 		</span>
 		<svg
@@ -102,7 +101,9 @@
 			/>
 		</div>
 
-		<ul class="max-h-[300px] divide-y divide-border overflow-y-auto rounded-xl border border-border bg-surface/30">
+		<ul
+			class="max-h-[300px] divide-y divide-border overflow-y-auto rounded-xl border border-border bg-surface/30"
+		>
 			<li>
 				<button
 					onclick={handleClear}
@@ -112,9 +113,7 @@
 				</button>
 			</li>
 			{#if filteredStudents.length === 0}
-				<li class="py-10 text-center text-sm text-muted-foreground">
-					No students found.
-				</li>
+				<li class="py-10 text-center text-sm text-muted-foreground">No students found.</li>
 			{:else}
 				{#each filteredStudents as s (s.id)}
 					<li>
@@ -127,7 +126,13 @@
 								<div class="label-mono text-[10px] opacity-60">#{s.studentNumber}</div>
 							</div>
 							{#if s.id === selectedId}
-								<svg class="size-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+								<svg
+									class="size-4 text-primary"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="3"
+								>
 									<polyline points="20 6 9 17 4 12" />
 								</svg>
 							{/if}

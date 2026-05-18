@@ -18,7 +18,7 @@
 	} from '$lib/db-rust';
 	import { page } from '$app/stores';
 	import { fmtDate, fmtTime } from '$lib/csv';
-	import { exportCsvWithFolder, exportDtrExcel } from '$lib/db-rust';
+	import { exportCsvWithFolder } from '$lib/db-rust';
 	import DTRPreviewModal from '$lib/components/ui/DTRPreviewModal.svelte';
 
 	// ── Types ────────────────────────────────────────────────────────────────
@@ -385,8 +385,16 @@
 							<option value={c.id}>{c.name}</option>
 						{/each}
 					</select>
-					<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground">
-						<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<div
+						class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground"
+					>
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						>
 							<path d="m6 9 6 6 6-6" />
 						</svg>
 					</div>
