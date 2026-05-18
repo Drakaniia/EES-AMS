@@ -16,7 +16,6 @@ A cross-platform desktop application for student attendance management at Espiri
 - Cross-platform desktop app - Windows, macOS, Linux
 - ID card reader support - Works with USB card readers as keyboard input
 - Real-time attendance tracking - Instant data synchronization
-- Local network architecture - Phone connects via WiFi/hotspot
 - Offline-first design - No internet required
 - SQLite database - Reliable local data storage
 - Modern UI - Responsive SvelteKit 5 frontend
@@ -40,9 +39,7 @@ A cross-platform desktop application for student attendance management at Espiri
 │                                                            │
 │              USB/Bluetooth Card Reader                      │
 └─────────────────────────────────────────────────────────────┘
-```
-
-## Prerequisites
+```## Prerequisites
 
 - **Node.js** 18+ (for frontend development)
 - **Rust** 1.77+ (for backend development)
@@ -115,13 +112,13 @@ espíritu-ams/
 │   ├── lib/
 │   │   ├── components/     # Reusable UI components
 │   │   ├── entities/       # TypeScript types
-│   │   └── api.ts         # API client
+│   │   └── db-rust.ts     # Tauri command wrappers
 │   ├── routes/            # Page routes
 │   └── app.css           # Global styles
 ├── src-tauri/             # Rust backend
 │   ├── src/
 │   │   ├── domain/        # Business logic
-│   │   ├── infrastructure/ # Database & server
+│   │   ├── infrastructure/ # Database & hardware
 │   │   └── commands.rs    # Tauri commands
 │   └── Cargo.toml        # Rust dependencies
 ├── static/               # Static assets
@@ -160,68 +157,12 @@ bun test
 cd src-tauri && cargo test
 ```
 
-## API Endpoints
-
-The HTTP server exposes the following REST API:
-
-### Students
-
-- `GET /api/students` - List all students
-- `POST /api/students` - Create new student
-- `GET /api/students/:id` - Get student by ID
-- `PUT /api/students/:id` - Update student
-- `DELETE /api/students/:id` - Delete student
-- `GET /api/students/card/:serial` - Find student by card serial
-
-### Attendance Events
-
-- `GET /api/events` - List all events
-- `POST /api/events` - Create attendance event
-- `GET /api/events/student/:id/last` - Get last event for student
-
-### Settings & Data
-
-- `GET /api/settings` - Get application settings
-- `PUT /api/settings` - Update settings
-- `GET /api/export` - Export all data as JSON
-- `POST /api/import` - Import data from JSON
-- `POST /api/wipe` - Clear all data
-
 ## Security
 
-- **Local network only** - No internet connectivity required
+- **Local only** - No network connectivity required
 - **No authentication** - Designed for single-teacher use case
-- **CORS enabled** - Cross-origin requests for mobile access
-
-> **Note**: For production deployment, consider adding API key authentication or JWT tokens.
 
 ## Troubleshooting
-
-### Server Issues
-
-**Problem**: Server won't start on port 3030
-
-```bash
-# Check if port is in use
-netstat -an | grep :3030
-
-# Kill process using port (Windows)
-taskkill /PID <PID> /F
-```
-
-**Problem**: Firewall blocking connections
-
-- Allow incoming connections on port 3030
-- Add exception for Tauri app in Windows Defender
-
-### Mobile Connection Issues
-
-**Problem**: Phone can't connect to laptop
-
-1. Verify both devices on same network
-2. Check laptop's IP address in app
-3. Try accessing `http://<laptop-ip>:3030/api/health` from phone browser
-4. Disable VPN on phone if enabled
 
 ### Card Reader Issues
 
@@ -265,7 +206,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **SvelteKit** - Modern web framework
 - **Rust** - Systems programming language
 - **SQLite** - Reliable database engine
-- **Axum** - Web framework for Rust
 
 ## Support
 

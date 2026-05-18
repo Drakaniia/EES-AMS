@@ -35,7 +35,6 @@ Examples with actual file paths:
 
 - DO: Follow command pattern from `src-tauri/src/commands.rs`
 - DO: Database models in `src-tauri/src/domain/models/`
-- DO: HTTP routes in `src-tauri/src/infrastructure/http/`
 - DON'T: Direct database access without connection pooling
 - DON'T: Blocking operations in async functions
 
@@ -51,9 +50,8 @@ Examples with actual file paths:
 
 - Find Tauri command: `rg -n "#\[tauri::command\]" src-tauri/src`
 - Find database model: `rg -n "struct.*\{" src-tauri/src/domain`
-- Find HTTP route: `rg -n "router\." src-tauri/src/infrastructure`
 - Find error types: `rg -n "enum.*Error" src-tauri/src`
-- Find tests: `find src-tauri/ -name "_test_.rs" -o -name "tests/"
+- Find tests: `find src-tauri/ -name "_test_.rs" -o -name "tests/"`
 
 ## Database Patterns
 
@@ -67,7 +65,6 @@ Examples with actual file paths:
 - Always handle SQLite connection errors gracefully
 - Use `tokio::spawn` for background tasks, don't block main thread
 - Tauri commands must be `async` if they perform I/O
-- HTTP server runs on separate port from Tauri's built-in server
 
 ## Pre-PR Checks
 
