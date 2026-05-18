@@ -1,0 +1,63 @@
+# This config was automatically generated from your source code
+# Stacks detected: cicd:github-actions:.github/workflows,deps:node:.,deps:rust:src-tauri
+version: 2.1
+orbs:
+  node: circleci/node@5
+jobs:
+  build-node:
+    # Build node project
+    executor: node/default
+    steps:
+      - checkout
+      - node/install-packages:
+          cache-path: ~/project/node_modules
+          override-ci-command: npm install
+      - run:
+          command: npm run build
+      - run:
+          name: Create the ~/artifacts directory if it doesn't exist
+          command: mkdir -p ~/artifacts
+      # Copy output to artifacts dir
+      - run:
+          name: Copy artifacts
+          command: cp -R build dist public .output .next .docusaurus ~/artifacts 2>/dev/null || true
+      - store_artifacts:
+          path: ~/artifacts
+          destination: node-build
+  test-rust:
+    docker:
+      - image: cimg/rust:1.70
+    working_directory: ~/project/src-tauri
+    steps:
+      - checkout:
+          path: ~/project
+      - restore_cache:
+          key: cargo-{{ checksum "Cargo.lock" }}
+      - run:
+          command: cargo test
+      - save_cache:
+          key: cargo-{{ checksum "Cargo.lock" }}
+          paths:
+            - ~/.cargo
+  deploy:
+    # This is an example deploy job, not actually used by the workflow
+    docker:
+      - image: cimg/base:stable
+    steps:
+      # Replace this with steps to deploy to users
+      - run:
+          name: deploy
+          command: '#e.g. ./deploy.sh'
+      - run:
+          name: found github actions config
+          command: ':'
+workflows:
+  build-and-test:
+    jobs:
+      - build-node:
+          requires:
+            - test-rust
+      - test-rust
+    # - deploy:
+    #     requires:
+    #       - build-node
