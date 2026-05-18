@@ -316,16 +316,21 @@
 		}
 	}
 
-	async function onDelete(s: Student) {
-		deleteTarget = s;
-	}
-
-	async function confirmDelete() {
-		if (!deleteTarget) return;
-		await deleteStudent(deleteTarget.id);
+	async function confirmDelete(target = deleteTarget) {
+		if (!target) return;
+		await deleteStudent(target.id);
 		toast('Deleted');
 		deleteTarget = null;
 		reload();
+	}
+
+	async function onDelete(event: MouseEvent, student: Student) {
+		if (event.shiftKey) {
+			await confirmDelete(student);
+			return;
+		}
+
+		deleteTarget = student;
 	}
 
 	async function onSaveCard() {
@@ -627,7 +632,7 @@
 											</button>
 											<!-- Delete -->
 											<button
-												onclick={() => onDelete(s)}
+												onclick={(event) => onDelete(event, s)}
 												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
 												title="Delete student"
 											>
@@ -916,10 +921,17 @@
 						/>
 					</svg>
 				</div>
-				<div>
+				<div class="w-full text-left">
 					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete student?</h2>
 					<p class="mt-1 text-sm text-muted-foreground">
 						<span class="font-medium text-foreground">{deleteTarget.name}</span> will be permanently removed.
+					</p>
+					<p class="mt-4 text-xs leading-relaxed text-muted-foreground">
+						<strong class="font-semibold text-accent">PROTIP:</strong>
+						<span class="block">
+							You can hold down <strong class="font-semibold">Shift</strong> when clicking the delete
+							button to bypass this confirmation entirely.
+						</span>
 					</p>
 				</div>
 			</div>
@@ -932,7 +944,7 @@
 					Cancel
 				</button>
 				<button
-					onclick={confirmDelete}
+					onclick={() => confirmDelete()}
 					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 				>
 					Delete
