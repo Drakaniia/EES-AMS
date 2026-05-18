@@ -216,6 +216,22 @@ export async function exportCsvWithFolder(
 	});
 }
 
+export async function exportDtrExcel(
+	student: Student,
+	classData: Class | undefined,
+	events: AttendanceEvent[],
+	month: number,
+	year: number
+): Promise<string> {
+	return await invoke('export_dtr_excel', {
+		student,
+		class: classData,
+		events,
+		month,
+		year
+	});
+}
+
 export async function importAll(payload: ExportData): Promise<void> {
 	return await invoke('import_all', { payload });
 }
