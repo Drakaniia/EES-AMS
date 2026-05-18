@@ -32,7 +32,6 @@ This project is the **Espiritu Elementary School Attendance Management System (E
 
 - `src/`: SvelteKit frontend.
   - `lib/db-rust.ts`: Tauri command wrappers (Primary frontend-to-backend interface).
-  - `lib/api.ts`: REST API client for mobile/external connectivity (Port 3030).
   - `routes/`: Application pages (Dashboard, Students, Attendance, etc.).
 - `src-tauri/`: Rust backend.
   - `src/commands.rs`: Implementation of all Tauri `#[tauri::command]` functions.
@@ -53,9 +52,8 @@ This project is the **Espiritu Elementary School Attendance Management System (E
 
 - **Svelte 5 Runes**: Strictly use `$state`, `$derived`, and `$effect` for reactivity.
 - **Component Design**: Modular components in `src/lib/components/`.
-- **API Communication**: Prefer `db-rust.ts` for desktop features. `api.ts` is intended for mobile/LAN access.
+- **API Communication**: Use `db-rust.ts` for all frontend-to-backend communication via Tauri commands.
 
 ## ⚠️ Known Discrepancies & TODOs
 
-- **HTTP Server**: Documentation (README.md, AGENTS.md) mentions an Axum-based HTTP server on port 3030 for mobile connectivity. However, the current implementation in `src-tauri` does not yet include the `axum` dependency or the server logic.
 - **Authentication**: The system currently operates without authentication, designed for single-teacher local use.
