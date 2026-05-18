@@ -28,10 +28,12 @@
 	let editing = $state<Student | null>(null);
 	let scanFor = $state<Student | null>(null);
 
+	let entryMode = $state<'single' | 'bulk'>('single');
 	let formName = $state('');
 	let formStudentNumber = $state('');
 	let formCardSerial = $state('');
 	let formClassId = $state('');
+	let bulkStudentNames = $state('');
 
 	let deleteTarget = $state<Student | null>(null);
 
@@ -111,6 +113,12 @@
 		const end = start + itemsPerPage;
 		return filteredStudents.slice(start, end);
 	});
+	const bulkNames = $derived.by(() =>
+		bulkStudentNames
+			.split(/\r?\n/)
+			.map((name) => name.trim())
+			.filter(Boolean)
+	);
 
 	function handlePageChange(page: number) {
 		currentPage = page;
@@ -142,7 +150,7 @@
 		const headers = ['Name', 'Student Number', 'Class', 'Card Serial', 'Created At'];
 		const rows = students.map((s) => [
 			s.name,
-			s.studentNumber,
+			displayStudentNumber(s.studentNumber),
 			getClassName(s.classId),
 			s.cardSerial || '',
 			s.createdAt
@@ -177,19 +185,23 @@
 	// ── Dialog helpers ───────────────────────────────────────────────────────
 	function openAdd() {
 		editing = null;
+		entryMode = 'single';
 		formName = '';
 		formStudentNumber = '';
 		formCardSerial = '';
 		formClassId = selectedClassId || (classes.length > 0 ? classes[0].id : '');
+		bulkStudentNames = '';
 		dialogOpen = true;
 	}
 
 	function openEdit(s: Student) {
 		editing = s;
+		entryMode = 'single';
 		formName = s.name;
-		formStudentNumber = s.studentNumber;
+		formStudentNumber = isGeneratedStudentNumber(s.studentNumber) ? '' : s.studentNumber;
 		formCardSerial = s.cardSerial ?? '';
 		formClassId = s.classId ?? '';
+		bulkStudentNames = '';
 		dialogOpen = true;
 	}
 
@@ -203,6 +215,34 @@
 		editing = null;
 	}
 
+	function isGeneratedStudentNumber(value: string) {
+		return value.startsWith('temp-');
+	}
+
+	function displayStudentNumber(value: string) {
+		return isGeneratedStudentNumber(value) ? '—' : value;
+	}
+
+	function makeStudentNumber(value: string) {
+		return value.trim() || `temp-${crypto.randomUUID()}`;
+	}
+
+	function createStudent(
+		name: string,
+		studentNumber: string,
+		classId: string,
+		cardSerial?: string
+	): Student {
+		return {
+			id: '',
+			createdAt: new Date().toISOString(),
+			name,
+			studentNumber: makeStudentNumber(studentNumber),
+			cardSerial: cardSerial || undefined,
+			classId: classId || undefined
+		};
+	}
+
 	async function onSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		const name = formName.trim();
@@ -210,16 +250,33 @@
 		const serial = formCardSerial.trim().toLowerCase();
 		const classId = formClassId;
 
-		console.log('Form submission:', { name, num, serial, classId, editing });
+		if (!editing && entryMode === 'bulk') {
+			if (bulkNames.length === 0) {
+				toast('Paste or type at least one student name');
+				return;
+			}
 
-		if (!name || !num) {
-			console.log('Validation failed: name or number missing');
-			toast('Please fill in all required fields');
+			try {
+				for (const bulkName of bulkNames) {
+					await saveStudent(createStudent(bulkName, '', classId));
+				}
+				toast(`${bulkNames.length} ${bulkNames.length === 1 ? 'student' : 'students'} added`);
+				closeDialog();
+				reload();
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : 'Failed to add students';
+				toast(`Error: ${msg}`);
+			}
 			return;
 		}
 
-		// Check for duplicate student number (only for new students)
-		if (!editing) {
+		if (!name) {
+			toast('Please enter a student name');
+			return;
+		}
+
+		// Check for duplicate student number only when one is provided.
+		if (num && !editing) {
 			const existingStudent = students.find((s) => s.studentNumber === num);
 			if (existingStudent) {
 				toast(
@@ -234,21 +291,11 @@
 				? {
 						...editing,
 						name,
-						studentNumber: num,
+						studentNumber: makeStudentNumber(num),
 						cardSerial: serial || undefined,
 						classId: classId || undefined
 					}
-				: {
-						// For new students, pass empty string as ID to trigger creation
-						id: '',
-						createdAt: new Date().toISOString(),
-						name,
-						studentNumber: num,
-						cardSerial: serial || undefined,
-						classId: classId || undefined
-					};
-
-			console.log('Saving student:', studentData);
+				: createStudent(name, num, classId, serial);
 
 			await saveStudent(studentData);
 			toast(editing ? 'Student updated' : 'Student added');
@@ -501,7 +548,7 @@
 											</svg>
 										</button>
 									</td>
-									{@render td(s.studentNumber, 'font-mono')}
+									{@render td(displayStudentNumber(s.studentNumber), 'font-mono')}
 									<td class="px-4 py-3">
 										<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs">
 											{getClassName(s.classId)}
@@ -636,35 +683,44 @@
 		aria-modal="true"
 		aria-labelledby="dialog-title"
 	>
-		<div
-			class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
-		>
-			<div>
+		<div class="w-full max-w-2xl rounded-2xl border border-border bg-background shadow-xl">
+			<div class="border-b border-border px-6 pt-6 pb-5">
 				<h2 id="dialog-title" class="text-lg font-semibold">
 					{editing ? 'Edit student' : 'Add student'}
 				</h2>
-				<p class="mt-1 text-sm text-muted-foreground">Assign to a class and pair a card later.</p>
+				<p class="mt-1 text-sm text-muted-foreground">
+					{editing
+						? 'Update the student profile and class assignment.'
+						: 'Add one student manually or paste a class list in one pass.'}
+				</p>
 			</div>
 
-			<form onsubmit={onSubmit} class="space-y-4">
-				<div class="space-y-1.5">
-					<label for="field-name" class="label-mono">Full name</label>
-					<input
-						id="field-name"
-						bind:value={formName}
-						required
-						class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					/>
-				</div>
-				<div class="space-y-1.5">
-					<label for="field-number" class="label-mono">Student number</label>
-					<input
-						id="field-number"
-						bind:value={formStudentNumber}
-						required
-						class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					/>
-				</div>
+			<form onsubmit={onSubmit} class="space-y-5 p-6">
+				{#if !editing}
+					<div class="grid rounded-lg border border-border bg-surface p-1 sm:grid-cols-2">
+						<button
+							type="button"
+							onclick={() => (entryMode = 'single')}
+							class="rounded-md px-4 py-2 text-sm font-medium transition-colors {entryMode ===
+							'single'
+								? 'bg-background text-foreground shadow-sm'
+								: 'text-muted-foreground hover:text-foreground'}"
+						>
+							Individual
+						</button>
+						<button
+							type="button"
+							onclick={() => (entryMode = 'bulk')}
+							class="rounded-md px-4 py-2 text-sm font-medium transition-colors {entryMode ===
+							'bulk'
+								? 'bg-background text-foreground shadow-sm'
+								: 'text-muted-foreground hover:text-foreground'}"
+						>
+							Bulk paste
+						</button>
+					</div>
+				{/if}
+
 				<div class="space-y-1.5">
 					<label for="field-class" class="label-mono">Class / Section</label>
 					<select
@@ -688,16 +744,63 @@
 						</p>
 					{/if}
 				</div>
-				<div class="space-y-1.5">
-					<label for="field-card" class="label-mono">Card serial (optional)</label>
-					<input
-						id="field-card"
-						bind:value={formCardSerial}
-						placeholder=""
-						class="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					/>
-				</div>
-				<div class="flex justify-end gap-2 pt-1">
+
+				{#if !editing && entryMode === 'bulk'}
+					<div class="space-y-2">
+						<div class="flex items-center justify-between gap-3">
+							<label for="bulk-students" class="label-mono">Student names</label>
+							<span class="font-mono text-xs text-muted-foreground">
+								{bulkNames.length}
+								{bulkNames.length === 1 ? 'student' : 'students'}
+							</span>
+						</div>
+						<textarea
+							id="bulk-students"
+							bind:value={bulkStudentNames}
+							rows="10"
+							placeholder="John Doe&#10;Jane Smith&#10;Michael Cruz"
+							class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
+						></textarea>
+						<p class="text-xs text-muted-foreground">
+							Each new line creates one student. Student numbers and cards can be added later.
+						</p>
+					</div>
+				{:else}
+					<div class="grid gap-4 sm:grid-cols-2">
+						<div class="space-y-1.5 sm:col-span-2">
+							<label for="field-name" class="label-mono">Full name</label>
+							<input
+								id="field-name"
+								bind:value={formName}
+								required
+								placeholder="Student full name"
+								class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+							/>
+						</div>
+						<div class="space-y-1.5">
+							<label for="field-number" class="label-mono">Student number (optional)</label>
+							<input
+								id="field-number"
+								bind:value={formStudentNumber}
+								placeholder="Add later"
+								class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+							/>
+						</div>
+						<div class="space-y-1.5">
+							<label for="field-card" class="label-mono">Card serial (optional)</label>
+							<input
+								id="field-card"
+								bind:value={formCardSerial}
+								placeholder="Pair later"
+								class="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+							/>
+						</div>
+					</div>
+				{/if}
+
+				<div
+					class="flex flex-col-reverse gap-2 border-t border-border pt-5 sm:flex-row sm:justify-end"
+				>
 					<button
 						type="button"
 						onclick={closeDialog}
@@ -707,9 +810,16 @@
 					</button>
 					<button
 						type="submit"
-						class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+						disabled={!editing && entryMode === 'bulk' && bulkNames.length === 0}
+						class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 					>
-						{editing ? 'Save Changes' : 'Add Student'}
+						{#if editing}
+							Save Changes
+						{:else if entryMode === 'bulk'}
+							Add {bulkNames.length || ''} Students
+						{:else}
+							Add Student
+						{/if}
 					</button>
 				</div>
 			</form>
