@@ -6,10 +6,201 @@ use crate::infrastructure::database::{
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use serde::Serialize;
+use chrono::{Datelike, Timelike};
+use rust_xlsxwriter::*;
+use std::collections::HashMap;
 use std::fs;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_updater::UpdaterExt;
+
+#[tauri::command]
+pub async fn export_dtr_excel(
+    app: tauri::AppHandle,
+    student: Student,
+    _class: Option<Class>,
+    events: Vec<AttendanceEvent>,
+    month: u32,
+    year: i32,
+) -> std::result::Result<String, String> {
+    let mut workbook = Workbook::new();
+    let worksheet = workbook.add_worksheet();
+
+    // Set Column Widths
+    worksheet.set_column_width(0, 5.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(1, 6.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(2, 6.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(3, 6.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(4, 6.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(5, 6.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(6, 6.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(7, 9.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(8, 2.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(9, 2.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(10, 5.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(11, 6.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(12, 6.0).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(13, 6.5).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(14, 6.2).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(15, 6.5).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(16, 7.2).map_err(|e| e.to_string())?;
+    worksheet.set_column_width(17, 9.2).map_err(|e| e.to_string())?;
+
+    // Formats
+    let fmt_header = Format::new().set_font_size(11.0).set_bold().set_align(FormatAlign::Center);
+    let fmt_italic = Format::new().set_font_size(8.0).set_italic().set_align(FormatAlign::Left);
+    let fmt_small_italic = Format::new().set_font_size(10.0).set_italic().set_align(FormatAlign::Center);
+    let fmt_name = Format::new().set_font_size(11.0).set_bold().set_align(FormatAlign::Center).set_border_bottom(FormatBorder::Thin);
+    let fmt_border_thin = Format::new().set_border(FormatBorder::Thin).set_align(FormatAlign::Center);
+    let fmt_border_thin_left = Format::new().set_border(FormatBorder::Thin).set_align(FormatAlign::Left);
+    let fmt_day = Format::new().set_border(FormatBorder::Thin).set_align(FormatAlign::Center);
+    let fmt_month = Format::new().set_align(FormatAlign::Center).set_border_bottom(FormatBorder::Thin);
+    let fmt_footer = Format::new().set_font_size(9.0).set_align(FormatAlign::Left);
+
+    let month_name = match month {
+        1 => "January", 2 => "February", 3 => "March", 4 => "April",
+        5 => "May", 6 => "June", 7 => "July", 8 => "August",
+        9 => "September", 10 => "October", 11 => "November", 12 => "December",
+        _ => "Unknown",
+    };
+
+    // Helper to draw one DTR side
+    let mut draw_side = |ws: &mut Worksheet, col_offset: u16| -> Result<(), XlsxError> {
+        // Header
+        ws.write_with_format(0, col_offset, "CSC Form 48", &fmt_italic)?;
+        ws.merge_range(1, col_offset, 1, col_offset + 6, "DAILY TIME RECORD", &fmt_header)?;
+        
+        ws.merge_range(3, col_offset, 3, col_offset + 7, &student.name, &fmt_name)?;
+        ws.merge_range(4, col_offset, 4, col_offset + 7, "(Name)", &fmt_small_italic)?;
+
+        ws.write(6, col_offset, "For the month of")?;
+        ws.merge_range(6, col_offset + 1, 6, col_offset + 5, format!("{} {}", month_name, year).as_str(), &fmt_month)?;
+
+        ws.write(7, col_offset, "Official hours for Arrival")?;
+        ws.merge_range(7, col_offset + 4, 7, col_offset + 7, "_______________________", &Format::new())?;
+        ws.write(8, col_offset, "and Departure")?;
+        ws.merge_range(8, col_offset + 4, 8, col_offset + 7, "_______________________", &Format::new())?;
+
+        // Table Headers
+        ws.merge_range(11, col_offset, 12, col_offset, "Day", &fmt_border_thin)?;
+        ws.merge_range(11, col_offset + 1, 11, col_offset + 2, "A.M.", &fmt_border_thin)?;
+        ws.merge_range(11, col_offset + 3, 11, col_offset + 4, "P.M.", &fmt_border_thin)?;
+        ws.merge_range(11, col_offset + 5, 11, col_offset + 6, "Undertime", &fmt_border_thin)?;
+        
+        ws.write_with_format(12, col_offset + 1, "Arrival", &fmt_border_thin)?;
+        ws.write_with_format(12, col_offset + 2, "Departure", &fmt_border_thin)?;
+        ws.write_with_format(12, col_offset + 3, "Arrival", &fmt_border_thin)?;
+        ws.write_with_format(12, col_offset + 4, "Departure", &fmt_border_thin)?;
+        ws.write_with_format(12, col_offset + 5, "Hours", &fmt_border_thin)?;
+        ws.write_with_format(12, col_offset + 6, "Minutes", &fmt_border_thin)?;
+
+        // Data Rows
+        let days_in_month = if month == 2 {
+            if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) { 29 } else { 28 }
+        } else if [4, 6, 9, 11].contains(&month) { 30 } else { 31 };
+
+        let mut events_map: HashMap<u32, Vec<&AttendanceEvent>> = HashMap::new();
+        for event in &events {
+            let dt = event.timestamp.with_timezone(&chrono::Local);
+            if dt.month() == month && dt.year() == year {
+                events_map.entry(dt.day()).or_default().push(event);
+            }
+        }
+
+        for day in 1..=31 {
+            let row = 12 + day as u32;
+            ws.write_with_format(row, col_offset, day as f64, &fmt_day)?;
+            
+            if day <= days_in_month {
+                if let Some(day_events) = events_map.get(&(day as u32)) {
+                    let mut sorted_events = day_events.clone();
+                    sorted_events.sort_by_key(|e| e.timestamp);
+
+                    let mut am_in: Option<String> = None;
+                    let mut am_out: Option<String> = None;
+                    let mut pm_in: Option<String> = None;
+                    let mut pm_out: Option<String> = None;
+
+                    for event in sorted_events {
+                        let dt = event.timestamp.with_timezone(&chrono::Local);
+                        let time = dt.format("%H:%M").to_string();
+                        let hour = dt.hour();
+                        
+                        if event.event_type == AttendanceType::In {
+                            if hour < 12 { am_in = Some(time); }
+                            else { pm_in = Some(time); }
+                        } else {
+                            if hour < 13 { am_out = Some(time); }
+                            else { pm_out = Some(time); }
+                        }
+                    }
+
+                    ws.write_with_format(row, col_offset + 1, am_in.unwrap_or_default().as_str(), &fmt_border_thin)?;
+                    ws.write_with_format(row, col_offset + 2, am_out.unwrap_or_default().as_str(), &fmt_border_thin)?;
+                    ws.write_with_format(row, col_offset + 3, pm_in.unwrap_or_default().as_str(), &fmt_border_thin)?;
+                    ws.write_with_format(row, col_offset + 4, pm_out.unwrap_or_default().as_str(), &fmt_border_thin)?;
+                } else {
+                    for c in 1..=6 { ws.write_with_format(row, col_offset + c as u16, "", &fmt_border_thin)?; }
+                }
+            } else {
+                for c in 1..=6 { ws.write_with_format(row, col_offset + c as u16, "", &fmt_border_thin)?; }
+            }
+            ws.write_with_format(row, col_offset + 5, "", &fmt_border_thin)?;
+            ws.write_with_format(row, col_offset + 6, "", &fmt_border_thin)?;
+        }
+
+        // Footer
+        let footer_start_row = 44;
+        ws.merge_range(footer_start_row, col_offset, footer_start_row, col_offset + 4, "TOTAL", &fmt_border_thin_left)?;
+        ws.write_with_format(footer_start_row, col_offset + 5, "", &fmt_border_thin)?;
+        ws.write_with_format(footer_start_row, col_offset + 6, "", &fmt_border_thin)?;
+
+        ws.merge_range(46, col_offset, 46, col_offset + 7, "I certify on my honor that the above is a true and correct", &fmt_footer)?;
+        ws.merge_range(47, col_offset, 47, col_offset + 7, "report of the hours of work performed, record of which was made", &fmt_footer)?;
+        ws.merge_range(48, col_offset, 48, col_offset + 7, "daily at the time of arrival and departure from office.", &fmt_footer)?;
+
+        ws.merge_range(52, col_offset, 52, col_offset + 7, "____________________________________", &fmt_header)?;
+        ws.merge_range(53, col_offset, 53, col_offset + 7, "(Signature)", &fmt_small_italic)?;
+
+        ws.merge_range(55, col_offset, 55, col_offset + 7, "Verified as to the prescribed office hours:", &fmt_footer)?;
+        ws.merge_range(58, col_offset, 58, col_offset + 7, "____________________________________", &fmt_header)?;
+        ws.merge_range(59, col_offset, 59, col_offset + 7, "In-Charge", &fmt_small_italic)?;
+
+        Ok(())
+    };
+
+    draw_side(worksheet, 0).map_err(|e| e.to_string())?; // Left side (A-H)
+    draw_side(worksheet, 10).map_err(|e| e.to_string())?; // Right side (K-R)
+
+    let buffer = workbook.save_to_buffer().map_err(|e| e.to_string())?;
+
+    // Show save dialog
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.dialog()
+        .file()
+        .add_filter("Excel Files", &["xlsx"])
+        .set_file_name(format!(
+            "DTR-{}-{}-{}.xlsx",
+            student.name.replace(" ", "_"),
+            month_name,
+            year
+        ))
+        .save_file(move |result| tx.send(result).unwrap());
+
+    let file_path = rx
+        .recv()
+        .map_err(|e| format!("Failed to receive file path: {}", e))?
+        .ok_or_else(|| "User cancelled save dialog".to_string())?;
+
+    let file_path_buf = match file_path {
+        tauri_plugin_dialog::FilePath::Path(path) => path,
+        _ => return Err("Unsupported file path".to_string()),
+    };
+
+    fs::write(&file_path_buf, buffer).map_err(|e| format!("Failed to write file: {}", e))?;
+
+    Ok(file_path_buf.to_string_lossy().to_string())
+}
 
 // ── Student Commands ───────────────────────────────────────────────────────
 
