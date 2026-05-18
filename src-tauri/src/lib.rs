@@ -12,9 +12,9 @@ use commands::{
     delete_event,
     delete_student,
     download_and_install,
-    // Export/Import commands
     export_all,
     export_csv_with_folder,
+    export_dtr_excel,
     export_database,
     export_json_with_folder,
     find_student_by_card,
@@ -70,6 +70,7 @@ pub fn run() {
             export_database,
             export_json_with_folder,
             export_csv_with_folder,
+            export_dtr_excel,
             import_all,
             wipe_all,
             // Updater commands
