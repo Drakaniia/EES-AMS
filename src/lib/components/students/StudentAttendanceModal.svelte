@@ -1,6 +1,11 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { listEventsForStudent, getSettings, type Student, type AttendanceEvent, type Settings } from '$lib/db-rust';
+	import {
+		listEventsForStudent,
+		getSettings,
+		type Student,
+		type AttendanceEvent,
+		type Settings
+	} from '$lib/db-rust';
 	import Dialog from '../ui/Dialog.svelte';
 
 	interface Props {
@@ -21,15 +26,18 @@
 	let selectedYear = $state(now.getFullYear());
 
 	const months = [
-		'January', 'February', 'March', 'April', 'May', 'June',
-		'July', 'August', 'September', 'October', 'November', 'December'
-	];
-
-	const quarters = [
-		{ label: 'Q1', value: '1' },
-		{ label: 'Q2', value: '2' },
-		{ label: 'Q3', value: '3' },
-		{ label: 'Q4', value: '4' }
+		'January',
+		'February',
+		'March',
+		'April',
+		'May',
+		'June',
+		'July',
+		'August',
+		'September',
+		'October',
+		'November',
+		'December'
 	];
 
 	$effect(() => {
@@ -42,10 +50,7 @@
 		if (!student) return;
 		loading = true;
 		try {
-			const [evs, sets] = await Promise.all([
-				listEventsForStudent(student.id),
-				getSettings()
-			]);
+			const [evs, sets] = await Promise.all([listEventsForStudent(student.id), getSettings()]);
 			events = evs;
 			settings = sets;
 		} catch (error) {
@@ -78,7 +83,7 @@
 		// Days of current month
 		for (let i = 1; i <= days; i++) {
 			const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-			const dayEvents = events.filter(e => e.timestamp.startsWith(dateStr));
+			const dayEvents = events.filter((e) => e.timestamp.startsWith(dateStr));
 			result.push({
 				day: i,
 				date: dateStr,
@@ -91,7 +96,7 @@
 
 	function getStatus(dayEvents: AttendanceEvent[]) {
 		if (dayEvents.length === 0) return 'none';
-		const hasIn = dayEvents.some(e => e.type === 'in');
+		const hasIn = dayEvents.some((e) => e.type === 'in');
 		// Simple logic: if they clocked in, they are present.
 		// We could add "Late" logic here if we compare with settings.lateAfter
 		return hasIn ? 'present' : 'none';
@@ -104,13 +109,13 @@
 	}
 
 	const stats = $derived.by(() => {
-		const filtered = events.filter(e => {
+		const filtered = events.filter((e) => {
 			const d = new Date(e.timestamp);
 			return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
 		});
 
-		const presents = new Set(filtered.map(e => e.timestamp.split('T')[0])).size;
-		const tardies = filtered.filter(e => isLate(e)).length;
+		const presents = new Set(filtered.map((e) => e.timestamp.split('T')[0])).size;
+		const tardies = filtered.filter((e) => isLate(e)).length;
 
 		return { presents, tardies };
 	});
@@ -135,7 +140,7 @@
 </script>
 
 <Dialog
-	open={open}
+	{open}
 	title="Student Attendance Record"
 	description={student ? `${student.name} (${student.studentNumber})` : ''}
 	maxWidth="lg"
@@ -144,7 +149,9 @@
 	<div class="space-y-6">
 		{#if loading}
 			<div class="flex h-64 items-center justify-center">
-				<div class="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+				<div
+					class="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent"
+				></div>
 			</div>
 		{:else}
 			<!-- Header Stats -->
@@ -155,7 +162,7 @@
 				</div>
 				<div class="rounded-xl border border-border bg-surface p-4">
 					<div class="label-mono text-xs">Late Arrivals</div>
-					<div class="mt-1 text-2xl font-bold text-warning">{stats.tardies}</div>
+					<div class="text-warning mt-1 text-2xl font-bold">{stats.tardies}</div>
 				</div>
 				<div class="rounded-xl border border-border bg-surface p-4">
 					<div class="label-mono text-xs">Current Quarter</div>
@@ -171,34 +178,51 @@
 						class="rounded-md border border-border p-1.5 transition-colors hover:bg-surface"
 						aria-label="Previous month"
 					>
-						<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						>
 							<path d="m15 18-6-6 6-6" />
 						</svg>
 					</button>
 					<span class="min-w-32 text-center font-medium">
-						{months[selectedMonth]} {selectedYear}
+						{months[selectedMonth]}
+						{selectedYear}
 					</span>
 					<button
 						onclick={nextMonth}
 						class="rounded-md border border-border p-1.5 transition-colors hover:bg-surface"
 						aria-label="Next month"
 					>
-						<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						>
 							<path d="m9 18 6-6-6-6" />
 						</svg>
 					</button>
 				</div>
 
-				<div class="flex rounded-lg border border-border p-1 bg-surface">
+				<div class="flex rounded-lg border border-border bg-surface p-1">
 					<button
-						onclick={() => viewMode = 'month'}
-						class="rounded-md px-3 py-1 text-xs font-medium transition-all {viewMode === 'month' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}"
+						onclick={() => (viewMode = 'month')}
+						class="rounded-md px-3 py-1 text-xs font-medium transition-all {viewMode === 'month'
+							? 'bg-background text-primary shadow-sm'
+							: 'text-muted-foreground'}"
 					>
 						Monthly
 					</button>
 					<button
-						onclick={() => viewMode = 'quarter'}
-						class="rounded-md px-3 py-1 text-xs font-medium transition-all {viewMode === 'quarter' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}"
+						onclick={() => (viewMode = 'quarter')}
+						class="rounded-md px-3 py-1 text-xs font-medium transition-all {viewMode === 'quarter'
+							? 'bg-background text-primary shadow-sm'
+							: 'text-muted-foreground'}"
 					>
 						Quarterly
 					</button>
@@ -209,7 +233,9 @@
 				<!-- Calendar Grid -->
 				<div class="grid grid-cols-7 gap-1">
 					{#each ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as day (day)}
-						<div class="py-2 text-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+						<div
+							class="py-2 text-center text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
+						>
 							{day}
 						</div>
 					{/each}
@@ -219,12 +245,20 @@
 							<div class="aspect-square"></div>
 						{:else}
 							{@const status = getStatus(d.events)}
-							{@const late = d.events.some(e => isLate(e))}
+							{@const late = d.events.some((e) => isLate(e))}
 							<div
 								class="relative flex aspect-square flex-col items-center justify-center rounded-lg border border-border transition-colors
-								{status === 'present' ? (late ? 'bg-warning/10 border-warning/20' : 'bg-primary/10 border-primary/20') : 'bg-surface'}"
+								{status === 'present'
+									? late
+										? 'bg-warning/10 border-warning/20'
+										: 'border-primary/20 bg-primary/10'
+									: 'bg-surface'}"
 							>
-								<span class="text-xs font-mono {status === 'present' ? 'font-bold' : 'text-muted-foreground'}">
+								<span
+									class="font-mono text-xs {status === 'present'
+										? 'font-bold'
+										: 'text-muted-foreground'}"
+								>
 									{d.day}
 								</span>
 								{#if status === 'present'}
@@ -236,33 +270,52 @@
 				</div>
 			{:else}
 				<!-- Quarterly View (List of events grouped by month in quarter) -->
-				<div class="space-y-4 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
-					{#each events.filter(e => {
+				<div class="custom-scrollbar max-h-80 space-y-4 overflow-y-auto pr-2">
+					{#each events.filter((e) => {
 						const d = new Date(e.timestamp);
 						// Rough quarter logic if settings doesn't have explicit dates
 						const q = Math.floor(d.getMonth() / 3) + 1;
 						return q.toString() === settings?.quarter;
 					}) as e (e.id)}
-						<div class="flex items-center justify-between rounded-xl border border-border bg-surface p-3 transition-colors hover:border-primary/30">
+						<div
+							class="flex items-center justify-between rounded-xl border border-border bg-surface p-3 transition-colors hover:border-primary/30"
+						>
 							<div class="flex items-center gap-3">
-								<div class="flex size-9 items-center justify-center rounded-full {isLate(e) ? 'bg-warning/10 text-warning' : 'bg-primary/10 text-primary'}">
-									<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<div
+									class="flex size-9 items-center justify-center rounded-full {isLate(e)
+										? 'bg-warning/10 text-warning'
+										: 'bg-primary/10 text-primary'}"
+								>
+									<svg
+										class="size-4"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+									>
 										<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
 									</svg>
 								</div>
 								<div>
 									<div class="text-sm font-medium">
-										{new Date(e.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+										{new Date(e.timestamp).toLocaleDateString(undefined, {
+											month: 'short',
+											day: 'numeric',
+											year: 'numeric'
+										})}
 									</div>
-									<div class="text-xs text-muted-foreground font-mono">
-										{new Date(e.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+									<div class="font-mono text-xs text-muted-foreground">
+										{new Date(e.timestamp).toLocaleTimeString(undefined, {
+											hour: '2-digit',
+											minute: '2-digit'
+										})}
 										{#if isLate(e)}
-											<span class="ml-2 text-warning font-bold">LATE</span>
+											<span class="text-warning ml-2 font-bold">LATE</span>
 										{/if}
 									</div>
 								</div>
 							</div>
-							<div class="text-xs font-mono bg-background px-2 py-1 rounded border border-border">
+							<div class="rounded border border-border bg-background px-2 py-1 font-mono text-xs">
 								{e.type.toUpperCase()}
 							</div>
 						</div>
