@@ -51,8 +51,6 @@ export interface Settings {
 	q2End?: string;
 	q3Start?: string;
 	q3End?: string;
-	q4Start?: string;
-	q4End?: string;
 }
 
 export interface CreateStudentRequest {

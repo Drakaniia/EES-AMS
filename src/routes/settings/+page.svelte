@@ -32,8 +32,6 @@
 	let q2End = $state('');
 	let q3Start = $state('');
 	let q3End = $state('');
-	let q4Start = $state('');
-	let q4End = $state('');
 
 	// Quarter Dialog state
 	let quarterDialogOpen = $state(false);
@@ -90,8 +88,6 @@
 				q2End = settingsStore.settings.q2End ?? '';
 				q3Start = settingsStore.settings.q3Start ?? '';
 				q3End = settingsStore.settings.q3End ?? '';
-				q4Start = settingsStore.settings.q4Start ?? '';
-				q4End = settingsStore.settings.q4End ?? '';
 			}
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : 'Database error';
@@ -114,9 +110,7 @@
 				q2Start,
 				q2End,
 				q3Start,
-				q3End,
-				q4Start,
-				q4End
+				q3End
 			};
 			await settingsStore.save(next);
 			toast('Global configuration saved');
@@ -632,7 +626,6 @@
 				<option value="1st Quarter">1st Quarter</option>
 				<option value="2nd Quarter">2nd Quarter</option>
 				<option value="3rd Quarter">3rd Quarter</option>
-				<option value="4th Quarter">4th Quarter</option>
 			</select>
 		</div>
 
@@ -699,27 +692,6 @@
 						id="q3End"
 						type="date"
 						bind:value={q3End}
-						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					/>
-				</div>
-			</div>
-
-			<div class="grid grid-cols-2 gap-4">
-				<div class="space-y-1">
-					<label for="q4Start" class="text-xs font-medium text-muted-foreground">Q4 Start</label>
-					<input
-						id="q4Start"
-						type="date"
-						bind:value={q4Start}
-						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					/>
-				</div>
-				<div class="space-y-1">
-					<label for="q4End" class="text-xs font-medium text-muted-foreground">Q4 End</label>
-					<input
-						id="q4End"
-						type="date"
-						bind:value={q4End}
 						class="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
