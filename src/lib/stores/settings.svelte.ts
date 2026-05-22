@@ -48,9 +48,7 @@ class SettingsStore {
 				q2Start: '',
 				q2End: '',
 				q3Start: '',
-				q3End: '',
-				q4Start: '',
-				q4End: ''
+				q3End: ''
 			};
 		} finally {
 			this._loading = false;

@@ -55,6 +55,11 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
         conn.execute("PRAGMA user_version = 6", [])?;
     }
 
+    if user_version < 7 {
+        migrate_to_v7(&conn)?;
+        conn.execute("PRAGMA user_version = 7", [])?;
+    }
+
     Ok(pool)
 }
 
@@ -259,7 +264,7 @@ fn migrate_to_v3(conn: &rusqlite::Connection) -> Result<()> {
 /// Migrate database to version 4 (add quarter dates to settings)
 fn migrate_to_v4(conn: &rusqlite::Connection) -> Result<()> {
     let columns = [
-        "q1_start", "q1_end", "q2_start", "q2_end", "q3_start", "q3_end", "q4_start", "q4_end",
+        "q1_start", "q1_end", "q2_start", "q2_end", "q3_start", "q3_end",
     ];
 
     for col in columns {
@@ -347,6 +352,18 @@ fn migrate_to_v6(conn: &rusqlite::Connection) -> Result<()> {
         let days_json = serde_json::to_string(&days).unwrap_or_else(|_| "[]".to_string());
         conn.execute("UPDATE classes SET days = ?1", params![days_json])?;
     }
+    Ok(())
+}
+
+/// Migrate database to version 7 (limit active quarter to three periods)
+fn migrate_to_v7(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute(
+        "UPDATE settings
+         SET quarter = '3rd Quarter'
+         WHERE quarter NOT IN ('1st Quarter', '2nd Quarter', '3rd Quarter')",
+        [],
+    )?;
+
     Ok(())
 }
 
@@ -768,9 +785,9 @@ impl SettingsRepository {
     /// Get settings
     pub fn get(&self) -> Result<Settings> {
         let conn = self.pool.get()?;
-        let settings = conn
+        let mut settings = conn
             .query_row(
-                "SELECT id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, q4_start, q4_end FROM settings WHERE id = 'app'",
+                "SELECT id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end FROM settings WHERE id = 'app'",
                 [],
                 |row| {
                     Ok(Settings {
@@ -785,22 +802,36 @@ impl SettingsRepository {
                         q2_end: row.get(8)?,
                         q3_start: row.get(9)?,
                         q3_end: row.get(10)?,
-                        q4_start: row.get(11)?,
-                        q4_end: row.get(12)?,
                     })
                 },
             )
-            .optional()?;
+            .optional()?
+            .unwrap_or_default();
 
-        Ok(settings.unwrap_or_default())
+        if !matches!(
+            settings.quarter.as_str(),
+            "1st Quarter" | "2nd Quarter" | "3rd Quarter"
+        ) {
+            settings.quarter = "3rd Quarter".to_string();
+        }
+
+        Ok(settings)
     }
 
     /// Update settings
     pub fn update(&self, settings: Settings) -> Result<Settings> {
+        let mut settings = settings;
+        if !matches!(
+            settings.quarter.as_str(),
+            "1st Quarter" | "2nd Quarter" | "3rd Quarter"
+        ) {
+            settings.quarter = "3rd Quarter".to_string();
+        }
+
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, q4_start, q4_end) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 settings.id,
                 settings.day_start,
@@ -813,8 +844,6 @@ impl SettingsRepository {
                 settings.q2_end,
                 settings.q3_start,
                 settings.q3_end,
-                settings.q4_start,
-                settings.q4_end,
             ],
         )?;
 

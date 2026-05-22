@@ -124,8 +124,6 @@ pub struct Settings {
     pub q2_end: Option<String>,
     pub q3_start: Option<String>,
     pub q3_end: Option<String>,
-    pub q4_start: Option<String>,
-    pub q4_end: Option<String>,
 }
 
 impl Default for Settings {
@@ -142,8 +140,6 @@ impl Default for Settings {
             q2_end: None,
             q3_start: None,
             q3_end: None,
-            q4_start: None,
-            q4_end: None,
         }
     }
 }
