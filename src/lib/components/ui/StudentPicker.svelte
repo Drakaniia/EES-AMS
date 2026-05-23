@@ -75,7 +75,7 @@
 <Dialog
 	{open}
 	title="Select Student"
-	description="Search for a student to filter records or export DTR."
+	description="Search for a student to filter records."
 	on:close={() => (open = false)}
 >
 	<div class="space-y-4">

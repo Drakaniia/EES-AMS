@@ -19,7 +19,6 @@
 	import { page } from '$app/stores';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { exportCsvWithFolder } from '$lib/db-rust';
-	import DTRPreviewModal from '$lib/components/ui/DTRPreviewModal.svelte';
 
 	// ── Types ────────────────────────────────────────────────────────────────
 	type StudentAttendance = {
@@ -57,16 +56,6 @@
 		studentName: string;
 		date: string;
 		events: AttendanceEvent[];
-	} | null>(null);
-
-	// Export Modal
-	let exportModalOpen = $state(false);
-	let exportData = $state<{
-		student: Student;
-		classData?: Class;
-		events: AttendanceEvent[];
-		month: number;
-		year: number;
 	} | null>(null);
 
 	// Pagination
@@ -257,39 +246,6 @@
 		}
 	}
 
-	function onExportExcel() {
-		if (!studentId) {
-			toast('Please select a student first', false);
-			return;
-		}
-
-		const student = studentMap.get(studentId);
-		if (!student) return;
-
-		const classData = student.classId ? classMap.get(student.classId) : undefined;
-
-		// Determine month/year from filters or current date
-		const d = from ? new Date(from) : new Date();
-		const month = d.getMonth() + 1;
-		const year = d.getFullYear();
-
-		// Filter events for this student and month
-		const studentEvents = events.filter((e) => {
-			if (e.studentId !== studentId) return false;
-			const ed = new Date(e.timestamp);
-			return ed.getMonth() + 1 === month && ed.getFullYear() === year;
-		});
-
-		exportData = {
-			student,
-			classData,
-			events: studentEvents,
-			month,
-			year
-		};
-		exportModalOpen = true;
-	}
-
 	function getEventClassName(e: AttendanceEvent) {
 		const id = e.classId || studentMap.get(e.studentId)?.classId;
 		if (!id) return '—';
@@ -315,47 +271,25 @@
 			description="Review and filter historical attendance data for your classes."
 		>
 			{#snippet actions()}
-				<div class="flex items-center gap-2">
-					<button
-						onclick={onExport}
-						class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+				<button
+					onclick={onExport}
+					class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+				>
+					<svg
+						class="size-4"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
 					>
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="7 10 12 15 17 10" />
-							<line x1="12" y1="15" x2="12" y2="3" />
-						</svg>
-						Export CSV
-					</button>
-					<button
-						onclick={onExportExcel}
-						class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
-					>
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="7 10 12 15 17 10" />
-							<line x1="12" y1="15" x2="12" y2="3" />
-						</svg>
-						Export DTR (Excel)
-					</button>
-				</div>
+						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+						<polyline points="7 10 12 15 17 10" />
+						<line x1="12" y1="15" x2="12" y2="3" />
+					</svg>
+					Export CSV
+				</button>
 			{/snippet}
 		</PageHeader>
 
@@ -648,16 +582,4 @@
 			</div>
 		</div>
 	</div>
-{/if}
-
-{#if exportModalOpen && exportData}
-	<DTRPreviewModal
-		open={exportModalOpen}
-		onClose={() => (exportModalOpen = false)}
-		student={exportData.student}
-		classData={exportData.classData}
-		events={exportData.events}
-		month={exportData.month}
-		year={exportData.year}
-	/>
 {/if}
