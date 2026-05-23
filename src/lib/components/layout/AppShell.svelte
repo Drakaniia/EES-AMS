@@ -10,7 +10,7 @@
 			title: 'Main',
 			items: [
 				{ href: '/', label: 'Overview', icon: 'dashboard' },
-				{ href: '/attendance', label: 'Live Session', icon: 'scan' }
+				{ href: '/attendance', label: 'Attendance', icon: 'scan' }
 			]
 		},
 		{
@@ -40,6 +40,9 @@
 	};
 
 	let { children } = $props();
+	const attendanceNavLabel = $derived(
+		settingsStore.settings?.attendanceMode === 'card_reader' ? 'Live Session' : 'Attendance'
+	);
 
 	function isActive(href: string, pathname: string) {
 		return href === '/' ? pathname === '/' : pathname.startsWith(href);
@@ -123,7 +126,7 @@
 								>
 									<path d={iconPaths[item.icon]} />
 								</svg>
-								<span>{item.label}</span>
+								<span>{item.href === '/attendance' ? attendanceNavLabel : item.label}</span>
 							</a>
 						{/each}
 					</div>

@@ -60,6 +60,11 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
         conn.execute("PRAGMA user_version = 7", [])?;
     }
 
+    if user_version < 8 {
+        migrate_to_v8(&conn)?;
+        conn.execute("PRAGMA user_version = 8", [])?;
+    }
+
     Ok(pool)
 }
 
@@ -361,6 +366,34 @@ fn migrate_to_v7(conn: &rusqlite::Connection) -> Result<()> {
         "UPDATE settings
          SET quarter = '3rd Quarter'
          WHERE quarter NOT IN ('1st Quarter', '2nd Quarter', '3rd Quarter')",
+        [],
+    )?;
+
+    Ok(())
+}
+
+/// Migrate database to version 8 (add attendance mode setting)
+fn migrate_to_v8(conn: &rusqlite::Connection) -> Result<()> {
+    let has_attendance_mode: bool = conn
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('settings') WHERE name='attendance_mode'",
+            [],
+            |row| row.get::<_, i32>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !has_attendance_mode {
+        conn.execute(
+            "ALTER TABLE settings ADD COLUMN attendance_mode TEXT NOT NULL DEFAULT 'manual'",
+            [],
+        )?;
+    }
+
+    conn.execute(
+        "UPDATE settings
+         SET attendance_mode = 'manual'
+         WHERE attendance_mode NOT IN ('manual', 'card_reader')",
         [],
     )?;
 
@@ -787,9 +820,10 @@ impl SettingsRepository {
         let conn = self.pool.get()?;
         let mut settings = conn
             .query_row(
-                "SELECT id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end FROM settings WHERE id = 'app'",
+                "SELECT id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode FROM settings WHERE id = 'app'",
                 [],
                 |row| {
+                    let attendance_mode = row.get::<_, String>(11)?;
                     Ok(Settings {
                         id: row.get(0)?,
                         day_start: row.get(1)?,
@@ -802,6 +836,7 @@ impl SettingsRepository {
                         q2_end: row.get(8)?,
                         q3_start: row.get(9)?,
                         q3_end: row.get(10)?,
+                        attendance_mode: AttendanceMode::from_db(&attendance_mode),
                     })
                 },
             )
@@ -814,6 +849,7 @@ impl SettingsRepository {
         ) {
             settings.quarter = "3rd Quarter".to_string();
         }
+        settings.attendance_mode = settings.attendance_mode.normalize();
 
         Ok(settings)
     }
@@ -827,11 +863,12 @@ impl SettingsRepository {
         ) {
             settings.quarter = "3rd Quarter".to_string();
         }
+        settings.attendance_mode = settings.attendance_mode.normalize();
 
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 settings.id,
                 settings.day_start,
@@ -844,6 +881,7 @@ impl SettingsRepository {
                 settings.q2_end,
                 settings.q3_start,
                 settings.q3_end,
+                settings.attendance_mode.as_str(),
             ],
         )?;
 

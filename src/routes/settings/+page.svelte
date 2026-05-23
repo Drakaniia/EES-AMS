@@ -12,6 +12,7 @@
 		exportJsonWithFolder,
 		importAll,
 		wipeAll,
+		type AttendanceMode,
 		type Settings,
 		type Class,
 		type Session
@@ -25,6 +26,7 @@
 	let defaultDayEnd = $state('15:30');
 	let defaultLateAfter = $state('08:45');
 	let defaultQuarter = $state('1st Quarter');
+	let attendanceMode = $state<AttendanceMode>('manual');
 
 	let q1Start = $state('');
 	let q1End = $state('');
@@ -82,6 +84,7 @@
 				defaultDayEnd = settingsStore.settings.dayEnd;
 				defaultLateAfter = settingsStore.settings.lateAfter;
 				defaultQuarter = settingsStore.settings.quarter;
+				attendanceMode = settingsStore.settings.attendanceMode ?? 'manual';
 				q1Start = settingsStore.settings.q1Start ?? '';
 				q1End = settingsStore.settings.q1End ?? '';
 				q2Start = settingsStore.settings.q2Start ?? '';
@@ -105,6 +108,7 @@
 				dayEnd: defaultDayEnd,
 				lateAfter: defaultLateAfter,
 				quarter: defaultQuarter,
+				attendanceMode,
 				q1Start,
 				q1End,
 				q2Start,
@@ -538,11 +542,47 @@
 					class="space-y-5 rounded-2xl border border-border bg-card p-6"
 				>
 					<div class="space-y-1">
-						<h3 class="text-lg font-medium">Global Defaults</h3>
-						<p class="text-xs text-muted-foreground">Used as templates for new classes.</p>
+						<h3 class="text-lg font-medium">Global Configuration</h3>
+						<p class="text-xs text-muted-foreground">
+							Controls attendance flow and templates for new classes.
+						</p>
 					</div>
 
 					<div class="space-y-4">
+						<fieldset class="space-y-2">
+							<legend class="label-mono">Attendance Type</legend>
+							<div class="grid gap-2 rounded-xl border border-border bg-surface p-1">
+								<button
+									type="button"
+									aria-pressed={attendanceMode === 'manual'}
+									onclick={() => (attendanceMode = 'manual')}
+									class="rounded-lg border px-3 py-3 text-left transition-colors {attendanceMode ===
+									'manual'
+										? 'border-primary bg-background shadow-sm'
+										: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
+								>
+									<span class="block text-sm font-semibold">Without card reader</span>
+									<span class="mt-1 block text-xs leading-5">
+										Name-only manual attendance for daily use.
+									</span>
+								</button>
+								<button
+									type="button"
+									aria-pressed={attendanceMode === 'card_reader'}
+									onclick={() => (attendanceMode = 'card_reader')}
+									class="rounded-lg border px-3 py-3 text-left transition-colors {attendanceMode ===
+									'card_reader'
+										? 'border-primary bg-background shadow-sm'
+										: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
+								>
+									<span class="block text-sm font-semibold">With card reader</span>
+									<span class="mt-1 block text-xs leading-5">
+										Live session optimized for ID card taps.
+									</span>
+								</button>
+							</div>
+						</fieldset>
+
 						<div class="space-y-2">
 							<label for="defDayStart" class="label-mono">Default Day Start</label>
 							<input

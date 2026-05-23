@@ -43,6 +43,7 @@ class SettingsStore {
 				dayEnd: '15:30',
 				lateAfter: '08:45',
 				quarter: '1st Quarter',
+				attendanceMode: 'manual',
 				q1Start: '',
 				q1End: '',
 				q2Start: '',

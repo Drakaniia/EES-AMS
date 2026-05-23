@@ -66,6 +66,41 @@ pub enum AttendanceType {
     Out,
 }
 
+/// Attendance interface mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AttendanceMode {
+    #[default]
+    Manual,
+    CardReader,
+    #[serde(other)]
+    Unknown,
+}
+
+impl AttendanceMode {
+    pub fn normalize(self) -> Self {
+        match self {
+            Self::CardReader => Self::CardReader,
+            Self::Manual | Self::Unknown => Self::Manual,
+        }
+    }
+
+    pub fn from_db(value: &str) -> Self {
+        match value {
+            "card_reader" => Self::CardReader,
+            "manual" => Self::Manual,
+            _ => Self::Manual,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self.normalize() {
+            Self::Manual | Self::Unknown => "manual",
+            Self::CardReader => "card_reader",
+        }
+    }
+}
+
 /// Session record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -118,6 +153,8 @@ pub struct Settings {
     pub day_end: String,    // "15:30"
     pub late_after: String, // "08:45"
     pub quarter: String,    // "1st Quarter"
+    #[serde(default)]
+    pub attendance_mode: AttendanceMode,
     pub q1_start: Option<String>,
     pub q1_end: Option<String>,
     pub q2_start: Option<String>,
@@ -134,6 +171,7 @@ impl Default for Settings {
             day_end: "15:30".to_string(),
             late_after: "08:45".to_string(),
             quarter: "1st Quarter".to_string(),
+            attendance_mode: AttendanceMode::Manual,
             q1_start: None,
             q1_end: None,
             q2_start: None,
