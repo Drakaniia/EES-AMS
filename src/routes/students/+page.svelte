@@ -145,31 +145,6 @@
 		}
 	}
 
-	async function exportStudents() {
-		// Simple CSV export for students
-		const headers = ['Name', 'Student Number', 'Class', 'Card Serial', 'Created At'];
-		const rows = students.map((s) => [
-			s.name,
-			displayStudentNumber(s.studentNumber),
-			getClassName(s.classId),
-			s.cardSerial || '',
-			s.createdAt
-		]);
-
-		const csvContent =
-			'data:text/csv;charset=utf-8,' +
-			[headers.join(','), ...rows.map((r) => r.map((cell) => `"${cell}"`).join(','))].join('\n');
-
-		const encodedUri = encodeURI(csvContent);
-		const link = document.createElement('a');
-		link.setAttribute('href', encodedUri);
-		link.setAttribute('download', 'class_list.csv');
-		document.body.appendChild(link);
-		link.click();
-		document.body.removeChild(link);
-		toast('Student list exported');
-	}
-
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
 		reload();
@@ -382,26 +357,6 @@
 						</svg>
 						View Records
 					</a>
-
-					<button
-						onclick={exportStudents}
-						class="inline-flex h-10 items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
-					>
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="7 10 12 15 17 10" />
-							<line x1="12" y1="15" x2="12" y2="3" />
-						</svg>
-						Export CSV
-					</button>
 
 					<button
 						onclick={openAdd}

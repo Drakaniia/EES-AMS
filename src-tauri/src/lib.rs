@@ -15,7 +15,6 @@ use commands::{
     export_all,
     export_csv_with_folder,
     export_database,
-    export_dtr_excel,
     export_json_with_folder,
     find_student_by_card,
     get_class,
@@ -70,7 +69,6 @@ pub fn run() {
             export_database,
             export_json_with_folder,
             export_csv_with_folder,
-            export_dtr_excel,
             import_all,
             wipe_all,
             // Updater commands
