@@ -29,6 +29,7 @@ export interface Class {
 }
 
 export type AttendanceType = 'in' | 'out';
+export type AttendanceMode = 'manual' | 'card_reader';
 
 export interface AttendanceEvent {
 	id: string;
@@ -45,6 +46,7 @@ export interface Settings {
 	dayEnd: string;
 	lateAfter: string;
 	quarter: string;
+	attendanceMode: AttendanceMode;
 	q1Start?: string;
 	q1End?: string;
 	q2Start?: string;

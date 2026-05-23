@@ -1,6 +1,24 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Student, Class, Session, AttendanceEvent, Settings, ExportData } from './types';
-export type { Student, Class, Session, AttendanceEvent, Settings, ExportData };
+import type {
+	Student,
+	Class,
+	Session,
+	AttendanceEvent,
+	AttendanceType,
+	AttendanceMode,
+	Settings,
+	ExportData
+} from './types';
+export type {
+	Student,
+	Class,
+	Session,
+	AttendanceEvent,
+	AttendanceType,
+	AttendanceMode,
+	Settings,
+	ExportData
+};
 
 // ── Student Operations ───────────────────────────────────────────────────────
 
@@ -165,6 +183,7 @@ export async function getSettings(): Promise<Settings> {
 		dayEnd: string;
 		lateAfter: string;
 		quarter: string;
+		attendanceMode?: AttendanceMode;
 		q1Start?: string;
 		q1End?: string;
 		q2Start?: string;
@@ -179,6 +198,7 @@ export async function getSettings(): Promise<Settings> {
 		dayEnd: backendSettings.dayEnd,
 		lateAfter: backendSettings.lateAfter,
 		quarter: backendSettings.quarter,
+		attendanceMode: backendSettings.attendanceMode ?? 'manual',
 		q1Start: backendSettings.q1Start,
 		q1End: backendSettings.q1End,
 		q2Start: backendSettings.q2Start,
@@ -196,6 +216,7 @@ export async function saveSettings(settings: Settings): Promise<Settings> {
 		dayEnd: settings.dayEnd,
 		lateAfter: settings.lateAfter,
 		quarter: settings.quarter,
+		attendanceMode: settings.attendanceMode,
 		q1Start: settings.q1Start,
 		q1End: settings.q1End,
 		q2Start: settings.q2Start,

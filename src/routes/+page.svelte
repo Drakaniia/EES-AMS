@@ -15,6 +15,7 @@
 		type Class
 	} from '$lib/db-rust';
 	import { fmtDate, fmtTime } from '$lib/csv';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
@@ -122,14 +123,14 @@
 		nextClass ? students.filter((s) => s.classId === nextClass.cls.id) : []
 	);
 
-	const dynamicTitle = $derived(() => {
+	const dynamicTitle = $derived.by(() => {
 		if (activeClass) {
 			return `Currently Teaching: ${activeClass.name}`;
 		}
 		return 'Dashboard';
 	});
 
-	const dynamicDescription = $derived(() => {
+	const dynamicDescription = $derived.by(() => {
 		if (activeClass) {
 			return `${activeClass.room ? `Room ${activeClass.room} • ` : ''}${activeClass.dayStart} – ${activeClass.dayEnd} • Session in progress`;
 		}
@@ -138,6 +139,24 @@
 		}
 		return 'No active sessions at the moment. Use this time to prepare or view your schedule.';
 	});
+	const isCardReaderMode = $derived(settingsStore.settings?.attendanceMode === 'card_reader');
+	const attendanceActionLabel = $derived(
+		isCardReaderMode ? 'Start Live Session' : 'Take Attendance'
+	);
+	const attendanceFallbackLabel = $derived(
+		isCardReaderMode ? 'Manual Check-in' : 'Open Attendance'
+	);
+
+	function attendanceHref(
+		classId?: string,
+		manualFallback = false
+	): '/attendance' | `/attendance?${string}` {
+		const params: string[] = [];
+		if (classId) params.push(`classId=${encodeURIComponent(classId)}`);
+		if (manualFallback && isCardReaderMode) params.push('manual=true');
+		const query = params.join('&');
+		return query ? (`/attendance?${query}` as `/attendance?${string}`) : '/attendance';
+	}
 </script>
 
 <svelte:head>
@@ -148,8 +167,8 @@
 <AppShell>
 	<PageHeader
 		category={activeClass ? 'Live' : 'Dashboard'}
-		title={dynamicTitle()}
-		description={dynamicDescription()}
+		title={dynamicTitle}
+		description={dynamicDescription}
 	>
 		{#snippet actions()}
 			<a
@@ -178,14 +197,10 @@
 				Manage students
 			</a>
 			<a
-				href={activeClass
-					? resolve(`/attendance?classId=${activeClass.id}`)
-					: resolve('/attendance')}
+				href={resolve(attendanceHref(activeClass?.id))}
 				onclick={(e) => {
 					e.preventDefault();
-					goto(
-						activeClass ? resolve(`/attendance?classId=${activeClass.id}`) : resolve('/attendance')
-					);
+					goto(resolve(attendanceHref(activeClass?.id)));
 				}}
 				class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 			>
@@ -213,7 +228,7 @@
 					<path d="M7 21H5a2 2 0 0 1-2-2v-2" />
 					<line x1="7" y1="12" x2="17" y2="12" />
 				</svg>
-				Start Attendance
+				{attendanceActionLabel}
 			</a>
 		{/snippet}
 	</PageHeader>
@@ -283,20 +298,22 @@
 					</h3>
 					<span class="label-mono text-xs opacity-60">
 						{activeClass
-							? 'Last tap registered as check-in'
+							? isCardReaderMode
+								? 'Last tap registered as check-in'
+								: 'Latest manual check-in status'
 							: `${nextClassStudents.length} Students`}
 					</span>
 				</div>
 				{#if activeClass}
 					<a
-						href={resolve(`/attendance?classId=${activeClass.id}&manual=true`)}
+						href={resolve(attendanceHref(activeClass.id, true))}
 						onclick={(e) => {
 							e.preventDefault();
-							goto(resolve(`/attendance?classId=${activeClass.id}&manual=true`));
+							goto(resolve(attendanceHref(activeClass.id, true)));
 						}}
 						class="inline-flex h-8 items-center gap-1.5 rounded-pill border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-surface"
 					>
-						Manual Check-in
+						{attendanceFallbackLabel}
 					</a>
 				{/if}
 			</div>

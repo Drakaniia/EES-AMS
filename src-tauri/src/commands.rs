@@ -700,7 +700,7 @@ pub fn wipe_all(
 
     // Re-insert default settings
     conn.execute(
-        "INSERT OR IGNORE INTO settings (id, day_start, day_end, late_after) VALUES ('app', '08:30', '15:30', '08:45')",
+        "INSERT OR IGNORE INTO settings (id, day_start, day_end, late_after, quarter, attendance_mode) VALUES ('app', '08:30', '15:30', '08:45', '1st Quarter', 'manual')",
         []
     ).map_err(|e| e.to_string())?;
 
