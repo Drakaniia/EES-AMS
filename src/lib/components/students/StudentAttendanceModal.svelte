@@ -142,7 +142,7 @@
 <Dialog
 	{open}
 	title="Student Attendance Record"
-	description={student ? `${student.name} (${student.studentNumber})` : ''}
+	description={student?.name ?? ''}
 	maxWidth="lg"
 	on:close={onClose}
 >

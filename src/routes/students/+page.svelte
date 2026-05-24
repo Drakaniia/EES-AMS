@@ -19,7 +19,7 @@
 	let classes = $state<Class[]>([]);
 	let selectedClassId = $state<string>('');
 	let searchTerms = $state('');
-	let sortBy = $state<'name' | 'number' | 'date'>('name');
+	let sortBy = $state<'name' | 'date'>('name');
 	let sortOrder = $state<'asc' | 'desc'>('asc');
 
 	let dialogOpen = $state(false);
@@ -30,7 +30,6 @@
 
 	let entryMode = $state<'single' | 'bulk'>('single');
 	let formName = $state('');
-	let formStudentNumber = $state('');
 	let formCardSerial = $state('');
 	let formClassId = $state('');
 	let bulkStudentNames = $state('');
@@ -77,9 +76,7 @@
 		// Search
 		if (searchTerms.trim()) {
 			const term = searchTerms.toLowerCase();
-			result = result.filter(
-				(s) => s.name.toLowerCase().includes(term) || s.studentNumber.toLowerCase().includes(term)
-			);
+			result = result.filter((s) => s.name.toLowerCase().includes(term));
 		}
 
 		// Sort
@@ -90,9 +87,6 @@
 			if (sortBy === 'name') {
 				valA = a.name;
 				valB = b.name;
-			} else if (sortBy === 'number') {
-				valA = a.studentNumber;
-				valB = b.studentNumber;
 			} else if (sortBy === 'date') {
 				valA = a.createdAt;
 				valB = b.createdAt;
@@ -162,7 +156,6 @@
 		editing = null;
 		entryMode = 'single';
 		formName = '';
-		formStudentNumber = '';
 		formCardSerial = '';
 		formClassId = selectedClassId || (classes.length > 0 ? classes[0].id : '');
 		bulkStudentNames = '';
@@ -173,7 +166,6 @@
 		editing = s;
 		entryMode = 'single';
 		formName = s.name;
-		formStudentNumber = isGeneratedStudentNumber(s.studentNumber) ? '' : s.studentNumber;
 		formCardSerial = s.cardSerial ?? '';
 		formClassId = s.classId ?? '';
 		bulkStudentNames = '';
@@ -190,29 +182,11 @@
 		editing = null;
 	}
 
-	function isGeneratedStudentNumber(value: string) {
-		return value.startsWith('temp-');
-	}
-
-	function displayStudentNumber(value: string) {
-		return isGeneratedStudentNumber(value) ? '—' : value;
-	}
-
-	function makeStudentNumber(value: string) {
-		return value.trim() || `temp-${crypto.randomUUID()}`;
-	}
-
-	function createStudent(
-		name: string,
-		studentNumber: string,
-		classId: string,
-		cardSerial?: string
-	): Student {
+	function createStudent(name: string, classId: string, cardSerial?: string): Student {
 		return {
 			id: '',
 			createdAt: new Date().toISOString(),
 			name,
-			studentNumber: makeStudentNumber(studentNumber),
 			cardSerial: cardSerial || undefined,
 			classId: classId || undefined
 		};
@@ -221,7 +195,6 @@
 	async function onSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		const name = formName.trim();
-		const num = formStudentNumber.trim();
 		const serial = formCardSerial.trim().toLowerCase();
 		const classId = formClassId;
 
@@ -233,7 +206,7 @@
 
 			try {
 				for (const bulkName of bulkNames) {
-					await saveStudent(createStudent(bulkName, '', classId));
+					await saveStudent(createStudent(bulkName, classId));
 				}
 				toast(`${bulkNames.length} ${bulkNames.length === 1 ? 'student' : 'students'} added`);
 				closeDialog();
@@ -250,27 +223,15 @@
 			return;
 		}
 
-		// Check for duplicate student number only when one is provided.
-		if (num && !editing) {
-			const existingStudent = students.find((s) => s.studentNumber === num);
-			if (existingStudent) {
-				toast(
-					`Student number "${num}" already exists for ${existingStudent.name}. Please use a different number.`
-				);
-				return;
-			}
-		}
-
 		try {
 			const studentData: Student = editing
 				? {
 						...editing,
 						name,
-						studentNumber: makeStudentNumber(num),
 						cardSerial: serial || undefined,
 						classId: classId || undefined
 					}
-				: createStudent(name, num, classId, serial);
+				: createStudent(name, classId, serial);
 
 			await saveStudent(studentData);
 			toast(editing ? 'Student updated' : 'Student added');
@@ -280,10 +241,7 @@
 			console.error('Error saving student:', error);
 			const msg = error instanceof Error ? error.message : 'Failed to save student';
 
-			// Check for common database errors
-			if (msg.includes('UNIQUE constraint failed') && msg.includes('student_number')) {
-				toast('Student number already exists. Please use a different student number.');
-			} else if (msg.includes('UNIQUE constraint failed') && msg.includes('card_serial')) {
+			if (msg.includes('UNIQUE constraint failed') && msg.includes('card_serial')) {
 				toast('Card serial already registered to another student.');
 			} else {
 				toast(`Error: ${msg}`);
@@ -324,7 +282,7 @@
 
 <svelte:head>
 	<title>Students — Attendance System</title>
-	<meta name="description" content="Manage students and their ID cards." />
+	<meta name="description" content="Manage students and their attendance cards." />
 </svelte:head>
 
 <AppShell>
@@ -332,7 +290,7 @@
 		<PageHeader
 			category="Students"
 			title="Class List"
-			description="Manage your student list and their identification cards."
+			description="Manage your student list and class assignments."
 		>
 			{#snippet actions()}
 				<div class="flex items-center gap-3">
@@ -400,7 +358,7 @@
 					<input
 						type="text"
 						bind:value={searchTerms}
-						placeholder="Name or student number…"
+						placeholder="Search by name..."
 						class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 					/>
 				</div>
@@ -460,25 +418,6 @@
 										{/if}
 									</button>
 								</th>
-								<th class="label-mono px-4 py-3">
-									<button
-										onclick={() => toggleSort('number')}
-										class="inline-flex items-center gap-1 transition-colors hover:text-primary"
-									>
-										Student #
-										{#if sortBy === 'number'}
-											<svg
-												class="size-3"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-											>
-												<path d={sortOrder === 'asc' ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'} />
-											</svg>
-										{/if}
-									</button>
-								</th>
 								<th class="label-mono px-4 py-3">Class</th>
 								<th class="label-mono px-4 py-3">Card</th>
 								<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
@@ -508,7 +447,6 @@
 											</svg>
 										</button>
 									</td>
-									{@render td(displayStudentNumber(s.studentNumber), 'font-mono')}
 									<td class="px-4 py-3">
 										<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs">
 											{getClassName(s.classId)}
@@ -722,27 +660,18 @@
 							class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
 						></textarea>
 						<p class="text-xs text-muted-foreground">
-							Each new line creates one student. Student numbers and cards can be added later.
+							Each new line creates one student. Cards can be paired later.
 						</p>
 					</div>
 				{:else}
 					<div class="grid gap-4 sm:grid-cols-2">
-						<div class="space-y-1.5 sm:col-span-2">
+						<div class="space-y-1.5">
 							<label for="field-name" class="label-mono">Full name</label>
 							<input
 								id="field-name"
 								bind:value={formName}
 								required
 								placeholder="Student full name"
-								class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-							/>
-						</div>
-						<div class="space-y-1.5">
-							<label for="field-number" class="label-mono">Student number (optional)</label>
-							<input
-								id="field-number"
-								bind:value={formStudentNumber}
-								placeholder="Add later"
 								class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 							/>
 						</div>
@@ -929,8 +858,4 @@
 			{/if}
 		</p>
 	</div>
-{/snippet}
-
-{#snippet td(value: string, extraClass?: string)}
-	<td class="px-4 py-3 {extraClass ?? ''}">{value}</td>
 {/snippet}
