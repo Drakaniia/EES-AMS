@@ -1,12 +1,15 @@
 mod commands;
 mod domain;
 mod infrastructure;
+pub mod sf2;
 
 use commands::{
     add_event,
     // Updater commands
     check_for_updates,
+    close_sf2_attendance_day,
     create_class,
+    create_sf2_workbook_from_template,
     create_student,
     delete_class,
     delete_event,
@@ -16,12 +19,16 @@ use commands::{
     export_csv_with_folder,
     export_database,
     export_json_with_folder,
+    export_sf2_workbook,
     find_student_by_card,
     get_class,
     // Settings commands
     get_settings,
+    get_sf2_export_readiness,
+    get_sf2_workbook_settings,
     get_student,
     import_all,
+    import_sf2_workbook,
     last_event_for_student,
     // Class commands
     list_classes,
@@ -30,8 +37,10 @@ use commands::{
     list_events_for_student,
     // Student commands
     list_students,
+    open_sf2_workbook,
     save_settings,
     update_class,
+    update_sf2_workbook_settings,
     update_student,
     wipe_all,
 };
@@ -71,6 +80,14 @@ pub fn run() {
             export_csv_with_folder,
             import_all,
             wipe_all,
+            import_sf2_workbook,
+            create_sf2_workbook_from_template,
+            get_sf2_workbook_settings,
+            update_sf2_workbook_settings,
+            close_sf2_attendance_day,
+            get_sf2_export_readiness,
+            export_sf2_workbook,
+            open_sf2_workbook,
             // Updater commands
             check_for_updates,
             download_and_install,

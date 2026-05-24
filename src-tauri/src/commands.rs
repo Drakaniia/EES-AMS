@@ -3,6 +3,11 @@ use crate::domain::models::*;
 use crate::infrastructure::database::{
     ClassRepository, EventRepository, SettingsRepository, StudentRepository,
 };
+use crate::sf2::models::{
+    Sf2CloseDaySummary, Sf2ExportReadiness, Sf2ExportResult, Sf2ImportSummary, Sf2TemplateDraft,
+    Sf2WorkbookSettings,
+};
+use crate::sf2::service;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use serde::Serialize;
@@ -240,7 +245,6 @@ pub fn import_all(
     for student in payload.students {
         let req = CreateStudentRequest {
             name: student.name,
-            student_number: student.student_number,
             card_serial: student.card_serial,
             class_id: student.class_id,
         };
@@ -392,7 +396,7 @@ pub async fn export_csv_with_folder(
     let mut csv_content = String::new();
 
     // Header
-    csv_content.push_str("Date,Class,Room,Student #,Name,Check-in,Check-out,Hours,Late\n");
+    csv_content.push_str("Date,Class,Room,Name,IN,Late\n");
 
     // Group events by student and date
     use std::collections::HashMap;
@@ -419,71 +423,53 @@ pub async fn export_csv_with_folder(
         events.sort_by_key(|a| a.timestamp);
 
         let mut check_in_time: Option<String> = None;
-        let mut check_out_time: Option<String> = None;
-        let mut duration_hours = String::new();
         let mut is_late = String::new();
 
         for event in &*events {
             let time_str = event.timestamp.format("%H:%M").to_string();
 
-            if event.event_type == AttendanceType::In {
-                if check_in_time.is_none() || time_str < *check_in_time.as_ref().unwrap() {
-                    check_in_time = Some(time_str.clone());
+            if check_in_time.is_none() || time_str < *check_in_time.as_ref().unwrap() {
+                check_in_time = Some(time_str.clone());
 
-                    // Check if late
-                    if let Some(class) = student.class_id.as_ref().and_then(|id| class_map.get(id))
-                    {
-                        let event_time = event
-                            .timestamp
-                            .with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
+                // Check if late
+                if let Some(class) = student.class_id.as_ref().and_then(|id| class_map.get(id)) {
+                    let event_time = event
+                        .timestamp
+                        .with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
 
-                        // Find matching session or use default
-                        let mut late_after = &class.late_after;
-                        let time_str = event_time.format("%H:%M").to_string();
+                    // Find matching session or use default
+                    let mut late_after = &class.late_after;
+                    let time_str = event_time.format("%H:%M").to_string();
 
-                        for session in &class.sessions {
-                            if time_str >= session.start_time && time_str <= session.end_time {
-                                late_after = &session.late_after;
-                                break;
-                            }
-                        }
-
-                        let parts: Vec<&str> = late_after.split(':').collect();
-                        let [h, m] = [
-                            parts
-                                .first()
-                                .and_then(|s| s.parse::<u32>().ok())
-                                .unwrap_or(0),
-                            parts
-                                .get(1)
-                                .and_then(|s| s.parse::<u32>().ok())
-                                .unwrap_or(0),
-                        ];
-                        let late_time = event_time
-                            .date_naive()
-                            .and_hms_opt(h, m, 0)
-                            .ok_or("Invalid time")?
-                            .and_utc();
-                        if event_time > late_time {
-                            is_late = "Yes".to_string();
-                        } else {
-                            is_late = "No".to_string();
+                    for session in &class.sessions {
+                        if time_str >= session.start_time && time_str <= session.end_time {
+                            late_after = &session.late_after;
+                            break;
                         }
                     }
-                }
-            } else if event.event_type == AttendanceType::Out {
-                check_out_time = Some(time_str.clone());
-            }
-        }
 
-        // Calculate duration
-        if let (Some(check_in), Some(check_out)) = (&check_in_time, &check_out_time) {
-            if let (Ok(in_time), Ok(out_time)) = (
-                chrono::NaiveTime::parse_from_str(check_in, "%H:%M"),
-                chrono::NaiveTime::parse_from_str(check_out, "%H:%M"),
-            ) {
-                let duration = out_time.signed_duration_since(in_time);
-                duration_hours = format!("{:.2}", duration.num_seconds() as f64 / 3600.0);
+                    let parts: Vec<&str> = late_after.split(':').collect();
+                    let [h, m] = [
+                        parts
+                            .first()
+                            .and_then(|s| s.parse::<u32>().ok())
+                            .unwrap_or(0),
+                        parts
+                            .get(1)
+                            .and_then(|s| s.parse::<u32>().ok())
+                            .unwrap_or(0),
+                    ];
+                    let late_time = event_time
+                        .date_naive()
+                        .and_hms_opt(h, m, 0)
+                        .ok_or("Invalid time")?
+                        .and_utc();
+                    if event_time > late_time {
+                        is_late = "Yes".to_string();
+                    } else {
+                        is_late = "No".to_string();
+                    }
+                }
             }
         }
 
@@ -506,18 +492,17 @@ pub async fn export_csv_with_folder(
             .map(|e| e.timestamp.format("%Y-%m-%d").to_string())
             .unwrap_or_default();
 
-        csv_content.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{}\n",
-            date,
-            class_name,
-            room_name,
-            student.student_number,
-            student.name,
-            check_in_time.unwrap_or_default(),
-            check_out_time.unwrap_or_default(),
-            duration_hours,
-            is_late
-        ));
+        push_csv_row(
+            &mut csv_content,
+            &[
+                date,
+                class_name.to_string(),
+                room_name.to_string(),
+                student.name.clone(),
+                check_in_time.unwrap_or_default(),
+                is_late,
+            ],
+        );
     }
 
     // Show save dialog to let user choose location and filename
@@ -548,6 +533,94 @@ pub async fn export_csv_with_folder(
     fs::write(&file_path_buf, csv_content).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(file_path_buf.to_string_lossy().to_string())
+}
+
+// ── SF2 Excel Bridge Commands ───────────────────────────────────────────────
+
+fn push_csv_row(output: &mut String, fields: &[String]) {
+    let row = fields
+        .iter()
+        .map(|field| escape_csv_field(field))
+        .collect::<Vec<_>>()
+        .join(",");
+    output.push_str(&row);
+    output.push('\n');
+}
+
+fn escape_csv_field(value: &str) -> String {
+    if value.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+#[tauri::command]
+pub async fn import_sf2_workbook(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+) -> std::result::Result<Sf2ImportSummary, String> {
+    service::import_workbook(app, pool.inner().clone()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn create_sf2_workbook_from_template(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    draft: Sf2TemplateDraft,
+) -> std::result::Result<Sf2ImportSummary, String> {
+    service::create_workbook_from_template(app, pool.inner().clone(), draft)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_sf2_workbook_settings(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: Option<String>,
+) -> std::result::Result<Sf2WorkbookSettings, String> {
+    service::workbook_settings(pool.inner().clone(), class_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_sf2_workbook_settings(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    draft: Sf2TemplateDraft,
+) -> std::result::Result<Sf2ImportSummary, String> {
+    service::update_workbook_settings(pool.inner().clone(), draft).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn close_sf2_attendance_day(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: String,
+    date: Option<String>,
+) -> std::result::Result<Sf2CloseDaySummary, String> {
+    service::close_day(pool.inner().clone(), class_id, date).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_sf2_export_readiness(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: Option<String>,
+) -> std::result::Result<Sf2ExportReadiness, String> {
+    service::export_readiness(pool.inner().clone(), class_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn export_sf2_workbook(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: String,
+) -> std::result::Result<Sf2ExportResult, String> {
+    service::export_workbook(app, pool.inner().clone(), class_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_sf2_workbook(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: Option<String>,
+) -> std::result::Result<String, String> {
+    service::open_workbook(pool.inner().clone(), class_id).map_err(|e| e.to_string())
 }
 
 // ── Updater Commands ───────────────────────────────────────────────────────
