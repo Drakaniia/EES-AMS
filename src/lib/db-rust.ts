@@ -7,7 +7,13 @@ import type {
 	AttendanceType,
 	AttendanceMode,
 	Settings,
-	ExportData
+	ExportData,
+	Sf2ImportSummary,
+	Sf2TemplateDraft,
+	Sf2WorkbookSettings,
+	Sf2CloseDaySummary,
+	Sf2ExportReadiness,
+	Sf2ExportResult
 } from './types';
 export type {
 	Student,
@@ -17,7 +23,13 @@ export type {
 	AttendanceType,
 	AttendanceMode,
 	Settings,
-	ExportData
+	ExportData,
+	Sf2ImportSummary,
+	Sf2TemplateDraft,
+	Sf2WorkbookSettings,
+	Sf2CloseDaySummary,
+	Sf2ExportReadiness,
+	Sf2ExportResult
 };
 
 // ── Student Operations ───────────────────────────────────────────────────────
@@ -40,7 +52,6 @@ export async function saveStudent(student: Student): Promise<Student> {
 			id: student.id,
 			req: {
 				name: student.name,
-				studentNumber: student.studentNumber,
 				cardSerial: student.cardSerial,
 				classId: student.classId
 			}
@@ -49,7 +60,6 @@ export async function saveStudent(student: Student): Promise<Student> {
 		return await invoke('create_student', {
 			req: {
 				name: student.name,
-				studentNumber: student.studentNumber,
 				cardSerial: student.cardSerial,
 				classId: student.classId
 			}
@@ -261,6 +271,47 @@ export async function importAll(payload: ExportData): Promise<void> {
 
 export async function wipeAll(): Promise<void> {
 	return await invoke('wipe_all');
+}
+
+// ── SF2 Excel Bridge Operations ─────────────────────────────────────────────
+
+export async function importSf2Workbook(): Promise<Sf2ImportSummary> {
+	return await invoke('import_sf2_workbook');
+}
+
+export async function createSf2WorkbookFromTemplate(
+	draft: Sf2TemplateDraft
+): Promise<Sf2ImportSummary> {
+	return await invoke('create_sf2_workbook_from_template', { draft });
+}
+
+export async function getSf2WorkbookSettings(classId?: string): Promise<Sf2WorkbookSettings> {
+	return await invoke('get_sf2_workbook_settings', { classId: classId || null });
+}
+
+export async function updateSf2WorkbookSettings(
+	draft: Sf2TemplateDraft
+): Promise<Sf2ImportSummary> {
+	return await invoke('update_sf2_workbook_settings', { draft });
+}
+
+export async function closeSf2AttendanceDay(
+	classId: string,
+	date?: string
+): Promise<Sf2CloseDaySummary> {
+	return await invoke('close_sf2_attendance_day', { classId, date });
+}
+
+export async function getSf2ExportReadiness(classId?: string): Promise<Sf2ExportReadiness> {
+	return await invoke('get_sf2_export_readiness', { classId: classId || null });
+}
+
+export async function exportSf2Workbook(classId: string): Promise<Sf2ExportResult> {
+	return await invoke('export_sf2_workbook', { classId });
+}
+
+export async function openSf2Workbook(classId?: string): Promise<string> {
+	return await invoke('open_sf2_workbook', { classId: classId || null });
 }
 
 // ── Utility Functions ───────────────────────────────────────────────────────

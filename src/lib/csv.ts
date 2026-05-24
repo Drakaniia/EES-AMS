@@ -30,7 +30,7 @@ export function eventsToCSV(
 	const byClass = new Map(classes.map((c) => [c.id, c]));
 	const groups = new Map<
 		string,
-		{ student: Student; date: string; ins: number[]; outs: number[]; classId?: string }
+		{ student: Student; date: string; ins: number[]; classId?: string }
 	>();
 
 	for (const e of events) {
@@ -40,13 +40,12 @@ export function eventsToCSV(
 		const key = `${student.id}|${date}`;
 		let g = groups.get(key);
 		if (!g) {
-			g = { student, date, ins: [], outs: [], classId: e.classId || student.classId };
+			g = { student, date, ins: [], classId: e.classId || student.classId };
 			groups.set(key, g);
 		}
 		const timestamp =
 			typeof e.timestamp === 'string' ? new Date(e.timestamp).getTime() : e.timestamp;
-		if (e.type === 'in') g.ins.push(timestamp);
-		else g.outs.push(timestamp);
+		g.ins.push(timestamp);
 	}
 
 	const rows = [...groups.values()]
@@ -57,11 +56,6 @@ export function eventsToCSV(
 		)
 		.map((g) => {
 			const checkIn = g.ins.length ? Math.min(...g.ins) : null;
-			const checkOut = g.outs.length ? Math.max(...g.outs) : null;
-			const duration =
-				checkIn && checkOut && checkOut > checkIn
-					? ((checkOut - checkIn) / 3600000).toFixed(2)
-					: '';
 
 			const cls = g.classId ? byClass.get(g.classId) : null;
 			const lateThreshold = cls?.lateAfter || globalLateAfter;
@@ -71,16 +65,13 @@ export function eventsToCSV(
 			return [
 				g.date,
 				cls?.name || 'Unknown',
-				g.student.studentNumber,
 				g.student.name,
 				checkIn ? fmtTime(checkIn) : '',
-				checkOut ? fmtTime(checkOut) : '',
-				duration,
 				late
 			];
 		});
 
-	const header = ['Date', 'Class', 'Student #', 'Name', 'Check-in', 'Check-out', 'Hours', 'Late'];
+	const header = ['Date', 'Class', 'Name', 'IN', 'Late'];
 	return [header, ...rows].map((r) => r.map(escape).join(',')).join('\n');
 }
 
