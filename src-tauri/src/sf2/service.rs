@@ -195,6 +195,7 @@ pub fn create_workbook_from_template(
 
     excel::write_metadata(&working_copy_path, &metadata)?;
     let analysis = excel::analyze_workbook(&working_copy_path)?;
+    validate_configured_calendar(&analysis, &metadata)?;
     let layout_fingerprint = layout_fingerprint(&analysis);
     let roster_marks = roster_name_marks(&analysis, &students, &row_slots);
     excel::write_marks(&working_copy_path, &roster_marks)?;
@@ -345,6 +346,7 @@ pub fn update_workbook_settings(pool: DbPool, draft: Sf2TemplateDraft) -> Result
 
     excel::write_metadata(&workbook_path, &metadata)?;
     let analysis = excel::analyze_workbook(&workbook_path)?;
+    validate_configured_calendar(&analysis, &metadata)?;
     let layout_fingerprint = layout_fingerprint(&analysis);
     let roster_marks = roster_name_marks(&analysis, &students, &row_slots);
     excel::write_marks(&workbook_path, &roster_marks)?;
@@ -712,17 +714,22 @@ fn metadata_from_analysis(analysis: &Sf2WorkbookAnalysis) -> Sf2WorkbookMetadata
 }
 
 fn metadata_from_draft(draft: &Sf2TemplateDraft) -> Result<Sf2WorkbookMetadata> {
+    let school_year = required_draft_text(&draft.school_year, "School Year")?;
+    let report_month = required_draft_text(&draft.report_month, "Report Month")?;
+    let first_school_day =
+        required_first_school_day(draft.first_school_day, &report_month, &school_year)?;
+
     Ok(Sf2WorkbookMetadata {
         school_id: required_draft_text(&draft.school_id, "School ID")?,
         school_name: required_draft_text(&draft.school_name, "Name of School")?,
-        school_year: required_draft_text(&draft.school_year, "School Year")?,
-        report_month: required_draft_text(&draft.report_month, "Report Month")?,
+        school_year,
+        report_month,
         grade_level: required_draft_text(&draft.grade_level, "Grade Level")?,
         section: required_draft_text(&draft.section, "Section")?,
         adviser_name: required_draft_text(&draft.adviser_name, "Adviser / LIS Name")?,
         school_head_name: required_draft_text(&draft.school_head_name, "School Head Name")?,
         configure_calendar: true,
-        first_school_day: draft.first_school_day,
+        first_school_day: Some(first_school_day),
     })
 }
 
@@ -732,6 +739,131 @@ fn required_draft_text(value: &str, label: &str) -> Result<String> {
         return Err(AppError::InvalidInput(format!("{label} is required")));
     }
     Ok(trimmed.to_string())
+}
+
+fn required_first_school_day(
+    day: Option<u32>,
+    report_month: &str,
+    school_year: &str,
+) -> Result<u32> {
+    let day = day.ok_or_else(|| {
+        AppError::InvalidInput("First attendance day is required for SF2 templates".to_string())
+    })?;
+    validate_first_school_day(day, report_month, school_year)?;
+    Ok(day)
+}
+
+fn validate_first_school_day(day: u32, report_month: &str, school_year: &str) -> Result<()> {
+    let month = sf2_month_number(report_month).ok_or_else(|| {
+        AppError::InvalidInput("Report Month must be a valid month name".to_string())
+    })?;
+    let year = sf2_report_year(school_year, month);
+    let date = NaiveDate::from_ymd_opt(year, month, day).ok_or_else(|| {
+        let last_day = last_day_of_month(year, month);
+        AppError::InvalidInput(format!(
+            "First attendance day must be between 1 and {last_day} for this report month"
+        ))
+    })?;
+
+    if date.weekday().number_from_monday() > 5 {
+        return Err(AppError::InvalidInput(
+            "First attendance day must be a Monday-Friday school day".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_configured_calendar(
+    analysis: &Sf2WorkbookAnalysis,
+    metadata: &Sf2WorkbookMetadata,
+) -> Result<()> {
+    if !metadata.configure_calendar {
+        return Ok(());
+    }
+
+    let expected_day = metadata.first_school_day.ok_or_else(|| {
+        AppError::InvalidInput("First attendance day is required for SF2 templates".to_string())
+    })?;
+    let month = sf2_month_number(&metadata.report_month).ok_or_else(|| {
+        AppError::InvalidInput("Report Month must be a valid month name".to_string())
+    })?;
+    let year = sf2_report_year(&metadata.school_year, month);
+    let detected_day = analysis
+        .dates
+        .iter()
+        .filter_map(|mapping| parse_date(&mapping.date).ok())
+        .filter(|date| date.year() == year && date.month() == month)
+        .map(|date| date.day())
+        .min();
+
+    match detected_day {
+        Some(actual_day) if actual_day == expected_day => Ok(()),
+        Some(actual_day) => Err(AppError::Internal(format!(
+            "SF2 calendar was not configured correctly: expected first attendance day {expected_day}, but the workbook starts at day {actual_day}"
+        ))),
+        None => Err(AppError::Internal(
+            "SF2 calendar was not configured correctly: no attendance dates were detected"
+                .to_string(),
+        )),
+    }
+}
+
+fn sf2_month_number(name: &str) -> Option<u32> {
+    let normalized = name.trim().to_ascii_uppercase();
+    if normalized.contains("JAN") {
+        Some(1)
+    } else if normalized.contains("FEB") {
+        Some(2)
+    } else if normalized.contains("MAR") {
+        Some(3)
+    } else if normalized.contains("APR") {
+        Some(4)
+    } else if normalized.contains("MAY") {
+        Some(5)
+    } else if normalized.contains("JUN") {
+        Some(6)
+    } else if normalized.contains("JUL") {
+        Some(7)
+    } else if normalized.contains("AUG") {
+        Some(8)
+    } else if normalized.contains("SEP") {
+        Some(9)
+    } else if normalized.contains("OCT") {
+        Some(10)
+    } else if normalized.contains("NOV") {
+        Some(11)
+    } else if normalized.contains("DEC") {
+        Some(12)
+    } else {
+        None
+    }
+}
+
+fn sf2_report_year(school_year: &str, month: u32) -> i32 {
+    let years = school_year
+        .split(|ch: char| !ch.is_ascii_digit())
+        .filter(|part| part.len() == 4 && part.starts_with("20"))
+        .filter_map(|part| part.parse::<i32>().ok())
+        .collect::<Vec<_>>();
+
+    match years.as_slice() {
+        [start, _, ..] if month >= 6 => *start,
+        [_, end, ..] => *end,
+        _ => Local::now().year(),
+    }
+}
+
+fn last_day_of_month(year: i32, month: u32) -> u32 {
+    let (next_year, next_month) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
+    NaiveDate::from_ymd_opt(next_year, next_month, 1)
+        .and_then(|date| date.pred_opt())
+        .map(|date| date.day())
+        .unwrap_or(31)
 }
 
 fn template_metadata(template: &Sf2TemplateRecord) -> Sf2WorkbookMetadata {
@@ -1227,6 +1359,104 @@ fn layout_fingerprint(analysis: &crate::sf2::models::Sf2WorkbookAnalysis) -> Str
         bytes.extend_from_slice(date.column_letter.as_bytes());
     }
     hash_bytes(&bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sf2::models::{Sf2WorkbookDate, Sf2WorkbookLearner, Sf2WorkbookSheet};
+
+    fn template_draft(first_school_day: Option<u32>) -> Sf2TemplateDraft {
+        Sf2TemplateDraft {
+            class_id: Some("class-1".to_string()),
+            school_id: "123456".to_string(),
+            school_name: "Sample School".to_string(),
+            school_year: "2026-2027".to_string(),
+            report_month: "JUNE".to_string(),
+            grade_level: "11".to_string(),
+            section: "A".to_string(),
+            adviser_name: "Adviser".to_string(),
+            school_head_name: "Head".to_string(),
+            first_school_day,
+            learner_names: Vec::new(),
+        }
+    }
+
+    fn workbook_analysis_with_dates(dates: &[&str]) -> Sf2WorkbookAnalysis {
+        Sf2WorkbookAnalysis {
+            file_format: 56,
+            has_vb_project: false,
+            school_id: String::new(),
+            school_name: String::new(),
+            school_year: "2026-2027".to_string(),
+            report_month: "JUNE".to_string(),
+            grade_level: "11".to_string(),
+            section: "A".to_string(),
+            adviser_name: String::new(),
+            school_head_name: String::new(),
+            learners: Vec::<Sf2WorkbookLearner>::new(),
+            dates: dates
+                .iter()
+                .enumerate()
+                .map(|(index, date)| Sf2WorkbookDate {
+                    sheet_name: "JUNE 2026".to_string(),
+                    date: (*date).to_string(),
+                    column_letter: "F".to_string(),
+                    column_index: 6 + index as u32,
+                })
+                .collect(),
+            sheets: vec![Sf2WorkbookSheet {
+                name: "JUNE 2026".to_string(),
+                visible: -1,
+                used_range: "A1:AP82".to_string(),
+            }],
+        }
+    }
+
+    #[test]
+    fn metadata_from_draft_requires_first_attendance_day() {
+        let error = metadata_from_draft(&template_draft(None)).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("First attendance day is required"));
+    }
+
+    #[test]
+    fn metadata_from_draft_rejects_weekend_first_attendance_day() {
+        let error = metadata_from_draft(&template_draft(Some(7))).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("must be a Monday-Friday school day"));
+    }
+
+    #[test]
+    fn metadata_from_draft_accepts_selected_monday_first_attendance_day() {
+        let metadata = metadata_from_draft(&template_draft(Some(8))).unwrap();
+
+        assert_eq!(metadata.first_school_day, Some(8));
+    }
+
+    #[test]
+    fn configured_calendar_validation_rejects_detected_day_one() {
+        let metadata = metadata_from_draft(&template_draft(Some(8))).unwrap();
+        let analysis = workbook_analysis_with_dates(&["2026-06-01", "2026-06-02"]);
+
+        let error = validate_configured_calendar(&analysis, &metadata).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("expected first attendance day 8"));
+    }
+
+    #[test]
+    fn configured_calendar_validation_accepts_detected_day_eight() {
+        let metadata = metadata_from_draft(&template_draft(Some(8))).unwrap();
+        let analysis = workbook_analysis_with_dates(&["2026-06-08", "2026-06-09"]);
+
+        validate_configured_calendar(&analysis, &metadata).unwrap();
+    }
 }
 
 fn hash_bytes(bytes: &[u8]) -> String {
