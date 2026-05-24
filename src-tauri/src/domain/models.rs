@@ -50,7 +50,6 @@ impl Default for EventId {
 pub struct Student {
     pub id: StudentId,
     pub name: String,
-    pub student_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card_serial: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -63,7 +62,6 @@ pub struct Student {
 #[serde(rename_all = "lowercase")]
 pub enum AttendanceType {
     In,
-    Out,
 }
 
 /// Attendance interface mode
@@ -161,6 +159,14 @@ pub struct Settings {
     pub q2_end: Option<String>,
     pub q3_start: Option<String>,
     pub q3_end: Option<String>,
+    pub school_id: Option<String>,
+    pub school_name: Option<String>,
+    pub school_year: Option<String>,
+    pub report_month: Option<String>,
+    pub grade_level: Option<String>,
+    pub section: Option<String>,
+    pub adviser_name: Option<String>,
+    pub school_head_name: Option<String>,
 }
 
 impl Default for Settings {
@@ -178,6 +184,14 @@ impl Default for Settings {
             q2_end: None,
             q3_start: None,
             q3_end: None,
+            school_id: None,
+            school_name: None,
+            school_year: None,
+            report_month: None,
+            grade_level: None,
+            section: None,
+            adviser_name: None,
+            school_head_name: None,
         }
     }
 }
@@ -187,7 +201,6 @@ impl Default for Settings {
 #[serde(rename_all = "camelCase")]
 pub struct CreateStudentRequest {
     pub name: String,
-    pub student_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card_serial: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -200,8 +213,6 @@ pub struct CreateStudentRequest {
 pub struct UpdateStudentRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub student_number: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card_serial: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

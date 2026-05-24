@@ -65,6 +65,26 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
         conn.execute("PRAGMA user_version = 8", [])?;
     }
 
+    if user_version < 9 {
+        migrate_to_v9(&conn)?;
+        conn.execute("PRAGMA user_version = 9", [])?;
+    }
+
+    if user_version < 10 {
+        migrate_to_v10(&conn)?;
+        conn.execute("PRAGMA user_version = 10", [])?;
+    }
+
+    if user_version < 11 {
+        migrate_to_v11(&conn)?;
+        conn.execute("PRAGMA user_version = 11", [])?;
+    }
+
+    if user_version < 12 {
+        migrate_to_v12(&conn)?;
+        conn.execute("PRAGMA user_version = 12", [])?;
+    }
+
     Ok(pool)
 }
 
@@ -90,7 +110,6 @@ fn migrate_to_v1(conn: &rusqlite::Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS students_new (
             id TEXT PRIMARY KEY NOT NULL,
             name TEXT NOT NULL,
-            student_number TEXT NOT NULL UNIQUE,
             card_serial TEXT UNIQUE,
             class_id TEXT,
             created_at INTEGER NOT NULL
@@ -106,7 +125,7 @@ fn migrate_to_v1(conn: &rusqlite::Connection) -> Result<()> {
             id TEXT PRIMARY KEY NOT NULL,
             student_id TEXT NOT NULL,
             class_id TEXT,
-            event_type TEXT NOT NULL CHECK(event_type IN ('in', 'out')),
+            event_type TEXT NOT NULL CHECK(event_type IN ('in')),
             timestamp INTEGER NOT NULL,
             note TEXT,
             FOREIGN KEY (student_id) REFERENCES students_new(id) ON DELETE CASCADE
@@ -140,15 +159,16 @@ fn migrate_to_v1(conn: &rusqlite::Connection) -> Result<()> {
     if has_old_students {
         // Copy data from old students table to new one
         conn.execute(
-            "INSERT INTO students_new (id, name, student_number, card_serial, created_at) 
-             SELECT id, name, student_number, card_serial, created_at FROM students",
+            "INSERT INTO students_new (id, name, card_serial, created_at) 
+             SELECT id, name, card_serial, created_at FROM students",
             [],
         )?;
 
         // Copy data from old events table to new one
         conn.execute(
             "INSERT INTO events_new (id, student_id, event_type, timestamp, note) 
-             SELECT id, student_id, event_type, timestamp, note FROM events",
+             SELECT id, student_id, event_type, timestamp, note FROM events
+             WHERE event_type = 'in'",
             [],
         )?;
 
@@ -400,6 +420,61 @@ fn migrate_to_v8(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migrate database to version 9 (add DepEd SF2 workbook mappings)
+fn migrate_to_v9(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(include_str!("../../sql/sf2/migrate_to_v9.sql"))?;
+    Ok(())
+}
+
+/// Migrate database to version 10 (add SF2 form metadata to settings)
+fn migrate_to_v10(conn: &rusqlite::Connection) -> Result<()> {
+    let columns = [
+        "school_id",
+        "school_name",
+        "school_year",
+        "report_month",
+        "grade_level",
+        "section",
+        "adviser_name",
+        "school_head_name",
+    ];
+
+    for column in columns {
+        let has_column: bool = conn
+            .query_row(
+                &format!(
+                    "SELECT count(*) FROM pragma_table_info('settings') WHERE name='{}'",
+                    column
+                ),
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+
+        if !has_column {
+            conn.execute(
+                &format!("ALTER TABLE settings ADD COLUMN {} TEXT", column),
+                [],
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Migrate database to version 11 (single IN attendance and no external student number)
+fn migrate_to_v11(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(include_str!("../../sql/migrate_to_v11.sql"))?;
+    Ok(())
+}
+
+/// Migrate database to version 12 (store SF2 metadata per workbook template)
+fn migrate_to_v12(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(include_str!("../../sql/sf2/migrate_to_v12.sql"))?;
+    Ok(())
+}
+
 /// Student repository
 pub struct StudentRepository {
     pool: DbPool,
@@ -420,7 +495,7 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         let students = if let Some(class_id) = class_id {
             let mut stmt = conn.prepare(
-                "SELECT id, name, student_number, card_serial, class_id, created_at 
+                "SELECT id, name, card_serial, class_id, created_at 
                  FROM students 
                  WHERE class_id = ?1 
                  ORDER BY name ASC",
@@ -429,10 +504,9 @@ impl StudentRepository {
                 Ok(Student {
                     id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
                     name: row.get(1)?,
-                    student_number: row.get(2)?,
-                    card_serial: row.get(3)?,
-                    class_id: row.get(4)?,
-                    created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
+                    card_serial: row.get(2)?,
+                    class_id: row.get(3)?,
+                    created_at: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
                 })
@@ -440,7 +514,7 @@ impl StudentRepository {
             rows.collect::<std::result::Result<Vec<_>, _>>()?
         } else {
             let mut stmt = conn.prepare(
-                "SELECT id, name, student_number, card_serial, class_id, created_at 
+                "SELECT id, name, card_serial, class_id, created_at 
                  FROM students 
                  ORDER BY name ASC",
             )?;
@@ -448,10 +522,9 @@ impl StudentRepository {
                 Ok(Student {
                     id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
                     name: row.get(1)?,
-                    student_number: row.get(2)?,
-                    card_serial: row.get(3)?,
-                    class_id: row.get(4)?,
-                    created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
+                    card_serial: row.get(2)?,
+                    class_id: row.get(3)?,
+                    created_at: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
                 })
@@ -467,7 +540,7 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         let student = conn
             .query_row(
-                "SELECT id, name, student_number, card_serial, class_id, created_at 
+                "SELECT id, name, card_serial, class_id, created_at 
                  FROM students 
                  WHERE id = ?1",
                 params![id.0.to_string()],
@@ -475,10 +548,9 @@ impl StudentRepository {
                     Ok(Student {
                         id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
                         name: row.get(1)?,
-                        student_number: row.get(2)?,
-                        card_serial: row.get(3)?,
-                        class_id: row.get(4)?,
-                        created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
+                        card_serial: row.get(2)?,
+                        class_id: row.get(3)?,
+                        created_at: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
                             .unwrap()
                             .with_timezone(&Utc),
                     })
@@ -495,7 +567,7 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         let student = conn
             .query_row(
-                "SELECT id, name, student_number, card_serial, class_id, created_at 
+                "SELECT id, name, card_serial, class_id, created_at 
                  FROM students 
                  WHERE card_serial = ?1",
                 params![serial],
@@ -503,10 +575,9 @@ impl StudentRepository {
                     Ok(Student {
                         id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
                         name: row.get(1)?,
-                        student_number: row.get(2)?,
-                        card_serial: row.get(3)?,
-                        class_id: row.get(4)?,
-                        created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
+                        card_serial: row.get(2)?,
+                        class_id: row.get(3)?,
+                        created_at: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
                             .unwrap()
                             .with_timezone(&Utc),
                     })
@@ -529,7 +600,6 @@ impl StudentRepository {
         let student = Student {
             id: StudentId::new(),
             name: req.name,
-            student_number: req.student_number,
             card_serial: req.card_serial,
             class_id: req.class_id,
             created_at: Utc::now(),
@@ -537,12 +607,11 @@ impl StudentRepository {
 
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT INTO students (id, name, student_number, card_serial, class_id, created_at) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO students (id, name, card_serial, class_id, created_at) 
+             VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
                 student.id.0.to_string(),
                 student.name,
-                student.student_number,
                 student.card_serial,
                 student.class_id,
                 student.created_at.timestamp(),
@@ -568,9 +637,6 @@ impl StudentRepository {
         if let Some(name) = req.name {
             student.name = name;
         }
-        if let Some(student_number) = req.student_number {
-            student.student_number = student_number;
-        }
         if let Some(card_serial) = req.card_serial {
             student.card_serial = Some(card_serial);
         }
@@ -581,11 +647,10 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         conn.execute(
             "UPDATE students 
-             SET name = ?1, student_number = ?2, card_serial = ?3, class_id = ?4 
-             WHERE id = ?5",
+             SET name = ?1, card_serial = ?2, class_id = ?3 
+             WHERE id = ?4",
             params![
                 student.name,
-                student.student_number,
                 student.card_serial,
                 student.class_id,
                 id.0.to_string(),
@@ -627,6 +692,7 @@ impl EventRepository {
         let mut stmt = conn.prepare(
             "SELECT id, student_id, class_id, event_type, timestamp, note 
              FROM events 
+             WHERE event_type = 'in'
              ORDER BY timestamp DESC",
         )?;
 
@@ -638,11 +704,7 @@ impl EventRepository {
                         uuid::Uuid::parse_str(&row.get::<_, String>(1)?).unwrap(),
                     ),
                     class_id: row.get(2)?,
-                    event_type: match row.get::<_, String>(3)?.as_str() {
-                        "in" => AttendanceType::In,
-                        "out" => AttendanceType::Out,
-                        _ => unreachable!(),
-                    },
+                    event_type: AttendanceType::In,
                     timestamp: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
@@ -660,7 +722,8 @@ impl EventRepository {
         let mut stmt = conn.prepare(
             "SELECT id, student_id, class_id, event_type, timestamp, note 
              FROM events 
-             WHERE student_id = ?1 
+             WHERE student_id = ?1
+             AND event_type = 'in'
              ORDER BY timestamp DESC",
         )?;
 
@@ -672,11 +735,7 @@ impl EventRepository {
                         uuid::Uuid::parse_str(&row.get::<_, String>(1)?).unwrap(),
                     ),
                     class_id: row.get(2)?,
-                    event_type: match row.get::<_, String>(3)?.as_str() {
-                        "in" => AttendanceType::In,
-                        "out" => AttendanceType::Out,
-                        _ => unreachable!(),
-                    },
+                    event_type: AttendanceType::In,
                     timestamp: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
@@ -695,7 +754,8 @@ impl EventRepository {
             .query_row(
                 "SELECT id, student_id, class_id, event_type, timestamp, note 
                  FROM events 
-                 WHERE student_id = ?1 
+                 WHERE student_id = ?1
+                 AND event_type = 'in'
                  ORDER BY timestamp DESC 
                  LIMIT 1",
                 params![student_id.0.to_string()],
@@ -706,11 +766,7 @@ impl EventRepository {
                             uuid::Uuid::parse_str(&row.get::<_, String>(1)?).unwrap(),
                         ),
                         class_id: row.get(2)?,
-                        event_type: match row.get::<_, String>(3)?.as_str() {
-                            "in" => AttendanceType::In,
-                            "out" => AttendanceType::Out,
-                            _ => unreachable!(),
-                        },
+                        event_type: AttendanceType::In,
                         timestamp: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
                             .unwrap()
                             .with_timezone(&Utc),
@@ -727,38 +783,35 @@ impl EventRepository {
     pub fn create(&self, req: CreateEventRequest) -> Result<AttendanceEvent> {
         let conn = self.pool.get()?;
 
-        // Check for duplicate check-in: prevent multiple "in" events on the same day
-        if req.event_type == AttendanceType::In {
-            let today_start = Utc::now()
-                .date_naive()
-                .and_hms_opt(0, 0, 0)
-                .unwrap()
-                .and_utc()
-                .timestamp();
-            let today_end = Utc::now()
-                .date_naive()
-                .and_hms_opt(23, 59, 59)
-                .unwrap()
-                .and_utc()
-                .timestamp();
+        let today_start = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        let today_end = Utc::now()
+            .date_naive()
+            .and_hms_opt(23, 59, 59)
+            .unwrap()
+            .and_utc()
+            .timestamp();
 
-            let existing_count: i32 = conn
-                .query_row(
-                    "SELECT COUNT(*) FROM events 
-                     WHERE student_id = ?1 
-                     AND event_type = 'in' 
-                     AND timestamp >= ?2 
-                     AND timestamp <= ?3",
-                    params![req.student_id.0.to_string(), today_start, today_end],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
+        let existing_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM events 
+                 WHERE student_id = ?1 
+                 AND event_type = 'in' 
+                 AND timestamp >= ?2 
+                 AND timestamp <= ?3",
+                params![req.student_id.0.to_string(), today_start, today_end],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
-            if existing_count > 0 {
-                return Err(AppError::DuplicateCheckIn(
-                    "Student already checked in today".to_string(),
-                ));
-            }
+        if existing_count > 0 {
+            return Err(AppError::DuplicateAttendance(
+                "Student already recorded today".to_string(),
+            ));
         }
 
         let event = AttendanceEvent {
@@ -777,10 +830,7 @@ impl EventRepository {
                 event.id.0.to_string(),
                 event.student_id.0.to_string(),
                 event.class_id,
-                match event.event_type {
-                    AttendanceType::In => "in",
-                    AttendanceType::Out => "out",
-                },
+                "in",
                 event.timestamp.timestamp(),
                 event.note,
             ],
@@ -820,7 +870,7 @@ impl SettingsRepository {
         let conn = self.pool.get()?;
         let mut settings = conn
             .query_row(
-                "SELECT id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode FROM settings WHERE id = 'app'",
+                "SELECT id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode, school_id, school_name, school_year, report_month, grade_level, section, adviser_name, school_head_name FROM settings WHERE id = 'app'",
                 [],
                 |row| {
                     let attendance_mode = row.get::<_, String>(11)?;
@@ -837,6 +887,14 @@ impl SettingsRepository {
                         q3_start: row.get(9)?,
                         q3_end: row.get(10)?,
                         attendance_mode: AttendanceMode::from_db(&attendance_mode),
+                        school_id: row.get(12)?,
+                        school_name: row.get(13)?,
+                        school_year: row.get(14)?,
+                        report_month: row.get(15)?,
+                        grade_level: row.get(16)?,
+                        section: row.get(17)?,
+                        adviser_name: row.get(18)?,
+                        school_head_name: row.get(19)?,
                     })
                 },
             )
@@ -867,8 +925,8 @@ impl SettingsRepository {
 
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode, school_id, school_name, school_year, report_month, grade_level, section, adviser_name, school_head_name)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
             params![
                 settings.id,
                 settings.day_start,
@@ -882,6 +940,14 @@ impl SettingsRepository {
                 settings.q3_start,
                 settings.q3_end,
                 settings.attendance_mode.as_str(),
+                settings.school_id,
+                settings.school_name,
+                settings.school_year,
+                settings.report_month,
+                settings.grade_level,
+                settings.section,
+                settings.adviser_name,
+                settings.school_head_name,
             ],
         )?;
 
@@ -1085,5 +1151,40 @@ impl ClassRepository {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn init_db_creates_in_only_schema_without_external_student_numbers() {
+        // Arrange
+        let temp_db = tempfile::NamedTempFile::new().expect("test database file should be created");
+
+        // Act
+        let pool = init_db(temp_db.path()).expect("database should initialize");
+        let conn = pool.get().expect("database connection should be available");
+
+        let student_number_columns: i32 = conn
+            .query_row(
+                "SELECT count(*) FROM pragma_table_info('students') WHERE name='student_number'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("students schema should be inspectable");
+        let out_insert = conn.execute(
+            "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note)
+             VALUES (?1, ?2, NULL, 'out', 0, NULL)",
+            params![
+                uuid::Uuid::new_v4().to_string(),
+                uuid::Uuid::new_v4().to_string()
+            ],
+        );
+
+        // Assert
+        assert_eq!(student_number_columns, 0);
+        assert!(out_insert.is_err());
     }
 }
