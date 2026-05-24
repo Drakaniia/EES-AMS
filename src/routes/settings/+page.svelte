@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
@@ -10,13 +12,186 @@
 		deleteClass,
 		exportDatabase,
 		exportJsonWithFolder,
+		createSf2WorkbookFromTemplate,
+		getSf2WorkbookSettings,
+		importSf2Workbook,
 		importAll,
+		openSf2Workbook,
+		updateSf2WorkbookSettings,
 		wipeAll,
 		type AttendanceMode,
 		type Settings,
 		type Class,
-		type Session
+		type Session,
+		type Sf2ImportSummary,
+		type Sf2TemplateDraft,
+		type Sf2WorkbookSettings
 	} from '$lib/db-rust';
+
+	type Sf2SchoolMonth = {
+		value: string;
+		label: string;
+		monthIndex: number;
+	};
+
+	type Sf2CalendarCell = {
+		key: string;
+		day: number | null;
+		label: string;
+		isSchoolDay: boolean;
+		isSelected: boolean;
+	};
+
+	const SF2_CALENDAR_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+	const SF2_SCHOOL_MONTHS: Sf2SchoolMonth[] = [
+		{ value: 'JUNE', label: 'June', monthIndex: 5 },
+		{ value: 'JULY', label: 'July', monthIndex: 6 },
+		{ value: 'AUGUST', label: 'August', monthIndex: 7 },
+		{ value: 'SEPTEMBER', label: 'September', monthIndex: 8 },
+		{ value: 'OCTOBER', label: 'October', monthIndex: 9 },
+		{ value: 'NOVEMBER', label: 'November', monthIndex: 10 },
+		{ value: 'DECEMBER', label: 'December', monthIndex: 11 },
+		{ value: 'JANUARY', label: 'January', monthIndex: 0 },
+		{ value: 'FEBRUARY', label: 'February', monthIndex: 1 },
+		{ value: 'MARCH', label: 'March', monthIndex: 2 },
+		{ value: 'APRIL', label: 'April', monthIndex: 3 }
+	];
+
+	function sf2MonthByIndex(monthIndex: number) {
+		return SF2_SCHOOL_MONTHS.find((month) => month.monthIndex === monthIndex);
+	}
+
+	function sf2MonthByValue(value: string) {
+		return SF2_SCHOOL_MONTHS.find((month) => month.value === value);
+	}
+
+	function defaultSf2ReportMonth(today = new Date()) {
+		return sf2MonthByIndex(today.getMonth())?.value ?? 'JUNE';
+	}
+
+	function defaultSf2SchoolYear(today = new Date()) {
+		const currentMonthIndex = today.getMonth();
+		const startYear = currentMonthIndex <= 3 ? today.getFullYear() - 1 : today.getFullYear();
+		return `${startYear}-${startYear + 1}`;
+	}
+
+	function sf2ReportYear(monthValue: string, schoolYear: string) {
+		const month = sf2MonthByValue(monthValue);
+		const match = schoolYear.match(/(20\d{2})\D+(20\d{2})/);
+		if (!month || !match) return new Date().getFullYear();
+		return month.monthIndex >= 5 ? Number(match[1]) : Number(match[2]);
+	}
+
+	function defaultSf2FirstSchoolDay(monthValue: string, schoolYear: string) {
+		const month = sf2MonthByValue(monthValue);
+		if (!month) return 1;
+
+		const year = sf2ReportYear(monthValue, schoolYear);
+		const firstDayOfWeek = new Date(year, month.monthIndex, 1).getDay();
+		if (firstDayOfWeek === 0) return 2;
+		if (firstDayOfWeek === 6) return 3;
+		return 1;
+	}
+
+	function sf2MonthDayCount(monthValue: string, schoolYear: string) {
+		const month = sf2MonthByValue(monthValue);
+		if (!month) return 31;
+		return new Date(sf2ReportYear(monthValue, schoolYear), month.monthIndex + 1, 0).getDate();
+	}
+
+	function isSf2SchoolDay(monthValue: string, schoolYear: string, day: number) {
+		const month = sf2MonthByValue(monthValue);
+		if (!month) return false;
+
+		const dayCount = sf2MonthDayCount(monthValue, schoolYear);
+		if (day < 1 || day > dayCount) return false;
+
+		const weekday = new Date(sf2ReportYear(monthValue, schoolYear), month.monthIndex, day).getDay();
+		return weekday >= 1 && weekday <= 5;
+	}
+
+	function normalizedSf2FirstSchoolDay(monthValue: string, schoolYear: string, day: number) {
+		if (isSf2SchoolDay(monthValue, schoolYear, day)) return day;
+		return defaultSf2FirstSchoolDay(monthValue, schoolYear);
+	}
+
+	function sf2CalendarCells(
+		monthValue: string,
+		schoolYear: string,
+		selectedDay: number
+	): Sf2CalendarCell[] {
+		const month = sf2MonthByValue(monthValue);
+		if (!month) return [];
+
+		const year = sf2ReportYear(monthValue, schoolYear);
+		const dayCount = sf2MonthDayCount(monthValue, schoolYear);
+		const firstWeekday = new Date(year, month.monthIndex, 1).getDay();
+		const leadingBlankCount = (firstWeekday + 6) % 7;
+		const cells: Sf2CalendarCell[] = [];
+
+		for (let index = 0; index < leadingBlankCount; index += 1) {
+			cells.push({
+				key: `blank-start-${index}`,
+				day: null,
+				label: '',
+				isSchoolDay: false,
+				isSelected: false
+			});
+		}
+
+		for (let day = 1; day <= dayCount; day += 1) {
+			const isSchoolDay = isSf2SchoolDay(monthValue, schoolYear, day);
+			cells.push({
+				key: `day-${day}`,
+				day,
+				label: String(day),
+				isSchoolDay,
+				isSelected: selectedDay === day
+			});
+		}
+
+		while (cells.length % 7 !== 0) {
+			cells.push({
+				key: `blank-end-${cells.length}`,
+				day: null,
+				label: '',
+				isSchoolDay: false,
+				isSelected: false
+			});
+		}
+
+		return cells;
+	}
+
+	function sf2SelectedFirstAttendanceLabel() {
+		const month = sf2MonthByValue(sf2DraftReportMonth);
+		if (!month) return `Day ${sf2DraftFirstSchoolDay}`;
+		const year = sf2ReportYear(sf2DraftReportMonth, sf2DraftSchoolYear);
+		return `${month.label} ${sf2DraftFirstSchoolDay}, ${year}`;
+	}
+
+	function selectSf2FirstSchoolDay(day: number | null) {
+		if (day === null) return;
+		if (!isSf2SchoolDay(sf2DraftReportMonth, sf2DraftSchoolYear, day)) return;
+		sf2DraftFirstSchoolDay = day;
+	}
+
+	function selectSf2ReportMonth(monthValue: string) {
+		const schoolYear = sf2DraftSchoolYear.trim() || defaultSf2SchoolYear();
+		sf2DraftReportMonth = monthValue;
+		sf2DraftSchoolYear = schoolYear;
+		sf2DraftFirstSchoolDay = defaultSf2FirstSchoolDay(monthValue, schoolYear);
+	}
+
+	function updateSf2SchoolYear(value: string) {
+		sf2DraftSchoolYear = value;
+		sf2DraftFirstSchoolDay = normalizedSf2FirstSchoolDay(
+			sf2DraftReportMonth,
+			value,
+			sf2DraftFirstSchoolDay
+		);
+	}
 
 	// ── State ────────────────────────────────────────────────────────────────
 	let classes = $state<Class[]>([]);
@@ -66,6 +241,30 @@
 	let exportDialogOpen = $state(false);
 	let exportFormat = $state<'json' | 'database'>('json');
 
+	// SF2 workbook state
+	let sf2Importing = $state(false);
+	let sf2TemplateCreating = $state(false);
+	let sf2TemplateClassId = $state('');
+	let sf2Opening = $state(false);
+	let sf2SettingsLoading = $state(false);
+	let sf2SettingsSaving = $state(false);
+	let sf2ImportSummary = $state<Sf2ImportSummary | null>(null);
+	let sf2TemplateDialogOpen = $state(false);
+	let sf2TemplateDialogMode = $state<'create' | 'edit'>('create');
+	let sf2DraftSchoolId = $state('');
+	let sf2DraftSchoolName = $state('');
+	let sf2DraftSchoolYear = $state('');
+	let sf2DraftReportMonth = $state('');
+	let sf2DraftGradeLevel = $state('');
+	let sf2DraftSection = $state('');
+	let sf2DraftAdviserName = $state('');
+	let sf2DraftSchoolHeadName = $state('');
+	let sf2DraftFirstSchoolDay = $state(1);
+	let sf2FirstAttendanceCalendar = $derived(
+		sf2CalendarCells(sf2DraftReportMonth, sf2DraftSchoolYear, sf2DraftFirstSchoolDay)
+	);
+	let sf2FirstAttendanceLabel = $derived(sf2SelectedFirstAttendanceLabel());
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string, ok = true) {
 		toastMessage = msg;
@@ -78,6 +277,9 @@
 		try {
 			const [c] = await Promise.all([listClasses(), settingsStore.load()]);
 			classes = c;
+			if (!sf2TemplateClassId && classes.length > 0) {
+				sf2TemplateClassId = classes[0].id;
+			}
 			// Update form fields from the store
 			if (settingsStore.settings) {
 				defaultDayStart = settingsStore.settings.dayStart;
@@ -93,35 +295,44 @@
 				q3End = settingsStore.settings.q3End ?? '';
 			}
 		} catch (err: unknown) {
-			const msg = err instanceof Error ? err.message : 'Database error';
+			const msg = errorMessage(err, 'Database error');
 			toast(`Failed to load: ${msg}`, false);
 		}
 	}
 
 	// ── Actions ──────────────────────────────────────────────────────────────
+	function currentSettingsPayload(): Settings {
+		return {
+			id: 'app',
+			dayStart: defaultDayStart,
+			dayEnd: defaultDayEnd,
+			lateAfter: defaultLateAfter,
+			quarter: defaultQuarter,
+			attendanceMode,
+			q1Start,
+			q1End,
+			q2Start,
+			q2End,
+			q3Start,
+			q3End
+		};
+	}
+
 	async function onSaveGlobal(e: SubmitEvent) {
 		e.preventDefault();
 		try {
-			const next: Settings = {
-				id: 'app',
-				dayStart: defaultDayStart,
-				dayEnd: defaultDayEnd,
-				lateAfter: defaultLateAfter,
-				quarter: defaultQuarter,
-				attendanceMode,
-				q1Start,
-				q1End,
-				q2Start,
-				q2End,
-				q3Start,
-				q3End
-			};
-			await settingsStore.save(next);
+			await settingsStore.save(currentSettingsPayload());
 			toast('Global configuration saved');
 		} catch (error) {
-			const msg = error instanceof Error ? error.message : 'Failed to save settings';
+			const msg = errorMessage(error, 'Failed to save settings');
 			toast(`Save failed: ${msg}`, false);
 		}
+	}
+
+	function errorMessage(error: unknown, fallback: string) {
+		if (error instanceof Error) return error.message;
+		if (typeof error === 'string') return error;
+		return fallback;
 	}
 
 	function openAddClass() {
@@ -287,7 +498,7 @@
 
 			exportDialogOpen = false;
 		} catch (error) {
-			const msg = error instanceof Error ? error.message : 'Export failed';
+			const msg = errorMessage(error, 'Export failed');
 			toast(`Export failed: ${msg}`, false);
 		}
 	}
@@ -300,7 +511,7 @@
 			await reload();
 			toast('Backup imported');
 		} catch (err: unknown) {
-			const msg = err instanceof Error ? err.message : 'Unknown error';
+			const msg = errorMessage(err, 'Unknown error');
 			toast(`Import failed: ${msg}`, false);
 		}
 	}
@@ -310,6 +521,149 @@
 		const file = input.files?.[0];
 		if (file) onImport(file);
 		input.value = '';
+	}
+
+	async function onImportSf2() {
+		if (sf2Importing) return;
+		sf2Importing = true;
+
+		try {
+			const summary = await importSf2Workbook();
+			sf2ImportSummary = summary;
+			await reload();
+			toast(`Imported ${summary.learnersFound} learners from SF2`);
+		} catch (error) {
+			const msg = errorMessage(error, 'SF2 import failed');
+			toast(`SF2 import failed: ${msg}`, false);
+		} finally {
+			sf2Importing = false;
+		}
+	}
+
+	function openSf2TemplateDialog() {
+		const reportMonth = defaultSf2ReportMonth();
+		const schoolYear = defaultSf2SchoolYear();
+		sf2TemplateDialogMode = 'create';
+		sf2DraftSchoolId = '';
+		sf2DraftSchoolName = '';
+		sf2DraftSchoolYear = schoolYear;
+		sf2DraftReportMonth = reportMonth;
+		sf2DraftGradeLevel = '';
+		sf2DraftSection = '';
+		sf2DraftAdviserName = '';
+		sf2DraftSchoolHeadName = '';
+		sf2DraftFirstSchoolDay = defaultSf2FirstSchoolDay(reportMonth, schoolYear);
+		sf2TemplateDialogOpen = true;
+	}
+
+	function populateSf2Draft(settings: Sf2WorkbookSettings) {
+		sf2TemplateClassId = settings.classId;
+		sf2DraftSchoolId = settings.schoolId;
+		sf2DraftSchoolName = settings.schoolName;
+		sf2DraftSchoolYear = settings.schoolYear;
+		sf2DraftReportMonth = settings.reportMonth;
+		sf2DraftGradeLevel = settings.gradeLevel;
+		sf2DraftSection = settings.section;
+		sf2DraftAdviserName = settings.adviserName;
+		sf2DraftSchoolHeadName = settings.schoolHeadName;
+		sf2DraftFirstSchoolDay = normalizedSf2FirstSchoolDay(
+			settings.reportMonth,
+			settings.schoolYear,
+			settings.firstSchoolDay || 1
+		);
+	}
+
+	async function openSf2SettingsDialog() {
+		if (sf2SettingsLoading) return;
+		sf2SettingsLoading = true;
+
+		try {
+			const settings = await getSf2WorkbookSettings(sf2TemplateClassId);
+			sf2TemplateDialogMode = 'edit';
+			populateSf2Draft(settings);
+			sf2TemplateDialogOpen = true;
+		} catch (error) {
+			const msg = errorMessage(error, 'SF2 settings failed');
+			toast(`SF2 settings failed: ${msg}`, false);
+		} finally {
+			sf2SettingsLoading = false;
+		}
+	}
+
+	function sf2DraftPayload(): Sf2TemplateDraft {
+		const firstSchoolDay = normalizedSf2FirstSchoolDay(
+			sf2DraftReportMonth,
+			sf2DraftSchoolYear,
+			sf2DraftFirstSchoolDay
+		);
+		sf2DraftFirstSchoolDay = firstSchoolDay;
+
+		return {
+			classId: sf2TemplateClassId || undefined,
+			schoolId: sf2DraftSchoolId,
+			schoolName: sf2DraftSchoolName,
+			schoolYear: sf2DraftSchoolYear,
+			reportMonth: sf2DraftReportMonth,
+			gradeLevel: sf2DraftGradeLevel,
+			section: sf2DraftSection,
+			adviserName: sf2DraftAdviserName,
+			schoolHeadName: sf2DraftSchoolHeadName,
+			firstSchoolDay,
+			learnerNames: []
+		};
+	}
+
+	async function onCreateSf2FromTemplate(event: SubmitEvent) {
+		event.preventDefault();
+		if (sf2TemplateCreating || sf2SettingsSaving) return;
+
+		const creating = sf2TemplateDialogMode === 'create';
+		if (creating) {
+			sf2TemplateCreating = true;
+		} else {
+			sf2SettingsSaving = true;
+		}
+		try {
+			const draft = sf2DraftPayload();
+			const summary = creating
+				? await createSf2WorkbookFromTemplate(draft)
+				: await updateSf2WorkbookSettings(draft);
+			sf2ImportSummary = summary;
+			sf2TemplateClassId = summary.classId;
+			sf2TemplateDialogOpen = false;
+			await reload();
+			toast(
+				creating
+					? `Created SF2 working copy for ${summary.learnersFound} learners`
+					: `Updated SF2 workbook for ${summary.learnersFound} learners`
+			);
+		} catch (error) {
+			const msg = errorMessage(error, creating ? 'SF2 template setup failed' : 'SF2 update failed');
+			toast(`${creating ? 'SF2 template setup' : 'SF2 update'} failed: ${msg}`, false);
+		} finally {
+			sf2TemplateCreating = false;
+			sf2SettingsSaving = false;
+		}
+	}
+
+	async function onOpenSf2() {
+		if (sf2Opening) return;
+		sf2Opening = true;
+
+		try {
+			const path = await openSf2Workbook(sf2ImportSummary?.classId || sf2TemplateClassId);
+			toast(`Opened SF2 workbook: ${path}`);
+		} catch (error) {
+			const msg = errorMessage(error, 'Open SF2 failed');
+			toast(`Open SF2 failed: ${msg}`, false);
+		} finally {
+			sf2Opening = false;
+		}
+	}
+
+	function startSf2Attendance() {
+		if (!sf2ImportSummary) return;
+		goto(resolve(`/attendance?classId=${sf2ImportSummary.classId}&manual=true`));
 	}
 
 	async function onWipe() {
@@ -533,6 +887,143 @@
 						</button>
 					</div>
 				</section>
+
+				<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
+					<div class="flex flex-wrap items-start justify-between gap-4">
+						<div>
+							<h3 class="text-lg font-medium">SF2 Workbook</h3>
+							<p class="mt-1 text-sm text-muted-foreground">
+								Import the official SF2 .xls form, or create a first-month working copy from the
+								bundled template.
+							</p>
+						</div>
+						<div class="flex flex-wrap gap-2">
+							<select
+								aria-label="Class for SF2 template"
+								bind:value={sf2TemplateClassId}
+								disabled={classes.length === 0 || sf2TemplateCreating}
+								class="h-10 min-w-52 rounded-pill border border-border bg-background px-4 text-sm focus:ring-2 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<option value="">Select class</option>
+								{#each classes as item (item.id)}
+									<option value={item.id}>{item.name}</option>
+								{/each}
+							</select>
+							<button
+								onclick={openSf2TemplateDialog}
+								disabled={sf2TemplateCreating}
+								class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<svg
+									class="size-4"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+									<polyline points="14 2 14 8 20 8" />
+									<path d="M12 11v6" />
+									<path d="M9 14h6" />
+								</svg>
+								{sf2TemplateCreating ? 'Creating...' : 'Create From Template'}
+							</button>
+							<button
+								onclick={openSf2SettingsDialog}
+								disabled={sf2SettingsLoading || !sf2TemplateClassId}
+								class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<svg
+									class="size-4"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<path d="M12 20h9" />
+									<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+								</svg>
+								{sf2SettingsLoading ? 'Loading...' : 'Edit SF2 Workbook'}
+							</button>
+							<button
+								onclick={onImportSf2}
+								disabled={sf2Importing}
+								class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<svg
+									class="size-4"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+									<polyline points="14 2 14 8 20 8" />
+									<path d="M12 18v-6" />
+									<path d="m9 15 3 3 3-3" />
+								</svg>
+								{sf2Importing ? 'Importing...' : 'Import SF2'}
+							</button>
+							<button
+								onclick={onOpenSf2}
+								disabled={sf2Opening}
+								class="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<svg
+									class="size-4"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+									<polyline points="15 3 21 3 21 9" />
+									<line x1="10" y1="14" x2="21" y2="3" />
+								</svg>
+								{sf2Opening ? 'Opening...' : 'Open Edited SF2'}
+							</button>
+						</div>
+					</div>
+
+					{#if sf2ImportSummary}
+						<div class="space-y-4 border-t border-border pt-5">
+							<div class="grid gap-3 sm:grid-cols-4">
+								<div class="rounded-xl border border-border bg-surface p-4">
+									<div class="label-mono">Class</div>
+									<div class="mt-2 text-sm font-semibold">{sf2ImportSummary.className}</div>
+								</div>
+								<div class="rounded-xl border border-border bg-surface p-4">
+									<div class="label-mono">Learners</div>
+									<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.learnersFound}</div>
+								</div>
+								<div class="rounded-xl border border-border bg-surface p-4">
+									<div class="label-mono">Created</div>
+									<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.studentsCreated}</div>
+								</div>
+								<div class="rounded-xl border border-border bg-surface p-4">
+									<div class="label-mono">Dates</div>
+									<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.datesMapped}</div>
+								</div>
+							</div>
+							<div class="flex justify-end">
+								<button
+									onclick={startSf2Attendance}
+									class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+								>
+									Start Attendance
+								</button>
+							</div>
+						</div>
+					{/if}
+				</section>
 			</div>
 
 			<!-- ── Sidebar: Global Defaults ────────────────────────────────── -->
@@ -544,7 +1035,7 @@
 					<div class="space-y-1">
 						<h3 class="text-lg font-medium">Global Configuration</h3>
 						<p class="text-xs text-muted-foreground">
-							Controls attendance flow and templates for new classes.
+							Controls attendance flow and defaults for new classes.
 						</p>
 					</div>
 
@@ -647,6 +1138,178 @@
 		</div>
 	{/if}
 </AppShell>
+
+<!-- SF2 Template Dialog -->
+<Dialog
+	open={sf2TemplateDialogOpen}
+	title={sf2TemplateDialogMode === 'create' ? 'Create SF2 Workbook' : 'Edit SF2 Workbook'}
+	description={sf2TemplateDialogMode === 'create'
+		? 'Enter the form details for this workbook copy.'
+		: 'Update the saved workbook copy and attendance date layout.'}
+	maxWidth="xl"
+	on:close={() => (sf2TemplateDialogOpen = false)}
+>
+	<form onsubmit={onCreateSf2FromTemplate} class="space-y-5">
+		<div class="grid gap-4 sm:grid-cols-2">
+			<div class="space-y-1.5">
+				<label for="sf2SchoolYear" class="label-mono">School Year</label>
+				<input
+					id="sf2SchoolYear"
+					value={sf2DraftSchoolYear}
+					oninput={(event) => updateSf2SchoolYear((event.currentTarget as HTMLInputElement).value)}
+					required
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				/>
+			</div>
+		</div>
+
+		<div class="grid gap-4 sm:grid-cols-2">
+			<div class="space-y-1.5">
+				<label for="sf2SchoolId" class="label-mono">School ID</label>
+				<input
+					id="sf2SchoolId"
+					bind:value={sf2DraftSchoolId}
+					required
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<label for="sf2SchoolName" class="label-mono">Name of School</label>
+				<input
+					id="sf2SchoolName"
+					bind:value={sf2DraftSchoolName}
+					required
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				/>
+			</div>
+		</div>
+
+		<div class="space-y-2">
+			<span class="label-mono">Report Month</span>
+			<div class="grid grid-cols-3 gap-2 sm:grid-cols-4">
+				{#each SF2_SCHOOL_MONTHS as month (month.value)}
+					<button
+						type="button"
+						aria-pressed={sf2DraftReportMonth === month.value}
+						onclick={() => selectSf2ReportMonth(month.value)}
+						class={`h-10 rounded-md border px-3 text-sm font-medium transition-colors ${
+							sf2DraftReportMonth === month.value
+								? 'border-primary bg-primary text-primary-foreground shadow-sm'
+								: 'border-border bg-background hover:bg-surface'
+						}`}
+					>
+						{month.label}
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		<div class="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+			<div class="space-y-2">
+				<div class="flex items-center justify-between gap-3">
+					<span class="label-mono">First Attendance Day</span>
+					<span class="text-xs font-medium text-muted-foreground">{sf2FirstAttendanceLabel}</span>
+				</div>
+				<div class="rounded-md border border-border bg-background p-3">
+					<div class="grid grid-cols-7 gap-1 pb-2">
+						{#each SF2_CALENDAR_WEEKDAYS as weekday (weekday)}
+							<div class="text-center text-[0.68rem] font-semibold text-muted-foreground uppercase">
+								{weekday}
+							</div>
+						{/each}
+					</div>
+					<div class="grid grid-cols-7 gap-1">
+						{#each sf2FirstAttendanceCalendar as cell (cell.key)}
+							{#if cell.day === null}
+								<div class="h-9 rounded-md"></div>
+							{:else}
+								<button
+									type="button"
+									disabled={!cell.isSchoolDay}
+									aria-pressed={cell.isSelected}
+									onclick={() => selectSf2FirstSchoolDay(cell.day)}
+									class={`h-9 rounded-md border text-sm font-medium transition-colors ${
+										cell.isSelected
+											? 'border-primary bg-primary text-primary-foreground shadow-sm'
+											: cell.isSchoolDay
+												? 'border-border bg-surface hover:border-primary hover:bg-background'
+												: 'cursor-not-allowed border-transparent bg-transparent text-muted-foreground/50'
+									}`}
+								>
+									{cell.label}
+								</button>
+							{/if}
+						{/each}
+					</div>
+				</div>
+			</div>
+			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+				<div class="space-y-1.5">
+					<label for="sf2GradeLevel" class="label-mono">Grade Level</label>
+					<input
+						id="sf2GradeLevel"
+						bind:value={sf2DraftGradeLevel}
+						required
+						class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</div>
+				<div class="space-y-1.5">
+					<label for="sf2Section" class="label-mono">Section</label>
+					<input
+						id="sf2Section"
+						bind:value={sf2DraftSection}
+						required
+						class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
+				</div>
+			</div>
+		</div>
+
+		<div class="grid gap-4 sm:grid-cols-2">
+			<div class="space-y-1.5">
+				<label for="sf2AdviserName" class="label-mono">Adviser / LIS Name</label>
+				<input
+					id="sf2AdviserName"
+					bind:value={sf2DraftAdviserName}
+					required
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<label for="sf2SchoolHeadName" class="label-mono">School Head Name</label>
+				<input
+					id="sf2SchoolHeadName"
+					bind:value={sf2DraftSchoolHeadName}
+					required
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				/>
+			</div>
+		</div>
+
+		<div class="flex justify-end gap-2 pt-2">
+			<button
+				type="button"
+				onclick={() => (sf2TemplateDialogOpen = false)}
+				class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
+			>
+				Cancel
+			</button>
+			<button
+				type="submit"
+				disabled={sf2TemplateCreating || sf2SettingsSaving}
+				class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+			>
+				{#if sf2TemplateCreating}
+					Creating...
+				{:else if sf2SettingsSaving}
+					Saving...
+				{:else}
+					{sf2TemplateDialogMode === 'create' ? 'Create Workbook' : 'Save Workbook Settings'}
+				{/if}
+			</button>
+		</div>
+	</form>
+</Dialog>
 
 <!-- ── Quarter Dialog ───────────────────────────────────────────────────────── -->
 <Dialog
