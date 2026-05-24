@@ -23,8 +23,8 @@ pub enum AppError {
     #[error("card already registered: {0}")]
     CardAlreadyRegistered(String),
 
-    #[error("duplicate check-in: {0}")]
-    DuplicateCheckIn(String),
+    #[error("duplicate attendance: {0}")]
+    DuplicateAttendance(String),
 
     #[error("invalid input: {0}")]
     InvalidInput(String),
