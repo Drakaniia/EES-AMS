@@ -332,6 +332,7 @@ try {
 
     $workbook = $excel.Workbooks.Open($WorkbookPath, 0, $false)
 
+    $sf2Sheets = @()
     $monthlySheets = @()
 
     foreach ($sheet in $workbook.Worksheets) {
@@ -339,6 +340,8 @@ try {
         if ($title -notmatch 'School Form 2') {
             continue
         }
+
+        $sf2Sheets += $sheet
 
         if ((Get-MonthNumber $sheet.Name) -gt 0 -and ([string]$sheet.Name) -match '(20\d{2})') {
             $monthlySheets += $sheet
@@ -380,22 +383,25 @@ try {
             $targetSheet = $monthlySheets[0]
         }
 
+        $targetSheet.Visible = -1
+        Rename-SheetUnique $targetSheet $targetSheetName
+        $firstSchoolDay = Get-MetadataInt 'firstSchoolDay' 1
+        Set-Sf2MonthDates $targetSheet $reportYear $monthNumber $firstSchoolDay
+        try { $targetSheet.Activate() | Out-Null } catch {}
+
         $hiddenIndex = 1
-        foreach ($sheet in $monthlySheets) {
+        foreach ($sheet in $sf2Sheets) {
             if ([int]$sheet.Index -eq [int]$targetSheet.Index) {
                 continue
             }
 
             Clear-Sf2MonthDates $sheet
-            Rename-SheetUnique $sheet "__SF2_HIDDEN_$hiddenIndex"
+            if ((Get-MonthNumber $sheet.Name) -gt 0 -and ([string]$sheet.Name) -match '(20\d{2})') {
+                Rename-SheetUnique $sheet "__SF2_HIDDEN_$hiddenIndex"
+            }
             $sheet.Visible = 0
             $hiddenIndex += 1
         }
-
-        $targetSheet.Visible = -1
-        Rename-SheetUnique $targetSheet $targetSheetName
-        $firstSchoolDay = Get-MetadataInt 'firstSchoolDay' 1
-        Set-Sf2MonthDates $targetSheet $reportYear $monthNumber $firstSchoolDay
     }
 
     $excel.CalculateFullRebuild()
