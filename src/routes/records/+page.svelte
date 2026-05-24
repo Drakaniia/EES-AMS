@@ -12,25 +12,24 @@
 		listClasses,
 		getSettings,
 		deleteEvent,
+		exportCsvWithFolder,
 		type Student,
 		type AttendanceEvent,
 		type Class
 	} from '$lib/db-rust';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { fmtDate, fmtTime } from '$lib/csv';
-	import { exportCsvWithFolder } from '$lib/db-rust';
+	import { Download, FileSpreadsheet } from 'lucide-svelte';
 
 	// ── Types ────────────────────────────────────────────────────────────────
 	type StudentAttendance = {
 		studentId: string;
 		studentName: string;
-		studentNumber: string;
 		className: string;
 		date: string;
 		checkInTime?: string;
-		checkOutTime?: string;
 		checkInTimestamp?: number;
-		checkOutTimestamp?: number;
 		isLate?: boolean;
 		events: AttendanceEvent[];
 	};
@@ -42,6 +41,7 @@
 	let studentId = $state($page.url.searchParams.get('studentId') || '');
 	let classId = $state($page.url.searchParams.get('classId') || '');
 	let lateAfter = $state('08:45');
+	let exportingLogs = $state(false);
 
 	// Date range picker dialog state
 	let dateRangePickerOpen = $state(false);
@@ -84,7 +84,7 @@
 	let classMap = $derived(new Map(classes.map((c) => [c.id, c])));
 
 	// Group events by student and date
-	let groupedAttendance = $derived(() => {
+	let groupedAttendance = $derived.by(() => {
 		const groups = new SvelteMap<string, StudentAttendance>();
 
 		filtered.forEach((event) => {
@@ -99,7 +99,6 @@
 				groups.set(key, {
 					studentId: event.studentId,
 					studentName: student.name,
-					studentNumber: student.studentNumber,
 					className,
 					date,
 					events: []
@@ -145,11 +144,6 @@
 						}
 					}
 				}
-			} else if (event.type === 'out') {
-				if (!group.checkOutTime || event.timestamp > group.checkOutTime) {
-					group.checkOutTime = fmtTime(event.timestamp);
-					group.checkOutTimestamp = new Date(event.timestamp).getTime();
-				}
 			}
 		});
 
@@ -180,11 +174,11 @@
 	);
 
 	// Pagination for records
-	const totalPages = $derived(Math.ceil(groupedAttendance().length / itemsPerPage));
-	const paginatedFiltered = $derived(() => {
+	const totalPages = $derived(Math.ceil(groupedAttendance.length / itemsPerPage));
+	const paginatedFiltered = $derived.by(() => {
 		const start = (currentPage - 1) * itemsPerPage;
 		const end = start + itemsPerPage;
-		return groupedAttendance().slice(start, end);
+		return groupedAttendance.slice(start, end);
 	});
 
 	function handlePageChange(page: number) {
@@ -237,12 +231,16 @@
 	}
 
 	async function onExport() {
+		if (exportingLogs) return;
+		exportingLogs = true;
 		try {
 			const filePath = await exportCsvWithFolder(filtered, students, classes, lateAfter);
 			toast(`CSV exported to: ${filePath}`);
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : 'Export failed';
 			toast(`Export failed: ${msg}`, false);
+		} finally {
+			exportingLogs = false;
 		}
 	}
 
@@ -271,25 +269,23 @@
 			description="Review and filter historical attendance data for your classes."
 		>
 			{#snippet actions()}
-				<button
-					onclick={onExport}
-					class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
-				>
-					<svg
-						class="size-4"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
+				<div class="flex flex-wrap items-center gap-2">
+					<a
+						href={resolve('/reports')}
+						class="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 					>
-						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-						<polyline points="7 10 12 15 17 10" />
-						<line x1="12" y1="15" x2="12" y2="3" />
-					</svg>
-					Export CSV
-				</button>
+						<FileSpreadsheet class="size-4" />
+						SF2 Workbook
+					</a>
+					<button
+						onclick={onExport}
+						disabled={exportingLogs}
+						class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						<Download class="size-4" />
+						{exportingLogs ? 'Exporting...' : 'Export Logs CSV'}
+					</button>
+				</div>
 			{/snippet}
 		</PageHeader>
 
@@ -373,7 +369,7 @@
 			<!-- Total -->
 			<div class="space-y-2">
 				<div class="label-mono">Total attendance records</div>
-				<div class="flex h-10 items-center font-mono text-sm">{groupedAttendance().length}</div>
+				<div class="flex h-10 items-center font-mono text-sm">{groupedAttendance.length}</div>
 			</div>
 		</section>
 
@@ -387,20 +383,18 @@
 							<th class="label-mono px-4 py-3">Student</th>
 							<th class="label-mono px-4 py-3">Class</th>
 							<th class="label-mono px-4 py-3">Check In</th>
-							<th class="label-mono px-4 py-3">Check Out</th>
 							<th class="label-mono w-20 px-4 py-3 text-right"> </th>
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-border">
-						{#if groupedAttendance().length === 0}
+						{#if groupedAttendance.length === 0}
 							{@render emptyState()}
 						{:else}
-							{#each paginatedFiltered() as record (record.studentId + record.date)}
+							{#each paginatedFiltered as record (record.studentId + record.date)}
 								<tr class="transition-colors hover:bg-surface/40">
 									<td class="px-4 py-3 align-top font-mono">{record.date}</td>
 									<td class="px-4 py-3 align-top">
 										<div class="font-medium">{record.studentName}</div>
-										<div class="label-mono">#{record.studentNumber}</div>
 									</td>
 									<td class="px-4 py-3 align-top">
 										<span
@@ -414,13 +408,6 @@
 											<div class="flex items-center gap-2">
 												{@render checkInPill(record.checkInTime, record.isLate)}
 											</div>
-										{:else}
-											<span class="font-mono text-xs text-muted-foreground">—</span>
-										{/if}
-									</td>
-									<td class="px-4 py-3 align-top">
-										{#if record.checkOutTime}
-											{@render checkOutPill(record.checkOutTime)}
 										{:else}
 											<span class="font-mono text-xs text-muted-foreground">—</span>
 										{/if}
@@ -489,7 +476,7 @@
 
 {#snippet emptyState()}
 	<tr>
-		<td colspan={6} class="px-4 py-12 text-center text-muted-foreground">
+		<td colspan={5} class="px-4 py-12 text-center text-muted-foreground">
 			No attendance records match the filters.
 		</td>
 	</tr>
@@ -503,14 +490,6 @@
 		{time}
 		{#if isLate}
 			(LATE){/if}
-	</span>
-{/snippet}
-
-{#snippet checkOutPill(time: string)}
-	<span
-		class="rounded-pill border border-border bg-surface px-2 py-1 font-mono text-xs text-foreground"
-	>
-		{time}
 	</span>
 {/snippet}
 

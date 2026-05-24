@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { Grid2X2, List, Search, ScanLine } from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -13,6 +14,7 @@
 		findStudentByCard,
 		addEvent,
 		deleteEvent,
+		closeSf2AttendanceDay,
 		type AttendanceEvent,
 		type AttendanceType,
 		type Student,
@@ -24,18 +26,20 @@
 	type LogLine = {
 		id: string;
 		studentName: string;
-		studentNumber?: string;
 		type: AttendanceType | 'error';
 		isLate?: boolean;
 		message: string;
 		timestamp: number | string;
 	};
 
+	type ManualViewMode = 'boxes' | 'list';
+
 	let log = $state<LogLine[]>([]);
 	let students = $state<Student[]>([]);
 	let classes = $state<Class[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
 	let selectedClassId = $state<string>('');
+	let manualViewMode = $state<ManualViewMode>('boxes');
 
 	let pickerOpen = $state(false);
 	let pickerQuery = $state('');
@@ -54,6 +58,7 @@
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 	let isProcessing = $state(false);
+	let isClosingDay = $state(false);
 	let lastEventId = $state<string | null>(null);
 	let undoTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -83,22 +88,12 @@
 		events = e;
 	}
 
+	const settingsPending = $derived(settingsStore.loading && !settingsStore.settings);
 	const attendanceMode = $derived(settingsStore.settings?.attendanceMode ?? 'manual');
 	const isCardReaderMode = $derived(attendanceMode === 'card_reader');
 	const currentClass = $derived(classes.find((c) => c.id === selectedClassId));
 	const today = $derived(fmtDate(Date.now()));
 	const todayEvents = $derived(events.filter((event) => fmtDate(event.timestamp) === today));
-
-	const todayClasses = $derived.by(() => {
-		const currentDay = new Date().getDay();
-		return classes
-			.filter((cls) => cls.days && cls.days.includes(currentDay))
-			.sort((a, b) => {
-				const [aH, aM] = a.dayStart.split(':').map(Number);
-				const [bH, bM] = b.dayStart.split(':').map(Number);
-				return aH * 60 + aM - (bH * 60 + bM);
-			});
-	});
 
 	const manualStudents = $derived.by(() => {
 		const query = rosterQuery.trim().toLowerCase();
@@ -115,10 +110,7 @@
 		const query = pickerQuery.trim().toLowerCase();
 		return students
 			.filter((student) => {
-				const matchesQuery =
-					!query ||
-					student.name.toLowerCase().includes(query) ||
-					student.studentNumber.toLowerCase().includes(query);
+				const matchesQuery = !query || student.name.toLowerCase().includes(query);
 				const matchesClass = !selectedClassId || student.classId === selectedClassId;
 				return matchesQuery && matchesClass;
 			})
@@ -139,20 +131,25 @@
 			.slice(0, 14)
 	);
 
-	const checkedInCount = $derived(
+	const recordedCount = $derived(
 		manualStudents.filter((student) => getLastEventToday(student)?.type === 'in').length
 	);
-	const completedCount = $derived(
-		manualStudents.filter((student) => getLastEventToday(student)?.type === 'out').length
-	);
+	const pendingCount = $derived(manualStudents.length - recordedCount);
 
 	const activeClass = $derived(getActiveClass());
+	const sessionClass = $derived.by(() => {
+		if (currentClass) return currentClass;
+		if (isCardReaderMode) return activeClass ?? undefined;
+		return undefined;
+	});
 	const timeOfDay = $derived(getTimeOfDay());
-	const pageCategory = $derived(isCardReaderMode ? 'Tap Mode' : 'Manual Mode');
+	const pageCategory = $derived(
+		settingsPending ? 'Attendance' : isCardReaderMode ? 'Tap Mode' : 'Manual Mode'
+	);
 	const dynamicTitle = $derived.by(() => {
+		if (settingsPending) return 'Attendance';
 		if (isCardReaderMode) {
-			if (activeClass) return `${timeOfDay} ${activeClass.name} Attendance`;
-			if (currentClass) return `${currentClass.name} Live Session`;
+			if (sessionClass) return `${timeOfDay} ${sessionClass.name} Attendance`;
 			return 'Live Session';
 		}
 		if (currentClass) return `${currentClass.name} Attendance`;
@@ -160,20 +157,18 @@
 	});
 
 	const dynamicDescription = $derived.by(() => {
+		if (settingsPending) return 'Loading attendance mode and class roster.';
 		if (isCardReaderMode) {
-			if (activeClass) {
-				return `Recording attendance for ${timeOfDay.toLowerCase()} ${activeClass.name} (${activeClass.dayStart} - ${activeClass.dayEnd})`;
+			if (sessionClass) {
+				return `Recording attendance for ${sessionClass.name} (${sessionClass.dayStart} - ${sessionClass.dayEnd})`;
 			}
-			if (currentClass) {
-				return `Recording attendance for ${currentClass.name} (${currentClass.dayStart} - ${currentClass.dayEnd})`;
-			}
-			return 'Active monitoring of student check-ins.';
+			return 'Active monitoring of student attendance.';
 		}
 
 		if (currentClass) {
 			return `Name-only attendance for ${currentClass.name} (${currentClass.dayStart} - ${currentClass.dayEnd})`;
 		}
-		return 'Choose names from the class list and record attendance without card or ID numbers.';
+		return 'Choose names from the class list and record attendance without card serials.';
 	});
 
 	function getTimeOfDay(): 'Morning' | 'Afternoon' {
@@ -217,14 +212,28 @@
 	function getNextAttendanceType(student: Student): AttendanceType | null {
 		const last = getLastEventToday(student);
 		if (!last) return 'in';
-		return last.type === 'in' ? 'out' : null;
+		return null;
 	}
 
 	function getStudentStatus(student: Student) {
 		const last = getLastEventToday(student);
 		if (!last) return { label: 'Not recorded', tone: 'idle' };
-		if (last.type === 'in') return { label: `Checked in ${fmtTime(last.timestamp)}`, tone: 'in' };
-		return { label: `Completed ${fmtTime(last.timestamp)}`, tone: 'out' };
+		return { label: `Recorded ${fmtTime(last.timestamp)}`, tone: 'in' };
+	}
+
+	function getStudentInitials(name: string) {
+		const initials = name
+			.split(/\s+/)
+			.filter(Boolean)
+			.slice(0, 2)
+			.map((part) => part[0]?.toUpperCase())
+			.join('');
+
+		return initials || 'ST';
+	}
+
+	function getStudentClassName(student: Student) {
+		return classes.find((classItem) => classItem.id === student.classId)?.name ?? 'No class';
 	}
 
 	function toast(msg: string, ok = true) {
@@ -242,7 +251,7 @@
 			const eventIdToRemove = lastEventId;
 			log = log.filter((line) => line.id !== eventIdToRemove);
 			events = events.filter((event) => event.id !== eventIdToRemove);
-			toast(`Undid ${lastResult.name} ${lastResult.type === 'in' ? 'check-in' : 'check-out'}`);
+			toast(`Undid ${lastResult.name} attendance`);
 		} catch {
 			toast('Failed to undo last action', false);
 		} finally {
@@ -319,7 +328,7 @@
 	async function logForStudent(student: Student, forcedType?: AttendanceType) {
 		const type = forcedType ?? getNextAttendanceType(student);
 		if (!type) {
-			toast(`${student.name} already completed attendance today`, false);
+			toast(`${student.name} already recorded today`, false);
 			return;
 		}
 
@@ -336,7 +345,7 @@
 		try {
 			const createdEvent = await addEvent({
 				studentId: student.id,
-				classId: student.classId || selectedClassId || undefined,
+				classId: student.classId || selectedClassId || sessionClass?.id || undefined,
 				type,
 				note: isLate ? 'Late' : undefined
 			});
@@ -355,19 +364,15 @@
 				{
 					id: createdEvent.id,
 					studentName: student.name,
-					studentNumber: student.studentNumber,
 					type,
 					isLate,
-					message: type === 'in' ? (isLate ? 'Checked in late' : 'Checked in') : 'Checked out',
+					message: isLate ? 'Recorded late' : 'Recorded',
 					timestamp: ts
 				},
 				...log
 			].slice(0, 30);
 
-			toast(
-				`${student.name} - ${type === 'in' ? (isLate ? 'Late check-in' : 'Checked in') : 'Checked out'}`,
-				!isLate
-			);
+			toast(`${student.name} - ${isLate ? 'Late attendance' : 'Recorded'}`, !isLate);
 			if (undoTimer) clearTimeout(undoTimer);
 			undoTimer = setTimeout(() => {
 				lastResult = null;
@@ -380,25 +385,65 @@
 
 	function handleAttendanceError(err: unknown, name?: string) {
 		const message = err instanceof Error ? err.message : String(err);
-		if (message.includes('duplicate check-in') || message.includes('already checked in')) {
-			toast(name ? `${name} already checked in today` : 'Already checked in today', false);
+		if (message.includes('duplicate attendance') || message.includes('already recorded')) {
+			toast(name ? `${name} already recorded today` : 'Already recorded today', false);
 			return;
 		}
 		toast(`Error: ${message}`, false);
 	}
 
-	function endSession() {
-		const classObj = classes.find((c) => c.id === selectedClassId);
+	async function markStudent(student: Student, action: AttendanceType | null, closePicker = false) {
+		if (!action) {
+			toast(`${student.name} already recorded today`, false);
+			return;
+		}
+
+		if (isProcessing) {
+			toast('Please wait - processing previous request', false);
+			return;
+		}
+
+		isProcessing = true;
+		try {
+			await logForStudent(student, action);
+			if (closePicker) pickerOpen = false;
+		} finally {
+			isProcessing = false;
+		}
+	}
+
+	async function endSession() {
+		const classObj = sessionClass;
 		if (!classObj) {
 			goto(resolve('/'));
 			return;
 		}
 
-		const classStudents = students.filter((student) => student.classId === selectedClassId);
+		if (
+			!confirm(
+				`Close attendance for ${classObj.name} today? Missing learners will be treated as absences in the SF2 export.`
+			)
+		) {
+			return;
+		}
+
+		isClosingDay = true;
+		let closeSummary: string;
+		try {
+			const summary = await closeSf2AttendanceDay(classObj.id, today);
+			closeSummary = `; SF2 day closed with ${summary.absentCount} absent`;
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : 'Failed to close SF2 day';
+			toast(`Failed to close SF2 day: ${msg}`, false);
+			isClosingDay = false;
+			return;
+		}
+
+		const classStudents = students.filter((student) => student.classId === classObj.id);
 		const presentCount = classStudents.filter(
 			(student) => getLastEventToday(student)?.type === 'in'
 		).length;
-		const summary = `${presentCount}/${classStudents.length} students present`;
+		const summary = `${presentCount}/${classStudents.length} students present${closeSummary}`;
 
 		goto(
 			resolve(
@@ -430,7 +475,7 @@
 
 				{#if isCardReaderMode}
 					<button
-						disabled={todayClasses.length === 0 && !selectedClassId}
+						disabled={classes.length === 0}
 						onclick={() => {
 							pickerQuery = '';
 							pickerOpen = true;
@@ -443,22 +488,23 @@
 
 				<button
 					onclick={endSession}
+					disabled={isClosingDay || !sessionClass}
 					class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 				>
-					End Session
+					{isClosingDay ? 'Closing...' : 'End Session'}
 				</button>
 			</div>
 		{/snippet}
 	</PageHeader>
 
-	{#if settingsStore.loading && classes.length === 0}
+	{#if settingsPending}
 		<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading attendance...</div>
 	{:else if isCardReaderMode}
 		<section
-			class="grid min-h-[calc(100vh-28rem)] gap-8 px-6 py-10 md:px-12 lg:grid-cols-[1.2fr_1fr]"
+			class="grid h-[calc(100vh-16rem)] min-h-[560px] gap-5 px-6 py-6 md:px-12 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
 		>
 			<div
-				class="relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-3xl border border-border bg-surface p-10"
+				class="relative flex min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-surface p-8"
 			>
 				<div
 					aria-hidden="true"
@@ -473,43 +519,29 @@
 							Add a class in Settings before starting a live session.
 						</p>
 					</div>
-				{:else if !selectedClassId}
+				{:else if !sessionClass}
 					<div class="relative w-full max-w-md text-center">
-						<h3 class="display-lg mb-2">Select a class</h3>
+						<h3 class="display-lg mb-2">No active class</h3>
 						<p class="mb-8 text-muted-foreground">
-							Choose a class from the header to start accepting card taps.
+							Choose a class from the header, or let the active schedule select one.
 						</p>
 					</div>
 				{:else}
 					<div class="relative w-full max-w-md text-center">
 						<div class="label-mono mb-4 text-primary">
-							<span class="animate-pulse">●</span> Ready for card taps
+							<span class="inline-block size-2 animate-pulse rounded-full bg-primary align-middle"
+							></span> Ready for card taps
 						</div>
 
 						<div
-							class="mx-auto grid size-40 place-items-center rounded-full border-2 border-primary shadow-[0_0_30px_-5px_var(--primary)]"
+							class="mx-auto grid size-36 place-items-center rounded-full border-2 border-primary bg-background shadow-[0_0_30px_-8px_var(--primary)]"
 						>
-							<svg
-								class="size-16 text-primary"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
-							>
-								<path d="M3 7V5a2 2 0 0 1 2-2h2" />
-								<path d="M17 3h2a2 2 0 0 1 2 2v2" />
-								<path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-								<path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-								<line x1="7" y1="12" x2="17" y2="12" />
-							</svg>
+							<ScanLine class="size-16 text-primary" strokeWidth={1.5} />
 						</div>
 
-						<h3 class="display-lg mt-8">Tap a card</h3>
-						<p class="mx-auto mt-2 max-w-md text-muted-foreground">
-							Tap an ID card on the reader or type the card serial below.
+						<h3 class="mt-8 text-4xl font-semibold tracking-normal">Tap a card</h3>
+						<p class="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+							The reader field stays focused for card serials and typed fallback entries.
 						</p>
 
 						<form
@@ -523,36 +555,27 @@
 								type="text"
 								bind:value={cardInput}
 								placeholder="Tap card or enter serial..."
-								class="w-full rounded-md border border-border bg-background px-4 py-3 text-center font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+								class="h-12 w-full rounded-md border border-border bg-background px-4 text-center font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 							/>
 						</form>
 					</div>
 				{/if}
 			</div>
 
-			<div class="flex h-full flex-col rounded-2xl border border-border bg-card p-6">
-				<div class="mb-4 flex shrink-0 items-baseline justify-between gap-4">
+			<div class="flex min-h-0 flex-col rounded-2xl border border-border bg-card p-5">
+				<div class="mb-4 flex shrink-0 items-start justify-between gap-3">
 					<div class="flex flex-col">
 						<h3 class="text-lg font-medium">Session log</h3>
-						<span class="label-mono text-xs opacity-60">Latest activity</span>
+						<span class="label-mono text-xs opacity-60">Latest card or manual actions</span>
 					</div>
-					<form
-						onsubmit={(e) => {
-							e.preventDefault();
-							handleCardSubmit(cardInput);
-						}}
-						class="w-56"
+					<span
+						class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]"
 					>
-						<input
-							type="text"
-							bind:value={cardInput}
-							placeholder="Tap card..."
-							class="w-full rounded-pill border border-border bg-background px-4 py-1.5 font-mono text-xs focus:ring-2 focus:ring-primary focus:outline-none"
-						/>
-					</form>
+						{log.length} entries
+					</span>
 				</div>
 
-				<div class="flex-1 overflow-y-auto">
+				<div class="min-h-0 flex-1 overflow-y-auto">
 					{#if log.length === 0}
 						<div
 							class="flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground"
@@ -565,12 +588,7 @@
 								<li class="flex items-center justify-between gap-3 py-3">
 									<div class="min-w-0">
 										<div class="truncate font-medium">{line.studentName}</div>
-										<div class="label-mono">
-											{#if line.studentNumber}
-												#{line.studentNumber} -
-											{/if}
-											{fmtTime(line.timestamp)}
-										</div>
+										<div class="label-mono">{fmtTime(line.timestamp)}</div>
 									</div>
 									<div class="flex items-center gap-2">
 										{#if line.isLate}
@@ -590,95 +608,181 @@
 			</div>
 		</section>
 	{:else}
-		<section class="grid gap-8 px-6 py-10 md:px-12 lg:grid-cols-[1.3fr_0.9fr]">
-			<div class="flex min-h-[560px] flex-col rounded-2xl border border-border bg-card p-6">
-				<div class="mb-6 flex flex-wrap items-end justify-between gap-4">
-					<div>
-						<h3 class="text-xl font-semibold">Name roster</h3>
-						<p class="mt-1 text-sm text-muted-foreground">
-							Mark attendance from the class list without card or ID numbers.
-						</p>
-					</div>
-					<div class="grid grid-cols-3 overflow-hidden rounded-xl border border-border bg-surface">
-						{@render manualStat('Names', manualStudents.length)}
-						{@render manualStat('In', checkedInCount)}
-						{@render manualStat('Done', completedCount)}
+		<section
+			class="grid h-[calc(100vh-16rem)] min-h-[560px] gap-5 px-6 py-6 md:px-12 xl:grid-cols-[minmax(0,1fr)_340px]"
+		>
+			<div class="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
+				<div class="shrink-0 border-b border-border p-5">
+					<div class="flex flex-wrap items-start justify-between gap-4">
+						<div>
+							<h3 class="text-xl font-semibold">Student boxes</h3>
+							<p class="mt-1 max-w-xl text-sm text-muted-foreground">
+								One click per learner. Boxes show whether attendance has been recorded.
+							</p>
+						</div>
+						<div
+							class="grid grid-cols-3 overflow-hidden rounded-xl border border-border bg-surface"
+						>
+							{@render manualStat('Names', manualStudents.length)}
+							{@render manualStat('Recorded', recordedCount)}
+							{@render manualStat('Pending', pendingCount)}
+						</div>
 					</div>
 				</div>
 
-				<div class="mb-4">
-					<label for="name-search" class="label-mono">Find name</label>
-					<input
-						id="name-search"
-						bind:value={rosterQuery}
-						placeholder="Search by name..."
-						class="mt-2 h-11 w-full rounded-md border border-border bg-background px-4 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					/>
+				<div class="flex shrink-0 flex-wrap items-center gap-3 border-b border-border p-4">
+					<div class="relative min-w-64 flex-1">
+						<Search
+							class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+						/>
+						<label for="name-search" class="sr-only">Find name</label>
+						<input
+							id="name-search"
+							bind:value={rosterQuery}
+							placeholder="Search by name..."
+							class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+						/>
+					</div>
+
+					<div
+						class="flex shrink-0 overflow-hidden rounded-pill border border-border bg-surface p-1"
+						role="group"
+						aria-label="Attendance roster view"
+					>
+						<button
+							type="button"
+							aria-pressed={manualViewMode === 'boxes'}
+							onclick={() => (manualViewMode = 'boxes')}
+							class="inline-flex h-9 items-center gap-2 rounded-pill px-3 text-sm font-medium transition-colors {manualViewMode ===
+							'boxes'
+								? 'bg-background text-foreground shadow-sm'
+								: 'text-muted-foreground hover:text-foreground'}"
+						>
+							<Grid2X2 class="size-4" />
+							Boxes
+						</button>
+						<button
+							type="button"
+							aria-pressed={manualViewMode === 'list'}
+							onclick={() => (manualViewMode = 'list')}
+							class="inline-flex h-9 items-center gap-2 rounded-pill px-3 text-sm font-medium transition-colors {manualViewMode ===
+							'list'
+								? 'bg-background text-foreground shadow-sm'
+								: 'text-muted-foreground hover:text-foreground'}"
+						>
+							<List class="size-4" />
+							List
+						</button>
+					</div>
 				</div>
 
-				<div class="min-h-0 flex-1 overflow-y-auto rounded-xl border border-border">
+				<div class="min-h-0 flex-1 p-4">
 					{#if manualStudents.length === 0}
 						<div
-							class="flex h-full min-h-72 items-center justify-center p-8 text-center text-sm text-muted-foreground"
+							class="flex h-full min-h-72 items-center justify-center rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
 						>
 							No names match this class or search.
 						</div>
-					{:else}
-						<ul class="divide-y divide-border">
+					{:else if manualViewMode === 'boxes'}
+						<div
+							class="grid h-full auto-rows-[84px] grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2 overflow-y-auto pr-1"
+						>
 							{#each manualStudents as student (student.id)}
 								{@const action = getNextAttendanceType(student)}
 								{@const status = getStudentStatus(student)}
-								<li class="flex items-center justify-between gap-4 px-4 py-3 hover:bg-surface/50">
-									<div class="min-w-0">
-										<div class="truncate text-base font-semibold">{student.name}</div>
-										<div
-											class="mt-1 text-xs {status.tone === 'in'
-												? 'text-primary'
-												: status.tone === 'out'
-													? 'text-muted-foreground'
-													: 'text-muted-foreground'}"
+								<button
+									type="button"
+									title={`${student.name} - ${status.label}`}
+									disabled={!action || isProcessing}
+									onclick={() => markStudent(student, action)}
+									class="group flex h-full min-w-0 flex-col justify-between rounded-xl border p-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-65 {action ===
+									'in'
+										? 'border-border bg-background hover:border-primary hover:bg-primary/10'
+										: 'border-border bg-surface/80 text-muted-foreground'}"
+								>
+									<span class="flex min-w-0 items-start gap-2">
+										<span
+											class="grid size-8 shrink-0 place-items-center rounded-lg border text-[11px] font-bold {status.tone ===
+											'in'
+												? 'border-primary/30 bg-primary text-primary-foreground'
+												: 'border-border bg-surface text-foreground'}"
 										>
-											{status.label}
-										</div>
-									</div>
-									<button
-										disabled={!action || isProcessing}
-										onclick={async () => {
-											if (!action) return;
-											if (isProcessing) {
-												toast('Please wait - processing previous request', false);
-												return;
-											}
-											isProcessing = true;
-											try {
-												await logForStudent(student, action);
-											} finally {
-												isProcessing = false;
-											}
-										}}
-										class="min-w-28 rounded-pill px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
-										'in'
-											? 'bg-primary text-primary-foreground hover:bg-accent'
-											: action === 'out'
-												? 'border border-border bg-background hover:bg-surface'
-												: 'border border-border bg-surface text-muted-foreground'}"
-									>
-										{action === 'in' ? 'Check in' : action === 'out' ? 'Check out' : 'Completed'}
-									</button>
-								</li>
+											{getStudentInitials(student.name)}
+										</span>
+										<span class="min-w-0">
+											<span class="line-clamp-2 text-xs leading-tight font-semibold break-words">
+												{student.name}
+											</span>
+										</span>
+									</span>
+									<span class="flex items-center justify-between gap-2">
+										<span class="truncate text-[10px] text-muted-foreground">
+											{selectedClassId ? status.label : getStudentClassName(student)}
+										</span>
+										<span
+											class="label-mono shrink-0 text-[10px] font-bold {action === 'in'
+												? 'text-primary'
+												: 'text-muted-foreground'}"
+										>
+											{action === 'in' ? 'IN' : 'REC'}
+										</span>
+									</span>
+								</button>
 							{/each}
-						</ul>
+						</div>
+					{:else}
+						<div class="h-full overflow-y-auto rounded-xl border border-border">
+							<ul class="divide-y divide-border">
+								{#each manualStudents as student (student.id)}
+									{@const action = getNextAttendanceType(student)}
+									{@const status = getStudentStatus(student)}
+									<li class="flex items-center justify-between gap-4 px-4 py-3 hover:bg-surface/50">
+										<div class="flex min-w-0 items-center gap-3">
+											<div
+												class="grid size-10 shrink-0 place-items-center rounded-lg border border-border bg-surface text-xs font-bold"
+											>
+												{getStudentInitials(student.name)}
+											</div>
+											<div class="min-w-0">
+												<div class="truncate text-base font-semibold">{student.name}</div>
+												<div
+													class="mt-1 text-xs {status.tone === 'in'
+														? 'text-primary'
+														: 'text-muted-foreground'}"
+												>
+													{status.label}
+												</div>
+											</div>
+										</div>
+										<button
+											disabled={!action || isProcessing}
+											onclick={() => markStudent(student, action)}
+											class="min-w-28 rounded-pill px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
+											'in'
+												? 'bg-primary text-primary-foreground hover:bg-accent'
+												: 'border border-border bg-surface text-muted-foreground'}"
+										>
+											{action === 'in' ? 'Record' : 'Recorded'}
+										</button>
+									</li>
+								{/each}
+							</ul>
+						</div>
 					{/if}
 				</div>
 			</div>
 
-			<div class="flex min-h-[560px] flex-col rounded-2xl border border-border bg-card p-6">
-				<div class="mb-4 flex items-baseline justify-between">
+			<div class="flex min-h-0 flex-col rounded-2xl border border-border bg-card p-5">
+				<div class="mb-4 flex shrink-0 items-start justify-between gap-3">
 					<div>
 						<h3 class="text-lg font-medium">Recent activity</h3>
 						<span class="label-mono text-xs opacity-60">Today</span>
 					</div>
-					<span class="label-mono">{recentActivity.length} events</span>
+					<span
+						class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]"
+					>
+						{recentActivity.length} events
+					</span>
 				</div>
 
 				<div class="min-h-0 flex-1 overflow-y-auto">
@@ -717,46 +821,26 @@
 		>
 			<div
 				class="grid size-12 place-items-center rounded-full
-				{lastResult.type === 'in'
-					? lastResult.isLate
-						? 'bg-destructive/20 text-destructive'
-						: 'bg-primary/20 text-primary'
-					: 'bg-surface text-muted-foreground'}"
+				{lastResult.isLate ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'}"
 			>
-				{#if lastResult.type === 'in'}
-					<svg
-						class="size-6"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<polyline points="20 6 9 17 4 12" />
-					</svg>
-				{:else}
-					<svg
-						class="size-6"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path d="M18 6 6 18" />
-						<path d="m6 6 12 12" />
-					</svg>
-				{/if}
+				<svg
+					class="size-6"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<polyline points="20 6 9 17 4 12" />
+				</svg>
 			</div>
 			<div>
 				<div class="text-xl font-bold">{lastResult.name}</div>
 				<div class="label-mono flex gap-2">
 					<span class={lastResult.isLate ? 'font-bold text-destructive' : ''}>
-						{lastResult.type === 'in' ? (lastResult.isLate ? 'LATE' : 'CHECK-IN') : 'CHECK-OUT'}
+						{lastResult.isLate ? 'LATE' : 'IN'}
 					</span>
 					<span class="text-muted-foreground">-</span>
 					<span class="text-muted-foreground">{fmtTime(lastResult.time)}</span>
@@ -789,20 +873,7 @@
 				<li>
 					<button
 						disabled={!action || isProcessing}
-						onclick={async () => {
-							if (!action) return;
-							if (isProcessing) {
-								toast('Please wait - processing previous request', false);
-								return;
-							}
-							isProcessing = true;
-							try {
-								await logForStudent(student, action);
-								pickerOpen = false;
-							} finally {
-								isProcessing = false;
-							}
-						}}
+						onclick={() => markStudent(student, action, true)}
 						class="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						<span>
@@ -812,7 +883,7 @@
 							</span>
 						</span>
 						<span class="label-mono text-xs font-bold text-primary">
-							{action === 'out' ? 'CHECK OUT' : action === 'in' ? 'CHECK IN' : 'DONE'}
+							{action === 'in' ? 'RECORD' : 'RECORDED'}
 						</span>
 					</button>
 				</li>
@@ -856,11 +927,9 @@
 		class="shrink-0 rounded-pill px-2 py-1 font-mono text-[10px] font-bold
 			{type === 'in'
 			? 'bg-primary text-primary-foreground'
-			: type === 'out'
-				? 'border border-border bg-surface text-foreground'
-				: 'bg-destructive text-destructive-foreground'}"
+			: 'bg-destructive text-destructive-foreground'}"
 	>
-		{type === 'in' ? 'IN' : type === 'out' ? 'OUT' : 'ERROR'}
+		{type === 'in' ? 'IN' : 'ERROR'}
 	</span>
 {/snippet}
 

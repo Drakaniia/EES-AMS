@@ -45,7 +45,7 @@
 
 	const studentMap = $derived(new SvelteMap(students.map((s) => [s.id, s])));
 
-	// Last event per student today — determine who's currently checked in
+	// Last event per student today determines who has been recorded.
 	const checkedIn = $derived.by(() => {
 		const lastByStudent = new SvelteMap<string, AttendanceEvent>();
 		// Filter events to only include those from today and optionally for the active class
@@ -143,9 +143,7 @@
 	const attendanceActionLabel = $derived(
 		isCardReaderMode ? 'Start Live Session' : 'Take Attendance'
 	);
-	const attendanceFallbackLabel = $derived(
-		isCardReaderMode ? 'Manual Check-in' : 'Open Attendance'
-	);
+	const attendanceFallbackLabel = $derived(isCardReaderMode ? 'Manual Entry' : 'Open Attendance');
 
 	function attendanceHref(
 		classId?: string,
@@ -284,7 +282,7 @@
 	<section class="grid gap-4 px-6 py-10 sm:grid-cols-2 md:px-12 lg:grid-cols-3">
 		{@render statCard('Class Size', activeClassStudents.length)}
 		{@render statCard('Total Attendance', todayEvents.length, true)}
-		{@render statCard('Currently checked in', checkedIn.length)}
+		{@render statCard('Recorded Today', checkedIn.length)}
 	</section>
 
 	<!-- Panels -->
@@ -294,13 +292,13 @@
 			<div class="mb-4 flex flex-shrink-0 items-baseline justify-between">
 				<div class="flex flex-col">
 					<h3 class="text-lg font-medium">
-						{activeClass ? 'Currently in the room' : 'Next Session Class List'}
+						{activeClass ? 'Recorded in this session' : 'Next Session Class List'}
 					</h3>
 					<span class="label-mono text-xs opacity-60">
 						{activeClass
 							? isCardReaderMode
-								? 'Last tap registered as check-in'
-								: 'Latest manual check-in status'
+								? 'Last tap registered'
+								: 'Latest manual attendance status'
 							: `${nextClassStudents.length} Students`}
 					</span>
 				</div>
@@ -320,7 +318,7 @@
 
 			{#if activeClass && checkedIn.length === 0}
 				<div class="flex flex-1 items-center justify-center">
-					{@render emptyState('No one is checked in yet. Start attendance to begin.')}
+					{@render emptyState('No attendance has been recorded yet. Start attendance to begin.')}
 				</div>
 			{:else if !activeClass && nextClass}
 				<div class="flex flex-1 flex-col">
@@ -339,7 +337,6 @@
 								<li class="flex items-center justify-between py-3">
 									<div>
 										<div class="font-medium">{s.name}</div>
-										<div class="label-mono">#{s.studentNumber}</div>
 									</div>
 								</li>
 							{/each}
@@ -357,7 +354,6 @@
 						<li class="flex items-center justify-between py-3">
 							<div>
 								<div class="font-medium">{s?.name ?? 'Unknown'}</div>
-								<div class="label-mono">#{s?.studentNumber}</div>
 							</div>
 							<div class="font-mono text-sm text-muted-foreground">in · {fmtTime(e.timestamp)}</div>
 						</li>
@@ -387,11 +383,9 @@
 								<div class="label-mono">{fmtDate(e.timestamp)} · {fmtTime(e.timestamp)}</div>
 							</div>
 							<span
-								class="rounded-pill px-2 py-1 font-mono text-xs {e.type === 'in'
-									? 'bg-primary text-primary-foreground'
-									: 'border border-border bg-surface text-foreground'}"
+								class="rounded-pill bg-primary px-2 py-1 font-mono text-xs text-primary-foreground"
 							>
-								{e.type === 'in' ? 'CHECK-IN' : 'CHECK-OUT'}
+								IN
 							</span>
 						</li>
 					{/each}

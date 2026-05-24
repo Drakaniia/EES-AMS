@@ -26,9 +26,7 @@
 
 		if (query.trim()) {
 			const term = query.toLowerCase();
-			result = result.filter(
-				(s) => s.name.toLowerCase().includes(term) || s.studentNumber.toLowerCase().includes(term)
-			);
+			result = result.filter((s) => s.name.toLowerCase().includes(term));
 		}
 
 		return result;
@@ -95,7 +93,7 @@
 			<input
 				type="text"
 				bind:value={query}
-				placeholder="Search name or student number…"
+				placeholder="Search by name..."
 				class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 				autocomplete="off"
 			/>
@@ -123,7 +121,6 @@
 						>
 							<div class="min-w-0 flex-1">
 								<div class="truncate font-medium group-hover:text-primary">{s.name}</div>
-								<div class="label-mono text-[10px] opacity-60">#{s.studentNumber}</div>
 							</div>
 							{#if s.id === selectedId}
 								<svg
