@@ -1,8 +1,11 @@
 /// Type definitions matching the Rust backend
 
+export type StudentGender = 'male' | 'female';
+
 export interface Student {
 	id: string;
 	name: string;
+	gender?: StudentGender;
 	cardSerial?: string;
 	classId?: string;
 	createdAt: string;
@@ -56,12 +59,14 @@ export interface Settings {
 
 export interface CreateStudentRequest {
 	name: string;
+	gender?: StudentGender;
 	cardSerial?: string;
 	classId?: string;
 }
 
 export interface UpdateStudentRequest {
 	name?: string;
+	gender?: StudentGender;
 	cardSerial?: string;
 	classId?: string;
 }
