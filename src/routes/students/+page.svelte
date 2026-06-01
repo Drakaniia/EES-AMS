@@ -10,9 +10,20 @@
 		deleteStudent,
 		listClasses,
 		type Student,
+		type StudentGender,
 		type Class
 	} from '$lib/db-rust';
 	import { resolve } from '$app/paths';
+
+	type GenderOption = {
+		value: StudentGender;
+		label: string;
+	};
+
+	const genderOptions: GenderOption[] = [
+		{ value: 'male', label: 'Male' },
+		{ value: 'female', label: 'Female' }
+	];
 
 	// ── State ────────────────────────────────────────────────────────────────
 	let students = $state<Student[]>([]);
@@ -30,9 +41,11 @@
 
 	let entryMode = $state<'single' | 'bulk'>('single');
 	let formName = $state('');
+	let formGender = $state<StudentGender>('male');
 	let formCardSerial = $state('');
 	let formClassId = $state('');
-	let bulkStudentNames = $state('');
+	let bulkMaleStudentNames = $state('');
+	let bulkFemaleStudentNames = $state('');
 
 	let deleteTarget = $state<Student | null>(null);
 
@@ -67,6 +80,19 @@
 		toastMessage = msg;
 		if (toastTimer) clearTimeout(toastTimer);
 		toastTimer = setTimeout(() => (toastMessage = null), 3000);
+	}
+
+	function parseStudentNames(value: string) {
+		return value
+			.split(/\r?\n/)
+			.map((name) => name.trim())
+			.filter(Boolean);
+	}
+
+	function genderLabel(gender?: StudentGender) {
+		if (gender === 'male') return 'Male';
+		if (gender === 'female') return 'Female';
+		return 'Not set';
 	}
 
 	// Computed filtered and sorted students
@@ -107,11 +133,14 @@
 		const end = start + itemsPerPage;
 		return filteredStudents.slice(start, end);
 	});
-	const bulkNames = $derived.by(() =>
-		bulkStudentNames
-			.split(/\r?\n/)
-			.map((name) => name.trim())
-			.filter(Boolean)
+	const bulkMaleNames = $derived.by(() => parseStudentNames(bulkMaleStudentNames));
+	const bulkFemaleNames = $derived.by(() => parseStudentNames(bulkFemaleStudentNames));
+	const bulkStudentCount = $derived(bulkMaleNames.length + bulkFemaleNames.length);
+	const maleStudentCount = $derived(
+		filteredStudents.filter((student) => student.gender === 'male').length
+	);
+	const femaleStudentCount = $derived(
+		filteredStudents.filter((student) => student.gender === 'female').length
 	);
 
 	function handlePageChange(page: number) {
@@ -156,9 +185,11 @@
 		editing = null;
 		entryMode = 'single';
 		formName = '';
+		formGender = 'male';
 		formCardSerial = '';
 		formClassId = selectedClassId || (classes.length > 0 ? classes[0].id : '');
-		bulkStudentNames = '';
+		bulkMaleStudentNames = '';
+		bulkFemaleStudentNames = '';
 		dialogOpen = true;
 	}
 
@@ -166,9 +197,11 @@
 		editing = s;
 		entryMode = 'single';
 		formName = s.name;
+		formGender = s.gender ?? 'male';
 		formCardSerial = s.cardSerial ?? '';
 		formClassId = s.classId ?? '';
-		bulkStudentNames = '';
+		bulkMaleStudentNames = '';
+		bulkFemaleStudentNames = '';
 		dialogOpen = true;
 	}
 
@@ -182,11 +215,17 @@
 		editing = null;
 	}
 
-	function createStudent(name: string, classId: string, cardSerial?: string): Student {
+	function createStudent(
+		name: string,
+		gender: StudentGender,
+		classId: string,
+		cardSerial?: string
+	): Student {
 		return {
 			id: '',
 			createdAt: new Date().toISOString(),
 			name,
+			gender,
 			cardSerial: cardSerial || undefined,
 			classId: classId || undefined
 		};
@@ -199,16 +238,19 @@
 		const classId = formClassId;
 
 		if (!editing && entryMode === 'bulk') {
-			if (bulkNames.length === 0) {
+			if (bulkStudentCount === 0) {
 				toast('Paste or type at least one student name');
 				return;
 			}
 
 			try {
-				for (const bulkName of bulkNames) {
-					await saveStudent(createStudent(bulkName, classId));
+				for (const bulkName of bulkMaleNames) {
+					await saveStudent(createStudent(bulkName, 'male', classId));
 				}
-				toast(`${bulkNames.length} ${bulkNames.length === 1 ? 'student' : 'students'} added`);
+				for (const bulkName of bulkFemaleNames) {
+					await saveStudent(createStudent(bulkName, 'female', classId));
+				}
+				toast(`${bulkStudentCount} ${bulkStudentCount === 1 ? 'student' : 'students'} added`);
 				closeDialog();
 				reload();
 			} catch (error) {
@@ -222,16 +264,16 @@
 			toast('Please enter a student name');
 			return;
 		}
-
 		try {
 			const studentData: Student = editing
 				? {
 						...editing,
 						name,
+						gender: formGender,
 						cardSerial: serial,
 						classId
 					}
-				: createStudent(name, classId, serial);
+				: createStudent(name, formGender, classId, serial);
 
 			await saveStudent(studentData);
 			toast(editing ? 'Student updated' : 'Student added');
@@ -381,11 +423,21 @@
 			<!-- Stats -->
 			<div class="space-y-2">
 				<div class="label-mono">Total Students</div>
-				<div class="flex h-10 items-center font-mono text-lg font-bold">
-					{filteredStudents.length}
-					<span class="ml-2 text-xs font-normal text-muted-foreground">
-						(out of {students.length})
-					</span>
+				<div class="flex h-10 items-center justify-between gap-3">
+					<div class="font-mono text-lg font-bold">
+						{filteredStudents.length}
+						<span class="ml-2 text-xs font-normal text-muted-foreground">
+							(out of {students.length})
+						</span>
+					</div>
+					<div class="flex shrink-0 items-center gap-2 font-mono text-xs">
+						<span class="rounded-pill border border-border bg-surface px-2 py-1">
+							M {maleStudentCount}
+						</span>
+						<span class="rounded-pill border border-border bg-surface px-2 py-1">
+							F {femaleStudentCount}
+						</span>
+					</div>
 				</div>
 			</div>
 		</section>
@@ -395,8 +447,8 @@
 			{#if students.length === 0}
 				{@render emptyState()}
 			{:else}
-				<div class="mt-6 overflow-hidden rounded-2xl border border-border bg-card">
-					<table class="w-full text-sm">
+				<div class="mt-6 overflow-x-auto rounded-2xl border border-border bg-card">
+					<table class="w-full min-w-[760px] text-sm">
 						<thead class="bg-surface text-left">
 							<tr>
 								<th class="label-mono px-4 py-3">
@@ -418,6 +470,7 @@
 										{/if}
 									</button>
 								</th>
+								<th class="label-mono px-4 py-3">Gender</th>
 								<th class="label-mono px-4 py-3">Class</th>
 								<th class="label-mono px-4 py-3">Card</th>
 								<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
@@ -446,6 +499,11 @@
 												<line x1="10" y1="14" x2="21" y2="3" />
 											</svg>
 										</button>
+									</td>
+									<td class="px-4 py-3">
+										<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs">
+											{genderLabel(s.gender)}
+										</span>
 									</td>
 									<td class="px-4 py-3">
 										<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs">
@@ -581,7 +639,7 @@
 		aria-modal="true"
 		aria-labelledby="dialog-title"
 	>
-		<div class="w-full max-w-2xl rounded-2xl border border-border bg-background shadow-xl">
+		<div class="w-full max-w-3xl rounded-2xl border border-border bg-background shadow-xl">
 			<div class="border-b border-border px-6 pt-6 pb-5">
 				<h2 id="dialog-title" class="text-lg font-semibold">
 					{editing ? 'Edit student' : 'Add student'}
@@ -646,24 +704,66 @@
 				{#if !editing && entryMode === 'bulk'}
 					<div class="space-y-2">
 						<div class="flex items-center justify-between gap-3">
-							<label for="bulk-students" class="label-mono">Student names</label>
+							<div class="label-mono">Student names</div>
 							<span class="font-mono text-xs text-muted-foreground">
-								{bulkNames.length}
-								{bulkNames.length === 1 ? 'student' : 'students'}
+								{bulkStudentCount}
+								{bulkStudentCount === 1 ? 'student' : 'students'}
 							</span>
 						</div>
-						<textarea
-							id="bulk-students"
-							bind:value={bulkStudentNames}
-							rows="10"
-							placeholder="John Doe&#10;Jane Smith&#10;Michael Cruz"
-							class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
-						></textarea>
+						<div class="grid gap-4 sm:grid-cols-2">
+							<div class="space-y-2">
+								<div class="flex items-center justify-between gap-2">
+									<label for="bulk-male-students" class="label-mono">Male</label>
+									<span class="font-mono text-xs text-muted-foreground">{bulkMaleNames.length}</span
+									>
+								</div>
+								<textarea
+									id="bulk-male-students"
+									bind:value={bulkMaleStudentNames}
+									rows="10"
+									placeholder="Cruz, Juan&#10;Reyes, Marco"
+									class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
+								></textarea>
+							</div>
+							<div class="space-y-2">
+								<div class="flex items-center justify-between gap-2">
+									<label for="bulk-female-students" class="label-mono">Female</label>
+									<span class="font-mono text-xs text-muted-foreground"
+										>{bulkFemaleNames.length}</span
+									>
+								</div>
+								<textarea
+									id="bulk-female-students"
+									bind:value={bulkFemaleStudentNames}
+									rows="10"
+									placeholder="Dela Cruz, Maria&#10;Santos, Ana"
+									class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
+								></textarea>
+							</div>
+						</div>
 						<p class="text-xs text-muted-foreground">
-							Each new line creates one student. Cards can be paired later.
+							Each new line creates one student in the matching SF2 roster block.
 						</p>
 					</div>
 				{:else}
+					<div class="space-y-2">
+						<div class="label-mono">Gender</div>
+						<div class="grid rounded-lg border border-border bg-surface p-1 sm:grid-cols-2">
+							{#each genderOptions as option (option.value)}
+								<button
+									type="button"
+									onclick={() => (formGender = option.value)}
+									aria-pressed={formGender === option.value}
+									class="rounded-md px-4 py-2 text-sm font-medium transition-colors {formGender ===
+									option.value
+										? 'bg-background text-foreground shadow-sm'
+										: 'text-muted-foreground hover:text-foreground'}"
+								>
+									{option.label}
+								</button>
+							{/each}
+						</div>
+					</div>
 					<div class="grid gap-4 sm:grid-cols-2">
 						<div class="space-y-1.5">
 							<label for="field-name" class="label-mono">Full name</label>
@@ -699,13 +799,13 @@
 					</button>
 					<button
 						type="submit"
-						disabled={!editing && entryMode === 'bulk' && bulkNames.length === 0}
+						disabled={!editing && entryMode === 'bulk' && bulkStudentCount === 0}
 						class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						{#if editing}
 							Save Changes
 						{:else if entryMode === 'bulk'}
-							Add {bulkNames.length || ''} Students
+							Add {bulkStudentCount || ''} Students
 						{:else}
 							Add Student
 						{/if}

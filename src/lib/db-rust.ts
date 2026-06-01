@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
 	Student,
+	StudentGender,
 	Class,
 	Session,
 	AttendanceEvent,
@@ -17,6 +18,7 @@ import type {
 } from './types';
 export type {
 	Student,
+	StudentGender,
 	Class,
 	Session,
 	AttendanceEvent,
@@ -52,6 +54,7 @@ export async function saveStudent(student: Student): Promise<Student> {
 			id: student.id,
 			req: {
 				name: student.name,
+				gender: student.gender,
 				cardSerial: student.cardSerial,
 				classId: student.classId
 			}
@@ -60,6 +63,7 @@ export async function saveStudent(student: Student): Promise<Student> {
 		return await invoke('create_student', {
 			req: {
 				name: student.name,
+				gender: student.gender,
 				cardSerial: student.cardSerial,
 				classId: student.classId
 			}
