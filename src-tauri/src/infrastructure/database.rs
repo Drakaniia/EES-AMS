@@ -3,7 +3,7 @@ use crate::domain::{
     error::{AppError, Result},
     models::*,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
@@ -14,7 +14,8 @@ pub type DbPool = Pool<SqliteConnectionManager>;
 
 /// Initialize the database with schema and migrations
 pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
-    let manager = SqliteConnectionManager::file(path);
+    let manager = SqliteConnectionManager::file(path)
+        .with_init(|conn| conn.execute_batch("PRAGMA foreign_keys = ON;"));
     let pool = Pool::new(manager)?;
 
     let conn = pool.get()?;
@@ -86,6 +87,38 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
     }
 
     Ok(pool)
+}
+
+fn normalize_optional_text(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn local_day_bounds_timestamps() -> Result<(i64, i64)> {
+    let today = Local::now().date_naive();
+    let tomorrow = today.succ_opt().ok_or_else(|| {
+        AppError::Internal("failed to calculate local attendance date".to_string())
+    })?;
+
+    let start = today
+        .and_hms_opt(0, 0, 0)
+        .and_then(|time| time.and_local_timezone(Local).earliest())
+        .ok_or_else(|| AppError::Internal("failed to calculate local day start".to_string()))?;
+    let end = tomorrow
+        .and_hms_opt(0, 0, 0)
+        .and_then(|time| time.and_local_timezone(Local).earliest())
+        .ok_or_else(|| AppError::Internal("failed to calculate local day end".to_string()))?;
+
+    Ok((
+        start.with_timezone(&Utc).timestamp(),
+        end.with_timezone(&Utc).timestamp(),
+    ))
 }
 
 /// Migrate database to version 1 (add class support)
@@ -590,8 +623,11 @@ impl StudentRepository {
 
     /// Create a new student
     pub fn create(&self, req: CreateStudentRequest) -> Result<Student> {
+        let card_serial = normalize_optional_text(req.card_serial);
+        let class_id = normalize_optional_text(req.class_id);
+
         // Check if card serial is already registered
-        if let Some(ref serial) = req.card_serial {
+        if let Some(ref serial) = card_serial {
             if self.find_by_card(serial)?.is_some() {
                 return Err(AppError::CardAlreadyRegistered(serial.clone()));
             }
@@ -600,8 +636,8 @@ impl StudentRepository {
         let student = Student {
             id: StudentId::new(),
             name: req.name,
-            card_serial: req.card_serial,
-            class_id: req.class_id,
+            card_serial,
+            class_id,
             created_at: Utc::now(),
         };
 
@@ -623,8 +659,15 @@ impl StudentRepository {
 
     /// Update a student
     pub fn update(&self, id: StudentId, req: UpdateStudentRequest) -> Result<Student> {
+        let card_serial = req
+            .card_serial
+            .map(|value| normalize_optional_text(Some(value)));
+        let class_id = req
+            .class_id
+            .map(|value| normalize_optional_text(Some(value)));
+
         // Check if card serial is already registered to another student
-        if let Some(ref serial) = req.card_serial {
+        if let Some(Some(ref serial)) = card_serial {
             if let Some(existing) = self.find_by_card(serial)? {
                 if existing.id != id {
                     return Err(AppError::CardAlreadyRegistered(serial.clone()));
@@ -637,11 +680,11 @@ impl StudentRepository {
         if let Some(name) = req.name {
             student.name = name;
         }
-        if let Some(card_serial) = req.card_serial {
-            student.card_serial = Some(card_serial);
+        if let Some(card_serial) = card_serial {
+            student.card_serial = card_serial;
         }
-        if let Some(class_id) = req.class_id {
-            student.class_id = Some(class_id);
+        if let Some(class_id) = class_id {
+            student.class_id = class_id;
         }
 
         let conn = self.pool.get()?;
@@ -662,8 +705,18 @@ impl StudentRepository {
 
     /// Delete a student and all their events
     pub fn delete(&self, id: StudentId) -> Result<()> {
-        let conn = self.pool.get()?;
-        let rows = conn.execute(
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+
+        transaction.execute(
+            "DELETE FROM sf2_student_mappings WHERE student_id = ?1",
+            params![id.0.to_string()],
+        )?;
+        transaction.execute(
+            "DELETE FROM events WHERE student_id = ?1",
+            params![id.0.to_string()],
+        )?;
+        let rows = transaction.execute(
             "DELETE FROM students WHERE id = ?1",
             params![id.0.to_string()],
         )?;
@@ -672,6 +725,7 @@ impl StudentRepository {
             return Err(AppError::StudentNotFound(id.0.to_string()));
         }
 
+        transaction.commit()?;
         Ok(())
     }
 }
@@ -783,18 +837,7 @@ impl EventRepository {
     pub fn create(&self, req: CreateEventRequest) -> Result<AttendanceEvent> {
         let conn = self.pool.get()?;
 
-        let today_start = Utc::now()
-            .date_naive()
-            .and_hms_opt(0, 0, 0)
-            .unwrap()
-            .and_utc()
-            .timestamp();
-        let today_end = Utc::now()
-            .date_naive()
-            .and_hms_opt(23, 59, 59)
-            .unwrap()
-            .and_utc()
-            .timestamp();
+        let (today_start, today_end) = local_day_bounds_timestamps()?;
 
         let existing_count: i32 = conn
             .query_row(
@@ -802,7 +845,7 @@ impl EventRepository {
                  WHERE student_id = ?1 
                  AND event_type = 'in' 
                  AND timestamp >= ?2 
-                 AND timestamp <= ?3",
+                 AND timestamp < ?3",
                 params![req.student_id.0.to_string(), today_start, today_end],
                 |row| row.get(0),
             )
@@ -1047,7 +1090,7 @@ impl ClassRepository {
 
     /// Create a new class
     pub fn create(&self, req: CreateClassRequest) -> Result<Class> {
-        let room = req.room.filter(|r| !r.trim().is_empty());
+        let room = normalize_optional_text(req.room);
         let sessions_json =
             serde_json::to_string(&req.sessions).unwrap_or_else(|_| "[]".to_string());
         let days_json = serde_json::to_string(&req.days).unwrap_or_else(|_| "[]".to_string());
@@ -1094,12 +1137,7 @@ impl ClassRepository {
             class.name = name;
         }
         if let Some(room) = req.room {
-            // Empty string clears the room
-            class.room = if room.trim().is_empty() {
-                None
-            } else {
-                Some(room)
-            };
+            class.room = normalize_optional_text(Some(room));
         }
         if let Some(day_start) = req.day_start {
             class.day_start = day_start;
@@ -1143,13 +1181,32 @@ impl ClassRepository {
 
     /// Delete a class
     pub fn delete(&self, id: &str) -> Result<()> {
-        let conn = self.pool.get()?;
-        let rows = conn.execute("DELETE FROM classes WHERE id = ?1", params![id])?;
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+
+        transaction.execute(
+            "DELETE FROM sf2_templates WHERE active_class_id = ?1",
+            params![id],
+        )?;
+        transaction.execute(
+            "DELETE FROM attendance_day_status WHERE class_id = ?1",
+            params![id],
+        )?;
+        transaction.execute(
+            "UPDATE events SET class_id = NULL WHERE class_id = ?1",
+            params![id],
+        )?;
+        transaction.execute(
+            "UPDATE students SET class_id = NULL WHERE class_id = ?1",
+            params![id],
+        )?;
+        let rows = transaction.execute("DELETE FROM classes WHERE id = ?1", params![id])?;
 
         if rows == 0 {
             return Err(AppError::ClassNotFound(id.to_string()));
         }
 
+        transaction.commit()?;
         Ok(())
     }
 }
@@ -1186,5 +1243,107 @@ mod tests {
         // Assert
         assert_eq!(student_number_columns, 0);
         assert!(out_insert.is_err());
+    }
+
+    #[test]
+    fn init_db_enables_foreign_keys_for_pooled_connections() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database file should be created");
+        let pool = init_db(temp_db.path()).expect("database should initialize");
+        let conn = pool.get().expect("database connection should be available");
+
+        let foreign_keys_enabled: i32 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .expect("foreign key pragma should be inspectable");
+
+        assert_eq!(foreign_keys_enabled, 1);
+    }
+
+    #[test]
+    fn deleting_student_removes_attendance_events() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database file should be created");
+        let pool = init_db(temp_db.path()).expect("database should initialize");
+        let student_repo = StudentRepository::new(pool.clone());
+        let event_repo = EventRepository::new(pool.clone());
+
+        let student = student_repo
+            .create(CreateStudentRequest {
+                name: "Ada Lovelace".to_string(),
+                card_serial: None,
+                class_id: None,
+            })
+            .expect("student should be created");
+        event_repo
+            .create(CreateEventRequest {
+                student_id: student.id,
+                class_id: None,
+                event_type: AttendanceType::In,
+                note: None,
+            })
+            .expect("event should be created");
+
+        student_repo
+            .delete(student.id)
+            .expect("student should be deleted");
+
+        let conn = pool.get().expect("database connection should be available");
+        let event_count: i32 = conn
+            .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
+            .expect("event count should be readable");
+        assert_eq!(event_count, 0);
+    }
+
+    #[test]
+    fn deleting_class_clears_student_and_event_references() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database file should be created");
+        let pool = init_db(temp_db.path()).expect("database should initialize");
+        let class_repo = ClassRepository::new(pool.clone());
+        let student_repo = StudentRepository::new(pool.clone());
+        let event_repo = EventRepository::new(pool.clone());
+
+        let class = class_repo
+            .create(CreateClassRequest {
+                name: "Grade 1 - A".to_string(),
+                room: Some("101".to_string()),
+                day_start: "08:00".to_string(),
+                day_end: "15:00".to_string(),
+                late_after: "08:15".to_string(),
+                sessions: vec![Session {
+                    name: "Full Day".to_string(),
+                    start_time: "08:00".to_string(),
+                    end_time: "15:00".to_string(),
+                    late_after: "08:15".to_string(),
+                }],
+                days: vec![1, 2, 3, 4, 5],
+            })
+            .expect("class should be created");
+        let student = student_repo
+            .create(CreateStudentRequest {
+                name: "Grace Hopper".to_string(),
+                card_serial: None,
+                class_id: Some(class.id.clone()),
+            })
+            .expect("student should be created");
+        let event = event_repo
+            .create(CreateEventRequest {
+                student_id: student.id,
+                class_id: Some(class.id.clone()),
+                event_type: AttendanceType::In,
+                note: None,
+            })
+            .expect("event should be created");
+
+        class_repo
+            .delete(&class.id)
+            .expect("class should be deleted");
+
+        let student = student_repo
+            .get(student.id)
+            .expect("student should still exist");
+        let event = event_repo
+            .last_for_student(event.student_id)
+            .expect("event lookup should succeed")
+            .expect("event should still exist");
+        assert_eq!(student.class_id, None);
+        assert_eq!(event.class_id, None);
     }
 }
