@@ -599,7 +599,7 @@
 		sf2DraftFirstSchoolDay = firstSchoolDay;
 
 		return {
-			classId: sf2TemplateClassId || undefined,
+			classId: sf2TemplateDialogMode === 'edit' ? sf2TemplateClassId || undefined : undefined,
 			schoolId: sf2DraftSchoolId,
 			schoolName: sf2DraftSchoolName,
 			schoolYear: sf2DraftSchoolYear,
