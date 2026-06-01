@@ -39,8 +39,6 @@ anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 
-rand = "0.8"
-
 [features]
 default = []
 
