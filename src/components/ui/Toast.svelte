@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { X, CheckCircle, AlertCircle, Info, Download } from 'lucide-svelte';
 
 	interface Props {
@@ -12,6 +11,8 @@
 		show?: boolean;
 		actionText?: string;
 		action?: () => void;
+		onClose?: () => void;
+		onAction?: () => void;
 	}
 
 	let {
@@ -22,10 +23,11 @@
 		closable = true,
 		show = true,
 		actionText = '',
-		action = $bindable(() => {})
+		action,
+		onClose,
+		onAction
 	}: Props = $props();
 
-	const dispatch = createEventDispatcher();
 	let timeoutId: ReturnType<typeof setTimeout>;
 
 	const icons = {
@@ -54,14 +56,12 @@
 
 	function close() {
 		show = false;
-		dispatch('close');
+		onClose?.();
 	}
 
 	function handleAction() {
-		if (action) {
-			action();
-		}
-		dispatch('action');
+		action?.();
+		onAction?.();
 	}
 
 	onMount(() => {
@@ -78,9 +78,7 @@
 		}
 	}
 
-	$effect(() => {
-		return cleanup;
-	});
+	onDestroy(cleanup);
 
 	const IconComponent = $derived(icons[type]);
 	const colorClass = $derived(colors[type]);

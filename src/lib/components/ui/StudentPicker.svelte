@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import Dialog from './Dialog.svelte';
 	import type { Student } from '$lib/db-rust';
 
@@ -8,11 +7,10 @@
 		selectedId: string;
 		classId?: string;
 		placeholder?: string;
+		onSelect?: (detail: { id: string }) => void;
 	};
 
-	let { students, selectedId, classId, placeholder = 'Select student' }: Props = $props();
-
-	const dispatch = createEventDispatcher();
+	let { students, selectedId, classId, placeholder = 'Select student', onSelect }: Props = $props();
 
 	let open = $state(false);
 	let query = $state('');
@@ -35,13 +33,13 @@
 	let selectedStudent = $derived(students.find((s) => s.id === selectedId));
 
 	function handleSelect(id: string) {
-		dispatch('select', { id });
+		onSelect?.({ id });
 		open = false;
 		query = '';
 	}
 
 	function handleClear() {
-		dispatch('select', { id: '' });
+		onSelect?.({ id: '' });
 		open = false;
 		query = '';
 	}
@@ -74,7 +72,7 @@
 	{open}
 	title="Select Student"
 	description="Search for a student to filter records."
-	on:close={() => (open = false)}
+	onClose={() => (open = false)}
 >
 	<div class="space-y-4">
 		<div class="relative">
