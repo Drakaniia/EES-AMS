@@ -8,3 +8,4 @@
 - In deployed app, when i create a create sf2 form template, it opens the powershell window and i thought is hidden in background process. (also can we make it pure rust script that runs instead of .ps1 script?)
 - Male Female in student
 - Sf2 Workbook Sumaary Page UI before Export
+- In Global settings  card. when left unsave. create model dialogue that you have unsaved changes rather thatn just lettings the global config reset when out of focus if there is changes
