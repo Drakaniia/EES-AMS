@@ -40,8 +40,7 @@
 		downloadError = '';
 
 		try {
-			const result: string = await invoke('download_and_install');
-			console.log(result);
+			await invoke<string>('download_and_install');
 			// The app will restart automatically after successful installation
 		} catch (error) {
 			downloadError = error as string;
@@ -79,11 +78,10 @@
 		title="Update Available"
 		message={formatUpdateMessage(updateInfo)}
 		duration={0}
-		// Don't auto-hide update notifications
 		closable={!isDownloading}
 		actionText={isDownloading ? 'Downloading...' : 'Download & Install'}
 		action={isDownloading ? undefined : downloadAndInstall}
-		on:close={dismissUpdate}
+		onClose={dismissUpdate}
 	/>
 {/if}
 

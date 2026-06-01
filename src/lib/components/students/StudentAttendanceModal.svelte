@@ -144,7 +144,7 @@
 	title="Student Attendance Record"
 	description={student?.name ?? ''}
 	maxWidth="lg"
-	on:close={onClose}
+	{onClose}
 >
 	<div class="space-y-6">
 		{#if loading}

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import Dialog from './Dialog.svelte';
 
 	type Props = {
@@ -8,28 +7,26 @@
 		toValue?: string;
 		min?: string;
 		max?: string;
+		onClose?: () => void;
+		onSelect?: (detail: { from: string; to: string }) => void;
 	};
 
-	let { open, fromValue = '', toValue = '', min, max }: Props = $props();
-
-	const dispatch = createEventDispatcher();
+	let { open, fromValue = '', toValue = '', min, max, onClose, onSelect }: Props = $props();
 
 	// View state: 'from' | 'to'
 	let currentView = $state<'from' | 'to'>('from');
 
 	// Calendar state for FROM view
 	let fromMonth = $state(new Date());
-	let selectedFromDate = $state<string | null>(null);
+	let selectedFromDraft = $state<string | null | undefined>(undefined);
+	let selectedFromDate = $derived(
+		selectedFromDraft !== undefined ? selectedFromDraft : fromValue || null
+	);
 
 	// Calendar state for TO view
 	let toMonth = $state(new Date());
-	let selectedToDate = $state<string | null>(null);
-
-	// Sync selected dates with props
-	$effect(() => {
-		selectedFromDate = fromValue || null;
-		selectedToDate = toValue || null;
-	});
+	let selectedToDraft = $state<string | null | undefined>(undefined);
+	let selectedToDate = $derived(selectedToDraft !== undefined ? selectedToDraft : toValue || null);
 
 	// Helper functions
 	function getDaysInMonth(date: Date): number {
@@ -89,9 +86,9 @@
 		if (isDisabled(date, view)) return;
 
 		if (view === 'from') {
-			selectedFromDate = formatDate(date);
+			selectedFromDraft = formatDate(date);
 		} else {
-			selectedToDate = formatDate(date);
+			selectedToDraft = formatDate(date);
 		}
 	}
 
@@ -105,26 +102,26 @@
 	}
 
 	function handleToConfirm() {
-		if (selectedToDate) {
-			dispatch('select', { from: selectedFromDate, to: selectedToDate });
+		if (selectedFromDate && selectedToDate) {
+			onSelect?.({ from: selectedFromDate, to: selectedToDate });
 		}
-		dispatch('close');
+		onClose?.();
 	}
 
 	function handleClear() {
-		selectedFromDate = null;
-		selectedToDate = null;
-		dispatch('select', { from: '', to: '' });
-		dispatch('close');
+		selectedFromDraft = null;
+		selectedToDraft = null;
+		onSelect?.({ from: '', to: '' });
+		onClose?.();
 	}
 
 	function handleToday(view: 'from' | 'to') {
 		const today = new Date();
 		if (!isDisabled(today, view)) {
 			if (view === 'from') {
-				selectedFromDate = formatDate(today);
+				selectedFromDraft = formatDate(today);
 			} else {
-				selectedToDate = formatDate(today);
+				selectedToDraft = formatDate(today);
 			}
 		}
 	}
@@ -181,7 +178,7 @@
 	const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 </script>
 
-<Dialog {open} title="Select Date Range" on:close={() => dispatch('close')}>
+<Dialog {open} title="Select Date Range" {onClose}>
 	<div class="relative overflow-hidden">
 		<!-- FROM View -->
 		<div

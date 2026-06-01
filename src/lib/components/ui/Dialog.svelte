@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import { fly } from 'svelte/transition';
 
 	type Props = {
@@ -8,6 +7,7 @@
 		description?: string;
 		maxWidth?: 'sm' | 'md' | 'lg' | 'xl';
 		showCloseButton?: boolean;
+		onClose?: () => void;
 		children?: import('svelte').Snippet;
 	};
 
@@ -17,13 +17,12 @@
 		description,
 		maxWidth = 'md',
 		showCloseButton = true,
+		onClose,
 		children
 	}: Props = $props();
 
-	const dispatch = createEventDispatcher();
-
 	function handleClose() {
-		dispatch('close');
+		onClose?.();
 	}
 
 	function handleBackdropClick(event: MouseEvent) {

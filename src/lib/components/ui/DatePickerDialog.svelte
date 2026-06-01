@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import Dialog from './Dialog.svelte';
 
 	type Props = {
@@ -7,11 +6,11 @@
 		value?: string;
 		min?: string;
 		max?: string;
+		onClose?: () => void;
+		onSelect?: (detail: { date: string }) => void;
 	};
 
-	let { open, value = '', min, max }: Props = $props();
-
-	const dispatch = createEventDispatcher();
+	let { open, value = '', min, max, onClose, onSelect }: Props = $props();
 
 	// Calendar state
 	let currentMonth = $state(new Date());
@@ -71,15 +70,15 @@
 
 	function handleConfirm() {
 		if (selectedDate) {
-			dispatch('select', { date: selectedDate });
+			onSelect?.({ date: selectedDate });
 		}
-		dispatch('close');
+		onClose?.();
 	}
 
 	function handleClear() {
 		selectedDate = null;
-		dispatch('select', { date: '' });
-		dispatch('close');
+		onSelect?.({ date: '' });
+		onClose?.();
 	}
 
 	function handleToday() {
@@ -130,7 +129,7 @@
 	const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 </script>
 
-<Dialog {open} title="Select Date" on:close={() => dispatch('close')}>
+<Dialog {open} title="Select Date" {onClose}>
 	<!-- Month navigation -->
 	<div class="mb-4 flex items-center justify-between">
 		<button
