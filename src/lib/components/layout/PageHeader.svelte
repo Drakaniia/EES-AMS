@@ -14,23 +14,27 @@
 	} = $props();
 </script>
 
-<header class="border-b border-border px-6 pt-10 pb-8 md:px-12 md:pt-16">
-	<div class="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-		<div>
+<header class="shrink-0 border-b border-border bg-background/95 px-6 py-5 md:px-12 md:py-6">
+	<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+		<div class="min-w-0">
 			{#if category}
 				<div
-					class="mb-4 inline-block rounded-full border border-border bg-surface px-3 py-1 font-mono text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
+					class="mb-2 inline-flex rounded-full border border-border bg-surface px-2.5 py-1 font-mono text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
 				>
 					{category}
 				</div>
 			{/if}
-			<h2 class="display-lg max-w-2xl">{title}</h2>
+			<h1 class="max-w-3xl text-3xl leading-tight font-semibold tracking-normal md:text-[34px]">
+				{title}
+			</h1>
 			{#if description}
-				<p class="mt-4 max-w-xl text-base text-muted-foreground">{description}</p>
+				<p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground md:text-[15px]">
+					{description}
+				</p>
 			{/if}
 		</div>
 		{#if actions}
-			<div class="flex flex-wrap gap-2">
+			<div class="flex shrink-0 flex-wrap gap-2">
 				{@render actions()}
 			</div>
 		{/if}
