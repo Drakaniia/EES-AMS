@@ -875,6 +875,24 @@ fn sf2_month_number(name: &str) -> Option<u32> {
     }
 }
 
+fn sf2_month_name(month: u32) -> &'static str {
+    match month {
+        1 => "JANUARY",
+        2 => "FEBRUARY",
+        3 => "MARCH",
+        4 => "APRIL",
+        5 => "MAY",
+        6 => "JUNE",
+        7 => "JULY",
+        8 => "AUGUST",
+        9 => "SEPTEMBER",
+        10 => "OCTOBER",
+        11 => "NOVEMBER",
+        12 => "DECEMBER",
+        _ => "",
+    }
+}
+
 fn sf2_report_year(school_year: &str, month: u32) -> i32 {
     let years = school_year
         .split(|ch: char| !ch.is_ascii_digit())
@@ -1364,11 +1382,7 @@ fn pick_workbook_path(app: &tauri::AppHandle) -> Result<PathBuf> {
 }
 
 fn save_workbook_path(app: &tauri::AppHandle, template: &Sf2TemplateRecord) -> Result<PathBuf> {
-    let file_name = format!(
-        "SF2-{}-{}-generated.xls",
-        sanitize_file_part(&template.grade_level),
-        sanitize_file_part(&template.section)
-    );
+    let file_name = export_workbook_file_name(template, Local::now().month());
     let (tx, rx) = std::sync::mpsc::channel();
     app.dialog()
         .file()
@@ -1384,6 +1398,24 @@ fn save_workbook_path(app: &tauri::AppHandle, template: &Sf2TemplateRecord) -> R
         })?,
     )?
     .ok_or_else(|| AppError::InvalidInput("Export cancelled".to_string()))
+}
+
+fn export_workbook_file_name(template: &Sf2TemplateRecord, current_month: u32) -> String {
+    let month = sf2_export_month_file_part(&template.report_month, current_month);
+    format!(
+        "SF2-{}-{}-{}-generated.xls",
+        sanitized_or(&template.grade_level, "GRADE"),
+        sanitized_or(&template.section, "SECTION"),
+        month
+    )
+}
+
+fn sf2_export_month_file_part(report_month: &str, current_month: u32) -> &'static str {
+    sf2_month_number(report_month)
+        .or(Some(current_month))
+        .map(sf2_month_name)
+        .filter(|month| !month.is_empty())
+        .unwrap_or("MONTH")
 }
 
 fn dialog_path(path: Option<tauri_plugin_dialog::FilePath>) -> Result<Option<PathBuf>> {
@@ -1574,6 +1606,40 @@ mod tests {
             class_id: Some("class-1".to_string()),
             created_at: chrono::Utc::now(),
         }
+    }
+
+    fn template_record(report_month: &str) -> Sf2TemplateRecord {
+        Sf2TemplateRecord {
+            id: "template-1".to_string(),
+            source_path: "C:/sf2-working.xls".to_string(),
+            source_hash: "hash".to_string(),
+            school_id: "123456".to_string(),
+            school_name: "Sample School".to_string(),
+            school_year: "2026-2027".to_string(),
+            report_month: report_month.to_string(),
+            grade_level: "Grade 4".to_string(),
+            section: "Rizal".to_string(),
+            adviser_name: "Adviser".to_string(),
+            school_head_name: "Head".to_string(),
+            layout_fingerprint: "layout".to_string(),
+            active_class_id: "class-1".to_string(),
+            imported_at: 0,
+        }
+    }
+
+    #[test]
+    fn export_workbook_file_name_includes_saved_report_month() {
+        let file_name =
+            export_workbook_file_name(&template_record("Report for the Month of: June"), 7);
+
+        assert_eq!(file_name, "SF2-GRADE-4-RIZAL-JUNE-generated.xls");
+    }
+
+    #[test]
+    fn export_workbook_file_name_falls_back_to_current_month_when_report_month_is_blank() {
+        let file_name = export_workbook_file_name(&template_record(""), 8);
+
+        assert_eq!(file_name, "SF2-GRADE-4-RIZAL-AUGUST-generated.xls");
     }
 
     #[test]
