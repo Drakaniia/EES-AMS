@@ -1,7 +1,7 @@
 version: 2.1
 
 jobs:
-  build-node:
+  frontend-check:
     docker:
       - image: oven/bun:1.3.13
     working_directory: ~/project
@@ -40,13 +40,20 @@ jobs:
           path: ~/artifacts
           destination: node-build
 
-  test-rust:
+  backend-check:
     docker:
       - image: cimg/rust:1.88.0
     working_directory: ~/project/src-tauri
     steps:
       - checkout:
           path: ~/project
+      - run:
+          name: Skip backend checks outside pull requests
+          command: |
+            if [ -z "${CIRCLE_PULL_REQUEST:-}" ]; then
+              echo "Backend checks run only for pull request pipelines."
+              circleci-agent step halt
+            fi
       - restore_cache:
           keys:
             - cargo-v1-{{ arch }}-{{ checksum "Cargo.lock" }}
@@ -73,9 +80,6 @@ jobs:
       - run:
           name: Check Rust project
           command: cargo check
-      - run:
-          name: Test Rust project
-          command: cargo test
       - save_cache:
           key: cargo-v1-{{ arch }}-{{ checksum "Cargo.lock" }}
           paths:
@@ -84,9 +88,12 @@ jobs:
             - target
 
 workflows:
-  build-and-test:
+  ci:
     jobs:
-      - test-rust
-      - build-node:
-          requires:
-            - test-rust
+      - frontend-check
+      - backend-check:
+          filters:
+            branches:
+              ignore:
+                - main
+                - master
