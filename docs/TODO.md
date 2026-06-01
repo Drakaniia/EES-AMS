@@ -1,17 +1,10 @@
-export data button.. include the student list and system configuration
+# TODO
 
-default class starts at june to april
-
-add feature that can add new sheet: name of sheet is the Curent Month..
-
-backup when, is it possible to add hybrid, like upload this file on user gdrive so if updated locally, when online, it will update also in cloud (google drive)
-
-fix pagination.
-
-filter not working, TRENDING
-NEWEST
-POPULAR
-
-REQUEST A TOOL..
-
-thers is still remaining x mrk even thouth no students yet.
+- Default class starts at June to April.
+- Add a feature that creates a new SF2 sheet named for the current month.
+- Add optional Google Drive sync for backup files when the app is online.
+- Add simple fade-in animation to toast messages.
+- Auto-adjust SF2 rows to fit the full student count.
+- In deployed app, when i create a create sf2 form template, it opens the powershell window and i thought is hidden in background process. (also can we make it pure rust script that runs instead of .ps1 script?)
+- Male Female in student
+- Sf2 Workbook Sumaary Page UI before Export
