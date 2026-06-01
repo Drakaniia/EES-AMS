@@ -10,6 +10,7 @@ use crate::sf2::models::{
 use crate::sf2::service;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::params;
 use serde::Serialize;
 use std::fs;
 use tauri::Manager;
@@ -222,77 +223,189 @@ pub fn import_all(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
     payload: ExportData,
 ) -> std::result::Result<(), String> {
-    let student_repo = StudentRepository::new(pool.inner().clone());
-    let class_repo = ClassRepository::new(pool.inner().clone());
-    let event_repo = EventRepository::new(pool.inner().clone());
-    let settings_repo = SettingsRepository::new(pool.inner().clone());
+    let mut conn = pool.get().map_err(|e| e.to_string())?;
+    let transaction = conn.transaction().map_err(|e| e.to_string())?;
 
-    // Import classes first (students may reference them)
     for class in payload.classes {
-        let req = CreateClassRequest {
-            name: class.name,
-            room: class.room,
-            day_start: class.day_start,
-            day_end: class.day_end,
-            late_after: class.late_after,
-            sessions: class.sessions,
-            days: class.days,
-        };
-        class_repo.create(req).map_err(|e| e.to_string())?;
+        let sessions_json = serde_json::to_string(&class.sessions)
+            .map_err(|e| format!("Invalid class sessions: {e}"))?;
+        let days_json =
+            serde_json::to_string(&class.days).map_err(|e| format!("Invalid class days: {e}"))?;
+
+        transaction
+            .execute(
+                "INSERT INTO classes (id, name, room, day_start, day_end, late_after, sessions, days, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    room = excluded.room,
+                    day_start = excluded.day_start,
+                    day_end = excluded.day_end,
+                    late_after = excluded.late_after,
+                    sessions = excluded.sessions,
+                    days = excluded.days,
+                    created_at = excluded.created_at",
+                params![
+                    class.id,
+                    class.name,
+                    class.room,
+                    class.day_start,
+                    class.day_end,
+                    class.late_after,
+                    sessions_json,
+                    days_json,
+                    class.created_at.timestamp(),
+                ],
+            )
+            .map_err(|e| e.to_string())?;
     }
 
-    // Import students
     for student in payload.students {
-        let req = CreateStudentRequest {
-            name: student.name,
-            card_serial: student.card_serial,
-            class_id: student.class_id,
-        };
-        student_repo.create(req).map_err(|e| e.to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO students (id, name, card_serial, class_id, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    card_serial = excluded.card_serial,
+                    class_id = excluded.class_id,
+                    created_at = excluded.created_at",
+                params![
+                    student.id.0.to_string(),
+                    student.name,
+                    student.card_serial,
+                    student.class_id,
+                    student.created_at.timestamp(),
+                ],
+            )
+            .map_err(|e| e.to_string())?;
     }
 
-    // Import events
     for event in payload.events {
-        let req = CreateEventRequest {
-            student_id: event.student_id,
-            class_id: event.class_id,
-            event_type: event.event_type,
-            note: event.note,
-        };
-        event_repo.create(req).map_err(|e| e.to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(id) DO UPDATE SET
+                    student_id = excluded.student_id,
+                    class_id = excluded.class_id,
+                    event_type = excluded.event_type,
+                    timestamp = excluded.timestamp,
+                    note = excluded.note",
+                params![
+                    event.id.0.to_string(),
+                    event.student_id.0.to_string(),
+                    event.class_id,
+                    "in",
+                    event.timestamp.timestamp(),
+                    event.note,
+                ],
+            )
+            .map_err(|e| e.to_string())?;
     }
 
-    // Import settings (only the first one)
-    if let Some(settings) = payload.settings.into_iter().next() {
-        settings_repo.update(settings).map_err(|e| e.to_string())?;
+    if let Some(mut settings) = payload.settings.into_iter().next() {
+        if !matches!(
+            settings.quarter.as_str(),
+            "1st Quarter" | "2nd Quarter" | "3rd Quarter"
+        ) {
+            settings.quarter = "3rd Quarter".to_string();
+        }
+        settings.attendance_mode = settings.attendance_mode.normalize();
+
+        transaction
+            .execute(
+                "INSERT INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode, school_id, school_name, school_year, report_month, grade_level, section, adviser_name, school_head_name)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
+                 ON CONFLICT(id) DO UPDATE SET
+                    day_start = excluded.day_start,
+                    day_end = excluded.day_end,
+                    late_after = excluded.late_after,
+                    quarter = excluded.quarter,
+                    q1_start = excluded.q1_start,
+                    q1_end = excluded.q1_end,
+                    q2_start = excluded.q2_start,
+                    q2_end = excluded.q2_end,
+                    q3_start = excluded.q3_start,
+                    q3_end = excluded.q3_end,
+                    attendance_mode = excluded.attendance_mode,
+                    school_id = excluded.school_id,
+                    school_name = excluded.school_name,
+                    school_year = excluded.school_year,
+                    report_month = excluded.report_month,
+                    grade_level = excluded.grade_level,
+                    section = excluded.section,
+                    adviser_name = excluded.adviser_name,
+                    school_head_name = excluded.school_head_name",
+                params![
+                    settings.id,
+                    settings.day_start,
+                    settings.day_end,
+                    settings.late_after,
+                    settings.quarter,
+                    settings.q1_start,
+                    settings.q1_end,
+                    settings.q2_start,
+                    settings.q2_end,
+                    settings.q3_start,
+                    settings.q3_end,
+                    settings.attendance_mode.as_str(),
+                    settings.school_id,
+                    settings.school_name,
+                    settings.school_year,
+                    settings.report_month,
+                    settings.grade_level,
+                    settings.section,
+                    settings.adviser_name,
+                    settings.school_head_name,
+                ],
+            )
+            .map_err(|e| e.to_string())?;
     }
 
-    Ok(())
+    transaction.commit().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn wipe_all(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
 ) -> std::result::Result<(), String> {
-    let conn = pool.get().map_err(|e| e.to_string())?;
+    let mut conn = pool.get().map_err(|e| e.to_string())?;
+    let transaction = conn.transaction().map_err(|e| e.to_string())?;
 
     // Clear all tables
-    conn.execute("DELETE FROM events", [])
+    transaction
+        .execute("DELETE FROM sf2_student_mappings", [])
         .map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM students", [])
+    transaction
+        .execute("DELETE FROM sf2_date_mappings", [])
         .map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM classes", [])
+    transaction
+        .execute("DELETE FROM attendance_day_status", [])
         .map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM settings", [])
+    transaction
+        .execute("DELETE FROM sf2_templates", [])
+        .map_err(|e| e.to_string())?;
+    transaction
+        .execute("DELETE FROM events", [])
+        .map_err(|e| e.to_string())?;
+    transaction
+        .execute("DELETE FROM students", [])
+        .map_err(|e| e.to_string())?;
+    transaction
+        .execute("DELETE FROM classes", [])
+        .map_err(|e| e.to_string())?;
+    transaction
+        .execute("DELETE FROM settings", [])
         .map_err(|e| e.to_string())?;
 
     // Re-insert default settings
-    conn.execute(
+    transaction.execute(
         "INSERT OR IGNORE INTO settings (id, day_start, day_end, late_after, quarter, attendance_mode) VALUES ('app', '08:30', '15:30', '08:45', '1st Quarter', 'manual')",
         []
     ).map_err(|e| e.to_string())?;
 
-    Ok(())
+    transaction.commit().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -321,7 +434,9 @@ pub async fn export_database(
             "attendance-backup-{}.db",
             chrono::Utc::now().format("%Y%m%d_%H%M%S")
         ))
-        .save_file(move |result| tx.send(result).unwrap());
+        .save_file(move |result| {
+            let _ = tx.send(result);
+        });
 
     let file_path = rx
         .recv()
@@ -359,7 +474,9 @@ pub async fn export_json_with_folder(
             "attendance-backup-{}.json",
             chrono::Utc::now().format("%Y%m%d_%H%M%S")
         ))
-        .save_file(move |result| tx.send(result).unwrap());
+        .save_file(move |result| {
+            let _ = tx.send(result);
+        });
 
     let file_path = rx
         .recv()
@@ -410,7 +527,11 @@ pub async fn export_csv_with_folder(
 
     for event in events {
         if let Some(student) = student_map.get(&event.student_id) {
-            let date = event.timestamp.format("%Y-%m-%d").to_string();
+            let date = event
+                .timestamp
+                .with_timezone(&chrono::Local)
+                .format("%Y-%m-%d")
+                .to_string();
             let key = format!("{}|{}", event.student_id, date);
 
             let entry = groups.entry(key).or_insert((student.clone(), Vec::new()));
@@ -426,17 +547,19 @@ pub async fn export_csv_with_folder(
         let mut is_late = String::new();
 
         for event in &*events {
-            let time_str = event.timestamp.format("%H:%M").to_string();
+            let event_time = event.timestamp.with_timezone(&chrono::Local);
+            let time_str = event_time.format("%H:%M").to_string();
 
-            if check_in_time.is_none() || time_str < *check_in_time.as_ref().unwrap() {
+            let is_earliest_check_in = match &check_in_time {
+                Some(current_check_in) => time_str < *current_check_in,
+                None => true,
+            };
+
+            if is_earliest_check_in {
                 check_in_time = Some(time_str.clone());
 
                 // Check if late
                 if let Some(class) = student.class_id.as_ref().and_then(|id| class_map.get(id)) {
-                    let event_time = event
-                        .timestamp
-                        .with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
-
                     // Find matching session or use default
                     let mut late_after = &class.late_after;
                     let time_str = event_time.format("%H:%M").to_string();
@@ -462,8 +585,8 @@ pub async fn export_csv_with_folder(
                     let late_time = event_time
                         .date_naive()
                         .and_hms_opt(h, m, 0)
-                        .ok_or("Invalid time")?
-                        .and_utc();
+                        .and_then(|time| time.and_local_timezone(chrono::Local).earliest())
+                        .ok_or("Invalid time")?;
                     if event_time > late_time {
                         is_late = "Yes".to_string();
                     } else {
@@ -489,7 +612,12 @@ pub async fn export_csv_with_folder(
 
         let date = events
             .first()
-            .map(|e| e.timestamp.format("%Y-%m-%d").to_string())
+            .map(|e| {
+                e.timestamp
+                    .with_timezone(&chrono::Local)
+                    .format("%Y-%m-%d")
+                    .to_string()
+            })
             .unwrap_or_default();
 
         push_csv_row(
@@ -514,7 +642,9 @@ pub async fn export_csv_with_folder(
             "attendance-records-{}.csv",
             chrono::Utc::now().format("%Y%m%d_%H%M%S")
         ))
-        .save_file(move |result| tx.send(result).unwrap());
+        .save_file(move |result| {
+            let _ = tx.send(result);
+        });
 
     let file_path = rx
         .recv()
@@ -639,7 +769,19 @@ pub struct UpdateInfo {
 pub async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
     let current_version = app.package_info().version.to_string();
 
-    let updater = app.updater().map_err(|e| e.to_string())?;
+    let updater = match app.updater() {
+        Ok(updater) => updater,
+        Err(error) => {
+            log::debug!("updater unavailable: {error}");
+            return Ok(UpdateInfo {
+                available: false,
+                version: None,
+                notes: None,
+                pub_date: None,
+                current_version,
+            });
+        }
+    };
     match updater.check().await.map_err(|e| e.to_string())? {
         Some(update) => Ok(UpdateInfo {
             available: true,
