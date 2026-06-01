@@ -1,6 +1,7 @@
 use crate::domain::error::{AppError, Result};
 use crate::domain::models::{
     AttendanceEvent, Class, CreateClassRequest, CreateStudentRequest, Settings, Student,
+    StudentGender, UpdateStudentRequest,
 };
 use crate::infrastructure::database::{
     ClassRepository, DbPool, EventRepository, SettingsRepository, StudentRepository,
@@ -72,13 +73,30 @@ pub fn import_workbook(app: tauri::AppHandle, pool: DbPool) -> Result<Sf2ImportS
         if !seen_names.insert(normalized_name.clone()) {
             continue;
         }
+        let learner_gender = StudentGender::from_sf2_block(learner.gender_block.as_deref());
 
         let student = if let Some(student) = existing_by_name.get(&normalized_name) {
             students_reused += 1;
-            student.clone()
+            let mut student = student.clone();
+            if let Some(gender) = learner_gender {
+                if student.gender != Some(gender) {
+                    student = student_repo.update(
+                        student.id,
+                        UpdateStudentRequest {
+                            name: None,
+                            gender: Some(gender),
+                            card_serial: None,
+                            class_id: None,
+                        },
+                    )?;
+                    existing_by_name.insert(normalized_name.clone(), student.clone());
+                }
+            }
+            student
         } else {
             let created = student_repo.create(CreateStudentRequest {
                 name: learner.name.clone(),
+                gender: learner_gender,
                 card_serial: None,
                 class_id: Some(class.id.clone()),
             })?;
@@ -172,6 +190,7 @@ fn create_workbook_from_template_in_dir(
         roster_students_for_draft(&student_repo, &class.id, &draft.learner_names)?;
 
     let row_slots = template_roster_slots();
+    let roster_assignments = template_roster_assignments(&students)?;
     if students.len() > row_slots.len() {
         return Err(AppError::InvalidInput(format!(
             "The bundled SF2 template has {} learner rows, but this class has {} learners",
@@ -206,14 +225,15 @@ fn create_workbook_from_template_in_dir(
     let analysis = excel::analyze_workbook(&working_copy_path)?;
     validate_configured_calendar(&analysis, &metadata)?;
     let layout_fingerprint = layout_fingerprint(&analysis);
-    let roster_marks = roster_name_marks(&analysis, &students, &row_slots);
+    let roster_marks = roster_name_marks(&analysis, &roster_assignments, &row_slots);
     excel::write_marks(&working_copy_path, &roster_marks)?;
 
     let mut seen_normalized_names = HashSet::new();
-    let student_mappings = students
+    let student_mappings = roster_assignments
         .iter()
-        .zip(row_slots.iter())
-        .map(|(student, slot)| {
+        .map(|assignment| {
+            let student = &assignment.student;
+            let slot = assignment.slot;
             let normalized_name = unique_normalized_name(
                 &mut seen_normalized_names,
                 &student.name,
@@ -345,6 +365,7 @@ pub fn update_workbook_settings(pool: DbPool, draft: Sf2TemplateDraft) -> Result
         roster_students_for_draft(&student_repo, class_id, &draft.learner_names)?;
 
     let row_slots = template_roster_slots();
+    let roster_assignments = template_roster_assignments(&students)?;
     if students.len() > row_slots.len() {
         return Err(AppError::InvalidInput(format!(
             "The bundled SF2 template has {} learner rows, but this class has {} learners",
@@ -357,14 +378,15 @@ pub fn update_workbook_settings(pool: DbPool, draft: Sf2TemplateDraft) -> Result
     let analysis = excel::analyze_workbook(&workbook_path)?;
     validate_configured_calendar(&analysis, &metadata)?;
     let layout_fingerprint = layout_fingerprint(&analysis);
-    let roster_marks = roster_name_marks(&analysis, &students, &row_slots);
+    let roster_marks = roster_name_marks(&analysis, &roster_assignments, &row_slots);
     excel::write_marks(&workbook_path, &roster_marks)?;
 
     let mut seen_normalized_names = HashSet::new();
-    let student_mappings = students
+    let student_mappings = roster_assignments
         .iter()
-        .zip(row_slots.iter())
-        .map(|(student, slot)| {
+        .map(|assignment| {
+            let student = &assignment.student;
+            let slot = assignment.slot;
             let normalized_name = unique_normalized_name(
                 &mut seen_normalized_names,
                 &student.name,
@@ -952,6 +974,7 @@ fn roster_students_for_draft(
         } else {
             let created = student_repo.create(CreateStudentRequest {
                 name: name.clone(),
+                gender: None,
                 card_serial: None,
                 class_id: Some(class_id.to_string()),
             })?;
@@ -999,10 +1022,16 @@ fn find_or_create_class(
     })
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 struct TemplateRosterSlot {
     row_index: u32,
     gender_block: &'static str,
+}
+
+#[derive(Debug, Clone)]
+struct TemplateRosterAssignment {
+    student: Student,
+    slot: TemplateRosterSlot,
 }
 
 fn template_roster_slots() -> Vec<TemplateRosterSlot> {
@@ -1022,9 +1051,76 @@ fn template_roster_slots() -> Vec<TemplateRosterSlot> {
     slots
 }
 
+fn template_roster_assignments(students: &[Student]) -> Result<Vec<TemplateRosterAssignment>> {
+    let row_slots = template_roster_slots();
+    let male_slots = row_slots
+        .iter()
+        .copied()
+        .filter(|slot| slot.gender_block == StudentGender::Male.sf2_block())
+        .collect::<Vec<_>>();
+    let female_slots = row_slots
+        .iter()
+        .copied()
+        .filter(|slot| slot.gender_block == StudentGender::Female.sf2_block())
+        .collect::<Vec<_>>();
+    let mut male_students = Vec::new();
+    let mut female_students = Vec::new();
+    let mut missing_gender = Vec::new();
+
+    for student in students {
+        match student.gender {
+            Some(StudentGender::Male) => male_students.push(student),
+            Some(StudentGender::Female) => female_students.push(student),
+            None => missing_gender.push(student.name.trim().to_string()),
+        }
+    }
+
+    if !missing_gender.is_empty() {
+        return Err(AppError::InvalidInput(format!(
+            "Set Male/Female for these students before creating or updating the SF2 workbook: {}",
+            missing_gender.join(", ")
+        )));
+    }
+    if male_students.len() > male_slots.len() {
+        return Err(AppError::InvalidInput(format!(
+            "The bundled SF2 template has {} male learner rows, but this class has {} male learners",
+            male_slots.len(),
+            male_students.len()
+        )));
+    }
+    if female_students.len() > female_slots.len() {
+        return Err(AppError::InvalidInput(format!(
+            "The bundled SF2 template has {} female learner rows, but this class has {} female learners",
+            female_slots.len(),
+            female_students.len()
+        )));
+    }
+
+    let mut assignments = Vec::with_capacity(students.len());
+    assignments.extend(
+        male_students
+            .into_iter()
+            .zip(male_slots)
+            .map(|(student, slot)| TemplateRosterAssignment {
+                student: student.clone(),
+                slot,
+            }),
+    );
+    assignments.extend(
+        female_students
+            .into_iter()
+            .zip(female_slots)
+            .map(|(student, slot)| TemplateRosterAssignment {
+                student: student.clone(),
+                slot,
+            }),
+    );
+    Ok(assignments)
+}
+
 fn roster_name_marks(
     analysis: &Sf2WorkbookAnalysis,
-    students: &[Student],
+    assignments: &[TemplateRosterAssignment],
     row_slots: &[TemplateRosterSlot],
 ) -> Vec<Sf2CellMark> {
     let sheet_names = analysis
@@ -1034,13 +1130,19 @@ fn roster_name_marks(
         .map(|sheet| sheet.name.clone())
         .collect::<Vec<_>>();
 
+    let names_by_row = assignments
+        .iter()
+        .map(|assignment| (assignment.slot.row_index, assignment.student.name.as_str()))
+        .collect::<HashMap<_, _>>();
     let mut marks = Vec::with_capacity(sheet_names.len() * row_slots.len());
     for sheet_name in sheet_names {
-        for (index, slot) in row_slots.iter().enumerate() {
-            let value = students
-                .get(index)
-                .map(|student| student.name.trim().to_string())
-                .unwrap_or_default();
+        for slot in row_slots {
+            let value = names_by_row
+                .get(&slot.row_index)
+                .copied()
+                .unwrap_or_default()
+                .trim()
+                .to_string();
             marks.push(Sf2CellMark {
                 sheet_name: sheet_name.clone(),
                 cell_address: format!("{SF2_NAME_COLUMN}{}", slot.row_index),
@@ -1413,6 +1515,7 @@ fn layout_fingerprint(analysis: &crate::sf2::models::Sf2WorkbookAnalysis) -> Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::models::StudentId;
     use crate::sf2::models::{Sf2WorkbookDate, Sf2WorkbookLearner, Sf2WorkbookSheet};
 
     fn template_draft(first_school_day: Option<u32>) -> Sf2TemplateDraft {
@@ -1459,6 +1562,17 @@ mod tests {
                 visible: -1,
                 used_range: "A1:AP82".to_string(),
             }],
+        }
+    }
+
+    fn student_with_gender(name: &str, gender: Option<StudentGender>) -> Student {
+        Student {
+            id: StudentId::new(),
+            name: name.to_string(),
+            gender,
+            card_serial: None,
+            class_id: Some("class-1".to_string()),
+            created_at: chrono::Utc::now(),
         }
     }
 
@@ -1561,17 +1675,68 @@ mod tests {
     }
 
     #[test]
+    fn template_roster_assignments_keep_female_learners_in_female_rows() {
+        let students = vec![
+            student_with_gender("Zamora, Ana", Some(StudentGender::Female)),
+            student_with_gender("Abao, Ben", Some(StudentGender::Male)),
+        ];
+
+        let assignments = template_roster_assignments(&students).unwrap();
+
+        let male = assignments
+            .iter()
+            .find(|assignment| assignment.student.name == "Abao, Ben")
+            .unwrap();
+        let female = assignments
+            .iter()
+            .find(|assignment| assignment.student.name == "Zamora, Ana")
+            .unwrap();
+        assert!(SF2_MALE_ROWS.contains(&male.slot.row_index));
+        assert_eq!(male.slot.gender_block, "MALE");
+        assert!(SF2_FEMALE_ROWS.contains(&female.slot.row_index));
+        assert_eq!(female.slot.gender_block, "FEMALE");
+    }
+
+    #[test]
+    fn template_roster_assignments_reject_missing_gender() {
+        let students = vec![student_with_gender("Learner, Missing", None)];
+
+        let error = template_roster_assignments(&students).unwrap_err();
+
+        assert!(error.to_string().contains("Set Male/Female"));
+    }
+
+    #[test]
     #[ignore = "requires Microsoft Excel COM automation"]
     fn create_workbook_from_template_flow_creates_class_and_template() {
         let temp_db = tempfile::NamedTempFile::new().expect("test database should be created");
         let workbook_dir = tempfile::tempdir().expect("workbook directory should be created");
         let pool = crate::infrastructure::init_db(temp_db.path()).expect("database should init");
+        let class = ClassRepository::new(pool.clone())
+            .create(CreateClassRequest {
+                name: "7 - Rose".to_string(),
+                room: None,
+                day_start: "08:30".to_string(),
+                day_end: "15:30".to_string(),
+                late_after: "08:45".to_string(),
+                sessions: Vec::new(),
+                days: vec![1, 2, 3, 4, 5],
+            })
+            .expect("class should be created");
+        StudentRepository::new(pool.clone())
+            .create(CreateStudentRequest {
+                name: "Learner, One".to_string(),
+                gender: Some(StudentGender::Male),
+                card_serial: None,
+                class_id: Some(class.id.clone()),
+            })
+            .expect("student should be created");
 
         let summary = create_workbook_from_template_in_dir(
             workbook_dir.path(),
             pool.clone(),
             Sf2TemplateDraft {
-                class_id: None,
+                class_id: Some(class.id.clone()),
                 school_id: "123456".to_string(),
                 school_name: "Sample Integrated School".to_string(),
                 school_year: "2026-2027".to_string(),
@@ -1581,14 +1746,14 @@ mod tests {
                 adviser_name: "Teacher Adviser".to_string(),
                 school_head_name: "School Head".to_string(),
                 first_school_day: Some(8),
-                learner_names: vec!["Learner, One".to_string()],
+                learner_names: Vec::new(),
             },
         )
         .expect("SF2 workbook should be created from template");
 
         assert_eq!(summary.class_name, "7 - Rose");
         assert_eq!(summary.learners_found, 1);
-        assert_eq!(summary.students_created, 1);
+        assert_eq!(summary.students_created, 0);
         assert_eq!(summary.dates_mapped, 17);
         assert!(Path::new(&summary.source_path).exists());
 
