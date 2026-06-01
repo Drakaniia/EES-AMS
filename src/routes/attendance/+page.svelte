@@ -7,6 +7,7 @@
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
+	import TaskProgress from '$lib/components/ui/TaskProgress.svelte';
 	import {
 		listStudents,
 		listClasses,
@@ -489,13 +490,29 @@
 				<button
 					onclick={endSession}
 					disabled={isClosingDay || !sessionClass}
-					class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+					class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 				>
+					{#if isClosingDay}
+						<span
+							class="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary"
+							aria-hidden="true"
+						></span>
+					{/if}
 					{isClosingDay ? 'Closing...' : 'End Session'}
 				</button>
 			</div>
 		{/snippet}
 	</PageHeader>
+
+	{#if isClosingDay}
+		<div class="px-6 pt-4 md:px-12">
+			<TaskProgress
+				active={isClosingDay}
+				title="Closing attendance session"
+				description="Writing absences to the SF2 workbook and preparing the session summary."
+			/>
+		</div>
+	{/if}
 
 	{#if settingsPending}
 		<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading attendance...</div>
@@ -586,8 +603,8 @@
 						<ul class="divide-y divide-border">
 							{#each log as line (line.id)}
 								<li class="flex items-center justify-between gap-3 py-3">
-									<div class="min-w-0">
-										<div class="truncate font-medium">{line.studentName}</div>
+									<div class="min-w-0 flex-1">
+										<div class="leading-snug font-medium break-words">{line.studentName}</div>
 										<div class="label-mono">{fmtTime(line.timestamp)}</div>
 									</div>
 									<div class="flex items-center gap-2">
@@ -685,7 +702,7 @@
 						</div>
 					{:else if manualViewMode === 'boxes'}
 						<div
-							class="grid h-full auto-rows-[84px] grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2 overflow-y-auto pr-1"
+							class="grid h-full auto-rows-[minmax(116px,auto)] grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3 overflow-y-auto pr-1"
 						>
 							{#each manualStudents as student (student.id)}
 								{@const action = getNextAttendanceType(student)}
@@ -695,28 +712,30 @@
 									title={`${student.name} - ${status.label}`}
 									disabled={!action || isProcessing}
 									onclick={() => markStudent(student, action)}
-									class="group flex h-full min-w-0 flex-col justify-between rounded-xl border p-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-65 {action ===
+									class="group flex min-h-[116px] min-w-0 flex-col justify-between rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-65 {action ===
 									'in'
 										? 'border-border bg-background hover:border-primary hover:bg-primary/10'
 										: 'border-border bg-surface/80 text-muted-foreground'}"
 								>
 									<span class="flex min-w-0 items-start gap-2">
 										<span
-											class="grid size-8 shrink-0 place-items-center rounded-lg border text-[11px] font-bold {status.tone ===
+											class="grid size-9 shrink-0 place-items-center rounded-lg border text-[11px] font-bold {status.tone ===
 											'in'
 												? 'border-primary/30 bg-primary text-primary-foreground'
 												: 'border-border bg-surface text-foreground'}"
 										>
 											{getStudentInitials(student.name)}
 										</span>
-										<span class="min-w-0">
-											<span class="line-clamp-2 text-xs leading-tight font-semibold break-words">
+										<span class="min-w-0 flex-1">
+											<span
+												class="text-sm leading-snug font-semibold break-words whitespace-normal"
+											>
 												{student.name}
 											</span>
 										</span>
 									</span>
 									<span class="flex items-center justify-between gap-2">
-										<span class="truncate text-[10px] text-muted-foreground">
+										<span class="min-w-0 text-[10px] leading-snug text-muted-foreground">
 											{selectedClassId ? status.label : getStudentClassName(student)}
 										</span>
 										<span
@@ -736,15 +755,19 @@
 								{#each manualStudents as student (student.id)}
 									{@const action = getNextAttendanceType(student)}
 									{@const status = getStudentStatus(student)}
-									<li class="flex items-center justify-between gap-4 px-4 py-3 hover:bg-surface/50">
+									<li
+										class="flex flex-col gap-3 px-4 py-3 hover:bg-surface/50 sm:flex-row sm:items-center sm:justify-between"
+									>
 										<div class="flex min-w-0 items-center gap-3">
 											<div
 												class="grid size-10 shrink-0 place-items-center rounded-lg border border-border bg-surface text-xs font-bold"
 											>
 												{getStudentInitials(student.name)}
 											</div>
-											<div class="min-w-0">
-												<div class="truncate text-base font-semibold">{student.name}</div>
+											<div class="min-w-0 flex-1">
+												<div class="text-base leading-snug font-semibold break-words">
+													{student.name}
+												</div>
 												<div
 													class="mt-1 text-xs {status.tone === 'in'
 														? 'text-primary'
@@ -757,7 +780,7 @@
 										<button
 											disabled={!action || isProcessing}
 											onclick={() => markStudent(student, action)}
-											class="min-w-28 rounded-pill px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
+											class="w-fit min-w-28 rounded-pill px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
 											'in'
 												? 'bg-primary text-primary-foreground hover:bg-accent'
 												: 'border border-border bg-surface text-muted-foreground'}"
@@ -796,8 +819,10 @@
 						<ul class="divide-y divide-border">
 							{#each recentActivity as event (event.id)}
 								<li class="flex items-center justify-between gap-3 py-3">
-									<div class="min-w-0">
-										<div class="truncate font-medium">{studentName(event.studentId)}</div>
+									<div class="min-w-0 flex-1">
+										<div class="leading-snug font-medium break-words">
+											{studentName(event.studentId)}
+										</div>
 										<div class="label-mono">{fmtTime(event.timestamp)}</div>
 									</div>
 									{@render pill(event.type)}
