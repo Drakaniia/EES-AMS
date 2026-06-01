@@ -440,7 +440,7 @@
 		const c: Class = {
 			id: editingClass?.id ?? '',
 			name,
-			room: formRoom.trim() || undefined,
+			room: formRoom.trim(),
 			dayStart: primary.startTime,
 			dayEnd: primary.endTime,
 			lateAfter: primary.lateAfter,
@@ -710,7 +710,7 @@
 			<button onclick={reload} class="ml-2 underline">Retry</button>
 		</div>
 	{:else}
-		<div class="grid gap-8 px-6 py-10 md:px-12 lg:grid-cols-12">
+		<div class="grid gap-6 px-6 py-6 md:px-12 lg:grid-cols-12">
 			<!-- ── Class Management ────────────────────────────────────────── -->
 			<div class="space-y-6 lg:col-span-8">
 				<section class="overflow-hidden rounded-2xl border border-border bg-card">
@@ -1147,7 +1147,7 @@
 		? 'Enter the form details for this workbook copy.'
 		: 'Update the saved workbook copy and attendance date layout.'}
 	maxWidth="xl"
-	on:close={() => (sf2TemplateDialogOpen = false)}
+	onClose={() => (sf2TemplateDialogOpen = false)}
 >
 	<form onsubmit={onCreateSf2FromTemplate} class="space-y-5">
 		<div class="grid gap-4 sm:grid-cols-2">
@@ -1316,7 +1316,7 @@
 	open={quarterDialogOpen}
 	title="School Year Quarters"
 	description="Set the current quarter and define the start/end dates for each period."
-	on:close={() => (quarterDialogOpen = false)}
+	onClose={() => (quarterDialogOpen = false)}
 >
 	<div class="space-y-6">
 		<div class="space-y-2">
@@ -1415,7 +1415,7 @@
 	open={classDialogOpen}
 	title={editingClass ? 'Edit Class' : 'Add New Class'}
 	description="Define the schedule for this specific grade or section."
-	on:close={() => (classDialogOpen = false)}
+	onClose={() => (classDialogOpen = false)}
 >
 	<form onsubmit={onSaveClass} class="space-y-4">
 		<div class="grid grid-cols-2 gap-4">

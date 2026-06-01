@@ -232,7 +232,7 @@
 	</PageHeader>
 
 	{#if sessionSummary}
-		<div class="px-6 pt-10 md:px-12">
+		<div class="px-6 pt-6 md:px-12">
 			<div
 				class="flex items-center justify-between rounded-2xl border border-primary/20 bg-primary/10 p-6 text-primary"
 			>
@@ -279,14 +279,14 @@
 	{/if}
 
 	<!-- Stats row -->
-	<section class="grid gap-4 px-6 py-10 sm:grid-cols-2 md:px-12 lg:grid-cols-3">
+	<section class="grid gap-4 px-6 py-6 sm:grid-cols-2 md:px-12 lg:grid-cols-3">
 		{@render statCard('Class Size', activeClassStudents.length)}
 		{@render statCard('Total Attendance', todayEvents.length, true)}
 		{@render statCard('Recorded Today', checkedIn.length)}
 	</section>
 
 	<!-- Panels -->
-	<section class="grid min-h-[calc(100vh-32rem)] gap-8 px-6 pb-16 md:px-12 lg:grid-cols-2">
+	<section class="grid min-h-[calc(100vh-28rem)] gap-6 px-6 pb-16 md:px-12 lg:grid-cols-2">
 		<!-- Currently in the room -->
 		<div class="flex h-full flex-col rounded-2xl border border-border bg-card p-6">
 			<div class="mb-4 flex flex-shrink-0 items-baseline justify-between">

@@ -290,7 +290,7 @@
 		</PageHeader>
 
 		<!-- ── Filters ──────────────────────────────────────────────────────────── -->
-		<section class="grid gap-4 px-6 py-8 sm:grid-cols-2 md:px-12 lg:grid-cols-4">
+		<section class="grid gap-4 px-6 py-5 sm:grid-cols-2 md:px-12 lg:grid-cols-4">
 			<!-- Date Range -->
 			<div class="space-y-2">
 				<div class="label-mono">Date Range</div>
@@ -362,7 +362,7 @@
 					selectedId={studentId}
 					{classId}
 					placeholder="All students"
-					on:select={(e) => (studentId = e.detail.id)}
+					onSelect={({ id }) => (studentId = id)}
 				/>
 			</div>
 
@@ -444,7 +444,7 @@
 			</div>
 		</section>
 
-		<div class="fixed right-6 bottom-6 z-30">
+		<div class="fixed bottom-6 left-1/2 z-30 -translate-x-1/2">
 			<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
 		</div>
 	</div>
@@ -467,10 +467,10 @@
 	open={dateRangePickerOpen}
 	fromValue={from}
 	toValue={to}
-	on:close={() => (dateRangePickerOpen = false)}
-	on:select={(e: CustomEvent<{ from: string; to: string }>) => {
-		from = e.detail.from;
-		to = e.detail.to;
+	onClose={() => (dateRangePickerOpen = false)}
+	onSelect={(range) => {
+		from = range.from;
+		to = range.to;
 	}}
 />
 
