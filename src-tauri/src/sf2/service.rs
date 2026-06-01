@@ -147,8 +147,17 @@ pub fn import_workbook(app: tauri::AppHandle, pool: DbPool) -> Result<Sf2ImportS
     })
 }
 
-pub fn create_workbook_from_template(
-    app: tauri::AppHandle,
+pub fn create_workbook_from_template<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    pool: DbPool,
+    draft: Sf2TemplateDraft,
+) -> Result<Sf2ImportSummary> {
+    let workbook_dir = sf2_workbook_dir(&app)?;
+    create_workbook_from_template_in_dir(&workbook_dir, pool, draft)
+}
+
+fn create_workbook_from_template_in_dir(
+    workbook_dir: &Path,
     pool: DbPool,
     draft: Sf2TemplateDraft,
 ) -> Result<Sf2ImportSummary> {
@@ -191,7 +200,7 @@ pub fn create_workbook_from_template(
         .map(|template| template.id)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let working_copy_path =
-        write_bundled_template_to_app_data(&app, &template_id, &grade_level, &section)?;
+        write_bundled_template_to_dir(workbook_dir, &template_id, &grade_level, &section)?;
 
     excel::write_metadata(&working_copy_path, &metadata)?;
     let analysis = excel::analyze_workbook(&working_copy_path)?;
@@ -1115,8 +1124,8 @@ fn sf2_metadata_warnings(metadata: &Sf2WorkbookMetadata) -> Vec<String> {
     .collect()
 }
 
-fn copy_workbook_to_app_data(
-    app: &tauri::AppHandle,
+fn copy_workbook_to_app_data<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
     source_path: &Path,
     template_id: &str,
     analysis: &crate::sf2::models::Sf2WorkbookAnalysis,
@@ -1142,13 +1151,12 @@ fn copy_workbook_to_app_data(
     Ok(working_copy_path)
 }
 
-fn write_bundled_template_to_app_data(
-    app: &tauri::AppHandle,
+fn write_bundled_template_to_dir(
+    dir: &Path,
     template_id: &str,
     grade_level: &str,
     section: &str,
 ) -> Result<PathBuf> {
-    let dir = sf2_workbook_dir(app)?;
     let template_prefix = template_id.chars().take(8).collect::<String>();
     let file_name = format!(
         "SF2-{}-{}-{}.xls",
@@ -1165,7 +1173,7 @@ fn write_bundled_template_to_app_data(
     Ok(working_copy_path)
 }
 
-fn sf2_workbook_dir(app: &tauri::AppHandle) -> Result<PathBuf> {
+fn sf2_workbook_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf> {
     let dir = app
         .path()
         .app_data_dir()
@@ -1550,6 +1558,57 @@ mod tests {
             cell_address: "F55".to_string(),
             value: String::new(),
         }));
+    }
+
+    #[test]
+    #[ignore = "requires Microsoft Excel COM automation"]
+    fn create_workbook_from_template_flow_creates_class_and_template() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database should be created");
+        let workbook_dir = tempfile::tempdir().expect("workbook directory should be created");
+        let pool = crate::infrastructure::init_db(temp_db.path()).expect("database should init");
+
+        let summary = create_workbook_from_template_in_dir(
+            workbook_dir.path(),
+            pool.clone(),
+            Sf2TemplateDraft {
+                class_id: None,
+                school_id: "123456".to_string(),
+                school_name: "Sample Integrated School".to_string(),
+                school_year: "2026-2027".to_string(),
+                report_month: "JUNE".to_string(),
+                grade_level: "7".to_string(),
+                section: "Rose".to_string(),
+                adviser_name: "Teacher Adviser".to_string(),
+                school_head_name: "School Head".to_string(),
+                first_school_day: Some(8),
+                learner_names: vec!["Learner, One".to_string()],
+            },
+        )
+        .expect("SF2 workbook should be created from template");
+
+        assert_eq!(summary.class_name, "7 - Rose");
+        assert_eq!(summary.learners_found, 1);
+        assert_eq!(summary.students_created, 1);
+        assert_eq!(summary.dates_mapped, 17);
+        assert!(Path::new(&summary.source_path).exists());
+
+        let settings = workbook_settings(pool.clone(), Some(summary.class_id.clone()))
+            .expect("created SF2 settings should be readable");
+        assert_eq!(settings.class_name, "7 - Rose");
+        assert_eq!(settings.section, "Rose");
+        assert_eq!(settings.learner_names, vec!["Learner, One".to_string()]);
+
+        let readiness = export_readiness(pool.clone(), Some(summary.class_id.clone()))
+            .expect("created SF2 workbook should have export readiness");
+        assert!(readiness.can_export);
+        assert_eq!(readiness.mapped_students, 1);
+        assert_eq!(readiness.mapped_dates, 17);
+
+        let close_summary = close_day(pool, summary.class_id, Some("2026-06-08".to_string()))
+            .expect("created SF2 workbook should accept close-day marking");
+        assert_eq!(close_summary.absent_count, 1);
+
+        let _ = std::fs::remove_file(summary.source_path);
     }
 }
 
