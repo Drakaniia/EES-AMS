@@ -501,7 +501,7 @@
 		<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading attendance...</div>
 	{:else if isCardReaderMode}
 		<section
-			class="grid h-[calc(100vh-16rem)] min-h-[560px] gap-5 px-6 py-6 md:px-12 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
+			class="grid h-[calc(100vh-13rem)] min-h-[600px] gap-5 px-6 py-5 md:px-12 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
 		>
 			<div
 				class="relative flex min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-surface p-8"
@@ -609,7 +609,7 @@
 		</section>
 	{:else}
 		<section
-			class="grid h-[calc(100vh-16rem)] min-h-[560px] gap-5 px-6 py-6 md:px-12 xl:grid-cols-[minmax(0,1fr)_340px]"
+			class="grid h-[calc(100vh-13rem)] min-h-[600px] gap-5 px-6 py-5 md:px-12 xl:grid-cols-[minmax(0,1fr)_340px]"
 		>
 			<div class="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
 				<div class="shrink-0 border-b border-border p-5">
@@ -854,7 +854,7 @@
 	open={pickerOpen}
 	title="Manual log"
 	description="Search by name to manually record attendance."
-	on:close={() => (pickerOpen = false)}
+	onClose={() => (pickerOpen = false)}
 >
 	<input
 		placeholder="Search name..."

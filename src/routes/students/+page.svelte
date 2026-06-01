@@ -228,8 +228,8 @@
 				? {
 						...editing,
 						name,
-						cardSerial: serial || undefined,
-						classId: classId || undefined
+						cardSerial: serial,
+						classId
 					}
 				: createStudent(name, classId, serial);
 
@@ -338,7 +338,7 @@
 		</PageHeader>
 
 		<!-- Tools Bar -->
-		<section class="grid gap-4 px-6 pt-8 md:grid-cols-2 md:px-12 lg:grid-cols-3">
+		<section class="grid gap-4 px-6 pt-5 md:grid-cols-2 md:px-12 lg:grid-cols-3">
 			<!-- Search -->
 			<div class="space-y-2">
 				<div class="label-mono">Search Students</div>
@@ -395,7 +395,7 @@
 			{#if students.length === 0}
 				{@render emptyState()}
 			{:else}
-				<div class="mt-8 overflow-hidden rounded-2xl border border-border bg-card">
+				<div class="mt-6 overflow-hidden rounded-2xl border border-border bg-card">
 					<table class="w-full text-sm">
 						<thead class="bg-surface text-left">
 							<tr>
@@ -554,7 +554,7 @@
 			{/if}
 		</section>
 
-		<div class="fixed right-6 bottom-6 z-10">
+		<div class="fixed bottom-6 left-1/2 z-10 -translate-x-1/2">
 			<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
 		</div>
 	</div>

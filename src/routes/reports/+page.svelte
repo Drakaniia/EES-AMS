@@ -173,7 +173,7 @@
 		{#if loading}
 			<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading SF2 status...</div>
 		{:else}
-			<section class="grid gap-6 px-6 py-8 md:px-12 xl:grid-cols-[1fr_0.75fr]">
+			<section class="grid gap-6 px-6 py-5 md:px-12 xl:grid-cols-[1fr_0.75fr]">
 				<div class="space-y-6">
 					<div class="rounded-2xl border border-border bg-card p-6">
 						<div class="flex flex-wrap items-start justify-between gap-4">
