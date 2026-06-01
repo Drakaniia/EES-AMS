@@ -17,7 +17,8 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Ole::DISPID_PROPERTYPUT;
 use windows::Win32::System::Variant::{
     VariantClear, VARENUM, VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_BOOL, VT_BSTR,
-    VT_DISPATCH, VT_EMPTY, VT_I2, VT_I4, VT_NULL,
+    VT_DISPATCH, VT_EMPTY, VT_I2, VT_I4, VT_I8, VT_INT, VT_NULL, VT_R4, VT_R8, VT_UI2, VT_UI4,
+    VT_UI8, VT_UINT,
 };
 
 const EXCEL_SHEET_VISIBLE: i32 = -1;
@@ -776,6 +777,14 @@ impl ComVariant {
             VT_BSTR => unsafe { self.0.Anonymous.Anonymous.Anonymous.bstrVal.to_string() },
             VT_I4 => unsafe { self.0.Anonymous.Anonymous.Anonymous.lVal.to_string() },
             VT_I2 => unsafe { self.0.Anonymous.Anonymous.Anonymous.iVal.to_string() },
+            VT_I8 => unsafe { self.0.Anonymous.Anonymous.Anonymous.llVal.to_string() },
+            VT_INT => unsafe { self.0.Anonymous.Anonymous.Anonymous.intVal.to_string() },
+            VT_UI2 => unsafe { self.0.Anonymous.Anonymous.Anonymous.uiVal.to_string() },
+            VT_UI4 => unsafe { self.0.Anonymous.Anonymous.Anonymous.ulVal.to_string() },
+            VT_UI8 => unsafe { self.0.Anonymous.Anonymous.Anonymous.ullVal.to_string() },
+            VT_UINT => unsafe { self.0.Anonymous.Anonymous.Anonymous.uintVal.to_string() },
+            VT_R4 => unsafe { self.0.Anonymous.Anonymous.Anonymous.fltVal.to_string() },
+            VT_R8 => unsafe { self.0.Anonymous.Anonymous.Anonymous.dblVal.to_string() },
             VT_BOOL => {
                 if self.to_bool().unwrap_or(false) {
                     "true".to_string()
@@ -794,6 +803,24 @@ impl ComVariant {
             VT_I2 => Ok(i32::from(unsafe {
                 self.0.Anonymous.Anonymous.Anonymous.iVal
             })),
+            VT_I8 => i32::try_from(unsafe { self.0.Anonymous.Anonymous.Anonymous.llVal })
+                .map_err(|_| self.integer_range_error()),
+            VT_INT => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.intVal }),
+            VT_UI2 => Ok(i32::from(unsafe {
+                self.0.Anonymous.Anonymous.Anonymous.uiVal
+            })),
+            VT_UI4 | VT_UINT => {
+                i32::try_from(unsafe { self.0.Anonymous.Anonymous.Anonymous.ulVal })
+                    .map_err(|_| self.integer_range_error())
+            }
+            VT_UI8 => i32::try_from(unsafe { self.0.Anonymous.Anonymous.Anonymous.ullVal })
+                .map_err(|_| self.integer_range_error()),
+            VT_R4 => {
+                float_to_i32(unsafe { f64::from(self.0.Anonymous.Anonymous.Anonymous.fltVal) })
+                    .map_err(|_| self.integer_range_error())
+            }
+            VT_R8 => float_to_i32(unsafe { self.0.Anonymous.Anonymous.Anonymous.dblVal })
+                .map_err(|_| self.integer_range_error()),
             VT_BOOL => Ok(i32::from(self.to_bool()?)),
             _ => Err(AppError::Internal(format!(
                 "Excel automation returned {}, expected integer",
@@ -820,6 +847,13 @@ impl ComVariant {
 
     fn variant_type_name(&self) -> String {
         format!("VARIANT({})", self.variant_type().0)
+    }
+
+    fn integer_range_error(&self) -> AppError {
+        AppError::Internal(format!(
+            "Excel automation returned {}, but it is not a valid integer",
+            self.variant_type_name()
+        ))
     }
 
     fn into_raw(mut self) -> VARIANT {
@@ -859,6 +893,18 @@ fn clear_variants(variants: &mut [VARIANT]) {
 
 fn wide_null(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+fn float_to_i32(value: f64) -> std::result::Result<i32, ()> {
+    if value.is_finite()
+        && value.fract() == 0.0
+        && value >= f64::from(i32::MIN)
+        && value <= f64::from(i32::MAX)
+    {
+        Ok(value as i32)
+    } else {
+        Err(())
+    }
 }
 
 fn month_number(name: &str) -> u32 {
@@ -1000,4 +1046,84 @@ struct Sf2WeekdaySlot {
     week_index: i32,
     weekday_index: i64,
     label: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sf2::logic::Sf2CellMark;
+
+    const BUNDLED_TEMPLATE_BYTES: &[u8] =
+        include_bytes!("../../resources/sf2/TEMPLATE_AUTOMATED_SF2.xls");
+
+    #[test]
+    fn accepts_excel_double_for_integer_properties() {
+        let value = ComVariant(variant_from_type(VT_R8, VARIANT_0_0_0 { dblVal: 42.0 }));
+
+        assert_eq!(value.to_i32().unwrap(), 42);
+    }
+
+    #[test]
+    #[ignore = "requires Microsoft Excel COM automation"]
+    fn sf2_template_com_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let workbook_path = dir.path().join("sf2-template-round-trip.xls");
+        std::fs::write(&workbook_path, BUNDLED_TEMPLATE_BYTES).unwrap();
+
+        let metadata = Sf2WorkbookMetadata {
+            school_id: "123456".to_string(),
+            school_name: "Sample Integrated School".to_string(),
+            school_year: "2026-2027".to_string(),
+            report_month: "JUNE".to_string(),
+            grade_level: "7".to_string(),
+            section: "Rose".to_string(),
+            adviser_name: "Teacher Adviser".to_string(),
+            school_head_name: "School Head".to_string(),
+            configure_calendar: true,
+            first_school_day: Some(8),
+        };
+
+        write_metadata(&workbook_path, &metadata).unwrap();
+        let analysis = analyze_workbook(&workbook_path).unwrap();
+
+        assert_eq!(analysis.school_id, "123456");
+        assert_eq!(analysis.school_name, "Sample Integrated School");
+        assert_eq!(analysis.school_year, "2026-2027");
+        assert_eq!(analysis.report_month, "JUNE");
+        assert_eq!(analysis.grade_level, "7");
+        assert_eq!(analysis.section, "Rose");
+        assert_eq!(analysis.adviser_name, "Teacher Adviser");
+        assert_eq!(analysis.school_head_name, "School Head");
+        assert!(analysis
+            .sheets
+            .iter()
+            .any(|sheet| sheet.name == "JUNE 2026" && sheet.visible == EXCEL_SHEET_VISIBLE));
+        assert_eq!(
+            analysis.dates.iter().map(|date| date.date.as_str()).min(),
+            Some("2026-06-08")
+        );
+
+        write_marks(
+            &workbook_path,
+            &[
+                Sf2CellMark {
+                    sheet_name: "JUNE 2026".to_string(),
+                    cell_address: "C8".to_string(),
+                    value: "Learner, One".to_string(),
+                },
+                Sf2CellMark {
+                    sheet_name: "JUNE 2026".to_string(),
+                    cell_address: "F8".to_string(),
+                    value: "X".to_string(),
+                },
+            ],
+        )
+        .unwrap();
+
+        let updated = analyze_workbook(&workbook_path).unwrap();
+        assert!(updated
+            .learners
+            .iter()
+            .any(|learner| learner.row_index == 8 && learner.name == "Learner, One"));
+    }
 }
