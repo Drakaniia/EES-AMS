@@ -20,9 +20,21 @@
 		label: string;
 	};
 
+	type EntryMode = 'single' | 'bulk';
+
+	type EntryModeTab = {
+		value: EntryMode;
+		label: string;
+	};
+
 	const genderOptions: GenderOption[] = [
 		{ value: 'male', label: 'Male' },
 		{ value: 'female', label: 'Female' }
+	];
+
+	const entryModeTabs: EntryModeTab[] = [
+		{ value: 'single', label: 'Individual' },
+		{ value: 'bulk', label: 'Bulk paste' }
 	];
 
 	// ── State ────────────────────────────────────────────────────────────────
@@ -39,7 +51,8 @@
 	let editing = $state<Student | null>(null);
 	let scanFor = $state<Student | null>(null);
 
-	let entryMode = $state<'single' | 'bulk'>('single');
+	let entryMode = $state<EntryMode>('single');
+	let entryModeDirection = $state(1);
 	let formName = $state('');
 	let formGender = $state<StudentGender>('male');
 	let formCardSerial = $state('');
@@ -93,6 +106,12 @@
 		if (gender === 'male') return 'Male';
 		if (gender === 'female') return 'Female';
 		return 'Not set';
+	}
+
+	function setEntryMode(mode: EntryMode) {
+		if (entryMode === mode) return;
+		entryModeDirection = mode === 'bulk' ? 1 : -1;
+		entryMode = mode;
 	}
 
 	// Computed filtered and sorted students
@@ -184,6 +203,7 @@
 	function openAdd() {
 		editing = null;
 		entryMode = 'single';
+		entryModeDirection = 1;
 		formName = '';
 		formGender = 'male';
 		formCardSerial = '';
@@ -196,6 +216,7 @@
 	function openEdit(s: Student) {
 		editing = s;
 		entryMode = 'single';
+		entryModeDirection = 1;
 		formName = s.name;
 		formGender = s.gender ?? 'male';
 		formCardSerial = s.cardSerial ?? '';
@@ -653,27 +674,29 @@
 
 			<form onsubmit={onSubmit} class="space-y-5 p-6">
 				{#if !editing}
-					<div class="grid rounded-lg border border-border bg-surface p-1 sm:grid-cols-2">
-						<button
-							type="button"
-							onclick={() => (entryMode = 'single')}
-							class="rounded-md px-4 py-2 text-sm font-medium transition-colors {entryMode ===
-							'single'
-								? 'bg-background text-foreground shadow-sm'
-								: 'text-muted-foreground hover:text-foreground'}"
-						>
-							Individual
-						</button>
-						<button
-							type="button"
-							onclick={() => (entryMode = 'bulk')}
-							class="rounded-md px-4 py-2 text-sm font-medium transition-colors {entryMode ===
-							'bulk'
-								? 'bg-background text-foreground shadow-sm'
-								: 'text-muted-foreground hover:text-foreground'}"
-						>
-							Bulk paste
-						</button>
+					<div
+						class="add-student-entry-tabs relative grid overflow-hidden rounded-lg border border-border bg-surface p-1 sm:grid-cols-2"
+						data-mode={entryMode}
+						role="tablist"
+						aria-label="Student entry mode"
+					>
+						<span class="add-student-tab-indicator" aria-hidden="true"></span>
+						{#each entryModeTabs as tab (tab.value)}
+							<button
+								id={`add-student-${tab.value}-tab`}
+								type="button"
+								role="tab"
+								aria-selected={entryMode === tab.value}
+								aria-controls={`add-student-${tab.value}-panel`}
+								onclick={() => setEntryMode(tab.value)}
+								class="relative z-10 rounded-md px-4 py-2 text-sm font-medium transition-colors {entryMode ===
+								tab.value
+									? 'text-foreground'
+									: 'text-muted-foreground hover:text-foreground'}"
+							>
+								{tab.label}
+							</button>
+						{/each}
 					</div>
 				{/if}
 
@@ -701,91 +724,102 @@
 					{/if}
 				</div>
 
-				{#if !editing && entryMode === 'bulk'}
-					<div class="space-y-2">
-						<div class="flex items-center justify-between gap-3">
-							<div class="label-mono">Student names</div>
-							<span class="font-mono text-xs text-muted-foreground">
-								{bulkStudentCount}
-								{bulkStudentCount === 1 ? 'student' : 'students'}
-							</span>
-						</div>
-						<div class="grid gap-4 sm:grid-cols-2">
+				{#key entryMode}
+					<div
+						id={!editing ? `add-student-${entryMode}-panel` : undefined}
+						role={!editing ? 'tabpanel' : undefined}
+						aria-labelledby={!editing ? `add-student-${entryMode}-tab` : undefined}
+						class="tab-panel-morph"
+						class:tab-panel-morph-reverse={entryModeDirection < 0}
+					>
+						{#if !editing && entryMode === 'bulk'}
 							<div class="space-y-2">
-								<div class="flex items-center justify-between gap-2">
-									<label for="bulk-male-students" class="label-mono">Male</label>
-									<span class="font-mono text-xs text-muted-foreground">{bulkMaleNames.length}</span
-									>
+								<div class="flex items-center justify-between gap-3">
+									<div class="label-mono">Student names</div>
+									<span class="font-mono text-xs text-muted-foreground">
+										{bulkStudentCount}
+										{bulkStudentCount === 1 ? 'student' : 'students'}
+									</span>
 								</div>
-								<textarea
-									id="bulk-male-students"
-									bind:value={bulkMaleStudentNames}
-									rows="10"
-									placeholder="Cruz, Juan&#10;Reyes, Marco"
-									class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
-								></textarea>
+								<div class="grid gap-4 sm:grid-cols-2">
+									<div class="space-y-2">
+										<div class="flex items-center justify-between gap-2">
+											<label for="bulk-male-students" class="label-mono">Male</label>
+											<span class="font-mono text-xs text-muted-foreground"
+												>{bulkMaleNames.length}</span
+											>
+										</div>
+										<textarea
+											id="bulk-male-students"
+											bind:value={bulkMaleStudentNames}
+											rows="10"
+											placeholder="Cruz, Juan&#10;Reyes, Marco"
+											class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
+										></textarea>
+									</div>
+									<div class="space-y-2">
+										<div class="flex items-center justify-between gap-2">
+											<label for="bulk-female-students" class="label-mono">Female</label>
+											<span class="font-mono text-xs text-muted-foreground"
+												>{bulkFemaleNames.length}</span
+											>
+										</div>
+										<textarea
+											id="bulk-female-students"
+											bind:value={bulkFemaleStudentNames}
+											rows="10"
+											placeholder="Dela Cruz, Maria&#10;Santos, Ana"
+											class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
+										></textarea>
+									</div>
+								</div>
+								<p class="text-xs text-muted-foreground">
+									Each new line creates one student in the matching SF2 roster block.
+								</p>
 							</div>
+						{:else}
 							<div class="space-y-2">
-								<div class="flex items-center justify-between gap-2">
-									<label for="bulk-female-students" class="label-mono">Female</label>
-									<span class="font-mono text-xs text-muted-foreground"
-										>{bulkFemaleNames.length}</span
-									>
+								<div class="label-mono">Gender</div>
+								<div class="grid rounded-lg border border-border bg-surface p-1 sm:grid-cols-2">
+									{#each genderOptions as option (option.value)}
+										<button
+											type="button"
+											onclick={() => (formGender = option.value)}
+											aria-pressed={formGender === option.value}
+											class="rounded-md px-4 py-2 text-sm font-medium transition-colors {formGender ===
+											option.value
+												? 'bg-background text-foreground shadow-sm'
+												: 'text-muted-foreground hover:text-foreground'}"
+										>
+											{option.label}
+										</button>
+									{/each}
 								</div>
-								<textarea
-									id="bulk-female-students"
-									bind:value={bulkFemaleStudentNames}
-									rows="10"
-									placeholder="Dela Cruz, Maria&#10;Santos, Ana"
-									class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
-								></textarea>
 							</div>
-						</div>
-						<p class="text-xs text-muted-foreground">
-							Each new line creates one student in the matching SF2 roster block.
-						</p>
+							<div class="grid gap-4 sm:grid-cols-2">
+								<div class="space-y-1.5">
+									<label for="field-name" class="label-mono">Full name</label>
+									<input
+										id="field-name"
+										bind:value={formName}
+										required
+										placeholder="Student full name"
+										class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+									/>
+								</div>
+								<div class="space-y-1.5">
+									<label for="field-card" class="label-mono">Card serial (optional)</label>
+									<input
+										id="field-card"
+										bind:value={formCardSerial}
+										placeholder="Pair later"
+										class="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+									/>
+								</div>
+							</div>
+						{/if}
 					</div>
-				{:else}
-					<div class="space-y-2">
-						<div class="label-mono">Gender</div>
-						<div class="grid rounded-lg border border-border bg-surface p-1 sm:grid-cols-2">
-							{#each genderOptions as option (option.value)}
-								<button
-									type="button"
-									onclick={() => (formGender = option.value)}
-									aria-pressed={formGender === option.value}
-									class="rounded-md px-4 py-2 text-sm font-medium transition-colors {formGender ===
-									option.value
-										? 'bg-background text-foreground shadow-sm'
-										: 'text-muted-foreground hover:text-foreground'}"
-								>
-									{option.label}
-								</button>
-							{/each}
-						</div>
-					</div>
-					<div class="grid gap-4 sm:grid-cols-2">
-						<div class="space-y-1.5">
-							<label for="field-name" class="label-mono">Full name</label>
-							<input
-								id="field-name"
-								bind:value={formName}
-								required
-								placeholder="Student full name"
-								class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-							/>
-						</div>
-						<div class="space-y-1.5">
-							<label for="field-card" class="label-mono">Card serial (optional)</label>
-							<input
-								id="field-card"
-								bind:value={formCardSerial}
-								placeholder="Pair later"
-								class="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-							/>
-						</div>
-					</div>
-				{/if}
+				{/key}
 
 				<div
 					class="flex flex-col-reverse gap-2 border-t border-border pt-5 sm:flex-row sm:justify-end"
@@ -959,3 +993,68 @@
 		</p>
 	</div>
 {/snippet}
+
+<style>
+	.add-student-tab-indicator {
+		position: absolute;
+		inset: 0.25rem auto 0.25rem 0.25rem;
+		width: calc(50% - 0.25rem);
+		border-radius: 0.375rem;
+		background: var(--color-background);
+		box-shadow:
+			0 1px 2px color-mix(in oklab, var(--color-foreground) 10%, transparent),
+			0 8px 22px color-mix(in oklab, var(--color-primary) 12%, transparent);
+		transition:
+			transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+			box-shadow 220ms ease;
+	}
+
+	.add-student-entry-tabs[data-mode='bulk'] .add-student-tab-indicator {
+		transform: translateX(100%);
+	}
+
+	.tab-panel-morph {
+		transform-origin: top center;
+		animation: tab-panel-morph 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+
+	.tab-panel-morph-reverse {
+		animation-name: tab-panel-morph-reverse;
+	}
+
+	@keyframes tab-panel-morph {
+		from {
+			opacity: 0.68;
+			filter: blur(2px);
+			transform: translateX(18px) scale(0.985);
+		}
+		to {
+			opacity: 1;
+			filter: blur(0);
+			transform: translateX(0) scale(1);
+		}
+	}
+
+	@keyframes tab-panel-morph-reverse {
+		from {
+			opacity: 0.68;
+			filter: blur(2px);
+			transform: translateX(-18px) scale(0.985);
+		}
+		to {
+			opacity: 1;
+			filter: blur(0);
+			transform: translateX(0) scale(1);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.add-student-tab-indicator,
+		.tab-panel-morph,
+		.tab-panel-morph-reverse {
+			animation: none;
+			filter: none;
+			transition: none;
+		}
+	}
+</style>
