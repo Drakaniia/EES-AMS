@@ -1,23 +1,21 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import { Minus, Square, X } from 'lucide-svelte';
 
 	let isMaximized = $state(false);
 	let appWindow: ReturnType<typeof getCurrentWindow> | null = null;
 
-	// Initialize window and check state
-	$effect(() => {
-		const initWindow = async () => {
-			try {
-				appWindow = getCurrentWindow();
-				console.log('Window initialized:', appWindow);
-				isMaximized = await appWindow.isMaximized();
-				console.log('Window maximized state:', isMaximized);
-			} catch (error) {
+	onMount(() => {
+		appWindow = getCurrentWindow();
+		appWindow
+			.isMaximized()
+			.then((maximized) => {
+				isMaximized = maximized;
+			})
+			.catch((error) => {
 				console.error('Failed to initialize window:', error);
-			}
-		};
-		initWindow();
+			});
 	});
 
 	async function minimize() {
@@ -26,9 +24,7 @@
 			return;
 		}
 		try {
-			console.log('Minimizing window...');
 			await appWindow.minimize();
-			console.log('Window minimized successfully');
 		} catch (error) {
 			console.error('Failed to minimize window:', error);
 		}
@@ -40,18 +36,14 @@
 			return;
 		}
 		try {
-			console.log('Toggling maximize...');
 			const currentlyMaximized = await appWindow.isMaximized();
-			console.log('Current maximized state:', currentlyMaximized);
 
 			if (currentlyMaximized) {
 				await appWindow.unmaximize();
 				isMaximized = false;
-				console.log('Window unmaximized');
 			} else {
 				await appWindow.maximize();
 				isMaximized = true;
-				console.log('Window maximized');
 			}
 		} catch (error) {
 			console.error('Failed to toggle maximize:', error);
@@ -64,9 +56,7 @@
 			return;
 		}
 		try {
-			console.log('Closing window...');
 			await appWindow.close();
-			console.log('Window closed successfully');
 		} catch (error) {
 			console.error('Failed to close window:', error);
 		}
