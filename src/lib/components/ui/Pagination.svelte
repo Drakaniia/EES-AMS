@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { ChevronLeft, ChevronRight } from 'lucide-svelte';
+
 	interface Props {
 		currentPage: number;
 		totalPages: number;
@@ -57,77 +59,50 @@
 	});
 </script>
 
-<!-- Pagination controls -->
-<div
-	class="inline-flex items-center gap-1 rounded-lg border border-border bg-background p-1 shadow-sm"
->
-	<!-- Previous button -->
-	<button
-		onclick={prevPage}
-		disabled={currentPage === 1}
-		class="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-		aria-label="Previous page"
-	>
-		<svg
-			class="size-4"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-		>
-			<polyline points="15 18 9 12 15 6" />
-		</svg>
-		<span class="hidden sm:inline">Previous</span>
-	</button>
+{#if totalPages > 1}
+	<nav aria-label="Pagination" class="flex justify-center">
+		<div class="inline-flex items-center gap-1 rounded-lg bg-background/95 p-1 shadow-sm">
+			<button
+				onclick={prevPage}
+				disabled={currentPage === 1}
+				class="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-45"
+				aria-label="Previous page"
+			>
+				<ChevronLeft class="size-4" aria-hidden="true" />
+				<span class="hidden sm:inline">Previous</span>
+			</button>
 
-	<!-- Page numbers -->
-	<div class="flex gap-1">
-		{#each pages as p, i (i)}
-			{#if p === 'ellipsis'}
-				<span class="px-2 py-2 text-sm text-muted-foreground">...</span>
-			{:else}
-				{@const isCurrent = p === currentPage}
-				{#if isCurrent}
-					<button
-						class="rounded-md bg-surface px-3 py-2 text-sm font-medium shadow-sm"
-						aria-label="Go to page {p}"
-						aria-current="page"
-					>
-						{p}
-					</button>
-				{:else}
-					<button
-						onclick={() => goToPage(p as number)}
-						class="rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-surface"
-						aria-label="Go to page {p}"
-					>
-						{p}
-					</button>
-				{/if}
-			{/if}
-		{/each}
-	</div>
+			<div class="flex items-center gap-1">
+				{#each pages as p, i (i)}
+					{#if p === 'ellipsis'}
+						<span class="grid size-9 place-items-center text-sm text-muted-foreground">...</span>
+					{:else}
+						{@const isCurrent = p === currentPage}
+						<button
+							onclick={() => goToPage(p)}
+							class="grid size-9 place-items-center rounded-md text-sm font-medium transition-colors
+								{isCurrent
+								? 'bg-primary text-primary-foreground shadow-sm'
+								: 'text-muted-foreground hover:bg-surface hover:text-foreground'}"
+							aria-label="Go to page {p}"
+							aria-current={isCurrent ? 'page' : undefined}
+							disabled={isCurrent}
+						>
+							{p}
+						</button>
+					{/if}
+				{/each}
+			</div>
 
-	<!-- Next button -->
-	<button
-		onclick={nextPage}
-		disabled={currentPage === totalPages}
-		class="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-		aria-label="Next page"
-	>
-		<span class="hidden sm:inline">Next</span>
-		<svg
-			class="size-4"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-		>
-			<polyline points="9 18 15 12 9 6" />
-		</svg>
-	</button>
-</div>
+			<button
+				onclick={nextPage}
+				disabled={currentPage === totalPages}
+				class="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-45"
+				aria-label="Next page"
+			>
+				<span class="hidden sm:inline">Next</span>
+				<ChevronRight class="size-4" aria-hidden="true" />
+			</button>
+		</div>
+	</nav>
+{/if}
