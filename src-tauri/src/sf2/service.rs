@@ -439,8 +439,8 @@ pub fn close_day(
     let present = present_student_ids(&event_repo.list()?, &students, &class_id, &date);
 
     if let Some(template) = sf2_repo.latest_template_for_class(&class_id)? {
-        let days = [date.clone()];
-        let _ = write_template_marks_for_days(pool, &template, &days)?;
+        let closed_days = sf2_repo.closed_days_for_class(&class_id)?;
+        let _ = write_template_marks_for_days(pool, &template, &closed_days)?;
     }
 
     Ok(Sf2CloseDaySummary {
@@ -658,10 +658,6 @@ fn write_template_marks_for_days(
     template: &Sf2TemplateRecord,
     days: &[String],
 ) -> Result<usize> {
-    if days.is_empty() {
-        return Ok(0);
-    }
-
     let workbook_path = PathBuf::from(&template.source_path);
     if !workbook_path.exists() {
         return Err(AppError::InvalidInput(
@@ -673,6 +669,10 @@ fn write_template_marks_for_days(
     let sf2_repo = Sf2Repository::new(pool.clone());
     let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
     let date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
+    if date_mappings.is_empty() {
+        return Ok(0);
+    }
+
     let mapped_dates: HashSet<&str> = date_mappings
         .iter()
         .map(|mapping| mapping.date.as_str())
@@ -683,19 +683,23 @@ fn write_template_marks_for_days(
         .cloned()
         .collect::<Vec<_>>();
 
-    if export_days.is_empty() || student_mappings.is_empty() || date_mappings.is_empty() {
-        return Ok(0);
-    }
+    let mut marks = clear_attendance_marks_for_records(&date_mappings, &student_mappings);
+    let attendance_marks = if export_days.is_empty() || student_mappings.is_empty() {
+        Vec::new()
+    } else {
+        export_marks(
+            pool,
+            &template.active_class_id,
+            &export_days,
+            &student_mappings,
+            &date_mappings,
+        )?
+    };
+    let attendance_mark_count = attendance_marks.len();
 
-    let marks = export_marks(
-        pool,
-        &template.active_class_id,
-        &export_days,
-        &student_mappings,
-        &date_mappings,
-    )?;
+    marks.extend(attendance_marks);
     excel::write_marks(&workbook_path, &marks)?;
-    Ok(marks.len())
+    Ok(attendance_mark_count)
 }
 
 fn metadata_from_analysis(analysis: &Sf2WorkbookAnalysis) -> Sf2WorkbookMetadata {
@@ -1036,6 +1040,43 @@ fn roster_name_marks(
         }
     }
     marks
+}
+
+fn clear_attendance_marks_for_records(
+    date_mappings: &[Sf2DateMappingRecord],
+    student_mappings: &[Sf2StudentMappingRecord],
+) -> Vec<Sf2CellMark> {
+    let row_slots = template_roster_slots();
+    let row_indices = attendance_grid_rows(
+        &row_slots,
+        student_mappings.iter().map(|mapping| mapping.row_index),
+    );
+
+    let mut marks = Vec::with_capacity(date_mappings.len() * row_indices.len());
+    for date_mapping in date_mappings {
+        for row_index in &row_indices {
+            marks.push(Sf2CellMark {
+                sheet_name: date_mapping.sheet_name.clone(),
+                cell_address: format!("{}{}", date_mapping.column_letter, row_index),
+                value: String::new(),
+            });
+        }
+    }
+    marks
+}
+
+fn attendance_grid_rows<I>(row_slots: &[TemplateRosterSlot], extra_rows: I) -> Vec<u32>
+where
+    I: IntoIterator<Item = u32>,
+{
+    let mut rows = row_slots
+        .iter()
+        .map(|slot| slot.row_index)
+        .collect::<Vec<_>>();
+    rows.extend(extra_rows);
+    rows.sort_unstable();
+    rows.dedup();
+    rows
 }
 
 fn unique_normalized_name(seen: &mut HashSet<String>, name: &str, suffix: &str) -> String {
@@ -1456,6 +1497,59 @@ mod tests {
         let analysis = workbook_analysis_with_dates(&["2026-06-08", "2026-06-09"]);
 
         validate_configured_calendar(&analysis, &metadata).unwrap();
+    }
+
+    #[test]
+    fn clear_attendance_marks_covers_template_grid_without_students() {
+        let dates = vec![Sf2DateMappingRecord {
+            template_id: "template-1".to_string(),
+            sheet_name: "JUNE 2026".to_string(),
+            date: "2026-06-08".to_string(),
+            column_letter: "F".to_string(),
+            column_index: 6,
+        }];
+
+        let marks = clear_attendance_marks_for_records(&dates, &[]);
+
+        assert_eq!(marks.len(), template_roster_slots().len());
+        assert!(marks.contains(&Sf2CellMark {
+            sheet_name: "JUNE 2026".to_string(),
+            cell_address: "F8".to_string(),
+            value: String::new(),
+        }));
+        assert!(marks.contains(&Sf2CellMark {
+            sheet_name: "JUNE 2026".to_string(),
+            cell_address: "F48".to_string(),
+            value: String::new(),
+        }));
+    }
+
+    #[test]
+    fn clear_attendance_marks_includes_imported_rows_outside_template_grid() {
+        let dates = vec![Sf2DateMappingRecord {
+            template_id: "template-1".to_string(),
+            sheet_name: "JUNE 2026".to_string(),
+            date: "2026-06-08".to_string(),
+            column_letter: "F".to_string(),
+            column_index: 6,
+        }];
+        let students = vec![Sf2StudentMappingRecord {
+            template_id: "template-1".to_string(),
+            student_id: "student-1".to_string(),
+            workbook_name: "Learner, Sample".to_string(),
+            normalized_name: "LEARNER,SAMPLE".to_string(),
+            row_index: 55,
+            gender_block: Some("FEMALE".to_string()),
+        }];
+
+        let marks = clear_attendance_marks_for_records(&dates, &students);
+
+        assert_eq!(marks.len(), template_roster_slots().len() + 1);
+        assert!(marks.contains(&Sf2CellMark {
+            sheet_name: "JUNE 2026".to_string(),
+            cell_address: "F55".to_string(),
+            value: String::new(),
+        }));
     }
 }
 
