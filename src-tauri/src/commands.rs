@@ -263,16 +263,18 @@ pub fn import_all(
     for student in payload.students {
         transaction
             .execute(
-                "INSERT INTO students (id, name, card_serial, class_id, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)
+                "INSERT INTO students (id, name, gender, card_serial, class_id, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                  ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
+                    gender = excluded.gender,
                     card_serial = excluded.card_serial,
                     class_id = excluded.class_id,
                     created_at = excluded.created_at",
                 params![
                     student.id.0.to_string(),
                     student.name,
+                    student.gender.map(StudentGender::as_db_value),
                     student.card_serial,
                     student.class_id,
                     student.created_at.timestamp(),

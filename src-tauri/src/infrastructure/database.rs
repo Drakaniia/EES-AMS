@@ -86,6 +86,11 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
         conn.execute("PRAGMA user_version = 12", [])?;
     }
 
+    if user_version < 13 {
+        migrate_to_v13(&conn)?;
+        conn.execute("PRAGMA user_version = 13", [])?;
+    }
+
     Ok(pool)
 }
 
@@ -508,6 +513,12 @@ fn migrate_to_v12(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migrate database to version 13 (add student gender for SF2 roster sections)
+fn migrate_to_v13(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(include_str!("../../sql/migrate_to_v13.sql"))?;
+    Ok(())
+}
+
 /// Student repository
 pub struct StudentRepository {
     pool: DbPool,
@@ -528,7 +539,7 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         let students = if let Some(class_id) = class_id {
             let mut stmt = conn.prepare(
-                "SELECT id, name, card_serial, class_id, created_at 
+                "SELECT id, name, gender, card_serial, class_id, created_at
                  FROM students 
                  WHERE class_id = ?1 
                  ORDER BY name ASC",
@@ -537,9 +548,12 @@ impl StudentRepository {
                 Ok(Student {
                     id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
                     name: row.get(1)?,
-                    card_serial: row.get(2)?,
-                    class_id: row.get(3)?,
-                    created_at: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
+                    gender: StudentGender::from_db_value(
+                        row.get::<_, Option<String>>(2)?.as_deref(),
+                    ),
+                    card_serial: row.get(3)?,
+                    class_id: row.get(4)?,
+                    created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
                 })
@@ -547,7 +561,7 @@ impl StudentRepository {
             rows.collect::<std::result::Result<Vec<_>, _>>()?
         } else {
             let mut stmt = conn.prepare(
-                "SELECT id, name, card_serial, class_id, created_at 
+                "SELECT id, name, gender, card_serial, class_id, created_at
                  FROM students 
                  ORDER BY name ASC",
             )?;
@@ -555,9 +569,12 @@ impl StudentRepository {
                 Ok(Student {
                     id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
                     name: row.get(1)?,
-                    card_serial: row.get(2)?,
-                    class_id: row.get(3)?,
-                    created_at: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
+                    gender: StudentGender::from_db_value(
+                        row.get::<_, Option<String>>(2)?.as_deref(),
+                    ),
+                    card_serial: row.get(3)?,
+                    class_id: row.get(4)?,
+                    created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
                         .unwrap()
                         .with_timezone(&Utc),
                 })
@@ -573,7 +590,7 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         let student = conn
             .query_row(
-                "SELECT id, name, card_serial, class_id, created_at 
+                "SELECT id, name, gender, card_serial, class_id, created_at
                  FROM students 
                  WHERE id = ?1",
                 params![id.0.to_string()],
@@ -581,9 +598,12 @@ impl StudentRepository {
                     Ok(Student {
                         id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
                         name: row.get(1)?,
-                        card_serial: row.get(2)?,
-                        class_id: row.get(3)?,
-                        created_at: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
+                        gender: StudentGender::from_db_value(
+                            row.get::<_, Option<String>>(2)?.as_deref(),
+                        ),
+                        card_serial: row.get(3)?,
+                        class_id: row.get(4)?,
+                        created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
                             .unwrap()
                             .with_timezone(&Utc),
                     })
@@ -600,7 +620,7 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         let student = conn
             .query_row(
-                "SELECT id, name, card_serial, class_id, created_at 
+                "SELECT id, name, gender, card_serial, class_id, created_at
                  FROM students 
                  WHERE card_serial = ?1",
                 params![serial],
@@ -608,9 +628,12 @@ impl StudentRepository {
                     Ok(Student {
                         id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
                         name: row.get(1)?,
-                        card_serial: row.get(2)?,
-                        class_id: row.get(3)?,
-                        created_at: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
+                        gender: StudentGender::from_db_value(
+                            row.get::<_, Option<String>>(2)?.as_deref(),
+                        ),
+                        card_serial: row.get(3)?,
+                        class_id: row.get(4)?,
+                        created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
                             .unwrap()
                             .with_timezone(&Utc),
                     })
@@ -636,6 +659,7 @@ impl StudentRepository {
         let student = Student {
             id: StudentId::new(),
             name: req.name,
+            gender: req.gender,
             card_serial,
             class_id,
             created_at: Utc::now(),
@@ -643,11 +667,12 @@ impl StudentRepository {
 
         let conn = self.pool.get()?;
         conn.execute(
-            "INSERT INTO students (id, name, card_serial, class_id, created_at) 
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO students (id, name, gender, card_serial, class_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 student.id.0.to_string(),
                 student.name,
+                student.gender.map(StudentGender::as_db_value),
                 student.card_serial,
                 student.class_id,
                 student.created_at.timestamp(),
@@ -680,6 +705,9 @@ impl StudentRepository {
         if let Some(name) = req.name {
             student.name = name;
         }
+        if let Some(gender) = req.gender {
+            student.gender = Some(gender);
+        }
         if let Some(card_serial) = card_serial {
             student.card_serial = card_serial;
         }
@@ -690,10 +718,11 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         conn.execute(
             "UPDATE students 
-             SET name = ?1, card_serial = ?2, class_id = ?3 
-             WHERE id = ?4",
+             SET name = ?1, gender = ?2, card_serial = ?3, class_id = ?4
+             WHERE id = ?5",
             params![
                 student.name,
+                student.gender.map(StudentGender::as_db_value),
                 student.card_serial,
                 student.class_id,
                 id.0.to_string(),
@@ -1259,6 +1288,44 @@ mod tests {
     }
 
     #[test]
+    fn student_gender_is_persisted_and_updated() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database file should be created");
+        let pool = init_db(temp_db.path()).expect("database should initialize");
+        let student_repo = StudentRepository::new(pool);
+
+        let student = student_repo
+            .create(CreateStudentRequest {
+                name: "Ada Lovelace".to_string(),
+                gender: Some(StudentGender::Female),
+                card_serial: None,
+                class_id: None,
+            })
+            .expect("student should be created");
+        assert_eq!(student.gender, Some(StudentGender::Female));
+
+        let updated = student_repo
+            .update(
+                student.id,
+                UpdateStudentRequest {
+                    name: None,
+                    gender: Some(StudentGender::Male),
+                    card_serial: None,
+                    class_id: None,
+                },
+            )
+            .expect("student should be updated");
+
+        assert_eq!(updated.gender, Some(StudentGender::Male));
+        assert_eq!(
+            student_repo
+                .get(student.id)
+                .expect("student should be readable")
+                .gender,
+            Some(StudentGender::Male)
+        );
+    }
+
+    #[test]
     fn deleting_student_removes_attendance_events() {
         let temp_db = tempfile::NamedTempFile::new().expect("test database file should be created");
         let pool = init_db(temp_db.path()).expect("database should initialize");
@@ -1268,6 +1335,7 @@ mod tests {
         let student = student_repo
             .create(CreateStudentRequest {
                 name: "Ada Lovelace".to_string(),
+                gender: None,
                 card_serial: None,
                 class_id: None,
             })
@@ -1319,6 +1387,7 @@ mod tests {
         let student = student_repo
             .create(CreateStudentRequest {
                 name: "Grace Hopper".to_string(),
+                gender: None,
                 card_serial: None,
                 class_id: Some(class.id.clone()),
             })

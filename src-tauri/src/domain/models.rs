@@ -26,6 +26,46 @@ impl std::fmt::Display for StudentId {
     }
 }
 
+/// Student gender used by DepEd SF2 male/female roster sections
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StudentGender {
+    Male,
+    Female,
+}
+
+impl StudentGender {
+    pub fn as_db_value(self) -> &'static str {
+        match self {
+            Self::Male => "male",
+            Self::Female => "female",
+        }
+    }
+
+    pub fn sf2_block(self) -> &'static str {
+        match self {
+            Self::Male => "MALE",
+            Self::Female => "FEMALE",
+        }
+    }
+
+    pub fn from_db_value(value: Option<&str>) -> Option<Self> {
+        match value.map(str::trim) {
+            Some(value) if value.eq_ignore_ascii_case("male") => Some(Self::Male),
+            Some(value) if value.eq_ignore_ascii_case("female") => Some(Self::Female),
+            _ => None,
+        }
+    }
+
+    pub fn from_sf2_block(value: Option<&str>) -> Option<Self> {
+        match value.map(str::trim) {
+            Some(value) if value.eq_ignore_ascii_case("MALE") => Some(Self::Male),
+            Some(value) if value.eq_ignore_ascii_case("FEMALE") => Some(Self::Female),
+            _ => None,
+        }
+    }
+}
+
 /// Unique identifier for an attendance event
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -50,6 +90,8 @@ impl Default for EventId {
 pub struct Student {
     pub id: StudentId,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gender: Option<StudentGender>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card_serial: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -202,6 +244,8 @@ impl Default for Settings {
 pub struct CreateStudentRequest {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub gender: Option<StudentGender>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub card_serial: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub class_id: Option<String>,
@@ -213,6 +257,8 @@ pub struct CreateStudentRequest {
 pub struct UpdateStudentRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gender: Option<StudentGender>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card_serial: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
