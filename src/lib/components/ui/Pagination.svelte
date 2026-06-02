@@ -61,11 +61,13 @@
 
 {#if totalPages > 1}
 	<nav aria-label="Pagination" class="flex justify-center">
-		<div class="inline-flex items-center gap-1 rounded-lg bg-background/95 p-1 shadow-sm">
+		<div
+			class="inline-flex max-w-[calc(100vw-2rem)] items-center gap-1 overflow-x-auto rounded-xl border border-border bg-background/95 p-1 shadow-lg backdrop-blur"
+		>
 			<button
 				onclick={prevPage}
 				disabled={currentPage === 1}
-				class="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-45"
+				class="control-ring inline-flex h-9 items-center gap-1.5 rounded-md border border-transparent px-3 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-45"
 				aria-label="Previous page"
 			>
 				<ChevronLeft class="size-4" aria-hidden="true" />
@@ -80,7 +82,7 @@
 						{@const isCurrent = p === currentPage}
 						<button
 							onclick={() => goToPage(p)}
-							class="grid size-9 place-items-center rounded-md text-sm font-medium transition-colors
+							class="control-ring grid size-9 shrink-0 place-items-center rounded-md border border-transparent text-sm font-medium transition-colors
 								{isCurrent
 								? 'bg-primary text-primary-foreground shadow-sm'
 								: 'text-muted-foreground hover:bg-surface hover:text-foreground'}"
@@ -97,7 +99,7 @@
 			<button
 				onclick={nextPage}
 				disabled={currentPage === totalPages}
-				class="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-45"
+				class="control-ring inline-flex h-9 items-center gap-1.5 rounded-md border border-transparent px-3 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-45"
 				aria-label="Next page"
 			>
 				<span class="hidden sm:inline">Next</span>
