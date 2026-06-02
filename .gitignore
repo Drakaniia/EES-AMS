@@ -27,3 +27,4 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .codex/config.toml
 .opencode/plugins/emdash-notifications.js
+.antigravitycli/
