@@ -66,22 +66,28 @@
 <div class="title-bar" data-tauri-drag-region>
 	<div class="title-bar-content" data-tauri-drag-region>
 		<!-- App title or logo can go here -->
-		<div class="app-title" data-tauri-drag-region>EES - Attendance Management System</div>
+		<div class="app-title" data-tauri-drag-region>EES Attendance Management System</div>
 	</div>
 
-	<div class="window-controls">
-		<button class="window-control minimize" onclick={minimize} title="Minimize">
-			<Minus size={14} />
+	<div class="window-controls" aria-label="Window controls">
+		<button
+			class="window-control minimize"
+			onclick={minimize}
+			title="Minimize"
+			aria-label="Minimize"
+		>
+			<Minus size={14} aria-hidden="true" />
 		</button>
 		<button
 			class="window-control maximize"
 			onclick={maximize}
 			title={isMaximized ? 'Restore' : 'Maximize'}
+			aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
 		>
-			<Square size={14} />
+			<Square size={14} aria-hidden="true" />
 		</button>
-		<button class="window-control close" onclick={close} title="Close">
-			<X size={14} />
+		<button class="window-control close" onclick={close} title="Close" aria-label="Close window">
+			<X size={14} aria-hidden="true" />
 		</button>
 	</div>
 </div>
@@ -111,6 +117,9 @@
 		font-weight: 500;
 		color: var(--color-muted-foreground);
 		-webkit-app-region: drag;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.window-controls {
@@ -128,7 +137,9 @@
 		background: transparent;
 		cursor: pointer;
 		color: var(--color-muted-foreground);
-		transition: background-color 0.2s;
+		transition:
+			background-color 0.15s ease,
+			color 0.15s ease;
 	}
 
 	.window-control:hover {
