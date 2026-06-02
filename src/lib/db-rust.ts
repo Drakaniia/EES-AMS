@@ -13,6 +13,9 @@ import type {
 	Sf2TemplateDraft,
 	Sf2WorkbookSettings,
 	Sf2CloseDaySummary,
+	Sf2ExportPreview,
+	Sf2PreviewCell,
+	Sf2PreviewStudentRow,
 	Sf2ExportReadiness,
 	Sf2ExportResult
 } from './types';
@@ -30,6 +33,9 @@ export type {
 	Sf2TemplateDraft,
 	Sf2WorkbookSettings,
 	Sf2CloseDaySummary,
+	Sf2ExportPreview,
+	Sf2PreviewCell,
+	Sf2PreviewStudentRow,
 	Sf2ExportReadiness,
 	Sf2ExportResult
 };
@@ -308,6 +314,19 @@ export async function closeSf2AttendanceDay(
 
 export async function getSf2ExportReadiness(classId?: string): Promise<Sf2ExportReadiness> {
 	return await invoke('get_sf2_export_readiness', { classId: classId || null });
+}
+
+export async function getSf2ExportPreview(classId?: string): Promise<Sf2ExportPreview> {
+	return await invoke('get_sf2_export_preview', { classId: classId || null });
+}
+
+export async function setSf2PreviewAttendance(
+	classId: string,
+	studentId: string,
+	date: string,
+	present: boolean
+): Promise<Sf2ExportPreview> {
+	return await invoke('set_sf2_preview_attendance', { classId, studentId, date, present });
 }
 
 export async function exportSf2Workbook(classId: string): Promise<Sf2ExportResult> {

@@ -190,6 +190,62 @@ export interface Sf2ExportReadiness {
 	warnings: string[];
 }
 
+export type Sf2PreviewCellStatus = 'present' | 'absent' | 'open';
+
+export interface Sf2ExportPreview {
+	template?: Sf2TemplateSummary;
+	classId?: string;
+	className: string;
+	sourcePath?: string;
+	dates: Sf2PreviewDate[];
+	students: Sf2PreviewStudentRow[];
+	absentList: Sf2PreviewAbsence[];
+	closedDays: string[];
+	mappedStudents: number;
+	mappedDates: number;
+	presentCount: number;
+	absenceCount: number;
+	unmappedStudentCount: number;
+	unmappedClosedDayCount: number;
+	canExport: boolean;
+	issues: string[];
+	warnings: string[];
+}
+
+export interface Sf2PreviewDate {
+	date: string;
+	sheetName: string;
+	columnLetter: string;
+	columnIndex: number;
+	closed: boolean;
+}
+
+export interface Sf2PreviewStudentRow {
+	studentId: string;
+	studentName: string;
+	workbookName: string;
+	gender?: string;
+	rowIndex: number;
+	mapped: boolean;
+	presentCount: number;
+	absentCount: number;
+	warnings: string[];
+	cells: Sf2PreviewCell[];
+}
+
+export interface Sf2PreviewCell {
+	date: string;
+	status: Sf2PreviewCellStatus;
+	editable: boolean;
+}
+
+export interface Sf2PreviewAbsence {
+	studentId: string;
+	studentName: string;
+	date: string;
+	rowIndex: number;
+}
+
 export interface Sf2ExportResult {
 	outputPath: string;
 	marksWritten: number;
