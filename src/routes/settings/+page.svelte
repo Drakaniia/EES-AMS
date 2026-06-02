@@ -5,6 +5,7 @@
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
+	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import TaskProgress from '$lib/components/ui/TaskProgress.svelte';
 	import {
 		SF2_CALENDAR_WEEKDAYS,
@@ -1957,15 +1958,4 @@
 {/if}
 
 <!-- ── Toast ──────────────────────────────────────────────────────────────── -->
-{#if toastMessage}
-	<div
-		class="fixed top-12 right-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
-			{toastOk
-			? 'border-border bg-background text-foreground'
-			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
-		role="status"
-		aria-live="polite"
-	>
-		{toastMessage}
-	</div>
-{/if}
+<FeedbackToast message={toastMessage} ok={toastOk} onClose={() => (toastMessage = null)} />
