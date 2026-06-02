@@ -6,6 +6,9 @@
 	import { page } from '$app/state';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
+	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 	import {
 		listEvents,
 		listStudents,
@@ -16,15 +19,24 @@
 	} from '$lib/db-rust';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { settingsStore } from '$lib/stores/settings.svelte';
+	import {
+		ArrowUpRight,
+		CalendarClock,
+		CheckCircle2,
+		History,
+		ScanLine,
+		UsersRound
+	} from 'lucide-svelte';
 
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
 	let classes = $state<Class[]>([]);
-
+	let loading = $state(true);
+	let loadError = $state<string | null>(null);
 	let sessionSummary = $state<{ summary: string; className: string } | null>(null);
 
 	onMount(async () => {
-		[students, events, classes] = await Promise.all([listStudents(), listEvents(), listClasses()]);
+		await reload();
 
 		const sessionEnd = page.url.searchParams.get('sessionEnd');
 		if (sessionEnd === 'true') {
@@ -32,56 +44,104 @@
 				summary: page.url.searchParams.get('summary') || '',
 				className: page.url.searchParams.get('className') || ''
 			};
-			// Clear URL params
 			goto(resolve('/'), { replaceState: true });
-			// Auto-hide after 10 seconds
 			setTimeout(() => (sessionSummary = null), 10000);
 		}
 	});
 
-	const today = fmtDate(Date.now());
+	async function reload() {
+		loading = true;
+		loadError = null;
+		try {
+			const [loadedStudents, loadedEvents, loadedClasses] = await Promise.all([
+				listStudents(),
+				listEvents(),
+				listClasses(),
+				settingsStore.load()
+			]);
+			students = loadedStudents;
+			events = loadedEvents;
+			classes = loadedClasses;
+		} catch (error) {
+			loadError =
+				error instanceof Error ? error.message : 'The local attendance backend is unavailable.';
+		} finally {
+			loading = false;
+		}
+	}
 
-	const todayEvents = $derived(events.filter((e) => fmtDate(e.timestamp) === today));
+	const today = $derived(fmtDate(Date.now()));
+	const todayEvents = $derived(events.filter((event) => fmtDate(event.timestamp) === today));
+	const studentMap = $derived(new SvelteMap(students.map((student) => [student.id, student])));
+	const activeClass = $derived(getActiveClass());
+	const nextClass = $derived(getNextClass());
+	const isCardReaderMode = $derived(settingsStore.settings?.attendanceMode === 'card_reader');
+	const attendanceActionLabel = $derived(
+		isCardReaderMode ? 'Start Live Session' : 'Take Attendance'
+	);
+	const attendanceFallbackLabel = $derived(isCardReaderMode ? 'Manual Entry' : 'Open Attendance');
 
-	const studentMap = $derived(new SvelteMap(students.map((s) => [s.id, s])));
-
-	// Last event per student today determines who has been recorded.
+	const activeClassStudents = $derived(
+		activeClass ? students.filter((student) => student.classId === activeClass.id) : students
+	);
+	const nextClassStudents = $derived(
+		nextClass ? students.filter((student) => student.classId === nextClass.cls.id) : []
+	);
+	const rosterStudents = $derived(activeClass ? activeClassStudents : nextClassStudents);
+	const relevantTodayEvents = $derived.by(() => {
+		if (!activeClass) return todayEvents;
+		return todayEvents.filter((event) => {
+			const student = studentMap.get(event.studentId);
+			return event.classId === activeClass.id || student?.classId === activeClass.id;
+		});
+	});
 	const checkedIn = $derived.by(() => {
 		const lastByStudent = new SvelteMap<string, AttendanceEvent>();
-		// Filter events to only include those from today and optionally for the active class
-		const relevantEvents = activeClass
-			? todayEvents.filter((e) => e.classId === activeClass.id)
-			: todayEvents;
-
-		for (const e of [...relevantEvents].sort((a, b) => {
-			const aTime = typeof a.timestamp === 'string' ? new Date(a.timestamp).getTime() : a.timestamp;
-			const bTime = typeof b.timestamp === 'string' ? new Date(b.timestamp).getTime() : b.timestamp;
-			return aTime - bTime;
-		})) {
-			lastByStudent.set(e.studentId, e);
+		for (const event of [...relevantTodayEvents].sort((a, b) => eventTime(a) - eventTime(b))) {
+			lastByStudent.set(event.studentId, event);
 		}
-		return [...lastByStudent.values()].filter((e) => e.type === 'in');
+		return [...lastByStudent.values()].filter((event) => event.type === 'in');
+	});
+	const pendingCount = $derived(Math.max(0, activeClassStudents.length - checkedIn.length));
+	const attendanceRate = $derived(
+		activeClassStudents.length === 0
+			? 0
+			: Math.round((checkedIn.length / activeClassStudents.length) * 100)
+	);
+	const recentEvents = $derived.by(() =>
+		[...events].sort((a, b) => eventTime(b) - eventTime(a)).slice(0, 8)
+	);
+
+	const dynamicTitle = $derived.by(() => {
+		if (activeClass) return `Currently Teaching: ${activeClass.name}`;
+		return 'Attendance Overview';
 	});
 
-	// ── Utility Functions ────────────────────────────────────────────────────────
+	const dynamicDescription = $derived.by(() => {
+		if (activeClass) {
+			const room = activeClass.room ? `Room ${activeClass.room} / ` : '';
+			return `${room}${activeClass.dayStart} - ${activeClass.dayEnd} / Session in progress`;
+		}
+		if (nextClass) {
+			return `Next session: ${nextClass.cls.name} starts in ${nextClass.minutes} minutes.`;
+		}
+		return 'No active class is scheduled right now. Review logs, manage rosters, or prepare the next session.';
+	});
 
 	function getActiveClass(): Class | null {
 		const now = new Date();
 		const currentTime = now.getHours() * 60 + now.getMinutes();
 		const currentDay = now.getDay();
 
-		for (const cls of classes) {
-			// Skip classes not scheduled for today
-			if (cls.days && !cls.days.includes(currentDay)) continue;
+		for (const classItem of classes) {
+			if (classItem.days && !classItem.days.includes(currentDay)) continue;
 
-			const [startHour, startMin] = cls.dayStart.split(':').map(Number);
-			const [endHour, endMin] = cls.dayEnd.split(':').map(Number);
+			const [startHour, startMin] = classItem.dayStart.split(':').map(Number);
+			const [endHour, endMin] = classItem.dayEnd.split(':').map(Number);
 			const startTime = startHour * 60 + startMin;
 			const endTime = endHour * 60 + endMin;
 
-			if (currentTime >= startTime && currentTime <= endTime) {
-				return cls;
-			}
+			if (currentTime >= startTime && currentTime <= endTime) return classItem;
 		}
 		return null;
 	}
@@ -90,60 +150,27 @@
 		const now = new Date();
 		const currentTime = now.getHours() * 60 + now.getMinutes();
 		const currentDay = now.getDay();
-
 		let next: { cls: Class; minutes: number } | null = null;
 
-		for (const cls of classes) {
-			// Skip classes not scheduled for today
-			if (cls.days && !cls.days.includes(currentDay)) continue;
+		for (const classItem of classes) {
+			if (classItem.days && !classItem.days.includes(currentDay)) continue;
 
-			const [startHour, startMin] = cls.dayStart.split(':').map(Number);
+			const [startHour, startMin] = classItem.dayStart.split(':').map(Number);
 			const startTime = startHour * 60 + startMin;
 
 			if (startTime > currentTime) {
 				const diff = startTime - currentTime;
-				if (!next || diff < next.minutes) {
-					next = { cls, minutes: diff };
-				}
+				if (!next || diff < next.minutes) next = { cls: classItem, minutes: diff };
 			}
 		}
 		return next;
 	}
 
-	// ── Dynamic Logic ──────────────────────────────────────────────────────────
-
-	const activeClass = $derived(getActiveClass());
-	const nextClass = $derived(getNextClass());
-
-	const activeClassStudents = $derived(
-		activeClass ? students.filter((s) => s.classId === activeClass.id) : students
-	);
-
-	const nextClassStudents = $derived(
-		nextClass ? students.filter((s) => s.classId === nextClass.cls.id) : []
-	);
-
-	const dynamicTitle = $derived.by(() => {
-		if (activeClass) {
-			return `Currently Teaching: ${activeClass.name}`;
-		}
-		return 'Dashboard';
-	});
-
-	const dynamicDescription = $derived.by(() => {
-		if (activeClass) {
-			return `${activeClass.room ? `Room ${activeClass.room} • ` : ''}${activeClass.dayStart} – ${activeClass.dayEnd} • Session in progress`;
-		}
-		if (nextClass) {
-			return `Welcome back. Your next session, ${nextClass.cls.name}, begins in ${nextClass.minutes} minutes.`;
-		}
-		return 'No active sessions at the moment. Use this time to prepare or view your schedule.';
-	});
-	const isCardReaderMode = $derived(settingsStore.settings?.attendanceMode === 'card_reader');
-	const attendanceActionLabel = $derived(
-		isCardReaderMode ? 'Start Live Session' : 'Take Attendance'
-	);
-	const attendanceFallbackLabel = $derived(isCardReaderMode ? 'Manual Entry' : 'Open Attendance');
+	function eventTime(event: AttendanceEvent) {
+		return typeof event.timestamp === 'string'
+			? new Date(event.timestamp).getTime()
+			: event.timestamp;
+	}
 
 	function attendanceHref(
 		classId?: string,
@@ -155,317 +182,282 @@
 		const query = params.join('&');
 		return query ? (`/attendance?${query}` as `/attendance?${string}`) : '/attendance';
 	}
+
+	function lastEventForStudentToday(student: Student) {
+		return todayEvents
+			.filter((event) => event.studentId === student.id)
+			.sort((a, b) => eventTime(b) - eventTime(a))[0];
+	}
+
+	function initials(name: string) {
+		return (
+			name
+				.split(/\s+/)
+				.filter(Boolean)
+				.slice(0, 2)
+				.map((part) => part[0]?.toUpperCase())
+				.join('') || 'ST'
+		);
+	}
 </script>
 
 <svelte:head>
-	<title>Dashboard — Attendance System</title>
+	<title>Dashboard - Attendance System</title>
 	<meta name="description" content="Today's attendance at a glance." />
 </svelte:head>
 
 <AppShell>
 	<PageHeader
-		category={activeClass ? 'Live' : 'Dashboard'}
+		category={activeClass ? 'Live Session' : 'Dashboard'}
 		title={dynamicTitle}
 		description={dynamicDescription}
 	>
 		{#snippet actions()}
 			<a
 				href={resolve('/students')}
-				onclick={(e) => {
-					e.preventDefault();
-					goto(resolve('/students'));
-				}}
-				class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 			>
-				<svg
-					class="size-4"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-					<circle cx="9" cy="7" r="4" />
-					<path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-					<path d="M16 3.13a4 4 0 0 1 0 7.75" />
-				</svg>
+				<UsersRound class="size-4" aria-hidden="true" />
 				Manage students
 			</a>
 			<a
 				href={resolve(attendanceHref(activeClass?.id))}
-				onclick={(e) => {
-					e.preventDefault();
-					goto(resolve(attendanceHref(activeClass?.id)));
-				}}
-				class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-primary bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 			>
 				{#if activeClass}
-					<span class="relative flex h-2 w-2">
+					<span class="relative flex h-2 w-2" aria-hidden="true">
 						<span
 							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"
 						></span>
 						<span class="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
 					</span>
 				{/if}
-				<svg
-					class="size-4"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M3 7V5a2 2 0 0 1 2-2h2" />
-					<path d="M17 3h2a2 2 0 0 1 2 2v2" />
-					<path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-					<path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-					<line x1="7" y1="12" x2="17" y2="12" />
-				</svg>
+				<ScanLine class="size-4" aria-hidden="true" />
 				{attendanceActionLabel}
 			</a>
 		{/snippet}
 	</PageHeader>
 
-	{#if sessionSummary}
-		<div class="px-6 pt-6 md:px-12">
+	<div class="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-5 md:px-8 lg:px-10">
+		{#if sessionSummary}
 			<div
-				class="flex items-center justify-between rounded-2xl border border-primary/20 bg-primary/10 p-6 text-primary"
+				class="flex flex-col gap-4 rounded-2xl border border-primary/25 bg-primary/10 p-4 text-primary sm:flex-row sm:items-center sm:justify-between"
+				role="status"
+				aria-live="polite"
 			>
-				<div class="flex items-center gap-4">
+				<div class="flex min-w-0 items-center gap-3">
 					<div
-						class="grid size-12 place-items-center rounded-full bg-primary text-primary-foreground"
+						class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"
 					>
-						<svg
-							class="size-6"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<polyline points="20 6 9 17 4 12" />
-						</svg>
+						<CheckCircle2 class="size-5" aria-hidden="true" />
 					</div>
-					<div>
-						<h4 class="text-lg font-bold">Session Complete: {sessionSummary.className}</h4>
-						<p class="text-sm font-medium opacity-80">{sessionSummary.summary}</p>
+					<div class="min-w-0">
+						<h2 class="text-balance-safe font-semibold">
+							Session complete: {sessionSummary.className}
+						</h2>
+						<p class="text-balance-safe mt-0.5 text-sm text-primary/80">{sessionSummary.summary}</p>
 					</div>
 				</div>
 				<button
+					type="button"
 					onclick={() => (sessionSummary = null)}
-					class="rounded-full p-2 transition-colors hover:bg-primary/10"
-					aria-label="Close session summary"
+					class="control-ring w-fit rounded-md border border-primary/20 px-3 py-2 text-sm font-medium hover:bg-primary/10"
 				>
-					<svg
-						class="size-5"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<path d="M18 6 6 18" /><path d="m6 6 12 12" />
-					</svg>
+					Dismiss
 				</button>
 			</div>
-		</div>
-	{/if}
+		{/if}
 
-	<!-- Stats row -->
-	<section class="grid gap-4 px-6 py-6 sm:grid-cols-2 md:px-12 lg:grid-cols-3">
-		{@render statCard('Class Size', activeClassStudents.length)}
-		{@render statCard('Total Attendance', todayEvents.length, true)}
-		{@render statCard('Recorded Today', checkedIn.length)}
-	</section>
-
-	<!-- Panels -->
-	<section class="grid min-h-[calc(100vh-28rem)] gap-6 px-6 pb-16 md:px-12 lg:grid-cols-2">
-		<!-- Currently in the room -->
-		<div class="flex h-full flex-col rounded-2xl border border-border bg-card p-6">
-			<div class="mb-4 flex flex-shrink-0 items-baseline justify-between">
-				<div class="flex flex-col">
-					<h3 class="text-lg font-medium">
-						{activeClass ? 'Recorded in this session' : 'Next Session Class List'}
-					</h3>
-					<span class="label-mono text-xs opacity-60">
-						{activeClass
-							? isCardReaderMode
-								? 'Last tap registered'
-								: 'Latest manual attendance status'
-							: `${nextClassStudents.length} Students`}
-					</span>
-				</div>
-				{#if activeClass}
-					<a
-						href={resolve(attendanceHref(activeClass.id, true))}
-						onclick={(e) => {
-							e.preventDefault();
-							goto(resolve(attendanceHref(activeClass.id, true)));
-						}}
-						class="inline-flex h-8 items-center gap-1.5 rounded-pill border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-surface"
+		{#if loading}
+			<LoadingBlock rows={3} label="Loading attendance dashboard" />
+		{:else if loadError}
+			<EmptyState
+				tone="warning"
+				title="Attendance data could not be loaded"
+				description={loadError}
+			>
+				{#snippet actions()}
+					<button
+						type="button"
+						onclick={reload}
+						class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
 					>
-						{attendanceFallbackLabel}
-					</a>
-				{/if}
-			</div>
+						Retry
+					</button>
+				{/snippet}
+			</EmptyState>
+		{:else}
+			<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Today summary">
+				{@render statCard('Roster', activeClassStudents.length, 'Students in scope')}
+				{@render statCard('Recorded', checkedIn.length, 'Marked present today', true)}
+				{@render statCard('Pending', pendingCount, 'Not yet recorded')}
+				{@render statCard('Rate', `${attendanceRate}%`, 'Current completion')}
+			</section>
 
-			{#if activeClass && checkedIn.length === 0}
-				<div class="flex flex-1 items-center justify-center">
-					{@render emptyState('No attendance has been recorded yet. Start attendance to begin.')}
-				</div>
-			{:else if !activeClass && nextClass}
-				<div class="flex flex-1 flex-col">
-					<div class="mb-4 text-sm text-muted-foreground">
-						Preparing for <strong>{nextClass.cls.name}</strong>{nextClass.cls.room
-							? ` (Room ${nextClass.cls.room})`
-							: ''} at {nextClass.cls.dayStart}
-					</div>
-					{#if nextClassStudents.length === 0}
-						<div class="flex flex-1 items-center justify-center">
-							{@render emptyState('No students enrolled in the next class.', true)}
+			<section
+				class="grid min-h-[26rem] gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]"
+			>
+				<div class="flex min-h-0 flex-col rounded-2xl border border-border bg-card">
+					<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border p-5">
+						<div class="min-w-0">
+							<h2 class="text-lg font-semibold">
+								{activeClass ? 'Session roster' : 'Next class roster'}
+							</h2>
+							<p class="mt-1 text-sm text-muted-foreground">
+								{activeClass
+									? `${checkedIn.length} recorded / ${pendingCount} pending`
+									: nextClass
+										? `${nextClassStudents.length} students for ${nextClass.cls.name}`
+										: 'No scheduled class is currently active.'}
+							</p>
 						</div>
-					{:else}
-						<ul class="flex-1 divide-y divide-border overflow-y-auto">
-							{#each nextClassStudents as s (s.id)}
-								<li class="flex items-center justify-between py-3">
-									<div>
-										<div class="font-medium">{s.name}</div>
-									</div>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</div>
-			{:else if checkedIn.length === 0}
-				<div class="flex flex-1 items-center justify-center">
-					{@render emptyState('No active sessions at the moment.', true)}
-				</div>
-			{:else}
-				<ul class="flex-1 divide-y divide-border overflow-y-auto">
-					{#each checkedIn as e (e.id)}
-						{@const s = studentMap.get(e.studentId)}
-						<li class="flex items-center justify-between py-3">
-							<div>
-								<div class="font-medium">{s?.name ?? 'Unknown'}</div>
-							</div>
-							<div class="font-mono text-sm text-muted-foreground">in · {fmtTime(e.timestamp)}</div>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		</div>
-
-		<!-- Recent activity -->
-		<div class="flex h-full flex-col rounded-2xl border border-border bg-card p-6">
-			<div class="mb-4 flex flex-shrink-0 items-baseline justify-between">
-				<h3 class="text-lg font-medium">Recent activity</h3>
-				<span class="label-mono">Last 8 events</span>
-			</div>
-
-			{#if events.length === 0}
-				<div class="flex flex-1 items-center justify-center">
-					{@render emptyState('No events yet.')}
-				</div>
-			{:else}
-				<ul class="flex-1 divide-y divide-border overflow-y-auto">
-					{#each events.slice(0, 8) as e (e.id)}
-						{@const s = studentMap.get(e.studentId)}
-						<li class="flex items-center justify-between py-3">
-							<div class="min-w-0">
-								<div class="truncate font-medium">{s?.name ?? 'Unknown'}</div>
-								<div class="label-mono">{fmtDate(e.timestamp)} · {fmtTime(e.timestamp)}</div>
-							</div>
-							<span
-								class="rounded-pill bg-primary px-2 py-1 font-mono text-xs text-primary-foreground"
+						{#if activeClass}
+							<a
+								href={resolve(attendanceHref(activeClass.id, true))}
+								class="control-ring inline-flex h-9 items-center gap-2 rounded-pill border border-border bg-background px-3 text-xs font-semibold hover:bg-surface"
 							>
-								IN
-							</span>
-						</li>
-					{/each}
-				</ul>
-			{/if}
+								{attendanceFallbackLabel}
+								<ArrowUpRight class="size-3.5" aria-hidden="true" />
+							</a>
+						{/if}
+					</div>
 
-			<div class="mt-4 flex-shrink-0">
-				<a
-					href={resolve('/records')}
-					onclick={(e) => {
-						e.preventDefault();
-						goto(resolve('/records'));
-					}}
-					class="inline-flex items-center gap-1 font-mono text-sm text-primary transition-colors hover:text-accent"
-				>
-					View all records
-					<svg
-						class="size-3.5"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<line x1="7" y1="17" x2="17" y2="7" />
-						<polyline points="7 7 17 7 17 17" />
-					</svg>
-				</a>
-			</div>
-		</div>
-	</section>
+					<div class="min-h-0 flex-1 overflow-y-auto p-3">
+						{#if rosterStudents.length === 0}
+							<EmptyState
+								title={activeClass ? 'No students assigned to this class' : 'No roster to show'}
+								description={activeClass
+									? 'Assign students to this class from the Class List before taking attendance.'
+									: 'Create a class schedule in Configuration to see upcoming rosters here.'}
+							/>
+						{:else}
+							<ul class="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
+								{#each rosterStudents as student (student.id)}
+									{@const event = lastEventForStudentToday(student)}
+									<li
+										class="flex min-w-0 items-center gap-3 rounded-xl border border-border bg-background p-3"
+									>
+										<div
+											class="grid size-10 shrink-0 place-items-center rounded-lg border font-mono text-xs font-bold {event
+												? 'border-primary/30 bg-primary text-primary-foreground'
+												: 'border-border bg-surface text-muted-foreground'}"
+											aria-hidden="true"
+										>
+											{initials(student.name)}
+										</div>
+										<div class="min-w-0 flex-1">
+											<div class="text-balance-safe text-sm leading-snug font-semibold">
+												{student.name}
+											</div>
+											<div
+												class="mt-1 font-mono text-[11px] {event
+													? 'text-primary'
+													: 'text-muted-foreground'}"
+											>
+												{event ? `Recorded ${fmtTime(event.timestamp)}` : 'Pending'}
+											</div>
+										</div>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</div>
+				</div>
+
+				<aside class="flex min-h-0 flex-col rounded-2xl border border-border bg-card">
+					<div class="flex items-start justify-between gap-3 border-b border-border p-5">
+						<div>
+							<h2 class="text-lg font-semibold">Recent activity</h2>
+							<p class="mt-1 text-sm text-muted-foreground">Latest attendance events</p>
+						</div>
+						<span
+							class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]"
+						>
+							{recentEvents.length} shown
+						</span>
+					</div>
+
+					<div class="min-h-0 flex-1 overflow-y-auto p-3">
+						{#if recentEvents.length === 0}
+							<EmptyState
+								title="No activity yet"
+								description="Attendance events will appear here as soon as a card tap or manual log is saved."
+							/>
+						{:else}
+							<ul class="divide-y divide-border">
+								{#each recentEvents as event (event.id)}
+									{@const student = studentMap.get(event.studentId)}
+									<li class="flex min-w-0 items-center justify-between gap-3 py-3">
+										<div class="min-w-0">
+											<div class="truncate text-sm font-semibold">
+												{student?.name ?? 'Unknown student'}
+											</div>
+											<div
+												class="mt-0.5 flex flex-wrap gap-x-2 gap-y-1 font-mono text-[11px] text-muted-foreground"
+											>
+												<span>{fmtDate(event.timestamp)}</span>
+												<span aria-hidden="true">/</span>
+												<span>{fmtTime(event.timestamp)}</span>
+											</div>
+										</div>
+										<span
+											class="rounded-pill bg-primary px-2 py-1 font-mono text-[10px] font-bold text-primary-foreground"
+										>
+											IN
+										</span>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</div>
+
+					<div class="border-t border-border p-4">
+						<a
+							href={resolve('/records')}
+							class="control-ring inline-flex h-9 items-center gap-2 rounded-pill border border-border bg-background px-3 text-xs font-semibold text-primary hover:bg-surface"
+						>
+							View all records
+							<ArrowUpRight class="size-3.5" aria-hidden="true" />
+						</a>
+					</div>
+				</aside>
+			</section>
+		{/if}
+	</div>
 </AppShell>
 
-{#snippet statCard(label: string, value: number, accent = false)}
-	<div
-		class="rounded-2xl border border-border p-6 {accent
-			? 'bg-primary text-primary-foreground'
-			: 'bg-surface'}"
-	>
-		<div class="label-mono {accent ? 'text-primary-foreground/80!' : ''}">{label}</div>
-		<div class="mt-2 text-5xl font-medium tracking-tight">{value}</div>
-	</div>
-{/snippet}
+<FeedbackToast message={settingsStore.error} ok={false} />
 
-{#snippet emptyState(text: string, showScheduleAction = false)}
+{#snippet statCard(label: string, value: number | string, detail: string, accent = false)}
 	<div
-		class="flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
+		class="rounded-2xl border p-5 {accent
+			? 'border-primary bg-primary text-primary-foreground'
+			: 'border-border bg-card'}"
 	>
-		<div class="mb-4 rounded-full bg-surface p-3">
-			<svg
-				class="size-6 opacity-60"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
+		<div class="flex items-start justify-between gap-3">
+			<div class="min-w-0">
+				<div class="label-mono {accent ? 'text-primary-foreground/80!' : ''}">{label}</div>
+				<div class="mt-2 text-4xl leading-none font-semibold tracking-normal">{value}</div>
+				<div class="mt-2 text-sm {accent ? 'text-primary-foreground/80' : 'text-muted-foreground'}">
+					{detail}
+				</div>
+			</div>
+			<div
+				class="grid size-10 shrink-0 place-items-center rounded-lg border {accent
+					? 'border-primary-foreground/20 bg-primary-foreground/10'
+					: 'border-border bg-surface text-muted-foreground'}"
 				aria-hidden="true"
 			>
-				<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-				<polyline points="14 2 14 8 20 8" />
-				<line x1="16" y1="13" x2="8" y2="13" />
-				<line x1="16" y1="17" x2="8" y2="17" />
-				<polyline points="10 9 9 9 8 9" />
-			</svg>
+				{#if label === 'Roster'}
+					<UsersRound class="size-5" />
+				{:else if label === 'Recorded'}
+					<CheckCircle2 class="size-5" />
+				{:else if label === 'Pending'}
+					<CalendarClock class="size-5" />
+				{:else}
+					<History class="size-5" />
+				{/if}
+			</div>
 		</div>
-		<p class="mb-6 max-w-[200px]">{text}</p>
-		{#if showScheduleAction}
-			<a
-				href={resolve('/settings')}
-				onclick={(e) => {
-					e.preventDefault();
-					goto(resolve('/settings'));
-				}}
-				class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-xs font-medium transition-colors hover:bg-surface"
-			>
-				View full schedule
-			</a>
-		{/if}
 	</div>
 {/snippet}
