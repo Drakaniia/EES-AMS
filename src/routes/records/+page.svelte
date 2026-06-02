@@ -4,6 +4,9 @@
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import DateRangePicker from '$lib/components/ui/DateRangePicker.svelte';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
+	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import StudentPicker from '$lib/components/ui/StudentPicker.svelte';
 	import {
@@ -42,6 +45,8 @@
 	let classId = $state($page.url.searchParams.get('classId') || '');
 	let lateAfter = $state('08:45');
 	let exportingLogs = $state(false);
+	let loading = $state(true);
+	let loadError = $state<string | null>(null);
 
 	// Date range picker dialog state
 	let dateRangePickerOpen = $state(false);
@@ -194,17 +199,26 @@
 	}
 
 	async function reload() {
-		const [s, e, c, st] = await Promise.all([
-			listStudents(),
-			listEvents(),
-			listClasses(),
-			getSettings()
-		]);
-		students = s;
-		events = e;
-		classes = c;
-		lateAfter = st.lateAfter;
-		currentPage = 1;
+		loading = true;
+		loadError = null;
+		try {
+			const [s, e, c, st] = await Promise.all([
+				listStudents(),
+				listEvents(),
+				listClasses(),
+				getSettings()
+			]);
+			students = s;
+			events = e;
+			classes = c;
+			lateAfter = st.lateAfter;
+			currentPage = 1;
+		} catch (error) {
+			loadError =
+				error instanceof Error ? error.message : 'Attendance records could not be loaded.';
+		} finally {
+			loading = false;
+		}
 	}
 
 	async function confirmDeleteAttendanceRecords(target = deleteTarget) {
@@ -290,178 +304,192 @@
 		</PageHeader>
 
 		<!-- ── Filters ──────────────────────────────────────────────────────────── -->
-		<section class="grid gap-4 px-6 py-5 sm:grid-cols-2 md:px-12 lg:grid-cols-4">
-			<!-- Date Range -->
-			<div class="space-y-2">
-				<div class="label-mono">Date Range</div>
-				<button
-					onclick={() => (dateRangePickerOpen = true)}
-					class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
-				>
-					<span class={from || to ? '' : 'text-muted-foreground'}>
-						{from && to
-							? `${new Date(from).toLocaleDateString()} - ${new Date(to).toLocaleDateString()}`
-							: from
-								? `From ${new Date(from).toLocaleDateString()}`
-								: to
-									? `To ${new Date(to).toLocaleDateString()}`
-									: 'Select date range'}
-					</span>
-					<svg
-						class="size-4 text-muted-foreground"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-						<line x1="16" y1="2" x2="16" y2="6"></line>
-						<line x1="8" y1="2" x2="8" y2="6"></line>
-						<line x1="3" y1="10" x2="21" y2="10"></line>
-					</svg>
-				</button>
+		{#if loading}
+			<div class="px-4 py-5 md:px-8 lg:px-10">
+				<LoadingBlock rows={4} label="Loading attendance records" />
 			</div>
-
-			<!-- Class -->
-			<div class="space-y-2">
-				<div class="label-mono">Class</div>
-				<div class="relative">
-					<select
-						bind:value={classId}
-						onchange={() => (studentId = '')}
-						class="h-10 w-full appearance-none rounded-md border border-border bg-background px-3 pr-10 text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
+		{:else if loadError}
+			<div class="px-4 py-5 md:px-8 lg:px-10">
+				<EmptyState tone="warning" title="Records are unavailable" description={loadError}>
+					{#snippet actions()}
+						<button
+							type="button"
+							onclick={reload}
+							class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
+						>
+							Retry
+						</button>
+					{/snippet}
+				</EmptyState>
+			</div>
+		{:else}
+			<section class="grid gap-4 px-4 py-5 sm:grid-cols-2 md:px-8 lg:grid-cols-4 lg:px-10">
+				<!-- Date Range -->
+				<div class="space-y-2">
+					<div class="label-mono">Date Range</div>
+					<button
+						onclick={() => (dateRangePickerOpen = true)}
+						class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
 					>
-						<option value="">All classes</option>
-						{#each classes as c (c.id)}
-							<option value={c.id}>{c.name}</option>
-						{/each}
-					</select>
-					<div
-						class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground"
-					>
+						<span class={from || to ? '' : 'text-muted-foreground'}>
+							{from && to
+								? `${new Date(from).toLocaleDateString()} - ${new Date(to).toLocaleDateString()}`
+								: from
+									? `From ${new Date(from).toLocaleDateString()}`
+									: to
+										? `To ${new Date(to).toLocaleDateString()}`
+										: 'Select date range'}
+						</span>
 						<svg
-							class="size-4"
+							class="size-4 text-muted-foreground"
 							viewBox="0 0 24 24"
 							fill="none"
 							stroke="currentColor"
 							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
 						>
-							<path d="m6 9 6 6 6-6" />
+							<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+							<line x1="16" y1="2" x2="16" y2="6"></line>
+							<line x1="8" y1="2" x2="8" y2="6"></line>
+							<line x1="3" y1="10" x2="21" y2="10"></line>
 						</svg>
+					</button>
+				</div>
+
+				<!-- Class -->
+				<div class="space-y-2">
+					<div class="label-mono">Class</div>
+					<div class="relative">
+						<select
+							bind:value={classId}
+							onchange={() => (studentId = '')}
+							class="h-10 w-full appearance-none rounded-md border border-border bg-background px-3 pr-10 text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
+						>
+							<option value="">All classes</option>
+							{#each classes as c (c.id)}
+								<option value={c.id}>{c.name}</option>
+							{/each}
+						</select>
+						<div
+							class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground"
+						>
+							<svg
+								class="size-4"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path d="m6 9 6 6 6-6" />
+							</svg>
+						</div>
 					</div>
 				</div>
-			</div>
 
-			<!-- Student -->
-			<div class="space-y-2">
-				<div class="label-mono">Student</div>
-				<StudentPicker
-					{students}
-					selectedId={studentId}
-					{classId}
-					placeholder="All students"
-					onSelect={({ id }) => (studentId = id)}
-				/>
-			</div>
+				<!-- Student -->
+				<div class="space-y-2">
+					<div class="label-mono">Student</div>
+					<StudentPicker
+						{students}
+						selectedId={studentId}
+						{classId}
+						placeholder="All students"
+						onSelect={({ id }) => (studentId = id)}
+					/>
+				</div>
 
-			<!-- Total -->
-			<div class="space-y-2">
-				<div class="label-mono">Total attendance records</div>
-				<div class="flex h-10 items-center font-mono text-sm">{groupedAttendance.length}</div>
-			</div>
-		</section>
+				<!-- Total -->
+				<div class="space-y-2">
+					<div class="label-mono">Total attendance records</div>
+					<div class="flex h-10 items-center font-mono text-sm">{groupedAttendance.length}</div>
+				</div>
+			</section>
 
-		<!-- ── Table ────────────────────────────────────────────────────────────── -->
-		<section class="min-h-0 flex-1 px-6 pb-20 md:px-12" bind:clientHeight={availableHeight}>
-			<div class="overflow-hidden rounded-2xl border border-border bg-card">
-				<table class="w-full text-sm">
-					<thead class="bg-surface text-left">
-						<tr>
-							<th class="label-mono px-4 py-3">Date</th>
-							<th class="label-mono px-4 py-3">Student</th>
-							<th class="label-mono px-4 py-3">Class</th>
-							<th class="label-mono px-4 py-3">Check In</th>
-							<th class="label-mono w-20 px-4 py-3 text-right"> </th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-border">
-						{#if groupedAttendance.length === 0}
-							{@render emptyState()}
-						{:else}
-							{#each paginatedFiltered as record (record.studentId + record.date)}
-								<tr class="transition-colors hover:bg-surface/40">
-									<td class="px-4 py-3 align-top font-mono">{record.date}</td>
-									<td class="px-4 py-3 align-top">
-										<div class="font-medium">{record.studentName}</div>
-									</td>
-									<td class="px-4 py-3 align-top">
-										<span
-											class="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10px]"
-										>
-											{record.className}
-										</span>
-									</td>
-									<td class="px-4 py-3 align-top">
-										{#if record.checkInTime}
-											<div class="flex items-center gap-2">
-												{@render checkInPill(record.checkInTime, record.isLate)}
-											</div>
-										{:else}
-											<span class="font-mono text-xs text-muted-foreground">—</span>
-										{/if}
-									</td>
-									<td class="px-4 py-3 text-right align-top">
-										{#if record.events.length > 0}
-											<button
-												onclick={(event) => onDeleteAttendanceRecord(event, record)}
-												aria-label="Delete attendance record"
-												class="inline-flex size-8 items-center justify-center rounded-md border border-border text-destructive transition-colors hover:bg-destructive/10"
+			<!-- ── Table ────────────────────────────────────────────────────────────── -->
+			<section
+				class="min-h-0 flex-1 px-4 pb-20 md:px-8 lg:px-10"
+				bind:clientHeight={availableHeight}
+			>
+				<div class="table-wrap">
+					<table class="min-w-[720px] text-sm">
+						<thead class="bg-surface text-left">
+							<tr>
+								<th class="label-mono px-4 py-3">Date</th>
+								<th class="label-mono px-4 py-3">Student</th>
+								<th class="label-mono px-4 py-3">Class</th>
+								<th class="label-mono px-4 py-3">Check In</th>
+								<th class="label-mono w-20 px-4 py-3 text-right"> </th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-border">
+							{#if groupedAttendance.length === 0}
+								{@render emptyState()}
+							{:else}
+								{#each paginatedFiltered as record (record.studentId + record.date)}
+									<tr class="transition-colors hover:bg-surface/40">
+										<td class="px-4 py-3 align-top font-mono">{record.date}</td>
+										<td class="px-4 py-3 align-top">
+											<div class="text-balance-safe font-medium">{record.studentName}</div>
+										</td>
+										<td class="px-4 py-3 align-top">
+											<span
+												class="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10px]"
 											>
-												<svg
-													class="size-3.5"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													aria-hidden="true"
+												{record.className}
+											</span>
+										</td>
+										<td class="px-4 py-3 align-top">
+											{#if record.checkInTime}
+												<div class="flex items-center gap-2">
+													{@render checkInPill(record.checkInTime, record.isLate)}
+												</div>
+											{:else}
+												<span class="font-mono text-xs text-muted-foreground">—</span>
+											{/if}
+										</td>
+										<td class="px-4 py-3 text-right align-top">
+											{#if record.events.length > 0}
+												<button
+													onclick={(event) => onDeleteAttendanceRecord(event, record)}
+													aria-label="Delete attendance record"
+													class="inline-flex size-8 items-center justify-center rounded-md border border-border text-destructive transition-colors hover:bg-destructive/10"
 												>
-													<polyline points="3 6 5 6 21 6" />
-													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
-													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-												</svg>
-											</button>
-										{/if}
-									</td>
-								</tr>
-							{/each}
-						{/if}
-					</tbody>
-				</table>
-			</div>
-		</section>
+													<svg
+														class="size-3.5"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"
+													>
+														<polyline points="3 6 5 6 21 6" />
+														<path
+															d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"
+														/>
+														<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+													</svg>
+												</button>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							{/if}
+						</tbody>
+					</table>
+				</div>
+			</section>
 
-		<div class="fixed bottom-6 left-1/2 z-30 -translate-x-1/2">
-			<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
-		</div>
+			<div class="fixed bottom-6 left-1/2 z-30 -translate-x-1/2">
+				<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
+			</div>
+		{/if}
 	</div>
 </AppShell>
 
-{#if toastMessage}
-	<div
-		class="fixed top-12 right-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
-					{toastOk
-			? 'border-border bg-background text-foreground'
-			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
-		role="status"
-		aria-live="polite"
-	>
-		{toastMessage}
-	</div>
-{/if}
+<FeedbackToast message={toastMessage} ok={toastOk} onClose={() => (toastMessage = null)} />
 
 <DateRangePicker
 	open={dateRangePickerOpen}
