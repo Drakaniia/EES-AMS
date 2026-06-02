@@ -12,12 +12,14 @@ use crate::sf2::logic::{
     Sf2CellMark, Sf2StudentMapping,
 };
 use crate::sf2::models::{
-    Sf2CloseDaySummary, Sf2DateMappingRecord, Sf2ExportReadiness, Sf2ExportResult,
-    Sf2ImportSummary, Sf2StudentMappingRecord, Sf2TemplateDraft, Sf2TemplateRecord,
-    Sf2WorkbookAnalysis, Sf2WorkbookMetadata, Sf2WorkbookSettings,
+    Sf2CloseDaySummary, Sf2DateMappingRecord, Sf2ExportPreview, Sf2ExportReadiness,
+    Sf2ExportResult, Sf2ImportSummary, Sf2PreviewAbsence, Sf2PreviewCell, Sf2PreviewCellStatus,
+    Sf2PreviewDate, Sf2PreviewStudentRow, Sf2StudentMappingRecord, Sf2TemplateDraft,
+    Sf2TemplateRecord, Sf2WorkbookAnalysis, Sf2WorkbookMetadata, Sf2WorkbookSettings,
 };
 use crate::sf2::repository::{template_summary, Sf2Repository};
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Datelike, Local, NaiveDate, Utc};
+use rusqlite::params;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
 use std::io::Write;
@@ -549,6 +551,298 @@ pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2Exp
         issues,
         warnings,
     })
+}
+
+pub fn export_preview(pool: DbPool, class_id: Option<String>) -> Result<Sf2ExportPreview> {
+    let readiness = export_readiness(pool.clone(), class_id)?;
+    let Some(summary) = readiness.template.clone() else {
+        return Ok(Sf2ExportPreview {
+            template: None,
+            class_id: None,
+            class_name: String::new(),
+            source_path: None,
+            dates: Vec::new(),
+            students: Vec::new(),
+            absent_list: Vec::new(),
+            closed_days: readiness.closed_days,
+            mapped_students: readiness.mapped_students,
+            mapped_dates: readiness.mapped_dates,
+            present_count: 0,
+            absence_count: 0,
+            unmapped_student_count: 0,
+            unmapped_closed_day_count: 0,
+            can_export: false,
+            issues: readiness.issues,
+            warnings: readiness.warnings,
+        });
+    };
+
+    let sf2_repo = Sf2Repository::new(pool.clone());
+    let template = sf2_repo
+        .latest_template_for_class(&summary.class_id)?
+        .ok_or_else(|| AppError::InvalidInput("No SF2 template imported".to_string()))?;
+    let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
+    let date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
+
+    let class_repo = ClassRepository::new(pool.clone());
+    let class = class_repo.get(&template.active_class_id)?;
+    let class_name = class
+        .as_ref()
+        .map(|class| class.name.clone())
+        .unwrap_or_else(|| class_name(&template.grade_level, &template.section));
+
+    let student_repo = StudentRepository::new(pool.clone());
+    let class_students = student_repo.list_by_class(Some(&template.active_class_id))?;
+    let student_lookup = class_students
+        .iter()
+        .map(|student| (student.id.to_string(), student))
+        .collect::<HashMap<_, _>>();
+    let closed_day_set = readiness
+        .closed_days
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    let mapped_day_set = date_mappings
+        .iter()
+        .map(|mapping| mapping.date.as_str())
+        .collect::<HashSet<_>>();
+
+    let dates = date_mappings
+        .iter()
+        .map(|mapping| Sf2PreviewDate {
+            date: mapping.date.clone(),
+            sheet_name: mapping.sheet_name.clone(),
+            column_letter: mapping.column_letter.clone(),
+            column_index: mapping.column_index,
+            closed: closed_day_set.contains(mapping.date.as_str()),
+        })
+        .collect::<Vec<_>>();
+
+    let event_repo = EventRepository::new(pool.clone());
+    let events = event_repo.list()?;
+    let present_by_day = dates
+        .iter()
+        .filter(|date| date.closed)
+        .map(|date| {
+            (
+                date.date.clone(),
+                present_student_ids(
+                    &events,
+                    &class_students,
+                    &template.active_class_id,
+                    &date.date,
+                ),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+
+    let mut warnings = readiness.warnings.clone();
+    let mut students = Vec::new();
+    let mut absent_list = Vec::new();
+    let mut present_count = 0;
+    let mut absence_count = 0;
+    let mut mapped_student_ids = HashSet::new();
+
+    for mapping in &student_mappings {
+        mapped_student_ids.insert(mapping.student_id.clone());
+        let student = student_lookup.get(&mapping.student_id);
+        let student_name = student
+            .map(|student| student.name.trim().to_string())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| mapping.workbook_name.clone());
+        let mut row_warnings = Vec::new();
+        if student.is_none() {
+            row_warnings.push(
+                "This SF2 row points to a student record that is no longer in the class."
+                    .to_string(),
+            );
+            warnings.push(format!(
+                "{} is mapped in the SF2 workbook but is not in the selected class.",
+                mapping.workbook_name
+            ));
+        }
+
+        let mut row_present_count = 0;
+        let mut row_absent_count = 0;
+        let cells = dates
+            .iter()
+            .map(|date| {
+                let editable = date.closed && student.is_some();
+                let status = if !date.closed {
+                    Sf2PreviewCellStatus::Open
+                } else if present_by_day
+                    .get(&date.date)
+                    .is_some_and(|present| present.contains(&mapping.student_id))
+                {
+                    row_present_count += 1;
+                    present_count += 1;
+                    Sf2PreviewCellStatus::Present
+                } else {
+                    row_absent_count += 1;
+                    absence_count += 1;
+                    absent_list.push(Sf2PreviewAbsence {
+                        student_id: mapping.student_id.clone(),
+                        student_name: student_name.clone(),
+                        date: date.date.clone(),
+                        row_index: mapping.row_index,
+                    });
+                    Sf2PreviewCellStatus::Absent
+                };
+
+                Sf2PreviewCell {
+                    date: date.date.clone(),
+                    status,
+                    editable,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        students.push(Sf2PreviewStudentRow {
+            student_id: mapping.student_id.clone(),
+            student_name,
+            workbook_name: mapping.workbook_name.clone(),
+            gender: preview_gender(student.and_then(|student| student.gender), mapping),
+            row_index: mapping.row_index,
+            mapped: true,
+            present_count: row_present_count,
+            absent_count: row_absent_count,
+            warnings: row_warnings,
+            cells,
+        });
+    }
+
+    let mut unmapped_student_count = 0;
+    for student in class_students
+        .iter()
+        .filter(|student| !mapped_student_ids.contains(&student.id.to_string()))
+    {
+        unmapped_student_count += 1;
+        warnings.push(format!(
+            "{} is in the class roster but is not mapped to an SF2 learner row.",
+            student.name
+        ));
+        students.push(Sf2PreviewStudentRow {
+            student_id: student.id.to_string(),
+            student_name: student.name.clone(),
+            workbook_name: String::new(),
+            gender: preview_gender(
+                student.gender,
+                &Sf2StudentMappingRecord {
+                    template_id: template.id.clone(),
+                    student_id: student.id.to_string(),
+                    workbook_name: student.name.clone(),
+                    normalized_name: normalize_learner_name(&student.name),
+                    row_index: 0,
+                    gender_block: None,
+                },
+            ),
+            row_index: 0,
+            mapped: false,
+            present_count: 0,
+            absent_count: 0,
+            warnings: vec![
+                "Not linked to an SF2 workbook row. Update the workbook roster before export."
+                    .to_string(),
+            ],
+            cells: dates
+                .iter()
+                .map(|date| Sf2PreviewCell {
+                    date: date.date.clone(),
+                    status: Sf2PreviewCellStatus::Open,
+                    editable: false,
+                })
+                .collect(),
+        });
+    }
+
+    let unmapped_closed_days = readiness
+        .closed_days
+        .iter()
+        .filter(|day| !mapped_day_set.contains(day.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    for day in &unmapped_closed_days {
+        warnings.push(format!(
+            "{day} is closed for attendance but is not mapped to an SF2 date column."
+        ));
+    }
+
+    if student_mappings.is_empty() {
+        warnings.push("No learners are mapped to this SF2 workbook.".to_string());
+    }
+
+    Ok(Sf2ExportPreview {
+        template: Some(template_summary(template.clone())),
+        class_id: Some(template.active_class_id),
+        class_name,
+        source_path: Some(template.source_path),
+        dates,
+        students,
+        absent_list,
+        closed_days: readiness.closed_days,
+        mapped_students: readiness.mapped_students,
+        mapped_dates: readiness.mapped_dates,
+        present_count,
+        absence_count,
+        unmapped_student_count,
+        unmapped_closed_day_count: unmapped_closed_days.len(),
+        can_export: readiness.issues.is_empty(),
+        issues: readiness.issues,
+        warnings,
+    })
+}
+
+pub fn set_preview_attendance(
+    pool: DbPool,
+    class_id: String,
+    student_id: String,
+    date: String,
+    present: bool,
+) -> Result<Sf2ExportPreview> {
+    let date_value = parse_date(&date)?;
+    let sf2_repo = Sf2Repository::new(pool.clone());
+    let template = sf2_repo
+        .latest_template_for_class(&class_id)?
+        .ok_or_else(|| {
+            AppError::InvalidInput("No SF2 template imported for this class".to_string())
+        })?;
+    let date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
+    if !date_mappings
+        .iter()
+        .any(|mapping| mapping.date.as_str() == date.as_str())
+    {
+        return Err(AppError::InvalidInput(format!(
+            "{date} is not mapped to an SF2 date column"
+        )));
+    }
+
+    let closed_days = sf2_repo.closed_days_for_class(&class_id)?;
+    if !closed_days.iter().any(|day| day == &date) {
+        return Err(AppError::InvalidInput(format!(
+            "{date} is not a closed SF2 attendance day"
+        )));
+    }
+
+    let class = ClassRepository::new(pool.clone())
+        .get(&class_id)?
+        .ok_or_else(|| AppError::InvalidInput("Selected class was not found".to_string()))?;
+    let students = StudentRepository::new(pool.clone()).list_by_class(Some(&class_id))?;
+    let student = students
+        .iter()
+        .find(|student| student.id.to_string() == student_id)
+        .ok_or_else(|| AppError::InvalidInput("Selected student was not found".to_string()))?;
+
+    set_attendance_event_for_day(
+        pool.clone(),
+        &student.id.to_string(),
+        &class_id,
+        date_value,
+        &class.day_start,
+        present,
+    )?;
+    write_template_marks_for_days(pool.clone(), &template, &closed_days)?;
+
+    export_preview(pool, Some(class_id))
 }
 
 pub fn export_workbook(
@@ -1366,6 +1660,115 @@ fn local_event_date(event: &AttendanceEvent) -> String {
         .to_string()
 }
 
+fn preview_gender(
+    gender: Option<StudentGender>,
+    mapping: &Sf2StudentMappingRecord,
+) -> Option<String> {
+    if let Some(gender) = gender {
+        return Some(
+            match gender {
+                StudentGender::Male => "Male",
+                StudentGender::Female => "Female",
+            }
+            .to_string(),
+        );
+    }
+
+    mapping
+        .gender_block
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            if value.eq_ignore_ascii_case("MALE") {
+                "Male".to_string()
+            } else if value.eq_ignore_ascii_case("FEMALE") {
+                "Female".to_string()
+            } else {
+                value.to_string()
+            }
+        })
+}
+
+fn set_attendance_event_for_day(
+    pool: DbPool,
+    student_id: &str,
+    class_id: &str,
+    date: NaiveDate,
+    day_start: &str,
+    present: bool,
+) -> Result<()> {
+    let (day_start_timestamp, day_end_timestamp) = local_day_bounds_timestamps_for_date(date)?;
+    let mut conn = pool.get()?;
+    let transaction = conn.transaction()?;
+    transaction.execute(
+        "DELETE FROM events
+         WHERE student_id = ?1
+         AND event_type = 'in'
+         AND timestamp >= ?2
+         AND timestamp < ?3
+         AND (class_id IS NULL OR class_id = ?4)",
+        params![student_id, day_start_timestamp, day_end_timestamp, class_id],
+    )?;
+
+    if present {
+        let attendance_timestamp = attendance_timestamp_for_date(date, day_start)?;
+        transaction.execute(
+            "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note)
+             VALUES (?1, ?2, ?3, 'in', ?4, ?5)",
+            params![
+                uuid::Uuid::new_v4().to_string(),
+                student_id,
+                class_id,
+                attendance_timestamp,
+                "SF2 preview correction",
+            ],
+        )?;
+    }
+
+    transaction.commit()?;
+    Ok(())
+}
+
+fn local_day_bounds_timestamps_for_date(date: NaiveDate) -> Result<(i64, i64)> {
+    let next_day = date.succ_opt().ok_or_else(|| {
+        AppError::Internal("failed to calculate local attendance date".to_string())
+    })?;
+    Ok((
+        local_timestamp(date, 0, 0)?,
+        local_timestamp(next_day, 0, 0)?,
+    ))
+}
+
+fn attendance_timestamp_for_date(date: NaiveDate, day_start: &str) -> Result<i64> {
+    let (hour, minute) = parse_clock(day_start).unwrap_or((8, 0));
+    local_timestamp(date, hour, minute)
+}
+
+fn local_timestamp(date: NaiveDate, hour: u32, minute: u32) -> Result<i64> {
+    let local_time = date
+        .and_hms_opt(hour, minute, 0)
+        .and_then(|time| time.and_local_timezone(Local).earliest())
+        .ok_or_else(|| {
+            AppError::Internal(format!(
+                "failed to calculate local timestamp for {}",
+                date.format("%Y-%m-%d")
+            ))
+        })?;
+    Ok(local_time.with_timezone(&Utc).timestamp())
+}
+
+fn parse_clock(value: &str) -> Option<(u32, u32)> {
+    let (hour, minute) = value.trim().split_once(':')?;
+    let hour = hour.parse::<u32>().ok()?;
+    let minute = minute.parse::<u32>().ok()?;
+    if hour < 24 && minute < 60 {
+        Some((hour, minute))
+    } else {
+        None
+    }
+}
+
 fn pick_workbook_path(app: &tauri::AppHandle) -> Result<PathBuf> {
     let (tx, rx) = std::sync::mpsc::channel();
     app.dialog()
@@ -1685,6 +2088,95 @@ mod tests {
         let analysis = workbook_analysis_with_dates(&["2026-06-08", "2026-06-09"]);
 
         validate_configured_calendar(&analysis, &metadata).unwrap();
+    }
+
+    #[test]
+    fn export_preview_reports_absences_and_unmapped_students() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database should be created");
+        let workbook = tempfile::NamedTempFile::new().expect("workbook file should be created");
+        let pool = crate::infrastructure::init_db(temp_db.path()).expect("database should init");
+        let class = ClassRepository::new(pool.clone())
+            .create(CreateClassRequest {
+                name: "7 - Rose".to_string(),
+                room: Some("N/A".to_string()),
+                day_start: "08:30".to_string(),
+                day_end: "15:30".to_string(),
+                late_after: "08:45".to_string(),
+                sessions: Vec::new(),
+                days: vec![1, 2, 3, 4, 5],
+            })
+            .expect("class should be created");
+        let student_repo = StudentRepository::new(pool.clone());
+        let mapped_student = student_repo
+            .create(CreateStudentRequest {
+                name: "Abao, Ben".to_string(),
+                gender: Some(StudentGender::Male),
+                card_serial: None,
+                class_id: Some(class.id.clone()),
+            })
+            .expect("mapped student should be created");
+        student_repo
+            .create(CreateStudentRequest {
+                name: "Zamora, Ana".to_string(),
+                gender: Some(StudentGender::Female),
+                card_serial: None,
+                class_id: Some(class.id.clone()),
+            })
+            .expect("unmapped student should be created");
+
+        let template = Sf2TemplateRecord {
+            id: "template-preview".to_string(),
+            source_path: workbook.path().to_string_lossy().to_string(),
+            source_hash: "preview-hash".to_string(),
+            school_id: "123456".to_string(),
+            school_name: "Sample Integrated School".to_string(),
+            school_year: "2026-2027".to_string(),
+            report_month: "JUNE".to_string(),
+            grade_level: "7".to_string(),
+            section: "Rose".to_string(),
+            adviser_name: "Teacher Adviser".to_string(),
+            school_head_name: "School Head".to_string(),
+            layout_fingerprint: "preview-layout".to_string(),
+            active_class_id: class.id.clone(),
+            imported_at: 0,
+        };
+        let student_mapping = Sf2StudentMappingRecord {
+            template_id: template.id.clone(),
+            student_id: mapped_student.id.to_string(),
+            workbook_name: mapped_student.name.clone(),
+            normalized_name: normalize_learner_name(&mapped_student.name),
+            row_index: 8,
+            gender_block: Some("MALE".to_string()),
+        };
+        let date_mapping = Sf2DateMappingRecord {
+            template_id: template.id.clone(),
+            sheet_name: "JUNE 2026".to_string(),
+            date: "2026-06-08".to_string(),
+            column_letter: "F".to_string(),
+            column_index: 6,
+        };
+        let sf2_repo = Sf2Repository::new(pool.clone());
+        sf2_repo
+            .upsert_template_with_mappings(&template, &[student_mapping], &[date_mapping])
+            .expect("template mappings should save");
+        sf2_repo
+            .close_day(&class.id, "2026-06-08", 0)
+            .expect("closed day should save");
+
+        let preview = export_preview(pool, Some(class.id)).expect("preview should be generated");
+
+        assert!(preview.can_export);
+        assert_eq!(preview.absence_count, 1);
+        assert_eq!(preview.absent_list.len(), 1);
+        assert_eq!(preview.unmapped_student_count, 1);
+        assert_eq!(
+            preview.students[0].cells[0].status,
+            Sf2PreviewCellStatus::Absent
+        );
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("not mapped to an SF2 learner row")));
     }
 
     #[test]

@@ -24,6 +24,7 @@ use commands::{
     get_class,
     // Settings commands
     get_settings,
+    get_sf2_export_preview,
     get_sf2_export_readiness,
     get_sf2_workbook_settings,
     get_student,
@@ -39,6 +40,7 @@ use commands::{
     list_students,
     open_sf2_workbook,
     save_settings,
+    set_sf2_preview_attendance,
     update_class,
     update_sf2_workbook_settings,
     update_student,
@@ -86,6 +88,8 @@ pub fn run() {
             update_sf2_workbook_settings,
             close_sf2_attendance_day,
             get_sf2_export_readiness,
+            get_sf2_export_preview,
+            set_sf2_preview_attendance,
             export_sf2_workbook,
             open_sf2_workbook,
             // Updater commands

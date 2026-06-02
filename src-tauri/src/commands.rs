@@ -4,8 +4,8 @@ use crate::infrastructure::database::{
     ClassRepository, EventRepository, SettingsRepository, StudentRepository,
 };
 use crate::sf2::models::{
-    Sf2CloseDaySummary, Sf2ExportReadiness, Sf2ExportResult, Sf2ImportSummary, Sf2TemplateDraft,
-    Sf2WorkbookSettings,
+    Sf2CloseDaySummary, Sf2ExportPreview, Sf2ExportReadiness, Sf2ExportResult, Sf2ImportSummary,
+    Sf2TemplateDraft, Sf2WorkbookSettings,
 };
 use crate::sf2::service;
 use r2d2::Pool;
@@ -736,6 +736,26 @@ pub fn get_sf2_export_readiness(
     class_id: Option<String>,
 ) -> std::result::Result<Sf2ExportReadiness, String> {
     service::export_readiness(pool.inner().clone(), class_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_sf2_export_preview(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: Option<String>,
+) -> std::result::Result<Sf2ExportPreview, String> {
+    service::export_preview(pool.inner().clone(), class_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_sf2_preview_attendance(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: String,
+    student_id: String,
+    date: String,
+    present: bool,
+) -> std::result::Result<Sf2ExportPreview, String> {
+    service::set_preview_attendance(pool.inner().clone(), class_id, student_id, date, present)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
