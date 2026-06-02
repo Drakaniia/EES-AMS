@@ -176,12 +176,24 @@
 
 @layer base {
 	* {
+		box-sizing: border-box;
 		border-color: var(--color-border);
 		user-select: none;
 		-webkit-user-select: none;
 		-moz-user-select: none;
 		-ms-user-select: none;
 	}
+
+	input,
+	textarea,
+	[contenteditable='true'],
+	.selectable-text {
+		user-select: text;
+		-webkit-user-select: text;
+		-moz-user-select: text;
+		-ms-user-select: text;
+	}
+
 	html,
 	body {
 		background-color: var(--color-background);
@@ -191,24 +203,76 @@
 		overflow: hidden;
 		width: 100vw;
 		max-width: 100vw;
-		min-width: 1500px;
 		position: fixed;
 		height: 100vh;
 		max-height: 100vh;
-		min-height: 900px;
+		min-width: 0;
+		min-height: 0;
+		text-rendering: optimizeLegibility;
 	}
 
-	/* Hide scrollbars globally */
-	html,
-	body,
-	* {
-		scrollbar-width: none;
-		-ms-overflow-style: none;
+	button,
+	a,
+	input,
+	select,
+	textarea {
+		-webkit-tap-highlight-color: transparent;
 	}
-	html::-webkit-scrollbar,
-	body::-webkit-scrollbar,
+
+	button,
+	select,
+	input,
+	textarea {
+		font: inherit;
+	}
+
+	button:not(:disabled),
+	[role='button']:not([aria-disabled='true']),
+	a[href],
+	select:not(:disabled),
+	input:not(:disabled),
+	textarea:not(:disabled) {
+		cursor: pointer;
+	}
+
+	input:not([type='button']):not([type='submit']):not([type='reset']),
+	textarea {
+		cursor: text;
+	}
+
+	:focus-visible {
+		outline: 2px solid color-mix(in oklab, var(--color-ring) 72%, white);
+		outline-offset: 2px;
+	}
+
+	::selection {
+		background: color-mix(in oklab, var(--color-primary) 28%, transparent);
+		color: var(--color-foreground);
+	}
+
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in oklab, var(--color-foreground) 22%, transparent) transparent;
+	}
+
 	*::-webkit-scrollbar {
-		display: none;
+		width: 10px;
+		height: 10px;
+	}
+
+	*::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	*::-webkit-scrollbar-thumb {
+		border: 3px solid transparent;
+		border-radius: 999px;
+		background-clip: content-box;
+		background-color: color-mix(in oklab, var(--color-foreground) 18%, transparent);
+	}
+
+	*::-webkit-scrollbar-thumb:hover {
+		background-color: color-mix(in oklab, var(--color-foreground) 28%, transparent);
 	}
 }
 
@@ -229,8 +293,88 @@
 	font-family: var(--font-sans);
 	font-weight: 500;
 	line-height: 1.04;
-	letter-spacing: -0.01em;
-	font-size: clamp(40px, 6vw, 64px);
+	letter-spacing: 0;
+	font-size: clamp(32px, 4vw, 56px);
+}
+
+.app-surface {
+	background:
+		linear-gradient(
+			180deg,
+			color-mix(in oklab, var(--color-background) 92%, white) 0%,
+			var(--color-background) 45%
+		),
+		var(--color-background);
+}
+
+.control-ring {
+	transition:
+		border-color 150ms ease,
+		background-color 150ms ease,
+		box-shadow 150ms ease,
+		color 150ms ease;
+}
+
+.control-ring:hover {
+	border-color: color-mix(in oklab, var(--color-primary) 38%, var(--color-border));
+}
+
+.control-ring:focus-visible {
+	outline: none;
+	box-shadow:
+		0 0 0 2px var(--color-background),
+		0 0 0 4px color-mix(in oklab, var(--color-ring) 58%, transparent);
+}
+
+.table-wrap {
+	overflow: auto;
+	border-radius: var(--radius-xl);
+	border: 1px solid var(--color-border);
+	background: var(--color-card);
+}
+
+.table-wrap table {
+	width: 100%;
+	border-collapse: separate;
+	border-spacing: 0;
+}
+
+.table-wrap thead {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: color-mix(in oklab, var(--color-surface) 82%, var(--color-background));
+}
+
+.text-balance-safe {
+	overflow-wrap: anywhere;
+	word-break: normal;
+}
+
+.skeleton {
+	position: relative;
+	overflow: hidden;
+	background: color-mix(in oklab, var(--color-surface) 72%, var(--color-background));
+}
+
+.skeleton::after {
+	position: absolute;
+	inset: 0;
+	content: '';
+	transform: translateX(-100%);
+	background: linear-gradient(
+		90deg,
+		transparent,
+		color-mix(in oklab, var(--color-background) 76%, transparent),
+		transparent
+	);
+	animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+	100% {
+		transform: translateX(100%);
+	}
 }
 
 /* Loading Screen Styles */
@@ -309,5 +453,16 @@
 	}
 	50% {
 		opacity: 0.5;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
 	}
 }
