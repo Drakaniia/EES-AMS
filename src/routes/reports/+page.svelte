@@ -2,6 +2,9 @@
 	import { onMount } from 'svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
+	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 	import {
 		exportSf2Workbook,
 		getSf2ExportReadiness,
@@ -16,6 +19,7 @@
 	let selectedClassId = $state('');
 	let readiness = $state<Sf2ExportReadiness | null>(null);
 	let loading = $state(true);
+	let loadError = $state<string | null>(null);
 	let exporting = $state(false);
 	let opening = $state(false);
 	let toastMessage = $state<string | null>(null);
@@ -31,6 +35,7 @@
 
 	async function loadInitial() {
 		loading = true;
+		loadError = null;
 		try {
 			classes = await listClasses();
 			const current = await getSf2ExportReadiness();
@@ -41,6 +46,7 @@
 			}
 		} catch (error) {
 			const msg = errorMessage(error, 'Failed to load reports');
+			loadError = msg;
 			toast(`Reports failed: ${msg}`, false);
 		} finally {
 			loading = false;
@@ -57,10 +63,12 @@
 
 	async function onClassChange() {
 		loading = true;
+		loadError = null;
 		try {
 			await loadReadiness();
 		} catch (error) {
 			const msg = errorMessage(error, 'Failed to load SF2 status');
+			loadError = msg;
 			toast(`SF2 status failed: ${msg}`, false);
 		} finally {
 			loading = false;
@@ -171,9 +179,25 @@
 		</PageHeader>
 
 		{#if loading}
-			<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading SF2 status...</div>
+			<div class="px-4 py-5 md:px-8 lg:px-10">
+				<LoadingBlock rows={3} label="Loading SF2 status" />
+			</div>
+		{:else if loadError}
+			<div class="px-4 py-5 md:px-8 lg:px-10">
+				<EmptyState tone="warning" title="SF2 reports are unavailable" description={loadError}>
+					{#snippet actions()}
+						<button
+							type="button"
+							onclick={loadInitial}
+							class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
+						>
+							Retry
+						</button>
+					{/snippet}
+				</EmptyState>
+			</div>
 		{:else}
-			<section class="grid gap-6 px-6 py-5 md:px-12 xl:grid-cols-[1fr_0.75fr]">
+			<section class="grid gap-6 px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[1fr_0.75fr]">
 				<div class="space-y-6">
 					<div class="rounded-2xl border border-border bg-card p-6">
 						<div class="flex flex-wrap items-start justify-between gap-4">
@@ -276,14 +300,4 @@
 	</div>
 </AppShell>
 
-{#if toastMessage}
-	<div
-		class="fixed top-12 right-6 z-60 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg {toastOk
-			? 'border-border bg-background'
-			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
-		role="status"
-		aria-live="polite"
-	>
-		{toastMessage}
-	</div>
-{/if}
+<FeedbackToast message={toastMessage} ok={toastOk} onClose={() => (toastMessage = null)} />
