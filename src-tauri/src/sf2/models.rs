@@ -208,6 +208,78 @@ pub struct Sf2ExportReadiness {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Sf2ExportPreview {
+    pub template: Option<Sf2TemplateSummary>,
+    pub class_id: Option<String>,
+    pub class_name: String,
+    pub source_path: Option<String>,
+    pub dates: Vec<Sf2PreviewDate>,
+    pub students: Vec<Sf2PreviewStudentRow>,
+    pub absent_list: Vec<Sf2PreviewAbsence>,
+    pub closed_days: Vec<String>,
+    pub mapped_students: usize,
+    pub mapped_dates: usize,
+    pub present_count: usize,
+    pub absence_count: usize,
+    pub unmapped_student_count: usize,
+    pub unmapped_closed_day_count: usize,
+    pub can_export: bool,
+    pub issues: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sf2PreviewDate {
+    pub date: String,
+    pub sheet_name: String,
+    pub column_letter: String,
+    pub column_index: u32,
+    pub closed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sf2PreviewStudentRow {
+    pub student_id: String,
+    pub student_name: String,
+    pub workbook_name: String,
+    pub gender: Option<String>,
+    pub row_index: u32,
+    pub mapped: bool,
+    pub present_count: usize,
+    pub absent_count: usize,
+    pub warnings: Vec<String>,
+    pub cells: Vec<Sf2PreviewCell>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sf2PreviewCell {
+    pub date: String,
+    pub status: Sf2PreviewCellStatus,
+    pub editable: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Sf2PreviewCellStatus {
+    Present,
+    Absent,
+    Open,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sf2PreviewAbsence {
+    pub student_id: String,
+    pub student_name: String,
+    pub date: String,
+    pub row_index: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Sf2ExportResult {
     pub output_path: String,
     pub marks_written: usize,
