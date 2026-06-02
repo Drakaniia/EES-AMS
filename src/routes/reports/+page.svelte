@@ -1,48 +1,93 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
+	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 	import {
 		exportSf2Workbook,
-		getSf2ExportReadiness,
+		getSf2ExportPreview,
+		getSf2WorkbookSettings,
 		listClasses,
 		openSf2Workbook,
+		setSf2PreviewAttendance,
+		updateSf2WorkbookSettings,
 		type Class,
-		type Sf2ExportReadiness
+		type Sf2ExportPreview,
+		type Sf2PreviewCell,
+		type Sf2PreviewStudentRow,
+		type Sf2TemplateDraft,
+		type Sf2WorkbookSettings
 	} from '$lib/db-rust';
-	import { ExternalLink, RefreshCw, Save } from 'lucide-svelte';
+	import { SF2_SCHOOL_MONTHS, sf2ReportMonthLabel } from '$lib/sf2-settings';
+	import {
+		AlertTriangle,
+		CalendarDays,
+		Check,
+		CircleAlert,
+		ExternalLink,
+		FileCheck2,
+		RefreshCw,
+		Save,
+		Settings2,
+		UserX,
+		X
+	} from 'lucide-svelte';
 
 	let classes = $state<Class[]>([]);
 	let selectedClassId = $state('');
-	let readiness = $state<Sf2ExportReadiness | null>(null);
+	let preview = $state<Sf2ExportPreview | null>(null);
+	let workbookSettings = $state<Sf2WorkbookSettings | null>(null);
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
 	let exporting = $state(false);
 	let opening = $state(false);
+	let savingDetails = $state(false);
+	let correctingCellKey = $state<string | null>(null);
+	let exportDialogOpen = $state(false);
 	let toastMessage = $state<string | null>(null);
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+	let draftSchoolId = $state('');
+	let draftSchoolName = $state('');
+	let draftSchoolYear = $state('');
+	let draftReportMonth = $state('');
+	let draftGradeLevel = $state('');
+	let draftSection = $state('');
+	let draftAdviserName = $state('');
+	let draftSchoolHeadName = $state('');
 
 	onMount(async () => {
 		await loadInitial();
 	});
 
-	const selectedClass = $derived(classes.find((item) => item.id === selectedClassId));
-	const activeClassId = $derived(selectedClassId || readiness?.template?.classId || '');
+	const activeClassId = $derived(
+		selectedClassId || preview?.classId || preview?.template?.classId || ''
+	);
+	const selectedClass = $derived(classes.find((item) => item.id === activeClassId));
+	const closedDateCount = $derived(preview?.closedDays.length ?? 0);
+	const mappedClosedDateCount = $derived(preview?.dates.filter((date) => date.closed).length ?? 0);
+	const exportDisabled = $derived(!preview?.canExport || exporting || !activeClassId);
+	const issueCount = $derived(preview?.issues.length ?? 0);
+	const warningCount = $derived(preview?.warnings.length ?? 0);
 
 	async function loadInitial() {
 		loading = true;
 		loadError = null;
 		try {
 			classes = await listClasses();
-			const current = await getSf2ExportReadiness();
-			readiness = current;
-			selectedClassId = current.template?.classId ?? classes[0]?.id ?? '';
-			if (selectedClassId && selectedClassId !== current.template?.classId) {
-				readiness = await getSf2ExportReadiness(selectedClassId);
+			const current = await getSf2ExportPreview();
+			preview = current;
+			selectedClassId = current.classId ?? classes[0]?.id ?? '';
+
+			if (selectedClassId && selectedClassId !== current.classId) {
+				await loadReport(selectedClassId);
+			} else {
+				await loadWorkbookSettings(current.classId);
 			}
 		} catch (error) {
 			const msg = errorMessage(error, 'Failed to load reports');
@@ -53,53 +98,46 @@
 		}
 	}
 
-	async function loadReadiness() {
-		if (!selectedClassId) {
-			readiness = await getSf2ExportReadiness();
+	async function loadReport(classId?: string) {
+		const nextPreview = await getSf2ExportPreview(classId);
+		preview = nextPreview;
+		if (nextPreview.classId) selectedClassId = nextPreview.classId;
+		await loadWorkbookSettings(nextPreview.classId ?? classId);
+	}
+
+	async function loadWorkbookSettings(classId?: string) {
+		if (!classId) {
+			workbookSettings = null;
+			clearDraft();
 			return;
 		}
-		readiness = await getSf2ExportReadiness(selectedClassId);
+
+		try {
+			const settings = await getSf2WorkbookSettings(classId);
+			workbookSettings = settings;
+			hydrateDraft(settings);
+		} catch {
+			workbookSettings = null;
+			clearDraft();
+		}
 	}
 
 	async function onClassChange() {
 		loading = true;
 		loadError = null;
 		try {
-			await loadReadiness();
+			await loadReport(selectedClassId || undefined);
 		} catch (error) {
-			const msg = errorMessage(error, 'Failed to load SF2 status');
+			const msg = errorMessage(error, 'Failed to load SF2 preview');
 			loadError = msg;
-			toast(`SF2 status failed: ${msg}`, false);
+			toast(`SF2 preview failed: ${msg}`, false);
 		} finally {
 			loading = false;
 		}
 	}
 
-	async function onExportSf2() {
-		if (!activeClassId || !readiness?.canExport || exporting) return;
-		const warnings = readiness.warnings ?? [];
-		if (warnings.length > 0) {
-			const confirmed = confirm(
-				`The SF2 export is missing these workbook details:\n\n- ${warnings.join('\n- ')}\n\nAre you sure you want to export?`
-			);
-			if (!confirmed) return;
-		}
-
-		exporting = true;
-		try {
-			const result = await exportSf2Workbook(activeClassId);
-			toast(`SF2 exported to ${result.outputPath}`);
-			await loadReadiness();
-		} catch (error) {
-			const msg = errorMessage(error, 'SF2 export failed');
-			toast(`SF2 export failed: ${msg}`, false);
-		} finally {
-			exporting = false;
-		}
-	}
-
 	async function onOpenSf2() {
-		if (!activeClassId || !readiness?.template || opening) return;
+		if (!activeClassId || !preview?.template || opening) return;
 		opening = true;
 		try {
 			const path = await openSf2Workbook(activeClassId);
@@ -110,6 +148,106 @@
 		} finally {
 			opening = false;
 		}
+	}
+
+	function requestExport() {
+		if (exportDisabled) return;
+		exportDialogOpen = true;
+	}
+
+	async function confirmExport() {
+		if (!activeClassId || !preview?.canExport || exporting) return;
+		exportDialogOpen = false;
+		exporting = true;
+		try {
+			const result = await exportSf2Workbook(activeClassId);
+			toast(`SF2 exported to ${result.outputPath}`);
+			await loadReport(activeClassId);
+		} catch (error) {
+			const msg = errorMessage(error, 'SF2 export failed');
+			toast(`SF2 export failed: ${msg}`, false);
+		} finally {
+			exporting = false;
+		}
+	}
+
+	async function saveWorkbookDetails() {
+		const draft = workbookDraftPayload();
+		if (!draft || savingDetails) return;
+
+		savingDetails = true;
+		try {
+			await updateSf2WorkbookSettings(draft);
+			toast('SF2 workbook details saved');
+			await loadReport(draft.classId);
+		} catch (error) {
+			const msg = errorMessage(error, 'SF2 workbook update failed');
+			toast(`SF2 workbook update failed: ${msg}`, false);
+		} finally {
+			savingDetails = false;
+		}
+	}
+
+	async function toggleAttendance(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
+		if (!preview?.classId || !row.mapped || !cell.editable || correctingCellKey) return;
+		const key = cellKey(row.studentId, cell.date);
+		const markPresent = cell.status !== 'present';
+		correctingCellKey = key;
+		try {
+			preview = await setSf2PreviewAttendance(
+				preview.classId,
+				row.studentId,
+				cell.date,
+				markPresent
+			);
+			toast(
+				`${row.studentName} marked ${markPresent ? 'present' : 'absent'} for ${formatDate(cell.date)}`
+			);
+		} catch (error) {
+			const msg = errorMessage(error, 'Attendance correction failed');
+			toast(`Attendance correction failed: ${msg}`, false);
+		} finally {
+			correctingCellKey = null;
+		}
+	}
+
+	function workbookDraftPayload(): Sf2TemplateDraft | null {
+		if (!workbookSettings || !activeClassId) return null;
+		return {
+			classId: activeClassId,
+			schoolId: draftSchoolId,
+			schoolName: draftSchoolName,
+			schoolYear: draftSchoolYear,
+			reportMonth: draftReportMonth,
+			gradeLevel: draftGradeLevel,
+			section: draftSection,
+			adviserName: draftAdviserName,
+			schoolHeadName: draftSchoolHeadName,
+			firstSchoolDay: workbookSettings.firstSchoolDay,
+			learnerNames: workbookSettings.learnerNames
+		};
+	}
+
+	function hydrateDraft(settings: Sf2WorkbookSettings) {
+		draftSchoolId = settings.schoolId;
+		draftSchoolName = settings.schoolName;
+		draftSchoolYear = settings.schoolYear;
+		draftReportMonth = settings.reportMonth;
+		draftGradeLevel = settings.gradeLevel;
+		draftSection = settings.section;
+		draftAdviserName = settings.adviserName;
+		draftSchoolHeadName = settings.schoolHeadName;
+	}
+
+	function clearDraft() {
+		draftSchoolId = '';
+		draftSchoolName = '';
+		draftSchoolYear = '';
+		draftReportMonth = '';
+		draftGradeLevel = '';
+		draftSection = '';
+		draftAdviserName = '';
+		draftSchoolHeadName = '';
 	}
 
 	function toast(msg: string, ok = true) {
@@ -124,22 +262,62 @@
 		if (typeof error === 'string') return error;
 		return fallback;
 	}
+
+	function formatDate(date: string) {
+		const value = new Date(`${date}T00:00:00`);
+		return value.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+	}
+
+	function formatWeekday(date: string) {
+		const value = new Date(`${date}T00:00:00`);
+		return value.toLocaleDateString(undefined, { weekday: 'short' });
+	}
+
+	function formatImportedAt(value?: number) {
+		if (!value) return 'Not imported';
+		return new Date(value * 1000).toLocaleDateString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		});
+	}
+
+	function cellKey(studentId: string, date: string) {
+		return `${studentId}:${date}`;
+	}
+
+	function cellLabel(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
+		const state =
+			cell.status === 'present' ? 'present' : cell.status === 'absent' ? 'absent' : 'not closed';
+		return `${row.studentName}, ${formatDate(cell.date)}: ${state}`;
+	}
+
+	function cellClass(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
+		if (!row.mapped) return 'border-border bg-surface text-muted-foreground';
+		if (cell.status === 'present') return 'border-emerald-500/30 bg-emerald-50 text-emerald-700';
+		if (cell.status === 'absent') return 'border-red-500/35 bg-red-50 text-red-700';
+		return 'border-border bg-background text-muted-foreground';
+	}
+
+	function reportMonthLabel(value: string) {
+		return sf2ReportMonthLabel(value) || 'Blank';
+	}
 </script>
 
 <svelte:head>
-	<title>Reports — Attendance System</title>
-	<meta name="description" content="Preview and export DepEd SF2 Excel reports." />
+	<title>Reports - Attendance System</title>
+	<meta name="description" content="Review and export DepEd SF2 Excel reports." />
 </svelte:head>
 
 <AppShell>
 	<div class="flex h-full flex-col overflow-hidden">
 		<PageHeader
 			category="Reports"
-			title="DepEd SF2 Workbook"
-			description="Preview the app's SF2 working copy, then export it to your chosen folder."
+			title="SF2 Workbook Pre-export Review"
+			description="Review workbook details, mapped dates, absences, and learner row mappings before exporting the official SF2 copy."
 		>
 			{#snippet actions()}
-				<div class="flex flex-wrap items-center gap-3">
+				<div class="flex flex-wrap items-center gap-2">
 					<select
 						aria-label="Class"
 						bind:value={selectedClassId}
@@ -152,27 +330,30 @@
 						{/each}
 					</select>
 					<button
+						type="button"
 						onclick={loadInitial}
-						class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+						class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface"
 					>
-						<RefreshCw class="size-4" />
+						<RefreshCw class="size-4" aria-hidden="true" />
 						Refresh
 					</button>
 					<button
+						type="button"
 						onclick={onOpenSf2}
-						disabled={!readiness?.template || opening || !activeClassId}
-						class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+						disabled={!preview?.template || opening || !activeClassId}
+						class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 					>
-						<ExternalLink class="size-4" />
+						<ExternalLink class="size-4" aria-hidden="true" />
 						{opening ? 'Opening...' : 'Open SF2'}
 					</button>
 					<button
-						onclick={onExportSf2}
-						disabled={!readiness?.canExport || exporting || !activeClassId}
-						class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+						type="button"
+						onclick={requestExport}
+						disabled={exportDisabled}
+						class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 					>
-						<Save class="size-4" />
-						{exporting ? 'Exporting...' : 'Export Copy'}
+						<Save class="size-4" aria-hidden="true" />
+						{exporting ? 'Exporting...' : 'Review Export'}
 					</button>
 				</div>
 			{/snippet}
@@ -180,7 +361,7 @@
 
 		{#if loading}
 			<div class="px-4 py-5 md:px-8 lg:px-10">
-				<LoadingBlock rows={3} label="Loading SF2 status" />
+				<LoadingBlock rows={4} label="Loading SF2 workbook preview" />
 			</div>
 		{:else if loadError}
 			<div class="px-4 py-5 md:px-8 lg:px-10">
@@ -196,108 +377,432 @@
 					{/snippet}
 				</EmptyState>
 			</div>
+		{:else if !preview?.template}
+			<div class="px-4 py-5 md:px-8 lg:px-10">
+				<EmptyState
+					tone="warning"
+					title="No SF2 workbook is ready for review"
+					description={preview?.issues[0] ??
+						'Import an SF2 workbook or create one from the bundled template first.'}
+				>
+					{#snippet actions()}
+						<a
+							href={resolve('/settings')}
+							class="control-ring inline-flex rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-accent"
+						>
+							Open SF2 Settings
+						</a>
+					{/snippet}
+				</EmptyState>
+			</div>
 		{:else}
-			<section class="grid gap-6 px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[1fr_0.75fr]">
-				<div class="space-y-6">
-					<div class="rounded-2xl border border-border bg-card p-6">
-						<div class="flex flex-wrap items-start justify-between gap-4">
+			<section
+				class="grid min-h-0 flex-1 gap-5 overflow-hidden px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px]"
+			>
+				<div class="min-h-0 space-y-5 overflow-auto pr-0 xl:pr-1">
+					<div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+						{@render summaryTile(
+							'Workbook',
+							preview.className || selectedClass?.name || 'Linked class',
+							preview.canExport ? 'Ready for confirmation' : 'Needs attention',
+							FileCheck2,
+							preview.canExport ? 'ready' : 'warning'
+						)}
+						{@render summaryTile(
+							'Closed Days',
+							String(closedDateCount),
+							`${mappedClosedDateCount} mapped to workbook`,
+							CalendarDays,
+							'neutral'
+						)}
+						{@render summaryTile(
+							'Absences',
+							String(preview.absenceCount),
+							`${preview.presentCount} present marks`,
+							UserX,
+							preview.absenceCount > 0 ? 'alert' : 'ready'
+						)}
+						{@render summaryTile(
+							'Checks',
+							`${issueCount}/${warningCount}`,
+							'Issues / warnings',
+							CircleAlert,
+							issueCount > 0 ? 'alert' : warningCount > 0 ? 'warning' : 'ready'
+						)}
+					</div>
+
+					<div class="rounded-2xl border border-border bg-card p-5 shadow-sm">
+						<div class="flex flex-wrap items-start justify-between gap-3">
 							<div>
-								<div class="label-mono text-primary">Workbook template</div>
-								<h2 class="mt-2 text-2xl font-semibold">
-									{readiness?.template
-										? `${readiness.template.gradeLevel} - ${readiness.template.section}`
-										: 'No SF2 workbook imported'}
+								<div class="label-mono text-primary">Original SF2 header details</div>
+								<h2 class="mt-1 text-xl font-semibold">
+									{draftSchoolName || preview.template.schoolName || 'Name of School'}
 								</h2>
-								<p class="mt-2 text-sm text-muted-foreground">
-									{#if readiness?.template}
-										{readiness.template.schoolYear} · {selectedClass?.name ?? 'Linked class'}
-									{:else}
-										Import an SF2 workbook or create one from the bundled template in Settings.
-									{/if}
+								<p class="mt-1 text-sm text-muted-foreground">
+									These fields are written into the SF2 workbook before export.
 								</p>
 							</div>
-
-							<div
-								class="rounded-pill border px-3 py-1 text-xs font-medium {readiness?.canExport
-									? 'border-primary bg-primary/10 text-primary'
-									: 'border-border bg-surface text-muted-foreground'}"
+							<button
+								type="button"
+								onclick={saveWorkbookDetails}
+								disabled={!workbookSettings || savingDetails}
+								class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 							>
-								{readiness?.canExport ? 'Ready' : 'Needs attention'}
-							</div>
+								<Settings2 class="size-4" aria-hidden="true" />
+								{savingDetails ? 'Saving...' : 'Save Details'}
+							</button>
 						</div>
 
-						<div class="mt-6 grid gap-3 sm:grid-cols-3">
-							<div class="rounded-xl border border-border bg-surface p-4">
-								<div class="label-mono">Mapped learners</div>
-								<div class="mt-2 text-3xl font-semibold">{readiness?.mappedStudents ?? 0}</div>
+						<div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+							{@render textField('School ID', draftSchoolId, 'draftSchoolId')}
+							{@render textField('School Year', draftSchoolYear, 'draftSchoolYear')}
+							<label class="space-y-1.5">
+								<span class="label-mono">Report Month</span>
+								<select
+									bind:value={draftReportMonth}
+									disabled={!workbookSettings || savingDetails}
+									class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none disabled:opacity-60"
+								>
+									<option value="">Select month</option>
+									{#each SF2_SCHOOL_MONTHS as month (month.value)}
+										<option value={month.value}>{month.label}</option>
+									{/each}
+								</select>
+							</label>
+							{@render textField('Grade Level', draftGradeLevel, 'draftGradeLevel')}
+							<div class="md:col-span-2">
+								{@render textField('Name of School', draftSchoolName, 'draftSchoolName')}
 							</div>
-							<div class="rounded-xl border border-border bg-surface p-4">
-								<div class="label-mono">Mapped dates</div>
-								<div class="mt-2 text-3xl font-semibold">{readiness?.mappedDates ?? 0}</div>
-							</div>
-							<div class="rounded-xl border border-border bg-surface p-4">
-								<div class="label-mono">Closed days</div>
-								<div class="mt-2 text-3xl font-semibold">{readiness?.closedDays.length ?? 0}</div>
+							{@render textField('Section', draftSection, 'draftSection')}
+							{@render textField('Adviser / LIS Name', draftAdviserName, 'draftAdviserName')}
+							<div class="md:col-span-2">
+								{@render textField('School Head Name', draftSchoolHeadName, 'draftSchoolHeadName')}
 							</div>
 						</div>
 					</div>
 
-					<div class="rounded-2xl border border-border bg-card p-6">
-						<div class="label-mono">Closed attendance days</div>
-						{#if readiness && readiness.closedDays.length > 0}
-							<div class="mt-4 flex flex-wrap gap-2">
-								{#each readiness.closedDays as day (day)}
-									<span
-										class="rounded-pill border border-border bg-surface px-3 py-1 font-mono text-xs"
-									>
-										{day}
-									</span>
-								{/each}
+					<div class="rounded-2xl border border-border bg-card shadow-sm">
+						<div
+							class="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4"
+						>
+							<div>
+								<div class="label-mono text-primary">Class-day matrix</div>
+								<h2 class="mt-1 text-xl font-semibold">
+									{preview.template.gradeLevel} - {preview.template.section}
+								</h2>
+								<p class="mt-1 text-sm text-muted-foreground">
+									Click a closed-day cell to toggle the individual learner between present and
+									absent.
+								</p>
 							</div>
-						{:else}
-							<p class="mt-4 text-sm text-muted-foreground">
-								End a class attendance session to write that day's marks into the SF2 working copy.
-							</p>
-						{/if}
+							<div class="flex flex-wrap gap-2 text-xs">
+								<span
+									class="rounded-pill border border-emerald-500/30 bg-emerald-50 px-2.5 py-1 text-emerald-700"
+								>
+									Present
+								</span>
+								<span
+									class="rounded-pill border border-red-500/35 bg-red-50 px-2.5 py-1 text-red-700"
+								>
+									Absent
+								</span>
+								<span
+									class="rounded-pill border border-border bg-background px-2.5 py-1 text-muted-foreground"
+								>
+									Open day
+								</span>
+							</div>
+						</div>
+
+						<div class="max-h-[560px] overflow-auto">
+							<table class="min-w-full border-separate border-spacing-0 text-sm">
+								<thead>
+									<tr>
+										<th
+											class="sticky top-0 left-0 z-20 w-72 min-w-72 border-r border-b border-border bg-card px-4 py-3 text-left"
+										>
+											Learner
+										</th>
+										{#each preview.dates as date (date.date)}
+											<th
+												class="sticky top-0 z-10 min-w-14 border-b border-border bg-card px-2 py-2 text-center"
+												title={`${date.sheetName} ${date.columnLetter}${date.columnIndex}`}
+											>
+												<div class="font-mono text-[11px] font-bold">{formatDate(date.date)}</div>
+												<div class="mt-0.5 text-[10px] text-muted-foreground">
+													{formatWeekday(date.date)}
+												</div>
+											</th>
+										{/each}
+									</tr>
+								</thead>
+								<tbody>
+									{#each preview.students as row (row.studentId)}
+										<tr class={row.mapped ? 'bg-background' : 'bg-amber-50/60'}>
+											<th
+												class="sticky left-0 z-10 w-72 min-w-72 border-r border-b border-border bg-inherit px-4 py-2 text-left align-middle"
+											>
+												<div class="flex items-center gap-2">
+													<div class="min-w-0 flex-1">
+														<div class="truncate font-medium">{row.studentName}</div>
+														<div
+															class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground"
+														>
+															<span>{row.gender ?? 'No gender'}</span>
+															<span aria-hidden="true">/</span>
+															<span>{row.mapped ? `Row ${row.rowIndex}` : 'Unmapped'}</span>
+														</div>
+													</div>
+													{#if row.warnings.length > 0}
+														<AlertTriangle
+															class="size-4 shrink-0 text-amber-600"
+															aria-hidden="true"
+														/>
+													{/if}
+												</div>
+											</th>
+											{#each row.cells as cell (cell.date)}
+												<td class="border-b border-border/80 px-1.5 py-1.5 text-center">
+													<button
+														type="button"
+														disabled={!cell.editable || !row.mapped || correctingCellKey !== null}
+														onclick={() => toggleAttendance(row, cell)}
+														aria-label={cellLabel(row, cell)}
+														title={cellLabel(row, cell)}
+														class="control-ring inline-grid size-9 place-items-center rounded-md border text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-70 {cellClass(
+															row,
+															cell
+														)}"
+													>
+														{#if correctingCellKey === cellKey(row.studentId, cell.date)}
+															<span class="font-mono text-[10px]">...</span>
+														{:else if cell.status === 'present'}
+															<Check class="size-4" aria-hidden="true" />
+														{:else if cell.status === 'absent'}
+															<X class="size-4" aria-hidden="true" />
+														{:else}
+															<span aria-hidden="true">-</span>
+														{/if}
+													</button>
+												</td>
+											{/each}
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
 					</div>
 				</div>
 
-				<aside class="rounded-2xl border border-border bg-surface p-6">
-					<div class="label-mono">Export checks</div>
-					{#if readiness && readiness.issues.length > 0}
-						<ul class="mt-4 space-y-3 text-sm">
-							{#each readiness.issues as issue (issue)}
-								<li class="rounded-xl border border-border bg-background p-3 text-muted-foreground">
-									{issue}
-								</li>
-							{/each}
-						</ul>
-					{:else if readiness && readiness.warnings.length > 0}
-						<div
-							class="mt-4 rounded-xl border border-primary/30 bg-background p-4 text-sm text-muted-foreground"
-						>
-							Export is available, but the app will ask for confirmation because these SF2 workbook
-							details are blank:
+				<aside class="min-h-0 space-y-5 overflow-auto">
+					<div class="rounded-2xl border border-border bg-surface p-5">
+						<div class="label-mono text-primary">Workbook identity</div>
+						<dl class="mt-4 space-y-3 text-sm">
+							{@render metaRow('Class', preview.className || selectedClass?.name || 'Unlinked')}
+							{@render metaRow('Report Month', reportMonthLabel(preview.template.reportMonth))}
+							{@render metaRow('School ID', preview.template.schoolId || 'Blank')}
+							{@render metaRow('School Year', preview.template.schoolYear || 'Blank')}
+							{@render metaRow('Adviser', preview.template.adviserName || 'Blank')}
+							{@render metaRow('School Head', preview.template.schoolHeadName || 'Blank')}
+							{@render metaRow('Imported', formatImportedAt(preview.template.importedAt))}
+						</dl>
+					</div>
+
+					<div class="rounded-2xl border border-border bg-card p-5">
+						<div class="flex items-center justify-between gap-3">
+							<div>
+								<div class="label-mono text-primary">Export checks</div>
+								<h2 class="mt-1 text-lg font-semibold">
+									{issueCount > 0 ? 'Blocked' : warningCount > 0 ? 'Review warnings' : 'Ready'}
+								</h2>
+							</div>
+							<div
+								class="rounded-pill border px-2.5 py-1 text-xs font-semibold {issueCount > 0
+									? 'border-red-500/35 bg-red-50 text-red-700'
+									: warningCount > 0
+										? 'border-amber-500/40 bg-amber-50 text-amber-700'
+										: 'border-emerald-500/30 bg-emerald-50 text-emerald-700'}"
+							>
+								{issueCount > 0 ? 'Fix required' : warningCount > 0 ? 'Confirm' : 'Clean'}
+							</div>
 						</div>
-						<ul class="mt-3 space-y-2 text-sm">
-							{#each readiness.warnings as warning (warning)}
-								<li class="rounded-xl border border-border bg-background p-3 text-muted-foreground">
-									{warning}
-								</li>
-							{/each}
-						</ul>
-					{:else}
-						<div
-							class="mt-4 rounded-xl border border-primary/40 bg-primary/10 p-4 text-sm text-primary"
-						>
-							The workbook and date cells are ready. Export copies the current saved SF2 working
-							file.
+
+						{#if preview.issues.length > 0}
+							<ul class="mt-4 space-y-2">
+								{#each preview.issues as issue, index (`issue-${index}-${issue}`)}
+									<li
+										class="rounded-md border border-red-500/25 bg-red-50 p-3 text-sm text-red-800"
+									>
+										{issue}
+									</li>
+								{/each}
+							</ul>
+						{/if}
+
+						{#if preview.warnings.length > 0}
+							<ul class="mt-4 max-h-72 space-y-2 overflow-auto pr-1">
+								{#each preview.warnings as warning, index (`warning-${index}-${warning}`)}
+									<li
+										class="rounded-md border border-amber-500/30 bg-amber-50 p-3 text-sm text-amber-900"
+									>
+										{warning}
+									</li>
+								{/each}
+							</ul>
+						{:else if preview.issues.length === 0}
+							<div
+								class="mt-4 rounded-md border border-emerald-500/30 bg-emerald-50 p-3 text-sm text-emerald-800"
+							>
+								No missing mappings or blank SF2 header fields were detected.
+							</div>
+						{/if}
+					</div>
+
+					<div class="rounded-2xl border border-border bg-card p-5">
+						<div class="flex items-start justify-between gap-3">
+							<div>
+								<div class="label-mono text-primary">Absent list</div>
+								<h2 class="mt-1 text-lg font-semibold">{preview.absentList.length} entries</h2>
+							</div>
+							<UserX class="size-5 text-red-700" aria-hidden="true" />
 						</div>
-					{/if}
+
+						{#if preview.absentList.length > 0}
+							<div class="mt-4 max-h-80 space-y-2 overflow-auto pr-1">
+								{#each preview.absentList as absence (`${absence.studentId}-${absence.date}`)}
+									<div class="rounded-md border border-border bg-background p-3 text-sm">
+										<div class="font-medium">{absence.studentName}</div>
+										<div
+											class="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground"
+										>
+											<span>{formatDate(absence.date)}</span>
+											<span>Row {absence.rowIndex}</span>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{:else}
+							<p class="mt-4 text-sm leading-6 text-muted-foreground">
+								No absences are currently marked on closed SF2 days.
+							</p>
+						{/if}
+					</div>
 				</aside>
 			</section>
 		{/if}
 	</div>
 </AppShell>
 
+<Dialog
+	open={exportDialogOpen}
+	title="Confirm SF2 Export"
+	description="Export copies the reviewed SF2 working workbook to your chosen file path."
+	maxWidth="2xl"
+	onClose={() => (exportDialogOpen = false)}
+>
+	<div class="grid gap-3 sm:grid-cols-3">
+		{@render confirmStat('Mapped learners', preview?.mappedStudents ?? 0)}
+		{@render confirmStat('Closed days', closedDateCount)}
+		{@render confirmStat('Absences', preview?.absenceCount ?? 0)}
+	</div>
+
+	{#if preview && preview.warnings.length > 0}
+		<div class="rounded-md border border-amber-500/30 bg-amber-50 p-4 text-sm text-amber-900">
+			<div class="font-semibold">Review these warnings before exporting.</div>
+			<ul class="mt-3 max-h-48 space-y-2 overflow-auto">
+				{#each preview.warnings as warning, index (`confirm-warning-${index}-${warning}`)}
+					<li>{warning}</li>
+				{/each}
+			</ul>
+		</div>
+	{:else}
+		<div class="rounded-md border border-emerald-500/30 bg-emerald-50 p-4 text-sm text-emerald-800">
+			The workbook details, date mappings, and learner mappings have no detected warnings.
+		</div>
+	{/if}
+
+	<div class="flex flex-wrap justify-end gap-2">
+		<button
+			type="button"
+			onclick={() => (exportDialogOpen = false)}
+			class="control-ring h-10 rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-surface"
+		>
+			Cancel
+		</button>
+		<button
+			type="button"
+			onclick={confirmExport}
+			disabled={exporting || !preview?.canExport}
+			class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+		>
+			<Save class="size-4" aria-hidden="true" />
+			{exporting ? 'Exporting...' : 'Export Workbook'}
+		</button>
+	</div>
+</Dialog>
+
 <FeedbackToast message={toastMessage} ok={toastOk} onClose={() => (toastMessage = null)} />
+
+{#snippet summaryTile(
+	label: string,
+	value: string,
+	description: string,
+	Icon: typeof FileCheck2,
+	tone: 'neutral' | 'ready' | 'warning' | 'alert'
+)}
+	<div class="rounded-2xl border border-border bg-card p-4 shadow-sm">
+		<div class="flex items-start justify-between gap-3">
+			<div class="min-w-0">
+				<div class="label-mono">{label}</div>
+				<div class="mt-2 truncate text-2xl font-semibold">{value}</div>
+				<div class="mt-1 truncate text-xs text-muted-foreground">{description}</div>
+			</div>
+			<div
+				class="grid size-10 shrink-0 place-items-center rounded-md {tone === 'ready'
+					? 'bg-emerald-50 text-emerald-700'
+					: tone === 'warning'
+						? 'bg-amber-50 text-amber-700'
+						: tone === 'alert'
+							? 'bg-red-50 text-red-700'
+							: 'bg-surface text-muted-foreground'}"
+			>
+				<Icon class="size-5" aria-hidden="true" />
+			</div>
+		</div>
+	</div>
+{/snippet}
+
+{#snippet textField(label: string, value: string, field: string)}
+	<label class="space-y-1.5">
+		<span class="label-mono">{label}</span>
+		<input
+			{value}
+			oninput={(event) => {
+				const nextValue = (event.currentTarget as HTMLInputElement).value;
+				if (field === 'draftSchoolId') draftSchoolId = nextValue;
+				if (field === 'draftSchoolName') draftSchoolName = nextValue;
+				if (field === 'draftSchoolYear') draftSchoolYear = nextValue;
+				if (field === 'draftGradeLevel') draftGradeLevel = nextValue;
+				if (field === 'draftSection') draftSection = nextValue;
+				if (field === 'draftAdviserName') draftAdviserName = nextValue;
+				if (field === 'draftSchoolHeadName') draftSchoolHeadName = nextValue;
+			}}
+			disabled={!workbookSettings || savingDetails}
+			class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none disabled:opacity-60"
+		/>
+	</label>
+{/snippet}
+
+{#snippet metaRow(label: string, value: string)}
+	<div class="grid grid-cols-[112px_minmax(0,1fr)] gap-3">
+		<dt class="text-xs font-medium text-muted-foreground">{label}</dt>
+		<dd class="truncate font-medium">{value}</dd>
+	</div>
+{/snippet}
+
+{#snippet confirmStat(label: string, value: number)}
+	<div class="rounded-md border border-border bg-surface p-3">
+		<div class="label-mono">{label}</div>
+		<div class="mt-2 text-2xl font-semibold">{value}</div>
+	</div>
+{/snippet}
