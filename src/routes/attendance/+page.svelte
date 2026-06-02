@@ -7,6 +7,9 @@
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
+	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 	import TaskProgress from '$lib/components/ui/TaskProgress.svelte';
 	import {
 		listStudents,
@@ -41,6 +44,8 @@
 	let events = $state<AttendanceEvent[]>([]);
 	let selectedClassId = $state<string>('');
 	let manualViewMode = $state<ManualViewMode>('boxes');
+	let loading = $state(true);
+	let loadError = $state<string | null>(null);
 
 	let pickerOpen = $state(false);
 	let pickerQuery = $state('');
@@ -55,6 +60,7 @@
 	} | null>(null);
 
 	let cardInput = $state('');
+	let cardInputElement = $state<HTMLInputElement | null>(null);
 	let toastMessage = $state<string | null>(null);
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -62,9 +68,22 @@
 	let isClosingDay = $state(false);
 	let lastEventId = $state<string | null>(null);
 	let undoTimer: ReturnType<typeof setTimeout> | null = null;
+	let lastScan = $state<{ serial: string; timestamp: number } | null>(null);
 
-	onMount(() => {
-		(async () => {
+	onMount(async () => {
+		await loadInitial();
+	});
+
+	$effect(() => {
+		if (isCardReaderMode && !pickerOpen && cardInputElement && !loading && !loadError) {
+			cardInputElement.focus();
+		}
+	});
+
+	async function loadInitial() {
+		loading = true;
+		loadError = null;
+		try {
 			await Promise.all([reload(), settingsStore.load()]);
 
 			const requestedClassId = page.url.searchParams.get('classId');
@@ -79,8 +98,12 @@
 				pickerQuery = '';
 				pickerOpen = true;
 			}
-		})();
-	});
+		} catch (error) {
+			loadError = error instanceof Error ? error.message : 'Attendance data could not be loaded.';
+		} finally {
+			loading = false;
+		}
+	}
 
 	async function reload() {
 		const [s, c, e] = await Promise.all([listStudents(), listClasses(), listEvents()]);
@@ -309,6 +332,15 @@
 			return;
 		}
 
+		const now = Date.now();
+		if (lastScan && lastScan.serial === trimmed && now - lastScan.timestamp < 2500) {
+			cardInput = '';
+			toast('Duplicate card tap ignored - wait a moment before scanning again', false);
+			cardInputElement?.focus();
+			return;
+		}
+
+		lastScan = { serial: trimmed, timestamp: now };
 		cardInput = '';
 		isProcessing = true;
 
@@ -323,6 +355,7 @@
 			handleAttendanceError(err);
 		} finally {
 			isProcessing = false;
+			cardInputElement?.focus();
 		}
 	}
 
@@ -514,14 +547,30 @@
 		</div>
 	{/if}
 
-	{#if settingsPending}
-		<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading attendance...</div>
+	{#if loading || settingsPending}
+		<div class="px-4 py-5 md:px-8 lg:px-10">
+			<LoadingBlock rows={3} label="Loading attendance workspace" />
+		</div>
+	{:else if loadError}
+		<div class="px-4 py-5 md:px-8 lg:px-10">
+			<EmptyState tone="warning" title="Attendance is unavailable" description={loadError}>
+				{#snippet actions()}
+					<button
+						type="button"
+						onclick={loadInitial}
+						class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
+					>
+						Retry
+					</button>
+				{/snippet}
+			</EmptyState>
+		</div>
 	{:else if isCardReaderMode}
 		<section
-			class="grid h-[calc(100vh-13rem)] min-h-[600px] gap-5 px-6 py-5 md:px-12 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
+			class="grid gap-5 px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
 		>
 			<div
-				class="relative flex min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-surface p-8"
+				class="relative flex min-h-[30rem] items-center justify-center overflow-hidden rounded-2xl border border-border bg-surface p-6 md:p-8"
 			>
 				<div
 					aria-hidden="true"
@@ -544,7 +593,7 @@
 						</p>
 					</div>
 				{:else}
-					<div class="relative w-full max-w-md text-center">
+					<div class="relative w-full max-w-md text-center" role="status" aria-live="polite">
 						<div class="label-mono mb-4 text-primary">
 							<span class="inline-block size-2 animate-pulse rounded-full bg-primary align-middle"
 							></span> Ready for card taps
@@ -560,6 +609,11 @@
 						<p class="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
 							The reader field stays focused for card serials and typed fallback entries.
 						</p>
+						{#if isProcessing}
+							<p class="mt-3 text-sm font-medium text-primary" aria-live="assertive">
+								Processing card tap...
+							</p>
+						{/if}
 
 						<form
 							onsubmit={(e) => {
@@ -568,18 +622,28 @@
 							}}
 							class="mx-auto mt-6 max-w-sm"
 						>
+							<label for="card-reader-serial" class="sr-only">Card serial</label>
 							<input
+								id="card-reader-serial"
+								bind:this={cardInputElement}
 								type="text"
 								bind:value={cardInput}
 								placeholder="Tap card or enter serial..."
-								class="h-12 w-full rounded-md border border-border bg-background px-4 text-center font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+								autocomplete="off"
+								spellcheck="false"
+								aria-describedby="card-reader-help"
+								disabled={isProcessing}
+								class="control-ring h-12 w-full rounded-md border border-border bg-background px-4 text-center font-mono text-sm disabled:cursor-wait disabled:opacity-70"
 							/>
+							<p id="card-reader-help" class="mt-2 text-xs text-muted-foreground">
+								Press Enter after typing a serial manually.
+							</p>
 						</form>
 					</div>
 				{/if}
 			</div>
 
-			<div class="flex min-h-0 flex-col rounded-2xl border border-border bg-card p-5">
+			<div class="flex min-h-[30rem] flex-col rounded-2xl border border-border bg-card p-5">
 				<div class="mb-4 flex shrink-0 items-start justify-between gap-3">
 					<div class="flex flex-col">
 						<h3 class="text-lg font-medium">Session log</h3>
@@ -625,10 +689,10 @@
 			</div>
 		</section>
 	{:else}
-		<section
-			class="grid h-[calc(100vh-13rem)] min-h-[600px] gap-5 px-6 py-5 md:px-12 xl:grid-cols-[minmax(0,1fr)_340px]"
-		>
-			<div class="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
+		<section class="grid gap-5 px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_340px]">
+			<div
+				class="flex min-h-[34rem] flex-col overflow-hidden rounded-2xl border border-border bg-card"
+			>
 				<div class="shrink-0 border-b border-border p-5">
 					<div class="flex flex-wrap items-start justify-between gap-4">
 						<div>
@@ -795,7 +859,7 @@
 				</div>
 			</div>
 
-			<div class="flex min-h-0 flex-col rounded-2xl border border-border bg-card p-5">
+			<div class="flex min-h-[34rem] flex-col rounded-2xl border border-border bg-card p-5">
 				<div class="mb-4 flex shrink-0 items-start justify-between gap-3">
 					<div>
 						<h3 class="text-lg font-medium">Recent activity</h3>
@@ -839,10 +903,12 @@
 {#if lastResult}
 	<div class="pointer-events-none fixed inset-x-0 bottom-10 z-50 flex justify-center px-4">
 		<div
-			class="pointer-events-auto flex items-center gap-4 rounded-3xl border px-8 py-5 shadow-2xl
+			class="pointer-events-auto flex max-w-[min(34rem,calc(100vw-2rem))] items-center gap-4 rounded-2xl border px-5 py-4 shadow-2xl md:px-8 md:py-5
 				{lastResult.ok
 				? 'border-border bg-background text-foreground'
 				: 'border-destructive bg-destructive text-destructive-foreground'}"
+			role="status"
+			aria-live="assertive"
 		>
 			<div
 				class="grid size-12 place-items-center rounded-full
@@ -861,8 +927,10 @@
 					<polyline points="20 6 9 17 4 12" />
 				</svg>
 			</div>
-			<div>
-				<div class="text-xl font-bold">{lastResult.name}</div>
+			<div class="min-w-0">
+				<div class="text-balance-safe text-lg leading-tight font-bold md:text-xl">
+					{lastResult.name}
+				</div>
 				<div class="label-mono flex gap-2">
 					<span class={lastResult.isLate ? 'font-bold text-destructive' : ''}>
 						{lastResult.isLate ? 'LATE' : 'IN'}
@@ -926,26 +994,13 @@
 	</div>
 </Dialog>
 
-{#if toastMessage}
-	<div
-		class="fixed top-12 right-6 z-60 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg
-			{toastOk
-			? 'border-border bg-background text-foreground'
-			: 'border-destructive/40 bg-destructive/10 text-destructive'}"
-		role="status"
-		aria-live="polite"
-	>
-		<span>{toastMessage}</span>
-		{#if lastEventId && toastOk}
-			<button
-				onclick={undoLast}
-				class="rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
-			>
-				UNDO
-			</button>
-		{/if}
-	</div>
-{/if}
+<FeedbackToast
+	message={toastMessage}
+	ok={toastOk}
+	actionLabel={lastEventId && toastOk ? 'Undo' : undefined}
+	onAction={undoLast}
+	onClose={() => (toastMessage = null)}
+/>
 
 {#snippet pill(type: AttendanceType | 'error')}
 	<span
