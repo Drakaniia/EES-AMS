@@ -2104,10 +2104,7 @@ mod tests {
 
     #[test]
     fn sf2_report_year_uses_current_calendar_year() {
-        assert_eq!(
-            sf2_report_year("2025-2026", 6),
-            chrono::Local::now().year()
-        );
+        assert_eq!(sf2_report_year("2025-2026", 6), chrono::Local::now().year());
     }
 
     #[test]
