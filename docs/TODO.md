@@ -32,3 +32,7 @@
 - Do i need to always end session?what about if thre is incomeing
 - dialogue modal for laoding animation when export
 - When in the first month. i alrady inputed the data.  and the sf2 is now availble,  what happenns when i import the sf2 (it makes a working copy) should modify the sf2 with the already recorded (for example there is absend in the first week it auto put x in the day without breaking or deleting the existing record). and the add validation if the names are right or other instances
+
+-Validation if export the sf2 xlsx, the dates should be  if whats report of the month of epecially the dates. becaues we create our own copy when importing, it modifies also the exel when import, the months dates  in weekly, also include the x mark when absent because currently there is no x mark
+
+- No end session, i should dont have to click end session just to end. when i click attendance in the list should automaticall record

@@ -15,7 +15,8 @@ use crate::sf2::models::{
     Sf2CloseDaySummary, Sf2DateMappingRecord, Sf2ExportPreview, Sf2ExportReadiness,
     Sf2ExportResult, Sf2ImportSummary, Sf2PreviewAbsence, Sf2PreviewCell, Sf2PreviewCellStatus,
     Sf2PreviewDate, Sf2PreviewStudentRow, Sf2StudentMappingRecord, Sf2TemplateDraft,
-    Sf2TemplateRecord, Sf2WorkbookAnalysis, Sf2WorkbookMetadata, Sf2WorkbookSettings,
+    Sf2TemplateRecord, Sf2WorkbookAnalysis, Sf2WorkbookLearner, Sf2WorkbookMetadata,
+    Sf2WorkbookSettings,
 };
 use crate::sf2::repository::{template_summary, Sf2Repository};
 use chrono::{Datelike, Local, NaiveDate, Utc};
@@ -36,98 +37,38 @@ const SF2_FEMALE_ROWS: std::ops::RangeInclusive<u32> = 30..=48;
 
 pub fn import_workbook(app: tauri::AppHandle, pool: DbPool) -> Result<Sf2ImportSummary> {
     let workbook_path = pick_workbook_path(&app)?;
-    let analysis = excel::analyze_workbook(&workbook_path)?;
+    let source_analysis = excel::analyze_workbook(&workbook_path)?;
     let source_hash = file_hash(&workbook_path)?;
-    let layout_fingerprint = layout_fingerprint(&analysis);
-    let class_name = class_name(&analysis.grade_level, &analysis.section);
+    let class_name = class_name(&source_analysis.grade_level, &source_analysis.section);
 
     let class_repo = ClassRepository::new(pool.clone());
     let student_repo = StudentRepository::new(pool.clone());
     let sf2_repo = Sf2Repository::new(pool.clone());
 
     let class = find_or_create_class(&class_repo, &class_name, None)?;
-    let existing_students = student_repo.list_by_class(Some(&class.id))?;
-    let mut existing_by_name: HashMap<String, Student> = existing_students
-        .into_iter()
-        .map(|student| (normalize_learner_name(&student.name), student))
-        .collect();
-
     let template_id = sf2_repo
-        .find_template(&source_hash, &analysis.grade_level, &analysis.section)?
+        .find_template(
+            &source_hash,
+            &source_analysis.grade_level,
+            &source_analysis.section,
+        )?
         .map(|template| template.id)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let working_copy_path =
-        copy_workbook_to_app_data(&app, &workbook_path, &template_id, &analysis)?;
-    let metadata = metadata_from_analysis(&analysis);
+        copy_workbook_to_app_data(&app, &workbook_path, &template_id, &source_analysis)?;
+    let metadata = metadata_from_import_analysis(&source_analysis)?;
     excel::write_metadata(&working_copy_path, &metadata)?;
+    let analysis = excel::analyze_workbook(&working_copy_path)?;
+    validate_configured_calendar(&analysis, &metadata)?;
+    let layout_fingerprint = layout_fingerprint(&analysis);
 
-    let mut seen_names = HashSet::new();
-    let mut student_mappings = Vec::new();
-    let mut students_created = 0;
-    let mut students_reused = 0;
+    let learner_sync =
+        sync_workbook_learner_mappings(&student_repo, &class.id, &template_id, &analysis.learners)?;
+    let student_mappings = learner_sync.student_mappings;
+    let students_created = learner_sync.students_created;
+    let students_reused = learner_sync.students_reused;
 
-    for learner in analysis
-        .learners
-        .iter()
-        .filter(|learner| is_learner_name(&learner.name))
-    {
-        let normalized_name = normalize_learner_name(&learner.name);
-        if !seen_names.insert(normalized_name.clone()) {
-            continue;
-        }
-        let learner_gender = StudentGender::from_sf2_block(learner.gender_block.as_deref());
-
-        let student = if let Some(student) = existing_by_name.get(&normalized_name) {
-            students_reused += 1;
-            let mut student = student.clone();
-            if let Some(gender) = learner_gender {
-                if student.gender != Some(gender) {
-                    student = student_repo.update(
-                        student.id,
-                        UpdateStudentRequest {
-                            name: None,
-                            gender: Some(gender),
-                            card_serial: None,
-                            class_id: None,
-                        },
-                    )?;
-                    existing_by_name.insert(normalized_name.clone(), student.clone());
-                }
-            }
-            student
-        } else {
-            let created = student_repo.create(CreateStudentRequest {
-                name: learner.name.clone(),
-                gender: learner_gender,
-                card_serial: None,
-                class_id: Some(class.id.clone()),
-            })?;
-            existing_by_name.insert(normalized_name.clone(), created.clone());
-            students_created += 1;
-            created
-        };
-
-        student_mappings.push(Sf2StudentMappingRecord {
-            template_id: template_id.clone(),
-            student_id: student.id.to_string(),
-            workbook_name: learner.name.clone(),
-            normalized_name,
-            row_index: learner.row_index,
-            gender_block: learner.gender_block.clone(),
-        });
-    }
-
-    let date_mappings: Vec<Sf2DateMappingRecord> = analysis
-        .dates
-        .iter()
-        .map(|date| Sf2DateMappingRecord {
-            template_id: template_id.clone(),
-            sheet_name: date.sheet_name.clone(),
-            date: date.date.clone(),
-            column_letter: date.column_letter.clone(),
-            column_index: date.column_index,
-        })
-        .collect();
+    let date_mappings = date_mappings_from_analysis(&template_id, &analysis);
 
     let template = Sf2TemplateRecord {
         id: template_id.clone(),
@@ -252,17 +193,7 @@ fn create_workbook_from_template_in_dir(
         })
         .collect::<Vec<_>>();
 
-    let date_mappings = analysis
-        .dates
-        .iter()
-        .map(|date| Sf2DateMappingRecord {
-            template_id: template_id.clone(),
-            sheet_name: date.sheet_name.clone(),
-            date: date.date.clone(),
-            column_letter: date.column_letter.clone(),
-            column_index: date.column_index,
-        })
-        .collect::<Vec<_>>();
+    let date_mappings = date_mappings_from_analysis(&template_id, &analysis);
 
     let template = Sf2TemplateRecord {
         id: template_id.clone(),
@@ -362,60 +293,73 @@ pub fn update_workbook_settings(pool: DbPool, draft: Sf2TemplateDraft) -> Result
     let class = ClassRepository::new(pool.clone())
         .get(class_id)?
         .ok_or_else(|| AppError::InvalidInput("Selected class was not found".to_string()))?;
-    let student_repo = StudentRepository::new(pool.clone());
-    let (students, students_created, students_reused) =
-        roster_students_for_draft(&student_repo, class_id, &draft.learner_names)?;
-
-    let row_slots = template_roster_slots();
-    let roster_assignments = template_roster_assignments(&students)?;
-    if students.len() > row_slots.len() {
-        return Err(AppError::InvalidInput(format!(
-            "The bundled SF2 template has {} learner rows, but this class has {} learners",
-            row_slots.len(),
-            students.len()
-        )));
-    }
-
     excel::write_metadata(&workbook_path, &metadata)?;
     let analysis = excel::analyze_workbook(&workbook_path)?;
     validate_configured_calendar(&analysis, &metadata)?;
     let layout_fingerprint = layout_fingerprint(&analysis);
-    let roster_marks = roster_name_marks(&analysis, &roster_assignments, &row_slots);
-    excel::write_marks(&workbook_path, &roster_marks)?;
+    let student_repo = StudentRepository::new(pool.clone());
+    let (student_mappings, students_created, students_reused, learners_found) =
+        if template_owns_roster(&existing) {
+            let (students, students_created, students_reused) =
+                roster_students_for_draft(&student_repo, class_id, &draft.learner_names)?;
 
-    let mut seen_normalized_names = HashSet::new();
-    let student_mappings = roster_assignments
-        .iter()
-        .map(|assignment| {
-            let student = &assignment.student;
-            let slot = assignment.slot;
-            let normalized_name = unique_normalized_name(
-                &mut seen_normalized_names,
-                &student.name,
-                &student.id.to_string(),
-            );
-            Sf2StudentMappingRecord {
-                template_id: existing.id.clone(),
-                student_id: student.id.to_string(),
-                workbook_name: student.name.clone(),
-                normalized_name,
-                row_index: slot.row_index,
-                gender_block: Some(slot.gender_block.to_string()),
+            let row_slots = template_roster_slots();
+            let roster_assignments = template_roster_assignments(&students)?;
+            if students.len() > row_slots.len() {
+                return Err(AppError::InvalidInput(format!(
+                    "The bundled SF2 template has {} learner rows, but this class has {} learners",
+                    row_slots.len(),
+                    students.len()
+                )));
             }
-        })
-        .collect::<Vec<_>>();
 
-    let date_mappings = analysis
-        .dates
-        .iter()
-        .map(|date| Sf2DateMappingRecord {
-            template_id: existing.id.clone(),
-            sheet_name: date.sheet_name.clone(),
-            date: date.date.clone(),
-            column_letter: date.column_letter.clone(),
-            column_index: date.column_index,
-        })
-        .collect::<Vec<_>>();
+            let roster_marks = roster_name_marks(&analysis, &roster_assignments, &row_slots);
+            excel::write_marks(&workbook_path, &roster_marks)?;
+
+            let mut seen_normalized_names = HashSet::new();
+            let student_mappings = roster_assignments
+                .iter()
+                .map(|assignment| {
+                    let student = &assignment.student;
+                    let slot = assignment.slot;
+                    let normalized_name = unique_normalized_name(
+                        &mut seen_normalized_names,
+                        &student.name,
+                        &student.id.to_string(),
+                    );
+                    Sf2StudentMappingRecord {
+                        template_id: existing.id.clone(),
+                        student_id: student.id.to_string(),
+                        workbook_name: student.name.clone(),
+                        normalized_name,
+                        row_index: slot.row_index,
+                        gender_block: Some(slot.gender_block.to_string()),
+                    }
+                })
+                .collect::<Vec<_>>();
+            (
+                student_mappings,
+                students_created,
+                students_reused,
+                students.len(),
+            )
+        } else {
+            let learner_sync = sync_workbook_learner_mappings(
+                &student_repo,
+                &class.id,
+                &existing.id,
+                &analysis.learners,
+            )?;
+            let learners_found = learner_sync.student_mappings.len();
+            (
+                learner_sync.student_mappings,
+                learner_sync.students_created,
+                learner_sync.students_reused,
+                learners_found,
+            )
+        };
+
+    let date_mappings = date_mappings_from_analysis(&existing.id, &analysis);
 
     let template = Sf2TemplateRecord {
         id: existing.id.clone(),
@@ -448,7 +392,7 @@ pub fn update_workbook_settings(pool: DbPool, draft: Sf2TemplateDraft) -> Result
         school_year: template.school_year,
         grade_level: template.grade_level,
         section: template.section,
-        learners_found: students.len(),
+        learners_found,
         students_created,
         students_reused,
         dates_mapped: date_mappings.len(),
@@ -472,6 +416,7 @@ pub fn close_day(
     let present = present_student_ids(&event_repo.list()?, &students, &class_id, &date);
 
     if let Some(template) = sf2_repo.latest_template_for_class(&class_id)? {
+        let template = refresh_template_calendar_from_saved_month(pool.clone(), &template)?;
         let closed_days = sf2_repo.closed_days_for_class(&class_id)?;
         let _ = write_template_marks_for_days(pool, &template, &closed_days)?;
     }
@@ -851,6 +796,7 @@ pub fn set_preview_attendance(
         &class.day_start,
         present,
     )?;
+    let template = refresh_template_calendar_from_saved_month(pool.clone(), &template)?;
     write_template_marks_for_days(pool.clone(), &template, &closed_days)?;
 
     export_preview(pool, Some(class_id))
@@ -867,16 +813,9 @@ pub fn export_workbook(
         .ok_or_else(|| {
             AppError::InvalidInput("No SF2 template imported for this class".to_string())
         })?;
+    let template = refresh_template_calendar_from_saved_month(pool.clone(), &template)?;
 
-    let output_path = save_workbook_path(&app, &template)?;
     let working_copy_path = PathBuf::from(&template.source_path);
-    if working_copy_path == output_path {
-        return Err(AppError::InvalidInput(
-            "Choose a different output path so the app SF2 working copy is not overwritten"
-                .to_string(),
-        ));
-    }
-
     if !working_copy_path.exists() {
         return Err(AppError::InvalidInput(
             "The app SF2 working workbook no longer exists. Import the SF2 workbook again"
@@ -886,6 +825,24 @@ pub fn export_workbook(
 
     let closed_days =
         sf2_closed_days_for_report_month(&template, &sf2_repo.closed_days_for_class(&class_id)?);
+    let mapped_dates = sf2_date_mappings_for_report_month(
+        &template,
+        &sf2_repo.date_mappings_for_template(&template.id)?,
+    );
+    if mapped_dates.is_empty() {
+        return Err(AppError::InvalidInput(
+            "No attendance dates are mapped to this SF2 report month.".to_string(),
+        ));
+    }
+
+    let output_path = save_workbook_path(&app, &template)?;
+    if working_copy_path == output_path {
+        return Err(AppError::InvalidInput(
+            "Choose a different output path so the app SF2 working copy is not overwritten"
+                .to_string(),
+        ));
+    }
+
     let marks_written = write_template_marks_for_days(pool.clone(), &template, &closed_days)?;
 
     let metadata = template_metadata(&template);
@@ -1023,7 +980,7 @@ fn write_template_marks_for_days(
         .cloned()
         .collect::<Vec<_>>();
 
-    let mut marks = clear_attendance_marks_for_records(&date_mappings, &student_mappings);
+    let mut marks = clear_attendance_marks_for_records(template, &date_mappings, &student_mappings);
     let attendance_marks = if export_days.is_empty() || student_mappings.is_empty() {
         Vec::new()
     } else {
@@ -1042,6 +999,109 @@ fn write_template_marks_for_days(
     Ok(attendance_mark_count)
 }
 
+fn refresh_template_calendar_from_saved_month(
+    pool: DbPool,
+    template: &Sf2TemplateRecord,
+) -> Result<Sf2TemplateRecord> {
+    let Some(_) = sf2_month_number(&template.report_month) else {
+        return Ok(template.clone());
+    };
+
+    let sf2_repo = Sf2Repository::new(pool);
+    let existing_date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
+    if date_mappings_are_current_for_report_month(template, &existing_date_mappings) {
+        return Ok(template.clone());
+    }
+
+    let workbook_path = PathBuf::from(&template.source_path);
+    if !workbook_path.exists() {
+        return Err(AppError::InvalidInput(
+            "The app SF2 working workbook no longer exists. Import the SF2 workbook again"
+                .to_string(),
+        ));
+    }
+
+    let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
+    let mut metadata = template_metadata(template);
+    metadata.configure_calendar = true;
+    metadata.first_school_day = Some(first_school_day_for_report_month(
+        &metadata.report_month,
+        &metadata.school_year,
+        existing_date_mappings
+            .iter()
+            .map(|mapping| mapping.date.as_str()),
+    )?);
+
+    excel::write_metadata(&workbook_path, &metadata)?;
+    let analysis = excel::analyze_workbook(&workbook_path)?;
+    validate_configured_calendar(&analysis, &metadata)?;
+
+    let refreshed_template = Sf2TemplateRecord {
+        id: template.id.clone(),
+        source_path: template.source_path.clone(),
+        source_hash: template.source_hash.clone(),
+        school_id: metadata.school_id,
+        school_name: metadata.school_name,
+        school_year: metadata.school_year,
+        report_month: metadata.report_month,
+        grade_level: metadata.grade_level,
+        section: metadata.section,
+        adviser_name: metadata.adviser_name,
+        school_head_name: metadata.school_head_name,
+        layout_fingerprint: layout_fingerprint(&analysis),
+        active_class_id: template.active_class_id.clone(),
+        imported_at: template.imported_at,
+    };
+    let refreshed_date_mappings = date_mappings_from_analysis(&template.id, &analysis);
+    sf2_repo.update_template_with_mappings(
+        &refreshed_template,
+        &student_mappings,
+        &refreshed_date_mappings,
+    )?;
+
+    Ok(refreshed_template)
+}
+
+fn date_mappings_are_current_for_report_month(
+    template: &Sf2TemplateRecord,
+    date_mappings: &[Sf2DateMappingRecord],
+) -> bool {
+    let Some(month) = sf2_month_number(&template.report_month) else {
+        return false;
+    };
+    let year = sf2_report_year(&template.school_year, month);
+    let year_text = year.to_string();
+
+    !date_mappings.is_empty()
+        && date_mappings.iter().all(|mapping| {
+            let Ok(date) = parse_date(&mapping.date) else {
+                return false;
+            };
+            date.year() == year
+                && date.month() == month
+                && date.weekday().number_from_monday() <= 5
+                && sf2_month_number(&mapping.sheet_name) == Some(month)
+                && mapping.sheet_name.contains(&year_text)
+        })
+}
+
+fn date_mappings_from_analysis(
+    template_id: &str,
+    analysis: &Sf2WorkbookAnalysis,
+) -> Vec<Sf2DateMappingRecord> {
+    analysis
+        .dates
+        .iter()
+        .map(|date| Sf2DateMappingRecord {
+            template_id: template_id.to_string(),
+            sheet_name: date.sheet_name.clone(),
+            date: date.date.clone(),
+            column_letter: date.column_letter.clone(),
+            column_index: date.column_index,
+        })
+        .collect()
+}
+
 fn metadata_from_analysis(analysis: &Sf2WorkbookAnalysis) -> Sf2WorkbookMetadata {
     Sf2WorkbookMetadata {
         school_id: analysis.school_id.trim().to_string(),
@@ -1055,6 +1115,20 @@ fn metadata_from_analysis(analysis: &Sf2WorkbookAnalysis) -> Sf2WorkbookMetadata
         configure_calendar: false,
         first_school_day: None,
     }
+}
+
+fn metadata_from_import_analysis(analysis: &Sf2WorkbookAnalysis) -> Result<Sf2WorkbookMetadata> {
+    let mut metadata = metadata_from_analysis(analysis);
+    if sf2_month_number(&metadata.report_month).is_some() {
+        metadata.configure_calendar = true;
+        metadata.first_school_day = Some(first_school_day_for_report_month(
+            &metadata.report_month,
+            &metadata.school_year,
+            analysis.dates.iter().map(|date| date.date.as_str()),
+        )?);
+    }
+
+    Ok(metadata)
 }
 
 fn metadata_from_draft(draft: &Sf2TemplateDraft) -> Result<Sf2WorkbookMetadata> {
@@ -1095,6 +1169,52 @@ fn required_first_school_day(
     })?;
     validate_first_school_day(day, report_month, school_year)?;
     Ok(day)
+}
+
+fn first_school_day_for_report_month<'a, I>(
+    report_month: &str,
+    school_year: &str,
+    dates: I,
+) -> Result<u32>
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let month = sf2_month_number(report_month).ok_or_else(|| {
+        AppError::InvalidInput("Report Month must be a valid month name".to_string())
+    })?;
+    let mut detected_days = dates
+        .into_iter()
+        .filter_map(|date| parse_date(date).ok())
+        .filter(|date| date.month() == month)
+        .map(|date| date.day())
+        .collect::<Vec<_>>();
+
+    detected_days.sort_unstable();
+    detected_days.dedup();
+
+    for day in detected_days {
+        if validate_first_school_day(day, report_month, school_year).is_ok() {
+            return Ok(day);
+        }
+    }
+
+    default_sf2_first_school_day(report_month, school_year)
+}
+
+fn default_sf2_first_school_day(report_month: &str, school_year: &str) -> Result<u32> {
+    let month = sf2_month_number(report_month).ok_or_else(|| {
+        AppError::InvalidInput("Report Month must be a valid month name".to_string())
+    })?;
+    let year = sf2_report_year(school_year, month);
+    let last_day = last_day_of_month(year, month);
+
+    (1..=last_day)
+        .find(|day| validate_first_school_day(*day, report_month, school_year).is_ok())
+        .ok_or_else(|| {
+            AppError::Internal(
+                "failed to find a Monday-Friday attendance day for this report month".to_string(),
+            )
+        })
 }
 
 fn validate_first_school_day(day: u32, report_month: &str, school_year: &str) -> Result<()> {
@@ -1251,6 +1371,10 @@ fn sf2_date_mappings_for_report_month(
             }
 
             let normalized_date = NaiveDate::from_ymd_opt(year, month, date.day())?;
+            if normalized_date.weekday().number_from_monday() > 5 {
+                return None;
+            }
+
             Some(Sf2DateMappingRecord {
                 template_id: mapping.template_id.clone(),
                 sheet_name: mapping.sheet_name.clone(),
@@ -1400,6 +1524,86 @@ struct TemplateRosterAssignment {
     slot: TemplateRosterSlot,
 }
 
+#[derive(Debug)]
+struct WorkbookLearnerSync {
+    student_mappings: Vec<Sf2StudentMappingRecord>,
+    students_created: usize,
+    students_reused: usize,
+}
+
+fn sync_workbook_learner_mappings(
+    student_repo: &StudentRepository,
+    class_id: &str,
+    template_id: &str,
+    learners: &[Sf2WorkbookLearner],
+) -> Result<WorkbookLearnerSync> {
+    let existing_students = student_repo.list_by_class(Some(class_id))?;
+    let mut existing_by_name: HashMap<String, Student> = existing_students
+        .into_iter()
+        .map(|student| (normalize_learner_name(&student.name), student))
+        .collect();
+    let mut seen_names = HashSet::new();
+    let mut student_mappings = Vec::new();
+    let mut students_created = 0;
+    let mut students_reused = 0;
+
+    for learner in learners
+        .iter()
+        .filter(|learner| is_learner_name(&learner.name))
+    {
+        let normalized_name = normalize_learner_name(&learner.name);
+        if !seen_names.insert(normalized_name.clone()) {
+            continue;
+        }
+        let learner_gender = StudentGender::from_sf2_block(learner.gender_block.as_deref());
+
+        let student = if let Some(student) = existing_by_name.get(&normalized_name) {
+            students_reused += 1;
+            let mut student = student.clone();
+            if let Some(gender) = learner_gender {
+                if student.gender != Some(gender) {
+                    student = student_repo.update(
+                        student.id,
+                        UpdateStudentRequest {
+                            name: None,
+                            gender: Some(gender),
+                            card_serial: None,
+                            class_id: None,
+                        },
+                    )?;
+                    existing_by_name.insert(normalized_name.clone(), student.clone());
+                }
+            }
+            student
+        } else {
+            let created = student_repo.create(CreateStudentRequest {
+                name: learner.name.clone(),
+                gender: learner_gender,
+                card_serial: None,
+                class_id: Some(class_id.to_string()),
+            })?;
+            existing_by_name.insert(normalized_name.clone(), created.clone());
+            students_created += 1;
+            created
+        };
+
+        student_mappings.push(Sf2StudentMappingRecord {
+            template_id: template_id.to_string(),
+            student_id: student.id.to_string(),
+            workbook_name: learner.name.clone(),
+            normalized_name,
+            row_index: learner.row_index,
+            gender_block: learner.gender_block.clone(),
+        });
+    }
+
+    Ok(WorkbookLearnerSync {
+        student_mappings,
+        students_created,
+        students_reused,
+    })
+}
+
 fn template_roster_slots() -> Vec<TemplateRosterSlot> {
     let mut slots = Vec::new();
     for row_index in SF2_MALE_ROWS {
@@ -1520,14 +1724,19 @@ fn roster_name_marks(
 }
 
 fn clear_attendance_marks_for_records(
+    template: &Sf2TemplateRecord,
     date_mappings: &[Sf2DateMappingRecord],
     student_mappings: &[Sf2StudentMappingRecord],
 ) -> Vec<Sf2CellMark> {
-    let row_slots = template_roster_slots();
-    let row_indices = attendance_grid_rows(
-        &row_slots,
-        student_mappings.iter().map(|mapping| mapping.row_index),
-    );
+    let row_indices = if template_owns_roster(template) {
+        let row_slots = template_roster_slots();
+        attendance_grid_rows(
+            &row_slots,
+            student_mappings.iter().map(|mapping| mapping.row_index),
+        )
+    } else {
+        mapped_attendance_rows(student_mappings.iter().map(|mapping| mapping.row_index))
+    };
 
     let mut marks = Vec::with_capacity(date_mappings.len() * row_indices.len());
     for date_mapping in date_mappings {
@@ -1542,6 +1751,10 @@ fn clear_attendance_marks_for_records(
     marks
 }
 
+fn template_owns_roster(template: &Sf2TemplateRecord) -> bool {
+    template.source_hash.starts_with("bundled-")
+}
+
 fn attendance_grid_rows<I>(row_slots: &[TemplateRosterSlot], extra_rows: I) -> Vec<u32>
 where
     I: IntoIterator<Item = u32>,
@@ -1551,6 +1764,19 @@ where
         .map(|slot| slot.row_index)
         .collect::<Vec<_>>();
     rows.extend(extra_rows);
+    rows.sort_unstable();
+    rows.dedup();
+    rows
+}
+
+fn mapped_attendance_rows<I>(rows: I) -> Vec<u32>
+where
+    I: IntoIterator<Item = u32>,
+{
+    let mut rows = rows
+        .into_iter()
+        .filter(|row_index| *row_index > 0)
+        .collect::<Vec<_>>();
     rows.sort_unstable();
     rows.dedup();
     rows
@@ -2087,6 +2313,13 @@ mod tests {
         }
     }
 
+    fn bundled_template_record(report_month: &str) -> Sf2TemplateRecord {
+        Sf2TemplateRecord {
+            source_hash: "bundled-test-hash".to_string(),
+            ..template_record(report_month)
+        }
+    }
+
     #[test]
     fn export_workbook_file_name_includes_saved_report_month() {
         let file_name =
@@ -2105,6 +2338,100 @@ mod tests {
     #[test]
     fn sf2_report_year_uses_current_calendar_year() {
         assert_eq!(sf2_report_year("2025-2026", 6), chrono::Local::now().year());
+    }
+
+    #[test]
+    fn import_metadata_configures_calendar_from_report_month() {
+        let expected_day = default_sf2_first_school_day("JUNE", "2025-2026").unwrap();
+        let stale_year = Local::now().year() - 1;
+        let stale_date = format!("{stale_year}-06-{expected_day:02}");
+        let analysis = workbook_analysis_with_dates(&[&stale_date]);
+
+        let metadata = metadata_from_import_analysis(&analysis).unwrap();
+
+        assert!(metadata.configure_calendar);
+        assert_eq!(metadata.first_school_day, Some(expected_day));
+    }
+
+    #[test]
+    fn first_school_day_for_report_month_skips_weekend_imported_dates() {
+        let year = Local::now().year();
+        let weekend_day = (1..=30)
+            .find(|day| {
+                NaiveDate::from_ymd_opt(year, 6, *day)
+                    .is_some_and(|date| date.weekday().number_from_monday() > 5)
+            })
+            .unwrap();
+        let stale_date = format!("{}-06-{weekend_day:02}", year - 1);
+
+        let first_day =
+            first_school_day_for_report_month("JUNE", "2025-2026", [stale_date.as_str()]).unwrap();
+
+        assert_ne!(first_day, weekend_day);
+        validate_first_school_day(first_day, "JUNE", "2025-2026").unwrap();
+    }
+
+    #[test]
+    fn report_month_date_mappings_use_current_year_and_skip_weekends() {
+        let year = Local::now().year();
+        let stale_year = year - 1;
+        let weekday_day = default_sf2_first_school_day("JUNE", "2025-2026").unwrap();
+        let weekend_day = (1..=30)
+            .find(|day| {
+                NaiveDate::from_ymd_opt(year, 6, *day)
+                    .is_some_and(|date| date.weekday().number_from_monday() > 5)
+            })
+            .unwrap();
+        let template = template_record("JUNE");
+        let date_mappings = vec![
+            Sf2DateMappingRecord {
+                template_id: template.id.clone(),
+                sheet_name: format!("JUNE {stale_year}"),
+                date: format!("{stale_year}-06-{weekday_day:02}"),
+                column_letter: "F".to_string(),
+                column_index: 6,
+            },
+            Sf2DateMappingRecord {
+                template_id: template.id.clone(),
+                sheet_name: format!("JUNE {stale_year}"),
+                date: format!("{stale_year}-06-{weekend_day:02}"),
+                column_letter: "G".to_string(),
+                column_index: 7,
+            },
+        ];
+
+        let filtered = sf2_date_mappings_for_report_month(&template, &date_mappings);
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].date, format!("{year}-06-{weekday_day:02}"));
+        assert_eq!(filtered[0].column_letter, "F");
+    }
+
+    #[test]
+    fn date_mappings_current_requires_current_weekday_month_year_and_sheet() {
+        let year = Local::now().year();
+        let weekday_day = default_sf2_first_school_day("JUNE", "2025-2026").unwrap();
+        let template = template_record("JUNE");
+        let current_mapping = Sf2DateMappingRecord {
+            template_id: template.id.clone(),
+            sheet_name: format!("JUNE {year}"),
+            date: format!("{year}-06-{weekday_day:02}"),
+            column_letter: "F".to_string(),
+            column_index: 6,
+        };
+        let stale_sheet_mapping = Sf2DateMappingRecord {
+            sheet_name: format!("JUNE {}", year - 1),
+            ..current_mapping.clone()
+        };
+
+        assert!(date_mappings_are_current_for_report_month(
+            &template,
+            &[current_mapping]
+        ));
+        assert!(!date_mappings_are_current_for_report_month(
+            &template,
+            &[stale_sheet_mapping]
+        ));
     }
 
     #[test]
@@ -2269,7 +2596,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_attendance_marks_covers_template_grid_without_students() {
+    fn clear_attendance_marks_covers_bundled_template_grid_without_students() {
         let dates = vec![Sf2DateMappingRecord {
             template_id: "template-1".to_string(),
             sheet_name: "JUNE 2026".to_string(),
@@ -2277,8 +2604,9 @@ mod tests {
             column_letter: "F".to_string(),
             column_index: 6,
         }];
+        let template = bundled_template_record("JUNE");
 
-        let marks = clear_attendance_marks_for_records(&dates, &[]);
+        let marks = clear_attendance_marks_for_records(&template, &dates, &[]);
 
         assert_eq!(marks.len(), template_roster_slots().len());
         assert!(marks.contains(&Sf2CellMark {
@@ -2294,7 +2622,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_attendance_marks_includes_imported_rows_outside_template_grid() {
+    fn clear_attendance_marks_for_imported_workbook_only_uses_mapped_learner_rows() {
         let dates = vec![Sf2DateMappingRecord {
             template_id: "template-1".to_string(),
             sheet_name: "JUNE 2026".to_string(),
@@ -2302,23 +2630,97 @@ mod tests {
             column_letter: "F".to_string(),
             column_index: 6,
         }];
-        let students = vec![Sf2StudentMappingRecord {
-            template_id: "template-1".to_string(),
-            student_id: "student-1".to_string(),
-            workbook_name: "Learner, Sample".to_string(),
-            normalized_name: "LEARNER,SAMPLE".to_string(),
-            row_index: 55,
-            gender_block: Some("FEMALE".to_string()),
-        }];
+        let students = vec![
+            Sf2StudentMappingRecord {
+                template_id: "template-1".to_string(),
+                student_id: "student-1".to_string(),
+                workbook_name: "Learner, Sample".to_string(),
+                normalized_name: "LEARNER,SAMPLE".to_string(),
+                row_index: 8,
+                gender_block: Some("FEMALE".to_string()),
+            },
+            Sf2StudentMappingRecord {
+                template_id: "template-1".to_string(),
+                student_id: "student-2".to_string(),
+                workbook_name: "Learner, Other".to_string(),
+                normalized_name: "LEARNER,OTHER".to_string(),
+                row_index: 30,
+                gender_block: Some("FEMALE".to_string()),
+            },
+        ];
+        let template = template_record("JUNE");
 
-        let marks = clear_attendance_marks_for_records(&dates, &students);
+        let marks = clear_attendance_marks_for_records(&template, &dates, &students);
 
-        assert_eq!(marks.len(), template_roster_slots().len() + 1);
+        assert_eq!(marks.len(), 2);
         assert!(marks.contains(&Sf2CellMark {
             sheet_name: "JUNE 2026".to_string(),
-            cell_address: "F55".to_string(),
+            cell_address: "F8".to_string(),
             value: String::new(),
         }));
+        assert!(marks.contains(&Sf2CellMark {
+            sheet_name: "JUNE 2026".to_string(),
+            cell_address: "F30".to_string(),
+            value: String::new(),
+        }));
+        assert!(!marks.iter().any(|mark| mark.cell_address == "F29"));
+        assert!(!marks.iter().any(|mark| mark.cell_address == "F49"));
+    }
+
+    #[test]
+    fn workbook_learner_sync_preserves_first_dynamic_roster_row() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database should be created");
+        let pool = crate::infrastructure::init_db(temp_db.path()).expect("database should init");
+        let class = ClassRepository::new(pool.clone())
+            .create(CreateClassRequest {
+                name: "3 - Matapat".to_string(),
+                room: Some("N/A".to_string()),
+                day_start: "08:30".to_string(),
+                day_end: "15:30".to_string(),
+                late_after: "08:45".to_string(),
+                sessions: Vec::new(),
+                days: vec![1, 2, 3, 4, 5],
+            })
+            .expect("class should be created");
+        let student_repo = StudentRepository::new(pool);
+        let learners = vec![
+            Sf2WorkbookLearner {
+                row_index: 8,
+                name: "CAMANIA,LIAN CARLO, SUGAY".to_string(),
+                gender_block: Some("MALE".to_string()),
+            },
+            Sf2WorkbookLearner {
+                row_index: 9,
+                name: "CUARES,JAIRO, ESPIRITU".to_string(),
+                gender_block: Some("MALE".to_string()),
+            },
+            Sf2WorkbookLearner {
+                row_index: 29,
+                name: "<=== MALE | TOTAL Per Day ===>".to_string(),
+                gender_block: Some("MALE".to_string()),
+            },
+            Sf2WorkbookLearner {
+                row_index: 30,
+                name: "BAPTISMA,SOFIA, ESPIRITU".to_string(),
+                gender_block: Some("FEMALE".to_string()),
+            },
+        ];
+
+        let sync =
+            sync_workbook_learner_mappings(&student_repo, &class.id, "template-1", &learners)
+                .expect("learner mappings should sync");
+
+        assert_eq!(sync.student_mappings.len(), 3);
+        assert_eq!(sync.students_created, 3);
+        assert_eq!(sync.student_mappings[0].row_index, 8);
+        assert_eq!(
+            sync.student_mappings[0].workbook_name,
+            "CAMANIA,LIAN CARLO, SUGAY"
+        );
+        assert_eq!(
+            sync.student_mappings[0].gender_block.as_deref(),
+            Some("MALE")
+        );
     }
 
     #[test]
