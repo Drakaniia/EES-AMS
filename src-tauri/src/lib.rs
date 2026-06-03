@@ -31,6 +31,7 @@ use commands::{
     import_all,
     import_sf2_workbook,
     last_event_for_student,
+    list_attendance_audit,
     // Class commands
     list_classes,
     // Event commands
@@ -42,6 +43,7 @@ use commands::{
     save_settings,
     set_sf2_preview_attendance,
     update_class,
+    update_event,
     update_sf2_workbook_settings,
     update_student,
     wipe_all,
@@ -71,7 +73,9 @@ pub fn run() {
             list_events_for_student,
             last_event_for_student,
             add_event,
+            update_event,
             delete_event,
+            list_attendance_audit,
             // Settings commands
             get_settings,
             save_settings,

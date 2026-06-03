@@ -168,10 +168,41 @@ pub fn add_event(
 pub fn delete_event(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
     id: String,
+    reason: Option<String>,
 ) -> std::result::Result<(), String> {
     let event_id = EventId(uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?);
     let repo = EventRepository::new(pool.inner().clone());
-    repo.delete(event_id).map_err(|e| e.to_string())
+    repo.delete(event_id, reason).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_event(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    id: String,
+    req: UpdateEventRequest,
+) -> std::result::Result<AttendanceEvent, String> {
+    let event_id = EventId(uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?);
+    let repo = EventRepository::new(pool.inner().clone());
+    repo.update(event_id, req).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_attendance_audit(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    event_id: Option<String>,
+    student_id: Option<String>,
+) -> std::result::Result<Vec<AttendanceAuditEntry>, String> {
+    let event_id = event_id
+        .map(|id| uuid::Uuid::parse_str(&id).map(EventId))
+        .transpose()
+        .map_err(|e| e.to_string())?;
+    let student_id = student_id
+        .map(|id| uuid::Uuid::parse_str(&id).map(StudentId))
+        .transpose()
+        .map_err(|e| e.to_string())?;
+    let repo = EventRepository::new(pool.inner().clone());
+    repo.list_audit(event_id, student_id)
+        .map_err(|e| e.to_string())
 }
 
 // ── Settings Commands ───────────────────────────────────────────────────────
@@ -284,16 +315,33 @@ pub fn import_all(
     }
 
     for event in payload.events {
+        let session_key = event.session_key.clone().unwrap_or_else(|| {
+            let local_date = event
+                .timestamp
+                .with_timezone(&chrono::Local)
+                .format("%Y-%m-%d");
+            let class_key = event
+                .class_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or("unassigned");
+            format!("{local_date}|{class_key}|day")
+        });
+
         transaction
             .execute(
-                "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                  ON CONFLICT(id) DO UPDATE SET
                     student_id = excluded.student_id,
                     class_id = excluded.class_id,
                     event_type = excluded.event_type,
                     timestamp = excluded.timestamp,
-                    note = excluded.note",
+                    note = excluded.note,
+                    session_key = excluded.session_key,
+                    override_reason = excluded.override_reason,
+                    updated_at = excluded.updated_at",
                 params![
                     event.id.0.to_string(),
                     event.student_id.0.to_string(),
@@ -301,6 +349,9 @@ pub fn import_all(
                     "in",
                     event.timestamp.timestamp(),
                     event.note,
+                    session_key,
+                    event.override_reason,
+                    event.updated_at.map(|timestamp| timestamp.timestamp()),
                 ],
             )
             .map_err(|e| e.to_string())?;
@@ -376,6 +427,9 @@ pub fn wipe_all(
     let transaction = conn.transaction().map_err(|e| e.to_string())?;
 
     // Clear all tables
+    transaction
+        .execute("DELETE FROM attendance_event_audit", [])
+        .map_err(|e| e.to_string())?;
     transaction
         .execute("DELETE FROM sf2_student_mappings", [])
         .map_err(|e| e.to_string())?;

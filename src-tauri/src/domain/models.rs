@@ -182,6 +182,34 @@ pub struct AttendanceEvent {
     pub timestamp: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub override_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// Audit entry for attendance event override, edit, and delete actions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttendanceAuditEntry {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_id: Option<EventId>,
+    pub student_id: StudentId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub class_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_key: Option<String>,
+    pub action: String,
+    pub reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before_json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after_json: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub actor: String,
 }
 
 /// Application settings
@@ -312,6 +340,27 @@ pub struct CreateEventRequest {
     pub event_type: AttendanceType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub override_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<DateTime<Utc>>,
+}
+
+/// Request to update an attendance event
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateEventRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub class_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<DateTime<Utc>>,
+    pub reason: String,
 }
 
 /// Export data structure
