@@ -22,6 +22,7 @@
 		type Sf2TemplateDraft,
 		type Sf2WorkbookSettings
 	} from '$lib/db-rust';
+	import type { Sf2PreviewDate } from '$lib/types';
 	import { SF2_SCHOOL_MONTHS, sf2ReportMonthLabel } from '$lib/sf2-settings';
 	import {
 		AlertTriangle,
@@ -61,6 +62,12 @@
 	let draftAdviserName = $state('');
 	let draftSchoolHeadName = $state('');
 
+	type MatrixWeekGroup = {
+		key: string;
+		label: string;
+		dates: Sf2PreviewDate[];
+	};
+
 	onMount(async () => {
 		await loadInitial();
 	});
@@ -74,6 +81,7 @@
 	const exportDisabled = $derived(!preview?.canExport || exporting || !activeClassId);
 	const issueCount = $derived(preview?.issues.length ?? 0);
 	const warningCount = $derived(preview?.warnings.length ?? 0);
+	const matrixWeekGroups = $derived(buildMatrixWeekGroups(preview?.dates ?? []));
 
 	async function loadInitial() {
 		loading = true;
@@ -273,6 +281,63 @@
 		return value.toLocaleDateString(undefined, { weekday: 'short' });
 	}
 
+	function formatDayNumber(date: string) {
+		const value = new Date(`${date}T00:00:00`);
+		return String(value.getDate());
+	}
+
+	function matrixDateLabel(date: string) {
+		return `${formatWeekday(date)} ${formatDayNumber(date)}`;
+	}
+
+	function buildMatrixWeekGroups(dates: Sf2PreviewDate[]): MatrixWeekGroup[] {
+		const groups: MatrixWeekGroup[] = [];
+
+		for (const date of dates) {
+			const key = mondayDateKey(date.date);
+			let group = groups.find((item) => item.key === key);
+
+			if (!group) {
+				group = {
+					key,
+					label: `Week ${groups.length + 1}`,
+					dates: []
+				};
+				groups.push(group);
+			}
+
+			group.dates.push(date);
+		}
+
+		return groups;
+	}
+
+	function mondayDateKey(date: string) {
+		const [year, month, day] = date.split('-').map(Number);
+		const value = new Date(year, month - 1, day);
+		const weekday = value.getDay();
+		const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+		return localDateKey(new Date(year, month - 1, day + mondayOffset));
+	}
+
+	function localDateKey(date: Date) {
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		return `${year}-${month}-${day}`;
+	}
+
+	function weekRangeLabel(group: MatrixWeekGroup) {
+		const first = group.dates[0];
+		const last = group.dates.at(-1);
+		if (!first || !last) return 'Mon-Fri';
+		if (first.date === last.date) return matrixDateLabel(first.date);
+
+		return `${formatWeekday(first.date)}-${formatWeekday(last.date)} / ${formatDayNumber(
+			first.date
+		)}-${formatDayNumber(last.date)}`;
+	}
+
 	function formatImportedAt(value?: number) {
 		if (!value) return 'Not imported';
 		return new Date(value * 1000).toLocaleDateString(undefined, {
@@ -289,7 +354,11 @@
 	function cellLabel(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
 		const state =
 			cell.status === 'present' ? 'present' : cell.status === 'absent' ? 'absent' : 'not closed';
-		return `${row.studentName}, ${formatDate(cell.date)}: ${state}`;
+		return `${row.studentName}, ${matrixDateLabel(cell.date)}: ${state}`;
+	}
+
+	function cellForDate(row: Sf2PreviewStudentRow, date: string) {
+		return row.cells.find((cell) => cell.date === date);
 	}
 
 	function cellClass(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
@@ -519,20 +588,44 @@
 								<thead>
 									<tr>
 										<th
-											class="sticky top-0 left-0 z-20 w-72 min-w-72 border-r border-b border-border bg-card px-4 py-3 text-left"
+											rowspan="2"
+											class="sticky top-0 left-0 z-30 w-72 min-w-72 border-r border-b border-border bg-card px-4 py-3 text-left align-middle"
 										>
 											Learner
 										</th>
-										{#each preview.dates as date (date.date)}
+										{#each matrixWeekGroups as week (week.key)}
 											<th
-												class="sticky top-0 z-10 min-w-14 border-b border-border bg-card px-2 py-2 text-center"
-												title={`${date.sheetName} ${date.columnLetter}${date.columnIndex}`}
+												colspan={week.dates.length}
+												class="sticky top-0 z-20 border-b border-l-2 border-border border-l-primary/45 bg-orange-50 px-2 py-2 text-center"
+												title={weekRangeLabel(week)}
 											>
-												<div class="font-mono text-[11px] font-bold">{formatDate(date.date)}</div>
-												<div class="mt-0.5 text-[10px] text-muted-foreground">
-													{formatWeekday(date.date)}
+												<div class="label-mono text-primary">{week.label}</div>
+												<div class="mt-0.5 font-mono text-[10px] font-medium text-muted-foreground">
+													{weekRangeLabel(week)}
 												</div>
 											</th>
+										{/each}
+									</tr>
+									<tr>
+										{#each matrixWeekGroups as week (week.key)}
+											{#each week.dates as date, dateIndex (date.date)}
+												<th
+													class="sticky top-[43px] z-10 min-w-14 border-b border-border bg-card px-2 py-2 text-center {dateIndex ===
+													0
+														? 'border-l-2 border-l-primary/45'
+														: 'border-l border-l-border/60'}"
+													title={`${matrixDateLabel(date.date)} ${date.columnLetter}${date.columnIndex}`}
+												>
+													<div class="font-mono text-sm leading-none font-bold">
+														{formatDayNumber(date.date)}
+													</div>
+													<div
+														class="mt-1 font-mono text-[10px] font-semibold text-muted-foreground"
+													>
+														{formatWeekday(date.date)}
+													</div>
+												</th>
+											{/each}
 										{/each}
 									</tr>
 								</thead>
@@ -561,30 +654,48 @@
 													{/if}
 												</div>
 											</th>
-											{#each row.cells as cell (cell.date)}
-												<td class="border-b border-border/80 px-1.5 py-1.5 text-center">
-													<button
-														type="button"
-														disabled={!cell.editable || !row.mapped || correctingCellKey !== null}
-														onclick={() => toggleAttendance(row, cell)}
-														aria-label={cellLabel(row, cell)}
-														title={cellLabel(row, cell)}
-														class="control-ring inline-grid size-9 place-items-center rounded-md border text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-70 {cellClass(
-															row,
-															cell
-														)}"
+											{#each matrixWeekGroups as week (week.key)}
+												{#each week.dates as date, dateIndex (date.date)}
+													{@const cell = cellForDate(row, date.date)}
+													<td
+														class="border-b border-border/80 px-1.5 py-1.5 text-center {dateIndex ===
+														0
+															? 'border-l-2 border-l-primary/30 bg-primary/5'
+															: 'border-l border-l-border/40'}"
 													>
-														{#if correctingCellKey === cellKey(row.studentId, cell.date)}
-															<span class="font-mono text-[10px]">...</span>
-														{:else if cell.status === 'present'}
-															<Check class="size-4" aria-hidden="true" />
-														{:else if cell.status === 'absent'}
-															<X class="size-4" aria-hidden="true" />
+														{#if cell}
+															<button
+																type="button"
+																disabled={!cell.editable ||
+																	!row.mapped ||
+																	correctingCellKey !== null}
+																onclick={() => toggleAttendance(row, cell)}
+																aria-label={cellLabel(row, cell)}
+																title={cellLabel(row, cell)}
+																class="control-ring inline-grid size-9 place-items-center rounded-md border text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-70 {cellClass(
+																	row,
+																	cell
+																)}"
+															>
+																{#if correctingCellKey === cellKey(row.studentId, cell.date)}
+																	<span class="font-mono text-[10px]">...</span>
+																{:else if cell.status === 'present'}
+																	<Check class="size-4" aria-hidden="true" />
+																{:else if cell.status === 'absent'}
+																	<X class="size-4" aria-hidden="true" />
+																{:else}
+																	<span aria-hidden="true">-</span>
+																{/if}
+															</button>
 														{:else}
-															<span aria-hidden="true">-</span>
+															<span
+																class="inline-grid size-9 place-items-center text-muted-foreground"
+															>
+																-
+															</span>
 														{/if}
-													</button>
-												</td>
+													</td>
+												{/each}
 											{/each}
 										</tr>
 									{/each}
