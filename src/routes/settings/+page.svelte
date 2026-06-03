@@ -897,10 +897,7 @@
 								class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 							>
 								{#if sf2TemplateCreating}
-									<span
-										class="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary"
-										aria-hidden="true"
-									></span>
+									<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
 								{:else}
 									<svg
 										class="size-4"
@@ -925,10 +922,7 @@
 								class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 							>
 								{#if sf2Importing}
-									<span
-										class="size-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground"
-										aria-hidden="true"
-									></span>
+									<span class="size-2 rounded-full bg-primary-foreground" aria-hidden="true"></span>
 								{:else}
 									<svg
 										class="size-4"
@@ -954,6 +948,7 @@
 						active={sf2Importing}
 						title="Importing SF2 workbook"
 						description="Reading the Excel form, matching learners, and preparing the working copy."
+						simple
 					/>
 
 					{#if sf2ImportSummary}
@@ -1177,6 +1172,7 @@
 			active={sf2TemplateCreating || sf2SettingsSaving}
 			title={sf2TemplateProgressTitle}
 			description={sf2TemplateProgressDescription}
+			simple
 		/>
 
 		<div class="grid gap-4 sm:grid-cols-2">
@@ -1331,13 +1327,13 @@
 			>
 				{#if sf2TemplateCreating}
 					<span
-						class="mr-2 inline-block size-3 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground align-[-2px]"
+						class="mr-2 inline-block size-2 rounded-full bg-primary-foreground align-[1px]"
 						aria-hidden="true"
 					></span>
 					Creating...
 				{:else if sf2SettingsSaving}
 					<span
-						class="mr-2 inline-block size-3 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground align-[-2px]"
+						class="mr-2 inline-block size-2 rounded-full bg-primary-foreground align-[1px]"
 						aria-hidden="true"
 					></span>
 					Saving...
