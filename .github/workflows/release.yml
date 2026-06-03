@@ -1,0 +1,82 @@
+name: Release Desktop App
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'app-v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-windows:
+    name: Release Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check frontend
+        run: bun run check && bun run lint && bun run typecheck
+
+      - name: Check Rust formatting
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      - name: Check Rust
+        working-directory: src-tauri
+        run: cargo check
+
+      - name: Lint Rust
+        working-directory: src-tauri
+        run: cargo clippy
+
+      - name: Verify updater signing secret
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            throw "Missing TAURI_SIGNING_PRIVATE_KEY. Generate a Tauri updater key and save the private key content as a GitHub Actions secret."
+          }
+
+      - name: Build signed Windows release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: app-v__VERSION__
+          releaseName: EES-AMS v__VERSION__
+          releaseBody: Signed Windows installer and updater manifest. Download EES-AMS_windows-setup.exe to install.
+          releaseDraft: false
+          prerelease: false
+          tauriScript: bun run tauri
+          assetNamePattern: EES-AMS_[platform][setup].[ext]
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true

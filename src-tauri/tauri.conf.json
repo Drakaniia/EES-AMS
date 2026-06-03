@@ -28,15 +28,17 @@
 	},
 	"plugins": {
 		"updater": {
-			"active": false,
 			"endpoints": ["https://github.com/Drakaniia/EES-AMS/releases/latest/download/latest.json"],
-			"dialog": false,
-			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU5QjE4QjZGMEU3NjU4QzQKUldSWkVWbE0vVVNITjJQK3JwV3ZVY3FQb1pqa3dQcEJQV0JqYVVRQ0pJd2EvUjJGQlJkQ2cK"
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU5QjE4QjZGMEU3NjU4QzQKUldSWkVWbE0vVVNITjJQK3JwV3ZVY3FQb1pqa3dQcEJQV0JqYVVRQ0pJd2EvUjJGQlJkQ2cK",
+			"windows": {
+				"installMode": "passive"
+			}
 		}
 	},
 	"bundle": {
 		"active": true,
 		"targets": "all",
+		"createUpdaterArtifacts": true,
 		"icon": [
 			"icons/32x32.png",
 			"icons/128x128.png",
