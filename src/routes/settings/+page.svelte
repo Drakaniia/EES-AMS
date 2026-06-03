@@ -35,7 +35,6 @@
 		getSf2WorkbookSettings,
 		importSf2Workbook,
 		importAll,
-		openSf2Workbook,
 		updateSf2WorkbookSettings,
 		wipeAll,
 		type AttendanceMode,
@@ -137,8 +136,6 @@
 	let sf2Importing = $state(false);
 	let sf2TemplateCreating = $state(false);
 	let sf2TemplateClassId = $state('');
-	let sf2Opening = $state(false);
-	let sf2SettingsLoading = $state(false);
 	let sf2SettingsSaving = $state(false);
 	let sf2ImportSummary = $state<Sf2ImportSummary | null>(null);
 	let sf2TemplateDialogOpen = $state(false);
@@ -178,9 +175,6 @@
 		try {
 			const [c] = await Promise.all([listClasses(), settingsStore.load()]);
 			classes = c;
-			if (!sf2TemplateClassId && classes.length > 0) {
-				sf2TemplateClassId = classes[0].id;
-			}
 			if (settingsStore.settings) {
 				const loadedSettings = normalizeGlobalSettings(settingsStore.settings);
 				if (globalSettingsDirty) {
@@ -604,24 +598,6 @@
 		);
 	}
 
-	async function openSf2SettingsDialog() {
-		if (sf2SettingsLoading) return;
-		sf2SettingsLoading = true;
-
-		try {
-			const settings = await getSf2WorkbookSettings(sf2TemplateClassId);
-			sf2TemplateDialogMode = 'edit';
-			sf2TemplateDialogNotice = null;
-			populateSf2Draft(settings);
-			sf2TemplateDialogOpen = true;
-		} catch (error) {
-			const msg = errorMessage(error, 'SF2 settings failed');
-			toast(`SF2 settings failed: ${msg}`, false);
-		} finally {
-			sf2SettingsLoading = false;
-		}
-	}
-
 	function sf2DraftPayload(): Sf2TemplateDraft {
 		const firstSchoolDay = normalizedSf2FirstSchoolDay(
 			sf2DraftReportMonth,
@@ -675,21 +651,6 @@
 		} finally {
 			sf2TemplateCreating = false;
 			sf2SettingsSaving = false;
-		}
-	}
-
-	async function onOpenSf2() {
-		if (sf2Opening) return;
-		sf2Opening = true;
-
-		try {
-			const path = await openSf2Workbook(sf2ImportSummary?.classId || sf2TemplateClassId);
-			toast(`Opened SF2 workbook: ${path}`);
-		} catch (error) {
-			const msg = errorMessage(error, 'Open SF2 failed');
-			toast(`Open SF2 failed: ${msg}`, false);
-		} finally {
-			sf2Opening = false;
 		}
 	}
 
@@ -930,17 +891,6 @@
 							</p>
 						</div>
 						<div class="flex flex-wrap gap-2">
-							<select
-								aria-label="Class for SF2 template"
-								bind:value={sf2TemplateClassId}
-								disabled={classes.length === 0 || sf2TemplateCreating || sf2SettingsSaving}
-								class="h-10 min-w-52 rounded-pill border border-border bg-background px-4 text-sm focus:ring-2 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								<option value="">Select class</option>
-								{#each classes as item (item.id)}
-									<option value={item.id}>{item.name}</option>
-								{/each}
-							</select>
 							<button
 								onclick={openSf2TemplateDialog}
 								disabled={sf2TemplateCreating || sf2SettingsSaving}
@@ -970,25 +920,6 @@
 								{sf2TemplateCreating ? 'Creating...' : 'Create From Template'}
 							</button>
 							<button
-								onclick={openSf2SettingsDialog}
-								disabled={sf2SettingsLoading || !sf2TemplateClassId}
-								class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								<svg
-									class="size-4"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<path d="M12 20h9" />
-									<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-								</svg>
-								{sf2SettingsLoading ? 'Loading...' : 'Edit SF2 Workbook'}
-							</button>
-							<button
 								onclick={onImportSf2}
 								disabled={sf2Importing}
 								class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
@@ -1015,26 +946,6 @@
 									</svg>
 								{/if}
 								{sf2Importing ? 'Importing...' : 'Import SF2'}
-							</button>
-							<button
-								onclick={onOpenSf2}
-								disabled={sf2Opening}
-								class="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								<svg
-									class="size-4"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-									<polyline points="15 3 21 3 21 9" />
-									<line x1="10" y1="14" x2="21" y2="3" />
-								</svg>
-								{sf2Opening ? 'Opening...' : 'Open Edited SF2'}
 							</button>
 						</div>
 					</div>
@@ -1244,7 +1155,7 @@
 		? 'Update SF2 Settings'
 		: sf2TemplateDialogMode === 'create'
 			? 'Create SF2 Workbook'
-			: 'Edit SF2 Workbook'}
+			: 'Update SF2 Settings'}
 	description={sf2TemplateDialogNotice
 		? 'Review the imported workbook details before using this SF2 copy.'
 		: sf2TemplateDialogMode === 'create'
