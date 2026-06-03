@@ -1202,18 +1202,8 @@ fn sf2_month_name(month: u32) -> &'static str {
     }
 }
 
-fn sf2_report_year(school_year: &str, month: u32) -> i32 {
-    let years = school_year
-        .split(|ch: char| !ch.is_ascii_digit())
-        .filter(|part| part.len() == 4 && part.starts_with("20"))
-        .filter_map(|part| part.parse::<i32>().ok())
-        .collect::<Vec<_>>();
-
-    match years.as_slice() {
-        [start, _, ..] if month >= 6 => *start,
-        [_, end, ..] => *end,
-        _ => Local::now().year(),
-    }
+fn sf2_report_year(_school_year: &str, _month: u32) -> i32 {
+    Local::now().year()
 }
 
 fn last_day_of_month(year: i32, month: u32) -> u32 {
@@ -1247,10 +1237,28 @@ fn sf2_date_mappings_for_report_month(
     template: &Sf2TemplateRecord,
     date_mappings: &[Sf2DateMappingRecord],
 ) -> Vec<Sf2DateMappingRecord> {
+    let Some(month) = sf2_month_number(&template.report_month) else {
+        return Vec::new();
+    };
+    let year = sf2_report_year(&template.school_year, month);
+
     date_mappings
         .iter()
-        .filter(|mapping| sf2_is_report_month_date(template, &mapping.date))
-        .cloned()
+        .filter_map(|mapping| {
+            let date = parse_date(&mapping.date).ok()?;
+            if date.month() != month {
+                return None;
+            }
+
+            let normalized_date = NaiveDate::from_ymd_opt(year, month, date.day())?;
+            Some(Sf2DateMappingRecord {
+                template_id: mapping.template_id.clone(),
+                sheet_name: mapping.sheet_name.clone(),
+                date: normalized_date.format("%Y-%m-%d").to_string(),
+                column_letter: mapping.column_letter.clone(),
+                column_index: mapping.column_index,
+            })
+        })
         .collect()
 }
 
@@ -2144,6 +2152,11 @@ mod tests {
         let temp_db = tempfile::NamedTempFile::new().expect("test database should be created");
         let workbook = tempfile::NamedTempFile::new().expect("workbook file should be created");
         let pool = crate::infrastructure::init_db(temp_db.path()).expect("database should init");
+        let current_year = Local::now().year();
+        let stale_year = current_year - 1;
+        let current_june_day = format!("{current_year}-06-08");
+        let stale_june_day = format!("{stale_year}-06-08");
+        let stale_july_day = format!("{stale_year}-07-01");
         let class = ClassRepository::new(pool.clone())
             .create(CreateClassRequest {
                 name: "7 - Rose".to_string(),
@@ -2179,7 +2192,7 @@ mod tests {
             source_hash: "preview-hash".to_string(),
             school_id: "123456".to_string(),
             school_name: "Sample Integrated School".to_string(),
-            school_year: "2026-2027".to_string(),
+            school_year: format!("{stale_year}-{current_year}"),
             report_month: "JUNE".to_string(),
             grade_level: "7".to_string(),
             section: "Rose".to_string(),
@@ -2200,15 +2213,15 @@ mod tests {
         let date_mappings = vec![
             Sf2DateMappingRecord {
                 template_id: template.id.clone(),
-                sheet_name: "JUNE 2026".to_string(),
-                date: "2026-06-08".to_string(),
+                sheet_name: format!("JUNE {stale_year}"),
+                date: stale_june_day,
                 column_letter: "F".to_string(),
                 column_index: 6,
             },
             Sf2DateMappingRecord {
                 template_id: template.id.clone(),
-                sheet_name: "JULY 2026".to_string(),
-                date: "2026-07-01".to_string(),
+                sheet_name: format!("JULY {stale_year}"),
+                date: stale_july_day,
                 column_letter: "F".to_string(),
                 column_index: 6,
             },
@@ -2218,24 +2231,24 @@ mod tests {
             .upsert_template_with_mappings(&template, &[student_mapping], &date_mappings)
             .expect("template mappings should save");
         sf2_repo
-            .close_day(&class.id, "2026-06-08", 0)
+            .close_day(&class.id, &current_june_day, 0)
             .expect("closed day should save");
         sf2_repo
-            .close_day(&class.id, "2026-07-01", 0)
+            .close_day(&class.id, &format!("{current_year}-07-01"), 0)
             .expect("future month closed day should save");
 
         let preview = export_preview(pool, Some(class.id)).expect("preview should be generated");
 
         assert!(preview.can_export);
         assert_eq!(preview.mapped_dates, 1);
-        assert_eq!(preview.closed_days, vec!["2026-06-08".to_string()]);
+        assert_eq!(preview.closed_days, vec![current_june_day.clone()]);
         assert_eq!(
             preview
                 .dates
                 .iter()
                 .map(|date| date.date.as_str())
                 .collect::<Vec<_>>(),
-            vec!["2026-06-08"]
+            vec![current_june_day.as_str()]
         );
         assert_eq!(preview.absence_count, 1);
         assert_eq!(preview.absent_list.len(), 1);
