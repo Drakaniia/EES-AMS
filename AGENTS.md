@@ -66,8 +66,9 @@ cd src-tauri && cargo check && cargo clippy
 
 ## SF2 Monthly Report Rules
 
-- SF2 report preview/export is monthly: the class-day matrix must only show and export dates matching the saved `Report for the Month of` header and school year.
+- SF2 report preview/export is monthly: the class-day matrix must only show and export dates matching the saved `Report for the Month of` header in the real current calendar year.
 - Do not include workbook dates from future or other months in the SF2 Reports page.
+- SF2 weekday/date layout must follow the real current calendar year for the report month, not the School Year input.
 - Verify behavior when refreshing to a new day.
 - Ensure attendance records are maintained until the end of the month.
 - Dashboard should show who is absent and the present/absent student counts.
