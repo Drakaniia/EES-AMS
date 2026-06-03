@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import logo from '$lib/assets/logo-seal.png';
 	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { fade } from 'svelte/transition';
 	import {
 		FileSpreadsheet,
 		FileText,
@@ -106,7 +107,7 @@
 										: 'border-transparent text-muted-foreground hover:bg-surface/80 hover:text-foreground'}"
 								>
 									<span
-										class="grid size-7 shrink-0 place-items-center rounded-md {active
+										class="grid size-7 shrink-0 place-items-center rounded-md transition-colors {active
 											? 'bg-primary text-primary-foreground'
 											: 'bg-surface text-muted-foreground group-hover:text-foreground'}"
 									>
@@ -125,6 +126,10 @@
 	</aside>
 
 	<main id="main-content" class="min-h-0 min-w-0 flex-1 overflow-auto" tabindex="-1">
-		{@render children()}
+		{#key page.url.pathname}
+			<div class="h-full min-h-0" in:fade={{ duration: 180 }} out:fade={{ duration: 140 }}>
+				{@render children()}
+			</div>
+		{/key}
 	</main>
 </div>

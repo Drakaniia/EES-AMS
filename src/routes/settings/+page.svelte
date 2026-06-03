@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
@@ -688,416 +687,412 @@
 	<meta name="description" content="Manage your classes and system configuration." />
 </svelte:head>
 
-<AppShell>
-	<PageHeader
-		category="Settings"
-		title="System Configuration"
-		description="Manage your class schedule and system-wide attendance rules."
-	/>
+<PageHeader
+	category="Settings"
+	title="System Configuration"
+	description="Manage your class schedule and system-wide attendance rules."
+/>
 
-	{#if settingsStore.loading}
-		<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading…</div>
-	{:else if settingsStore.error}
-		<div class="px-6 py-12 text-sm text-destructive md:px-12">
-			Error: {settingsStore.error}
-			<button onclick={reload} class="ml-2 underline">Retry</button>
-		</div>
-	{:else}
-		<div class="grid gap-6 px-6 py-6 md:px-12 lg:grid-cols-12">
-			<!-- ── Class Management ────────────────────────────────────────── -->
-			<div class="space-y-6 lg:col-span-8">
-				<section class="overflow-hidden rounded-2xl border border-border bg-card">
-					<div class="flex items-center justify-between p-6 pb-4">
-						<h3 class="text-lg font-medium">Classes & Schedule</h3>
-						<button
-							onclick={openAddClass}
-							class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+{#if settingsStore.loading}
+	<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading…</div>
+{:else if settingsStore.error}
+	<div class="px-6 py-12 text-sm text-destructive md:px-12">
+		Error: {settingsStore.error}
+		<button onclick={reload} class="ml-2 underline">Retry</button>
+	</div>
+{:else}
+	<div class="grid gap-6 px-6 py-6 md:px-12 lg:grid-cols-12">
+		<!-- ── Class Management ────────────────────────────────────────── -->
+		<div class="space-y-6 lg:col-span-8">
+			<section class="overflow-hidden rounded-2xl border border-border bg-card">
+				<div class="flex items-center justify-between p-6 pb-4">
+					<h3 class="text-lg font-medium">Classes & Schedule</h3>
+					<button
+						onclick={openAddClass}
+						class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+					>
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
 						>
-							<svg
-								class="size-4"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<path d="M12 5v14M5 12h14" />
-							</svg>
-							Add Class
-						</button>
-					</div>
+							<path d="M12 5v14M5 12h14" />
+						</svg>
+						Add Class
+					</button>
+				</div>
 
-					<div class="divide-y divide-border border-t border-border pt-5">
-						{#if classes.length === 0}
-							<div class="p-12 text-center text-sm text-muted-foreground">
-								No classes configured. Add a class to start tracking attendance.
-							</div>
-						{:else}
-							{#each classes as c (c.id)}
-								<div
-									class="flex items-center justify-between p-6 transition-colors hover:bg-surface"
-								>
-									<div class="space-y-1">
-										<div class="flex items-center gap-3">
-											<div class="font-medium">{c.name}</div>
-											{#if c.days}
-												<span
-													class="rounded-md bg-accent/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-accent uppercase"
-												>
-													{getDaysLabel(c.days)}
+				<div class="divide-y divide-border border-t border-border pt-5">
+					{#if classes.length === 0}
+						<div class="p-12 text-center text-sm text-muted-foreground">
+							No classes configured. Add a class to start tracking attendance.
+						</div>
+					{:else}
+						{#each classes as c (c.id)}
+							<div class="flex items-center justify-between p-6 transition-colors hover:bg-surface">
+								<div class="space-y-1">
+									<div class="flex items-center gap-3">
+										<div class="font-medium">{c.name}</div>
+										{#if c.days}
+											<span
+												class="rounded-md bg-accent/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-accent uppercase"
+											>
+												{getDaysLabel(c.days)}
+											</span>
+										{/if}
+									</div>
+									<div
+										class="label-mono flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
+									>
+										{#if c.room}
+											<span>Room {c.room}</span>
+										{/if}
+										{#if c.sessions && c.sessions.length > 0}
+											{#each c.sessions as s (s.name)}
+												<span class="inline-flex items-center gap-1">
+													<span class="font-medium text-foreground">{s.name}:</span>
+													{s.startTime}–{s.endTime}
 												</span>
-											{/if}
-										</div>
-										<div
-											class="label-mono flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
-										>
-											{#if c.room}
-												<span>Room {c.room}</span>
-											{/if}
-											{#if c.sessions && c.sessions.length > 0}
-												{#each c.sessions as s (s.name)}
-													<span class="inline-flex items-center gap-1">
-														<span class="font-medium text-foreground">{s.name}:</span>
-														{s.startTime}–{s.endTime}
-													</span>
-												{/each}
-											{:else}
-												<span>{c.dayStart} – {c.dayEnd}</span>
-												<span class="text-accent">Late after {c.lateAfter}</span>
-											{/if}
-										</div>
-									</div>
-									<div class="flex gap-2">
-										<button
-											onclick={() => openEditClass(c)}
-											class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
-											title="Edit class"
-										>
-											<svg
-												class="size-4"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-											>
-												<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-												<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-											</svg>
-										</button>
-										<button
-											onclick={(event) => onDeleteClass(event, c.id)}
-											class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
-											title="Delete class"
-										>
-											<svg
-												class="size-4"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-											>
-												<polyline points="3 6 5 6 21 6" />
-												<path
-													d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
-												/>
-											</svg>
-										</button>
+											{/each}
+										{:else}
+											<span>{c.dayStart} – {c.dayEnd}</span>
+											<span class="text-accent">Late after {c.lateAfter}</span>
+										{/if}
 									</div>
 								</div>
-							{/each}
-						{/if}
-					</div>
-				</section>
-
-				<!-- ── Backups ───────────────────────────────────────────────────── -->
-				<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
-					<h3 class="text-lg font-medium">Data Management</h3>
-					<p class="text-sm text-muted-foreground">
-						Your data is stored locally. Backups include the student list, attendance records,
-						classes, and system configuration.
-					</p>
-
-					<div class="flex flex-wrap gap-2">
-						<button
-							onclick={openExportDialog}
-							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
-						>
-							<svg
-								class="size-4"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-								<polyline points="7 10 12 15 17 10" />
-								<line x1="12" y1="15" x2="12" y2="3" />
-							</svg>
-							Export Data
-						</button>
-
-						<button
-							onclick={() => fileInput?.click()}
-							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
-						>
-							<svg
-								class="size-4"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-								<polyline points="17 8 12 3 7 8" />
-								<line x1="12" y1="3" x2="12" y2="15" />
-							</svg>
-							Import Backup
-						</button>
-						<input
-							bind:this={fileInput}
-							type="file"
-							accept="application/json"
-							class="hidden"
-							onchange={handleFileChange}
-						/>
-					</div>
-
-					<div class="space-y-3 border-t border-border pt-5">
-						<button
-							onclick={onWipe}
-							class="inline-flex items-center gap-2 rounded-pill border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
-						>
-							Wipe all data
-						</button>
-					</div>
-				</section>
-
-				<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
-					<div class="flex flex-wrap items-start justify-between gap-4">
-						<div>
-							<h3 class="text-lg font-medium">SF2 Workbook</h3>
-							<p class="mt-1 text-sm text-muted-foreground">
-								Import the official SF2 .xls form, or create a first-month working copy from the
-								bundled template.
-							</p>
-						</div>
-						<div class="flex flex-wrap gap-2">
-							<button
-								onclick={openSf2TemplateDialog}
-								disabled={sf2TemplateCreating || sf2SettingsSaving}
-								class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								{#if sf2TemplateCreating}
-									<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-								{:else}
-									<svg
-										class="size-4"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
+								<div class="flex gap-2">
+									<button
+										onclick={() => openEditClass(c)}
+										class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
+										title="Edit class"
 									>
-										<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-										<polyline points="14 2 14 8 20 8" />
-										<path d="M12 11v6" />
-										<path d="M9 14h6" />
-									</svg>
-								{/if}
-								{sf2TemplateCreating ? 'Creating...' : 'Create From Template'}
-							</button>
-							<button
-								onclick={onImportSf2}
-								disabled={sf2Importing}
-								class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								{#if sf2Importing}
-									<span class="size-2 rounded-full bg-primary-foreground" aria-hidden="true"></span>
-								{:else}
-									<svg
-										class="size-4"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
+										<svg
+											class="size-4"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+											<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+										</svg>
+									</button>
+									<button
+										onclick={(event) => onDeleteClass(event, c.id)}
+										class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
+										title="Delete class"
 									>
-										<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-										<polyline points="14 2 14 8 20 8" />
-										<path d="M12 18v-6" />
-										<path d="m9 15 3 3 3-3" />
-									</svg>
-								{/if}
-								{sf2Importing ? 'Importing...' : 'Import SF2'}
-							</button>
-						</div>
-					</div>
-
-					<TaskProgress
-						active={sf2Importing}
-						title="Importing SF2 workbook"
-						description="Reading the Excel form, matching learners, and preparing the working copy."
-						simple
-					/>
-
-					{#if sf2ImportSummary}
-						<div class="space-y-4 border-t border-border pt-5">
-							<div class="grid gap-3 sm:grid-cols-4">
-								<div class="rounded-xl border border-border bg-surface p-4">
-									<div class="label-mono">Class</div>
-									<div class="mt-2 text-sm font-semibold">{sf2ImportSummary.className}</div>
-								</div>
-								<div class="rounded-xl border border-border bg-surface p-4">
-									<div class="label-mono">Learners</div>
-									<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.learnersFound}</div>
-								</div>
-								<div class="rounded-xl border border-border bg-surface p-4">
-									<div class="label-mono">Created</div>
-									<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.studentsCreated}</div>
-								</div>
-								<div class="rounded-xl border border-border bg-surface p-4">
-									<div class="label-mono">Dates</div>
-									<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.datesMapped}</div>
+										<svg
+											class="size-4"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<polyline points="3 6 5 6 21 6" />
+											<path
+												d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+											/>
+										</svg>
+									</button>
 								</div>
 							</div>
-							<div class="flex justify-end">
-								<button
-									onclick={startSf2Attendance}
-									class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
-								>
-									Start Attendance
-								</button>
-							</div>
-						</div>
+						{/each}
 					{/if}
-				</section>
-			</div>
+				</div>
+			</section>
 
-			<!-- ── Sidebar: Global Defaults ────────────────────────────────── -->
-			<div class="space-y-6 lg:col-span-4">
-				<form
-					onsubmit={onSaveGlobal}
-					onfocusout={handleGlobalSettingsFocusOut}
-					class="space-y-5 rounded-2xl border border-border bg-card p-6"
-				>
-					<div class="space-y-1">
-						<h3 class="text-lg font-medium">Global Configuration</h3>
-						<p class="text-xs text-muted-foreground">
-							Controls attendance flow and defaults for new classes.
+			<!-- ── Backups ───────────────────────────────────────────────────── -->
+			<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
+				<h3 class="text-lg font-medium">Data Management</h3>
+				<p class="text-sm text-muted-foreground">
+					Your data is stored locally. Backups include the student list, attendance records,
+					classes, and system configuration.
+				</p>
+
+				<div class="flex flex-wrap gap-2">
+					<button
+						onclick={openExportDialog}
+						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+					>
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+							<polyline points="7 10 12 15 17 10" />
+							<line x1="12" y1="15" x2="12" y2="3" />
+						</svg>
+						Export Data
+					</button>
+
+					<button
+						onclick={() => fileInput?.click()}
+						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+					>
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+							<polyline points="17 8 12 3 7 8" />
+							<line x1="12" y1="3" x2="12" y2="15" />
+						</svg>
+						Import Backup
+					</button>
+					<input
+						bind:this={fileInput}
+						type="file"
+						accept="application/json"
+						class="hidden"
+						onchange={handleFileChange}
+					/>
+				</div>
+
+				<div class="space-y-3 border-t border-border pt-5">
+					<button
+						onclick={onWipe}
+						class="inline-flex items-center gap-2 rounded-pill border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+					>
+						Wipe all data
+					</button>
+				</div>
+			</section>
+
+			<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
+				<div class="flex flex-wrap items-start justify-between gap-4">
+					<div>
+						<h3 class="text-lg font-medium">SF2 Workbook</h3>
+						<p class="mt-1 text-sm text-muted-foreground">
+							Import the official SF2 .xls form, or create a first-month working copy from the
+							bundled template.
 						</p>
 					</div>
-
-					<div class="space-y-4">
-						<fieldset class="space-y-2">
-							<legend class="label-mono">Attendance Type</legend>
-							<div class="grid gap-2 rounded-xl border border-border bg-surface p-1">
-								<button
-									type="button"
-									aria-pressed={attendanceMode === 'manual'}
-									onclick={() => (attendanceMode = 'manual')}
-									class="rounded-lg border px-3 py-3 text-left transition-colors {attendanceMode ===
-									'manual'
-										? 'border-primary bg-background shadow-sm'
-										: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
-								>
-									<span class="block text-sm font-semibold">Without card reader</span>
-									<span class="mt-1 block text-xs leading-5">
-										Name-only manual attendance for daily use.
-									</span>
-								</button>
-								<button
-									type="button"
-									aria-pressed={attendanceMode === 'card_reader'}
-									onclick={() => (attendanceMode = 'card_reader')}
-									class="rounded-lg border px-3 py-3 text-left transition-colors {attendanceMode ===
-									'card_reader'
-										? 'border-primary bg-background shadow-sm'
-										: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
-								>
-									<span class="block text-sm font-semibold">With card reader</span>
-									<span class="mt-1 block text-xs leading-5">
-										Live session optimized for ID card taps.
-									</span>
-								</button>
-							</div>
-						</fieldset>
-
-						<div class="space-y-2">
-							<label for="defDayStart" class="label-mono">Default Day Start</label>
-							<input
-								id="defDayStart"
-								type="time"
-								bind:value={defaultDayStart}
-								class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-							/>
-						</div>
-						<div class="space-y-2">
-							<label for="defDayEnd" class="label-mono">Default Day End</label>
-							<input
-								id="defDayEnd"
-								type="time"
-								bind:value={defaultDayEnd}
-								class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-							/>
-						</div>
-						<div class="space-y-2">
-							<label for="defLateAfter" class="label-mono">Default Late After</label>
-							<input
-								id="defLateAfter"
-								type="time"
-								bind:value={defaultLateAfter}
-								class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-							/>
-						</div>
-						<div class="space-y-2">
-							<label for="defQuarter" class="label-mono">Current Quarter</label>
-							<button
-								type="button"
-								onclick={() => (quarterDialogOpen = true)}
-								class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-sm transition-colors hover:bg-accent/50 focus:ring-2 focus:ring-primary focus:outline-none"
-							>
-								<span>{defaultQuarter}</span>
+					<div class="flex flex-wrap gap-2">
+						<button
+							onclick={openSf2TemplateDialog}
+							disabled={sf2TemplateCreating || sf2SettingsSaving}
+							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							{#if sf2TemplateCreating}
+								<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+							{:else}
 								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="16"
-									height="16"
+									class="size-4"
 									viewBox="0 0 24 24"
 									fill="none"
 									stroke="currentColor"
 									stroke-width="2"
 									stroke-linecap="round"
 									stroke-linejoin="round"
-									class="opacity-50"
 								>
-									<path d="m6 9 6 6 6-6" />
+									<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+									<polyline points="14 2 14 8 20 8" />
+									<path d="M12 11v6" />
+									<path d="M9 14h6" />
 								</svg>
+							{/if}
+							{sf2TemplateCreating ? 'Creating...' : 'Create From Template'}
+						</button>
+						<button
+							onclick={onImportSf2}
+							disabled={sf2Importing}
+							class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							{#if sf2Importing}
+								<span class="size-2 rounded-full bg-primary-foreground" aria-hidden="true"></span>
+							{:else}
+								<svg
+									class="size-4"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+									<polyline points="14 2 14 8 20 8" />
+									<path d="M12 18v-6" />
+									<path d="m9 15 3 3 3-3" />
+								</svg>
+							{/if}
+							{sf2Importing ? 'Importing...' : 'Import SF2'}
+						</button>
+					</div>
+				</div>
+
+				<TaskProgress
+					active={sf2Importing}
+					title="Importing SF2 workbook"
+					description="Reading the Excel form, matching learners, and preparing the working copy."
+					simple
+				/>
+
+				{#if sf2ImportSummary}
+					<div class="space-y-4 border-t border-border pt-5">
+						<div class="grid gap-3 sm:grid-cols-4">
+							<div class="rounded-xl border border-border bg-surface p-4">
+								<div class="label-mono">Class</div>
+								<div class="mt-2 text-sm font-semibold">{sf2ImportSummary.className}</div>
+							</div>
+							<div class="rounded-xl border border-border bg-surface p-4">
+								<div class="label-mono">Learners</div>
+								<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.learnersFound}</div>
+							</div>
+							<div class="rounded-xl border border-border bg-surface p-4">
+								<div class="label-mono">Created</div>
+								<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.studentsCreated}</div>
+							</div>
+							<div class="rounded-xl border border-border bg-surface p-4">
+								<div class="label-mono">Dates</div>
+								<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.datesMapped}</div>
+							</div>
+						</div>
+						<div class="flex justify-end">
+							<button
+								onclick={startSf2Attendance}
+								class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+							>
+								Start Attendance
 							</button>
 						</div>
 					</div>
-
-					<button
-						type="submit"
-						disabled={globalSettingsSaving}
-						class="w-full rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						{globalSettingsSaving ? 'Saving...' : 'Save Configuration'}
-					</button>
-				</form>
-			</div>
+				{/if}
+			</section>
 		</div>
-	{/if}
-</AppShell>
+
+		<!-- ── Sidebar: Global Defaults ────────────────────────────────── -->
+		<div class="space-y-6 lg:col-span-4">
+			<form
+				onsubmit={onSaveGlobal}
+				onfocusout={handleGlobalSettingsFocusOut}
+				class="space-y-5 rounded-2xl border border-border bg-card p-6"
+			>
+				<div class="space-y-1">
+					<h3 class="text-lg font-medium">Global Configuration</h3>
+					<p class="text-xs text-muted-foreground">
+						Controls attendance flow and defaults for new classes.
+					</p>
+				</div>
+
+				<div class="space-y-4">
+					<fieldset class="space-y-2">
+						<legend class="label-mono">Attendance Type</legend>
+						<div class="grid gap-2 rounded-xl border border-border bg-surface p-1">
+							<button
+								type="button"
+								aria-pressed={attendanceMode === 'manual'}
+								onclick={() => (attendanceMode = 'manual')}
+								class="rounded-lg border px-3 py-3 text-left transition-colors {attendanceMode ===
+								'manual'
+									? 'border-primary bg-background shadow-sm'
+									: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
+							>
+								<span class="block text-sm font-semibold">Without card reader</span>
+								<span class="mt-1 block text-xs leading-5">
+									Name-only manual attendance for daily use.
+								</span>
+							</button>
+							<button
+								type="button"
+								aria-pressed={attendanceMode === 'card_reader'}
+								onclick={() => (attendanceMode = 'card_reader')}
+								class="rounded-lg border px-3 py-3 text-left transition-colors {attendanceMode ===
+								'card_reader'
+									? 'border-primary bg-background shadow-sm'
+									: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
+							>
+								<span class="block text-sm font-semibold">With card reader</span>
+								<span class="mt-1 block text-xs leading-5">
+									Live session optimized for ID card taps.
+								</span>
+							</button>
+						</div>
+					</fieldset>
+
+					<div class="space-y-2">
+						<label for="defDayStart" class="label-mono">Default Day Start</label>
+						<input
+							id="defDayStart"
+							type="time"
+							bind:value={defaultDayStart}
+							class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+						/>
+					</div>
+					<div class="space-y-2">
+						<label for="defDayEnd" class="label-mono">Default Day End</label>
+						<input
+							id="defDayEnd"
+							type="time"
+							bind:value={defaultDayEnd}
+							class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+						/>
+					</div>
+					<div class="space-y-2">
+						<label for="defLateAfter" class="label-mono">Default Late After</label>
+						<input
+							id="defLateAfter"
+							type="time"
+							bind:value={defaultLateAfter}
+							class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+						/>
+					</div>
+					<div class="space-y-2">
+						<label for="defQuarter" class="label-mono">Current Quarter</label>
+						<button
+							type="button"
+							onclick={() => (quarterDialogOpen = true)}
+							class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-sm transition-colors hover:bg-accent/50 focus:ring-2 focus:ring-primary focus:outline-none"
+						>
+							<span>{defaultQuarter}</span>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								class="opacity-50"
+							>
+								<path d="m6 9 6 6 6-6" />
+							</svg>
+						</button>
+					</div>
+				</div>
+
+				<button
+					type="submit"
+					disabled={globalSettingsSaving}
+					class="w-full rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					{globalSettingsSaving ? 'Saving...' : 'Save Configuration'}
+				</button>
+			</form>
+		</div>
+	</div>
+{/if}
 
 <Dialog
 	open={unsavedGlobalDialogOpen}

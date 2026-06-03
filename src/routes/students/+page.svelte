@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
@@ -381,323 +380,314 @@
 	<meta name="description" content="Manage students and their attendance cards." />
 </svelte:head>
 
-<AppShell>
-	<div class="flex h-full flex-col overflow-hidden">
-		<PageHeader
-			category="Students"
-			title="Class List"
-			description="Manage your student list and class assignments."
-		>
-			{#snippet actions()}
-				<div class="flex items-center gap-3">
-					<a
-						href={resolve('/records')}
-						class="inline-flex h-10 items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+<div class="flex h-full flex-col overflow-hidden">
+	<PageHeader
+		category="Students"
+		title="Class List"
+		description="Manage your student list and class assignments."
+	>
+		{#snippet actions()}
+			<div class="flex items-center gap-3">
+				<a
+					href={resolve('/records')}
+					class="inline-flex h-10 items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+				>
+					<svg
+						class="size-4"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
 					>
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-							<polyline points="14 2 14 8 20 8" />
-							<line x1="16" y1="13" x2="8" y2="13" />
-							<line x1="16" y1="17" x2="8" y2="17" />
-							<polyline points="10 9 9 9 8 9" />
-						</svg>
-						View Records
-					</a>
+						<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+						<polyline points="14 2 14 8 20 8" />
+						<line x1="16" y1="13" x2="8" y2="13" />
+						<line x1="16" y1="17" x2="8" y2="17" />
+						<polyline points="10 9 9 9 8 9" />
+					</svg>
+					View Records
+				</a>
 
+				<button
+					onclick={openAdd}
+					class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-6 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+				>
+					<svg
+						class="size-4"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M12 5v14M5 12h14" />
+					</svg>
+					Add student
+				</button>
+			</div>
+		{/snippet}
+	</PageHeader>
+
+	{#if loading}
+		<div class="px-4 py-5 md:px-8 lg:px-10">
+			<LoadingBlock rows={4} label="Loading class list" />
+		</div>
+	{:else if loadError}
+		<div class="px-4 py-5 md:px-8 lg:px-10">
+			<EmptyState tone="warning" title="Class list is unavailable" description={loadError}>
+				{#snippet actions()}
 					<button
-						onclick={openAdd}
-						class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-6 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+						type="button"
+						onclick={reload}
+						class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
 					>
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="M12 5v14M5 12h14" />
-						</svg>
-						Add student
+						Retry
 					</button>
-				</div>
-			{/snippet}
-		</PageHeader>
-
-		{#if loading}
-			<div class="px-4 py-5 md:px-8 lg:px-10">
-				<LoadingBlock rows={4} label="Loading class list" />
-			</div>
-		{:else if loadError}
-			<div class="px-4 py-5 md:px-8 lg:px-10">
-				<EmptyState tone="warning" title="Class list is unavailable" description={loadError}>
-					{#snippet actions()}
-						<button
-							type="button"
-							onclick={reload}
-							class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
-						>
-							Retry
-						</button>
-					{/snippet}
-				</EmptyState>
-			</div>
-		{:else}
-			<!-- Tools Bar -->
-			<section class="grid gap-4 px-4 pt-5 md:grid-cols-2 md:px-8 lg:grid-cols-3 lg:px-10">
-				<!-- Search -->
-				<div class="space-y-2">
-					<div class="label-mono">Search Students</div>
-					<div class="relative">
-						<svg
-							class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<circle cx="11" cy="11" r="8" />
-							<path d="m21 21-4.3-4.3" />
-						</svg>
-						<input
-							type="text"
-							bind:value={searchTerms}
-							placeholder="Search by name..."
-							class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-						/>
-					</div>
-				</div>
-
-				<!-- Class Filter -->
-				<div class="space-y-2">
-					<div class="label-mono">Filter by Class</div>
-					<select
-						bind:value={selectedClassId}
-						class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				{/snippet}
+			</EmptyState>
+		</div>
+	{:else}
+		<!-- Tools Bar -->
+		<section class="grid gap-4 px-4 pt-5 md:grid-cols-2 md:px-8 lg:grid-cols-3 lg:px-10">
+			<!-- Search -->
+			<div class="space-y-2">
+				<div class="label-mono">Search Students</div>
+				<div class="relative">
+					<svg
+						class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
 					>
-						<option value="">All Classes</option>
-						{#each classes as c (c.id)}
-							<option value={c.id}>{c.name}</option>
-						{/each}
-					</select>
+						<circle cx="11" cy="11" r="8" />
+						<path d="m21 21-4.3-4.3" />
+					</svg>
+					<input
+						type="text"
+						bind:value={searchTerms}
+						placeholder="Search by name..."
+						class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					/>
 				</div>
+			</div>
 
-				<!-- Stats -->
-				<div class="space-y-2">
-					<div class="label-mono">Total Students</div>
-					<div class="flex h-10 items-center justify-between gap-3">
-						<div class="font-mono text-lg font-bold">
-							{filteredStudents.length}
-							<span class="ml-2 text-xs font-normal text-muted-foreground">
-								(out of {students.length})
-							</span>
-						</div>
-						<div class="flex shrink-0 items-center gap-2 font-mono text-xs">
-							<span class="rounded-pill border border-border bg-surface px-2 py-1">
-								M {maleStudentCount}
-							</span>
-							<span class="rounded-pill border border-border bg-surface px-2 py-1">
-								F {femaleStudentCount}
-							</span>
-						</div>
+			<!-- Class Filter -->
+			<div class="space-y-2">
+				<div class="label-mono">Filter by Class</div>
+				<select
+					bind:value={selectedClassId}
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				>
+					<option value="">All Classes</option>
+					{#each classes as c (c.id)}
+						<option value={c.id}>{c.name}</option>
+					{/each}
+				</select>
+			</div>
+
+			<!-- Stats -->
+			<div class="space-y-2">
+				<div class="label-mono">Total Students</div>
+				<div class="flex h-10 items-center justify-between gap-3">
+					<div class="font-mono text-lg font-bold">
+						{filteredStudents.length}
+						<span class="ml-2 text-xs font-normal text-muted-foreground">
+							(out of {students.length})
+						</span>
+					</div>
+					<div class="flex shrink-0 items-center gap-2 font-mono text-xs">
+						<span class="rounded-pill border border-border bg-surface px-2 py-1">
+							M {maleStudentCount}
+						</span>
+						<span class="rounded-pill border border-border bg-surface px-2 py-1">
+							F {femaleStudentCount}
+						</span>
 					</div>
 				</div>
-			</section>
+			</div>
+		</section>
 
-			<!-- Class List -->
-			<section
-				class="min-h-0 flex-1 px-4 pb-20 md:px-8 lg:px-10"
-				bind:clientHeight={availableHeight}
-			>
-				{#if students.length === 0}
-					{@render emptyState()}
-				{:else}
-					<div class="table-wrap mt-6">
-						<table class="w-full min-w-[760px] text-sm">
-							<thead class="bg-surface text-left">
+		<!-- Class List -->
+		<section class="min-h-0 flex-1 px-4 pb-20 md:px-8 lg:px-10" bind:clientHeight={availableHeight}>
+			{#if students.length === 0}
+				{@render emptyState()}
+			{:else}
+				<div class="table-wrap mt-6">
+					<table class="w-full min-w-[760px] text-sm">
+						<thead class="bg-surface text-left">
+							<tr>
+								<th class="label-mono px-4 py-3">
+									<button
+										onclick={() => toggleSort('name')}
+										class="inline-flex items-center gap-1 transition-colors hover:text-primary"
+									>
+										Name
+										{#if sortBy === 'name'}
+											<svg
+												class="size-3"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+											>
+												<path d={sortOrder === 'asc' ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'} />
+											</svg>
+										{/if}
+									</button>
+								</th>
+								<th class="label-mono px-4 py-3">Gender</th>
+								<th class="label-mono px-4 py-3">Class</th>
+								<th class="label-mono px-4 py-3">Card</th>
+								<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-border">
+							{#each paginatedStudents as s (s.id)}
 								<tr>
-									<th class="label-mono px-4 py-3">
+									<td class="px-4 py-3">
 										<button
-											onclick={() => toggleSort('name')}
-											class="inline-flex items-center gap-1 transition-colors hover:text-primary"
+											onclick={() => openAttendance(s)}
+											class="group flex min-w-0 items-center gap-2 text-left font-medium transition-colors hover:text-primary"
 										>
-											Name
-											{#if sortBy === 'name'}
+											<span class="text-balance-safe">{s.name}</span>
+											<svg
+												class="size-3 opacity-0 transition-opacity group-hover:opacity-100"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+												<polyline points="15 3 21 3 21 9" />
+												<line x1="10" y1="14" x2="21" y2="3" />
+											</svg>
+										</button>
+									</td>
+									<td class="px-4 py-3">
+										<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs">
+											{genderLabel(s.gender)}
+										</span>
+									</td>
+									<td class="px-4 py-3">
+										<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs">
+											{getClassName(s.classId)}
+										</span>
+									</td>
+									<td class="px-4 py-3 font-mono text-xs">
+										{#if s.cardSerial}
+											<span class="rounded-pill border border-border bg-surface px-2 py-1"
+												>{s.cardSerial}</span
+											>
+										{:else}
+											<span class="text-muted-foreground">—</span>
+										{/if}
+									</td>
+									<td class="px-4 py-3 text-right">
+										<div class="inline-flex gap-1">
+											<!-- View Records -->
+											<a
+												href={resolve(`/records?studentId=${s.id}`)}
+												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
+												title="View attendance records"
+											>
 												<svg
-													class="size-3"
+													class="size-3.5"
 													viewBox="0 0 24 24"
 													fill="none"
 													stroke="currentColor"
 													stroke-width="2"
-												>
-													<path d={sortOrder === 'asc' ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'} />
-												</svg>
-											{/if}
-										</button>
-									</th>
-									<th class="label-mono px-4 py-3">Gender</th>
-									<th class="label-mono px-4 py-3">Class</th>
-									<th class="label-mono px-4 py-3">Card</th>
-									<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-border">
-								{#each paginatedStudents as s (s.id)}
-									<tr>
-										<td class="px-4 py-3">
-											<button
-												onclick={() => openAttendance(s)}
-												class="group flex min-w-0 items-center gap-2 text-left font-medium transition-colors hover:text-primary"
-											>
-												<span class="text-balance-safe">{s.name}</span>
-												<svg
-													class="size-3 opacity-0 transition-opacity group-hover:opacity-100"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2.5"
 													stroke-linecap="round"
 													stroke-linejoin="round"
 												>
-													<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-													<polyline points="15 3 21 3 21 9" />
-													<line x1="10" y1="14" x2="21" y2="3" />
+													<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+													<polyline points="14 2 14 8 20 8" />
+													<line x1="16" y1="13" x2="8" y2="13" />
+													<line x1="16" y1="17" x2="8" y2="17" />
+													<polyline points="10 9 9 9 8 9" />
+												</svg>
+											</a>
+											<!-- Pair card -->
+											<button
+												onclick={() => (scanFor = s)}
+												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
+												title="Pair card"
+											>
+												<svg
+													class="size-3.5"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													<rect x="2" y="5" width="20" height="14" rx="2" />
+													<path d="M2 10h20" />
 												</svg>
 											</button>
-										</td>
-										<td class="px-4 py-3">
-											<span
-												class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs"
+											<!-- Edit -->
+											<button
+												onclick={() => openEdit(s)}
+												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
+												title="Edit student"
 											>
-												{genderLabel(s.gender)}
-											</span>
-										</td>
-										<td class="px-4 py-3">
-											<span
-												class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs"
+												<svg
+													class="size-3.5"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+													<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+												</svg>
+											</button>
+											<!-- Delete -->
+											<button
+												onclick={(event) => onDelete(event, s)}
+												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
+												title="Delete student"
 											>
-												{getClassName(s.classId)}
-											</span>
-										</td>
-										<td class="px-4 py-3 font-mono text-xs">
-											{#if s.cardSerial}
-												<span class="rounded-pill border border-border bg-surface px-2 py-1"
-													>{s.cardSerial}</span
+												<svg
+													class="size-3.5"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
 												>
-											{:else}
-												<span class="text-muted-foreground">—</span>
-											{/if}
-										</td>
-										<td class="px-4 py-3 text-right">
-											<div class="inline-flex gap-1">
-												<!-- View Records -->
-												<a
-													href={resolve(`/records?studentId=${s.id}`)}
-													class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
-													title="View attendance records"
-												>
-													<svg
-														class="size-3.5"
-														viewBox="0 0 24 24"
-														fill="none"
-														stroke="currentColor"
-														stroke-width="2"
-														stroke-linecap="round"
-														stroke-linejoin="round"
-													>
-														<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-														<polyline points="14 2 14 8 20 8" />
-														<line x1="16" y1="13" x2="8" y2="13" />
-														<line x1="16" y1="17" x2="8" y2="17" />
-														<polyline points="10 9 9 9 8 9" />
-													</svg>
-												</a>
-												<!-- Pair card -->
-												<button
-													onclick={() => (scanFor = s)}
-													class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
-													title="Pair card"
-												>
-													<svg
-														class="size-3.5"
-														viewBox="0 0 24 24"
-														fill="none"
-														stroke="currentColor"
-														stroke-width="2"
-														stroke-linecap="round"
-														stroke-linejoin="round"
-													>
-														<rect x="2" y="5" width="20" height="14" rx="2" />
-														<path d="M2 10h20" />
-													</svg>
-												</button>
-												<!-- Edit -->
-												<button
-													onclick={() => openEdit(s)}
-													class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
-													title="Edit student"
-												>
-													<svg
-														class="size-3.5"
-														viewBox="0 0 24 24"
-														fill="none"
-														stroke="currentColor"
-														stroke-width="2"
-														stroke-linecap="round"
-														stroke-linejoin="round"
-													>
-														<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-														<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-													</svg>
-												</button>
-												<!-- Delete -->
-												<button
-													onclick={(event) => onDelete(event, s)}
-													class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
-													title="Delete student"
-												>
-													<svg
-														class="size-3.5"
-														viewBox="0 0 24 24"
-														fill="none"
-														stroke="currentColor"
-														stroke-width="2"
-														stroke-linecap="round"
-														stroke-linejoin="round"
-													>
-														<polyline points="3 6 5 6 21 6" />
-														<path
-															d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
-														/>
-													</svg>
-												</button>
-											</div>
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				{/if}
-			</section>
+													<polyline points="3 6 5 6 21 6" />
+													<path
+														d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+													/>
+												</svg>
+											</button>
+										</div>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</section>
 
-			<div class="fixed bottom-6 left-1/2 z-10 -translate-x-1/2">
-				<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
-			</div>
-		{/if}
-	</div>
-</AppShell>
+		<div class="fixed bottom-6 left-1/2 z-10 -translate-x-1/2">
+			<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
+		</div>
+	{/if}
+</div>
 
 <StudentAttendanceModal
 	open={attendanceModalOpen}

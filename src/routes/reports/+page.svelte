@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
-	import { fade, fly } from 'svelte/transition';
-	import AppShell from '$lib/components/layout/AppShell.svelte';
+	import { fade } from 'svelte/transition';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
@@ -540,190 +539,188 @@
 
 <svelte:window onkeydown={onWindowKeydown} />
 
-<AppShell>
-	<div class="flex h-full flex-col overflow-hidden">
-		<PageHeader
-			category="Reports"
-			title="SF2 Workbook Pre-export Review"
-			description="Review workbook details, mapped dates, absences, and learner row mappings before exporting the official SF2 copy."
-		>
-			{#snippet actions()}
-				<div class="flex flex-wrap items-center gap-2">
-					<select
-						aria-label="Class"
-						bind:value={selectedClassId}
-						onchange={onClassChange}
-						class="h-10 min-w-56 rounded-pill border border-border bg-background px-4 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					>
-						<option value="">Latest SF2 template</option>
-						{#each classes as item (item.id)}
-							<option value={item.id}>{item.name}</option>
-						{/each}
-					</select>
+<div class="flex h-full flex-col overflow-hidden">
+	<PageHeader
+		category="Reports"
+		title="SF2 Workbook Pre-export Review"
+		description="Review workbook details, mapped dates, absences, and learner row mappings before exporting the official SF2 copy."
+	>
+		{#snippet actions()}
+			<div class="flex flex-wrap items-center gap-2">
+				<select
+					aria-label="Class"
+					bind:value={selectedClassId}
+					onchange={onClassChange}
+					class="h-10 min-w-56 rounded-pill border border-border bg-background px-4 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				>
+					<option value="">Latest SF2 template</option>
+					{#each classes as item (item.id)}
+						<option value={item.id}>{item.name}</option>
+					{/each}
+				</select>
+				<button
+					type="button"
+					onclick={loadInitial}
+					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface"
+				>
+					<RefreshCw class="size-4" aria-hidden="true" />
+					Refresh
+				</button>
+				<button
+					type="button"
+					onclick={onOpenSf2}
+					disabled={!preview?.template || opening || !activeClassId}
+					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					<ExternalLink class="size-4" aria-hidden="true" />
+					{opening ? 'Opening...' : 'Open SF2'}
+				</button>
+				<button
+					type="button"
+					onclick={() => (fullReviewOpen = true)}
+					disabled={!preview?.template}
+					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					<Maximize2 class="size-4" aria-hidden="true" />
+					View Full Review
+				</button>
+				<button
+					type="button"
+					onclick={requestExport}
+					disabled={exportDisabled}
+					class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					<Save class="size-4" aria-hidden="true" />
+					{exporting ? 'Exporting...' : 'Review Export'}
+				</button>
+			</div>
+		{/snippet}
+	</PageHeader>
+
+	{#if loading}
+		<div class="px-4 py-5 md:px-8 lg:px-10">
+			<LoadingBlock rows={4} label="Loading SF2 workbook preview" />
+		</div>
+	{:else if loadError}
+		<div class="px-4 py-5 md:px-8 lg:px-10">
+			<EmptyState tone="warning" title="SF2 reports are unavailable" description={loadError}>
+				{#snippet actions()}
 					<button
 						type="button"
 						onclick={loadInitial}
-						class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface"
+						class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
 					>
-						<RefreshCw class="size-4" aria-hidden="true" />
-						Refresh
+						Retry
 					</button>
-					<button
-						type="button"
-						onclick={onOpenSf2}
-						disabled={!preview?.template || opening || !activeClassId}
-						class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						<ExternalLink class="size-4" aria-hidden="true" />
-						{opening ? 'Opening...' : 'Open SF2'}
-					</button>
-					<button
-						type="button"
-						onclick={() => (fullReviewOpen = true)}
-						disabled={!preview?.template}
-						class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						<Maximize2 class="size-4" aria-hidden="true" />
-						View Full Review
-					</button>
-					<button
-						type="button"
-						onclick={requestExport}
-						disabled={exportDisabled}
-						class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						<Save class="size-4" aria-hidden="true" />
-						{exporting ? 'Exporting...' : 'Review Export'}
-					</button>
-				</div>
-			{/snippet}
-		</PageHeader>
-
-		{#if loading}
-			<div class="px-4 py-5 md:px-8 lg:px-10">
-				<LoadingBlock rows={4} label="Loading SF2 workbook preview" />
-			</div>
-		{:else if loadError}
-			<div class="px-4 py-5 md:px-8 lg:px-10">
-				<EmptyState tone="warning" title="SF2 reports are unavailable" description={loadError}>
-					{#snippet actions()}
-						<button
-							type="button"
-							onclick={loadInitial}
-							class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
-						>
-							Retry
-						</button>
-					{/snippet}
-				</EmptyState>
-			</div>
-		{:else if !preview?.template}
-			<div class="px-4 py-5 md:px-8 lg:px-10">
-				<EmptyState
-					tone="warning"
-					title="No SF2 workbook is ready for review"
-					description={preview?.issues[0] ??
-						'Import an SF2 workbook or create one from the bundled template first.'}
-				>
-					{#snippet actions()}
-						<a
-							href={resolve('/settings')}
-							class="control-ring inline-flex rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-accent"
-						>
-							Open SF2 Settings
-						</a>
-					{/snippet}
-				</EmptyState>
-			</div>
-		{:else}
-			<section
-				class="grid min-h-0 flex-1 gap-5 overflow-hidden px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px]"
+				{/snippet}
+			</EmptyState>
+		</div>
+	{:else if !preview?.template}
+		<div class="px-4 py-5 md:px-8 lg:px-10">
+			<EmptyState
+				tone="warning"
+				title="No SF2 workbook is ready for review"
+				description={preview?.issues[0] ??
+					'Import an SF2 workbook or create one from the bundled template first.'}
 			>
-				<div class="min-h-0 space-y-5 overflow-auto pr-0 xl:pr-1">
-					<div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-						{@render summaryTile(
-							'Workbook',
-							preview.className || selectedClass?.name || 'Linked class',
-							preview.canExport ? 'Ready for confirmation' : 'Needs attention',
-							FileCheck2,
-							preview.canExport ? 'ready' : 'warning'
-						)}
-						{@render summaryTile(
-							'Closed Days',
-							String(closedDateCount),
-							`${mappedClosedDateCount} mapped to workbook`,
-							CalendarDays,
-							'neutral'
-						)}
-						{@render summaryTile(
-							'Absences',
-							String(preview.absenceCount),
-							`${preview.presentCount} present marks`,
-							UserX,
-							preview.absenceCount > 0 ? 'alert' : 'ready'
-						)}
-						{@render summaryTile(
-							'Checks',
-							`${issueCount}/${warningCount}`,
-							'Issues / warnings',
-							CircleAlert,
-							issueCount > 0 ? 'alert' : warningCount > 0 ? 'warning' : 'ready'
-						)}
-					</div>
-
-					{@render sf2HeaderDetails(false)}
-
-					{@render classDayMatrix(false)}
+				{#snippet actions()}
+					<a
+						href={resolve('/settings')}
+						class="control-ring inline-flex rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-accent"
+					>
+						Open SF2 Settings
+					</a>
+				{/snippet}
+			</EmptyState>
+		</div>
+	{:else}
+		<section
+			class="grid min-h-0 flex-1 gap-5 overflow-hidden px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px]"
+		>
+			<div class="min-h-0 space-y-5 overflow-auto pr-0 xl:pr-1">
+				<div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+					{@render summaryTile(
+						'Workbook',
+						preview.className || selectedClass?.name || 'Linked class',
+						preview.canExport ? 'Ready for confirmation' : 'Needs attention',
+						FileCheck2,
+						preview.canExport ? 'ready' : 'warning'
+					)}
+					{@render summaryTile(
+						'Closed Days',
+						String(closedDateCount),
+						`${mappedClosedDateCount} mapped to workbook`,
+						CalendarDays,
+						'neutral'
+					)}
+					{@render summaryTile(
+						'Absences',
+						String(preview.absenceCount),
+						`${preview.presentCount} present marks`,
+						UserX,
+						preview.absenceCount > 0 ? 'alert' : 'ready'
+					)}
+					{@render summaryTile(
+						'Checks',
+						`${issueCount}/${warningCount}`,
+						'Issues / warnings',
+						CircleAlert,
+						issueCount > 0 ? 'alert' : warningCount > 0 ? 'warning' : 'ready'
+					)}
 				</div>
 
-				<aside class="min-h-0 space-y-5 overflow-auto">
-					<div class="rounded-2xl border border-border bg-surface p-5">
-						<div class="label-mono text-primary">Workbook identity</div>
-						<dl class="mt-4 space-y-3 text-sm">
-							{@render metaRow('Class', preview.className || selectedClass?.name || 'Unlinked')}
-							{@render metaRow('Report Month', reportMonthLabel(preview.template.reportMonth))}
-							{@render metaRow('School ID', preview.template.schoolId || 'Blank')}
-							{@render metaRow('School Year', preview.template.schoolYear || 'Blank')}
-							{@render metaRow('Adviser', preview.template.adviserName || 'Blank')}
-							{@render metaRow('School Head', preview.template.schoolHeadName || 'Blank')}
-							{@render metaRow('Imported', formatImportedAt(preview.template.importedAt))}
-						</dl>
-					</div>
+				{@render sf2HeaderDetails(false)}
 
-					<div class="rounded-2xl border border-border bg-card p-5">
-						<div class="flex items-start justify-between gap-3">
-							<div>
-								<div class="label-mono text-primary">Absent list</div>
-								<h2 class="mt-1 text-lg font-semibold">{preview.absentList.length} entries</h2>
-							</div>
-							<UserX class="size-5 text-red-700" aria-hidden="true" />
+				{@render classDayMatrix(false)}
+			</div>
+
+			<aside class="min-h-0 space-y-5 overflow-auto">
+				<div class="rounded-2xl border border-border bg-surface p-5">
+					<div class="label-mono text-primary">Workbook identity</div>
+					<dl class="mt-4 space-y-3 text-sm">
+						{@render metaRow('Class', preview.className || selectedClass?.name || 'Unlinked')}
+						{@render metaRow('Report Month', reportMonthLabel(preview.template.reportMonth))}
+						{@render metaRow('School ID', preview.template.schoolId || 'Blank')}
+						{@render metaRow('School Year', preview.template.schoolYear || 'Blank')}
+						{@render metaRow('Adviser', preview.template.adviserName || 'Blank')}
+						{@render metaRow('School Head', preview.template.schoolHeadName || 'Blank')}
+						{@render metaRow('Imported', formatImportedAt(preview.template.importedAt))}
+					</dl>
+				</div>
+
+				<div class="rounded-2xl border border-border bg-card p-5">
+					<div class="flex items-start justify-between gap-3">
+						<div>
+							<div class="label-mono text-primary">Absent list</div>
+							<h2 class="mt-1 text-lg font-semibold">{preview.absentList.length} entries</h2>
 						</div>
-
-						{#if preview.absentList.length > 0}
-							<div class="mt-4 max-h-80 space-y-2 overflow-auto pr-1">
-								{#each preview.absentList as absence (`${absence.studentId}-${absence.date}`)}
-									<div class="rounded-md border border-border bg-background p-3 text-sm">
-										<div class="font-medium">{absence.studentName}</div>
-										<div
-											class="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground"
-										>
-											<span>{formatDate(absence.date)}</span>
-											<span>Row {absence.rowIndex}</span>
-										</div>
-									</div>
-								{/each}
-							</div>
-						{:else}
-							<p class="mt-4 text-sm leading-6 text-muted-foreground">
-								No absences are currently marked on closed SF2 days.
-							</p>
-						{/if}
+						<UserX class="size-5 text-red-700" aria-hidden="true" />
 					</div>
-				</aside>
-			</section>
-		{/if}
-	</div>
-</AppShell>
+
+					{#if preview.absentList.length > 0}
+						<div class="mt-4 max-h-80 space-y-2 overflow-auto pr-1">
+							{#each preview.absentList as absence (`${absence.studentId}-${absence.date}`)}
+								<div class="rounded-md border border-border bg-background p-3 text-sm">
+									<div class="font-medium">{absence.studentName}</div>
+									<div
+										class="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground"
+									>
+										<span>{formatDate(absence.date)}</span>
+										<span>Row {absence.rowIndex}</span>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<p class="mt-4 text-sm leading-6 text-muted-foreground">
+							No absences are currently marked on closed SF2 days.
+						</p>
+					{/if}
+				</div>
+			</aside>
+		</section>
+	{/if}
+</div>
 
 {#if fullReviewOpen && preview?.template}
 	<div
@@ -755,7 +752,7 @@
 
 			<div
 				class="min-h-0 flex-1 overflow-hidden px-4 py-4 md:px-6"
-				transition:fly={{ y: 14, duration: 180 }}
+				transition:fade={{ duration: 180 }}
 			>
 				<div class="flex h-full min-h-0 flex-col gap-4">
 					{@render sf2HeaderDetails(true)}

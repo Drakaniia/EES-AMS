@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import DateRangePicker from '$lib/components/ui/DateRangePicker.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
@@ -390,228 +389,223 @@
 	<meta name="description" content="Filter, review, and export attendance records as CSV." />
 </svelte:head>
 
-<AppShell>
-	<div class="flex h-full flex-col overflow-hidden">
-		<PageHeader
-			category="Archives"
-			title="Attendance Logs"
-			description="Review and filter historical attendance data for your classes."
-		>
-			{#snippet actions()}
-				<div class="flex flex-wrap items-center gap-2">
-					<a
-						href={resolve('/reports')}
-						class="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
-					>
-						<FileSpreadsheet class="size-4" />
-						SF2 Workbook
-					</a>
-					<button
-						onclick={onExport}
-						disabled={exportingLogs}
-						class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						<Download class="size-4" />
-						{exportingLogs ? 'Exporting...' : 'Export Logs CSV'}
-					</button>
-				</div>
-			{/snippet}
-		</PageHeader>
+<div class="flex h-full flex-col overflow-hidden">
+	<PageHeader
+		category="Archives"
+		title="Attendance Logs"
+		description="Review and filter historical attendance data for your classes."
+	>
+		{#snippet actions()}
+			<div class="flex flex-wrap items-center gap-2">
+				<a
+					href={resolve('/reports')}
+					class="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+				>
+					<FileSpreadsheet class="size-4" />
+					SF2 Workbook
+				</a>
+				<button
+					onclick={onExport}
+					disabled={exportingLogs}
+					class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					<Download class="size-4" />
+					{exportingLogs ? 'Exporting...' : 'Export Logs CSV'}
+				</button>
+			</div>
+		{/snippet}
+	</PageHeader>
 
-		<!-- ── Filters ──────────────────────────────────────────────────────────── -->
-		{#if loading}
-			<div class="px-4 py-5 md:px-8 lg:px-10">
-				<LoadingBlock rows={4} label="Loading attendance records" />
-			</div>
-		{:else if loadError}
-			<div class="px-4 py-5 md:px-8 lg:px-10">
-				<EmptyState tone="warning" title="Records are unavailable" description={loadError}>
-					{#snippet actions()}
-						<button
-							type="button"
-							onclick={reload}
-							class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
-						>
-							Retry
-						</button>
-					{/snippet}
-				</EmptyState>
-			</div>
-		{:else}
-			<section class="grid gap-4 px-4 py-5 sm:grid-cols-2 md:px-8 lg:grid-cols-4 lg:px-10">
-				<!-- Date Range -->
-				<div class="space-y-2">
-					<div class="label-mono">Date Range</div>
+	<!-- ── Filters ──────────────────────────────────────────────────────────── -->
+	{#if loading}
+		<div class="px-4 py-5 md:px-8 lg:px-10">
+			<LoadingBlock rows={4} label="Loading attendance records" />
+		</div>
+	{:else if loadError}
+		<div class="px-4 py-5 md:px-8 lg:px-10">
+			<EmptyState tone="warning" title="Records are unavailable" description={loadError}>
+				{#snippet actions()}
 					<button
-						onclick={() => (dateRangePickerOpen = true)}
-						class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
+						type="button"
+						onclick={reload}
+						class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
 					>
-						<span class={from || to ? '' : 'text-muted-foreground'}>
-							{from && to
-								? `${new Date(from).toLocaleDateString()} - ${new Date(to).toLocaleDateString()}`
-								: from
-									? `From ${new Date(from).toLocaleDateString()}`
-									: to
-										? `To ${new Date(to).toLocaleDateString()}`
-										: 'Select date range'}
-						</span>
+						Retry
+					</button>
+				{/snippet}
+			</EmptyState>
+		</div>
+	{:else}
+		<section class="grid gap-4 px-4 py-5 sm:grid-cols-2 md:px-8 lg:grid-cols-4 lg:px-10">
+			<!-- Date Range -->
+			<div class="space-y-2">
+				<div class="label-mono">Date Range</div>
+				<button
+					onclick={() => (dateRangePickerOpen = true)}
+					class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
+				>
+					<span class={from || to ? '' : 'text-muted-foreground'}>
+						{from && to
+							? `${new Date(from).toLocaleDateString()} - ${new Date(to).toLocaleDateString()}`
+							: from
+								? `From ${new Date(from).toLocaleDateString()}`
+								: to
+									? `To ${new Date(to).toLocaleDateString()}`
+									: 'Select date range'}
+					</span>
+					<svg
+						class="size-4 text-muted-foreground"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+						<line x1="16" y1="2" x2="16" y2="6"></line>
+						<line x1="8" y1="2" x2="8" y2="6"></line>
+						<line x1="3" y1="10" x2="21" y2="10"></line>
+					</svg>
+				</button>
+			</div>
+
+			<!-- Class -->
+			<div class="space-y-2">
+				<div class="label-mono">Class</div>
+				<div class="relative">
+					<select
+						bind:value={classId}
+						onchange={() => (studentId = '')}
+						class="h-10 w-full appearance-none rounded-md border border-border bg-background px-3 pr-10 text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
+					>
+						<option value="">All classes</option>
+						{#each classes as c (c.id)}
+							<option value={c.id}>{c.name}</option>
+						{/each}
+					</select>
+					<div
+						class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground"
+					>
 						<svg
-							class="size-4 text-muted-foreground"
+							class="size-4"
 							viewBox="0 0 24 24"
 							fill="none"
 							stroke="currentColor"
 							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
 						>
-							<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-							<line x1="16" y1="2" x2="16" y2="6"></line>
-							<line x1="8" y1="2" x2="8" y2="6"></line>
-							<line x1="3" y1="10" x2="21" y2="10"></line>
+							<path d="m6 9 6 6 6-6" />
 						</svg>
-					</button>
-				</div>
-
-				<!-- Class -->
-				<div class="space-y-2">
-					<div class="label-mono">Class</div>
-					<div class="relative">
-						<select
-							bind:value={classId}
-							onchange={() => (studentId = '')}
-							class="h-10 w-full appearance-none rounded-md border border-border bg-background px-3 pr-10 text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
-						>
-							<option value="">All classes</option>
-							{#each classes as c (c.id)}
-								<option value={c.id}>{c.name}</option>
-							{/each}
-						</select>
-						<div
-							class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground"
-						>
-							<svg
-								class="size-4"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-							>
-								<path d="m6 9 6 6 6-6" />
-							</svg>
-						</div>
 					</div>
 				</div>
-
-				<!-- Student -->
-				<div class="space-y-2">
-					<div class="label-mono">Student</div>
-					<StudentPicker
-						{students}
-						selectedId={studentId}
-						{classId}
-						placeholder="All students"
-						onSelect={({ id }) => (studentId = id)}
-					/>
-				</div>
-
-				<!-- Total -->
-				<div class="space-y-2">
-					<div class="label-mono">Total attendance records</div>
-					<div class="flex h-10 items-center font-mono text-sm">{groupedAttendance.length}</div>
-				</div>
-			</section>
-
-			<!-- ── Table ────────────────────────────────────────────────────────────── -->
-			<section
-				class="min-h-0 flex-1 px-4 pb-20 md:px-8 lg:px-10"
-				bind:clientHeight={availableHeight}
-			>
-				<div class="table-wrap">
-					<table class="min-w-[720px] text-sm">
-						<thead class="bg-surface text-left">
-							<tr>
-								<th class="label-mono px-4 py-3">Date</th>
-								<th class="label-mono px-4 py-3">Student</th>
-								<th class="label-mono px-4 py-3">Class</th>
-								<th class="label-mono px-4 py-3">Check In</th>
-								<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
-							</tr>
-						</thead>
-						<tbody class="divide-y divide-border">
-							{#if groupedAttendance.length === 0}
-								{@render emptyState()}
-							{:else}
-								{#each paginatedFiltered as record (record.studentId + record.date)}
-									<tr class="transition-colors hover:bg-surface/40">
-										<td class="px-4 py-3 align-top font-mono">{record.date}</td>
-										<td class="px-4 py-3 align-top">
-											<div class="text-balance-safe font-medium">{record.studentName}</div>
-										</td>
-										<td class="px-4 py-3 align-top">
-											<span
-												class="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10px]"
-											>
-												{record.className}
-											</span>
-										</td>
-										<td class="px-4 py-3 align-top">
-											{#if record.checkInTime}
-												<div class="flex flex-col items-start gap-1">
-													{@render checkInPill(record.checkInTime, record.isLate)}
-													{#if primaryEvent(record)?.overrideReason}
-														<span class="max-w-56 text-xs leading-5 text-muted-foreground">
-															{primaryEvent(record)?.overrideReason}
-														</span>
-													{/if}
-												</div>
-											{:else}
-												<span class="font-mono text-xs text-muted-foreground">—</span>
-											{/if}
-										</td>
-										<td class="px-4 py-3 text-right align-top">
-											{#if record.events.length > 0}
-												<div class="inline-flex items-center gap-1">
-													<button
-														type="button"
-														onclick={() => onEditAttendanceRecord(record)}
-														aria-label="Edit attendance record"
-														class="inline-flex size-8 items-center justify-center rounded-md border border-border text-primary transition-colors hover:bg-primary/10"
-													>
-														<Pencil class="size-3.5" aria-hidden="true" />
-													</button>
-													<button
-														type="button"
-														onclick={() => openAudit(record)}
-														aria-label="View audit history"
-														class="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-surface"
-													>
-														<History class="size-3.5" aria-hidden="true" />
-													</button>
-													<button
-														type="button"
-														onclick={(event) => onDeleteAttendanceRecord(event, record)}
-														aria-label="Delete attendance record"
-														class="inline-flex size-8 items-center justify-center rounded-md border border-border text-destructive transition-colors hover:bg-destructive/10"
-													>
-														<Trash2 class="size-3.5" aria-hidden="true" />
-													</button>
-												</div>
-											{/if}
-										</td>
-									</tr>
-								{/each}
-							{/if}
-						</tbody>
-					</table>
-				</div>
-			</section>
-
-			<div class="fixed bottom-6 left-1/2 z-30 -translate-x-1/2">
-				<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
 			</div>
-		{/if}
-	</div>
-</AppShell>
+
+			<!-- Student -->
+			<div class="space-y-2">
+				<div class="label-mono">Student</div>
+				<StudentPicker
+					{students}
+					selectedId={studentId}
+					{classId}
+					placeholder="All students"
+					onSelect={({ id }) => (studentId = id)}
+				/>
+			</div>
+
+			<!-- Total -->
+			<div class="space-y-2">
+				<div class="label-mono">Total attendance records</div>
+				<div class="flex h-10 items-center font-mono text-sm">{groupedAttendance.length}</div>
+			</div>
+		</section>
+
+		<!-- ── Table ────────────────────────────────────────────────────────────── -->
+		<section class="min-h-0 flex-1 px-4 pb-20 md:px-8 lg:px-10" bind:clientHeight={availableHeight}>
+			<div class="table-wrap">
+				<table class="min-w-[720px] text-sm">
+					<thead class="bg-surface text-left">
+						<tr>
+							<th class="label-mono px-4 py-3">Date</th>
+							<th class="label-mono px-4 py-3">Student</th>
+							<th class="label-mono px-4 py-3">Class</th>
+							<th class="label-mono px-4 py-3">Check In</th>
+							<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-border">
+						{#if groupedAttendance.length === 0}
+							{@render emptyState()}
+						{:else}
+							{#each paginatedFiltered as record (record.studentId + record.date)}
+								<tr class="transition-colors hover:bg-surface/40">
+									<td class="px-4 py-3 align-top font-mono">{record.date}</td>
+									<td class="px-4 py-3 align-top">
+										<div class="text-balance-safe font-medium">{record.studentName}</div>
+									</td>
+									<td class="px-4 py-3 align-top">
+										<span
+											class="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10px]"
+										>
+											{record.className}
+										</span>
+									</td>
+									<td class="px-4 py-3 align-top">
+										{#if record.checkInTime}
+											<div class="flex flex-col items-start gap-1">
+												{@render checkInPill(record.checkInTime, record.isLate)}
+												{#if primaryEvent(record)?.overrideReason}
+													<span class="max-w-56 text-xs leading-5 text-muted-foreground">
+														{primaryEvent(record)?.overrideReason}
+													</span>
+												{/if}
+											</div>
+										{:else}
+											<span class="font-mono text-xs text-muted-foreground">—</span>
+										{/if}
+									</td>
+									<td class="px-4 py-3 text-right align-top">
+										{#if record.events.length > 0}
+											<div class="inline-flex items-center gap-1">
+												<button
+													type="button"
+													onclick={() => onEditAttendanceRecord(record)}
+													aria-label="Edit attendance record"
+													class="inline-flex size-8 items-center justify-center rounded-md border border-border text-primary transition-colors hover:bg-primary/10"
+												>
+													<Pencil class="size-3.5" aria-hidden="true" />
+												</button>
+												<button
+													type="button"
+													onclick={() => openAudit(record)}
+													aria-label="View audit history"
+													class="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-surface"
+												>
+													<History class="size-3.5" aria-hidden="true" />
+												</button>
+												<button
+													type="button"
+													onclick={(event) => onDeleteAttendanceRecord(event, record)}
+													aria-label="Delete attendance record"
+													class="inline-flex size-8 items-center justify-center rounded-md border border-border text-destructive transition-colors hover:bg-destructive/10"
+												>
+													<Trash2 class="size-3.5" aria-hidden="true" />
+												</button>
+											</div>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						{/if}
+					</tbody>
+				</table>
+			</div>
+		</section>
+
+		<div class="fixed bottom-6 left-1/2 z-30 -translate-x-1/2">
+			<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
+		</div>
+	{/if}
+</div>
 
 <FeedbackToast message={toastMessage} ok={toastOk} onClose={() => (toastMessage = null)} />
 
