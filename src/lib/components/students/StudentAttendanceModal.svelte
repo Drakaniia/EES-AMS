@@ -6,6 +6,7 @@
 		type AttendanceEvent,
 		type Settings
 	} from '$lib/db-rust';
+	import { filterAttendanceEventsForQuarter } from '$lib/student-analytics';
 	import Dialog from '../ui/Dialog.svelte';
 
 	interface Props {
@@ -94,6 +95,17 @@
 		return result;
 	});
 
+	const monthlyEvents = $derived.by(() =>
+		events.filter((e) => {
+			const d = new Date(e.timestamp);
+			return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+		})
+	);
+
+	const quarterlyEvents = $derived.by(() =>
+		filterAttendanceEventsForQuarter(events, settings, selectedYear)
+	);
+
 	function getStatus(dayEvents: AttendanceEvent[]) {
 		if (dayEvents.length === 0) return 'none';
 		const hasIn = dayEvents.some((e) => e.type === 'in');
@@ -109,10 +121,7 @@
 	}
 
 	const stats = $derived.by(() => {
-		const filtered = events.filter((e) => {
-			const d = new Date(e.timestamp);
-			return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
-		});
+		const filtered = viewMode === 'quarter' ? quarterlyEvents : monthlyEvents;
 
 		const presents = new Set(filtered.map((e) => e.timestamp.split('T')[0])).size;
 		const tardies = filtered.filter((e) => isLate(e)).length;
@@ -271,55 +280,58 @@
 			{:else}
 				<!-- Quarterly View (List of events grouped by month in quarter) -->
 				<div class="custom-scrollbar max-h-80 space-y-4 overflow-y-auto pr-2">
-					{#each events.filter((e) => {
-						const d = new Date(e.timestamp);
-						// Rough quarter logic if settings doesn't have explicit dates
-						const q = Math.floor(d.getMonth() / 3) + 1;
-						return q.toString() === settings?.quarter;
-					}) as e (e.id)}
+					{#if quarterlyEvents.length === 0}
 						<div
-							class="flex items-center justify-between rounded-xl border border-border bg-surface p-3 transition-colors hover:border-primary/30"
+							class="rounded-xl border border-dashed border-border bg-surface/60 px-4 py-8 text-center text-sm text-muted-foreground"
 						>
-							<div class="flex items-center gap-3">
-								<div
-									class="flex size-9 items-center justify-center rounded-full {isLate(e)
-										? 'bg-warning/10 text-warning'
-										: 'bg-primary/10 text-primary'}"
-								>
-									<svg
-										class="size-4"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-									>
-										<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-									</svg>
-								</div>
-								<div>
-									<div class="text-sm font-medium">
-										{new Date(e.timestamp).toLocaleDateString(undefined, {
-											month: 'short',
-											day: 'numeric',
-											year: 'numeric'
-										})}
-									</div>
-									<div class="font-mono text-xs text-muted-foreground">
-										{new Date(e.timestamp).toLocaleTimeString(undefined, {
-											hour: '2-digit',
-											minute: '2-digit'
-										})}
-										{#if isLate(e)}
-											<span class="text-warning ml-2 font-bold">LATE</span>
-										{/if}
-									</div>
-								</div>
-							</div>
-							<div class="rounded border border-border bg-background px-2 py-1 font-mono text-xs">
-								{e.type.toUpperCase()}
-							</div>
+							No attendance events found for {settings?.quarter ?? 'the selected quarter'}.
 						</div>
-					{/each}
+					{:else}
+						{#each quarterlyEvents as e (e.id)}
+							<div
+								class="flex items-center justify-between rounded-xl border border-border bg-surface p-3 transition-colors hover:border-primary/30"
+							>
+								<div class="flex items-center gap-3">
+									<div
+										class="flex size-9 items-center justify-center rounded-full {isLate(e)
+											? 'bg-warning/10 text-warning'
+											: 'bg-primary/10 text-primary'}"
+									>
+										<svg
+											class="size-4"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+										>
+											<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+										</svg>
+									</div>
+									<div>
+										<div class="text-sm font-medium">
+											{new Date(e.timestamp).toLocaleDateString(undefined, {
+												month: 'short',
+												day: 'numeric',
+												year: 'numeric'
+											})}
+										</div>
+										<div class="font-mono text-xs text-muted-foreground">
+											{new Date(e.timestamp).toLocaleTimeString(undefined, {
+												hour: '2-digit',
+												minute: '2-digit'
+											})}
+											{#if isLate(e)}
+												<span class="text-warning ml-2 font-bold">LATE</span>
+											{/if}
+										</div>
+									</div>
+								</div>
+								<div class="rounded border border-border bg-background px-2 py-1 font-mono text-xs">
+									{e.type.toUpperCase()}
+								</div>
+							</div>
+						{/each}
+					{/if}
 				</div>
 			{/if}
 
