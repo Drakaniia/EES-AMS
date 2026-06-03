@@ -23,7 +23,12 @@
 		type Sf2WorkbookSettings
 	} from '$lib/db-rust';
 	import type { Sf2PreviewDate } from '$lib/types';
-	import { SF2_SCHOOL_MONTHS, sf2ReportMonthLabel } from '$lib/sf2-settings';
+	import {
+		SF2_SCHOOL_MONTHS,
+		defaultSf2FirstSchoolDay,
+		sf2MonthByValue,
+		sf2ReportMonthLabel
+	} from '$lib/sf2-settings';
 	import {
 		AlertTriangle,
 		CalendarDays,
@@ -62,10 +67,21 @@
 	let draftAdviserName = $state('');
 	let draftSchoolHeadName = $state('');
 
+	const MATRIX_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const;
+
+	type MatrixWeekday = (typeof MATRIX_WEEKDAYS)[number];
+
+	type MatrixDateSlot = {
+		key: string;
+		weekday: MatrixWeekday;
+		date: Sf2PreviewDate | null;
+		dateKey: string | null;
+	};
+
 	type MatrixWeekGroup = {
 		key: string;
 		label: string;
-		dates: Sf2PreviewDate[];
+		slots: MatrixDateSlot[];
 	};
 
 	onMount(async () => {
@@ -81,7 +97,8 @@
 	const exportDisabled = $derived(!preview?.canExport || exporting || !activeClassId);
 	const issueCount = $derived(preview?.issues.length ?? 0);
 	const warningCount = $derived(preview?.warnings.length ?? 0);
-	const matrixWeekGroups = $derived(buildMatrixWeekGroups(preview?.dates ?? []));
+	const activeReportMonth = $derived(draftReportMonth || preview?.template?.reportMonth || '');
+	const matrixWeekGroups = $derived(buildMatrixWeekGroups(preview?.dates ?? [], activeReportMonth));
 
 	async function loadInitial() {
 		loading = true;
@@ -179,21 +196,30 @@
 		}
 	}
 
-	async function saveWorkbookDetails() {
+	async function saveWorkbookDetails(successMessage = 'SF2 workbook details saved') {
 		const draft = workbookDraftPayload();
-		if (!draft || savingDetails) return;
+		if (!draft || savingDetails) return false;
 
 		savingDetails = true;
 		try {
 			await updateSf2WorkbookSettings(draft);
-			toast('SF2 workbook details saved');
+			toast(successMessage);
 			await loadReport(draft.classId);
+			return true;
 		} catch (error) {
 			const msg = errorMessage(error, 'SF2 workbook update failed');
 			toast(`SF2 workbook update failed: ${msg}`, false);
+			return false;
 		} finally {
 			savingDetails = false;
 		}
+	}
+
+	async function onReportMonthChange() {
+		const previousReportMonth =
+			workbookSettings?.reportMonth || preview?.template?.reportMonth || '';
+		const saved = await saveWorkbookDetails('SF2 report month updated');
+		if (!saved) draftReportMonth = previousReportMonth;
 	}
 
 	async function toggleAttendance(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
@@ -231,7 +257,7 @@
 			section: draftSection,
 			adviserName: draftAdviserName,
 			schoolHeadName: draftSchoolHeadName,
-			firstSchoolDay: workbookSettings.firstSchoolDay,
+			firstSchoolDay: defaultSf2FirstSchoolDay(draftReportMonth, draftSchoolYear),
 			learnerNames: workbookSettings.learnerNames
 		};
 	}
@@ -290,26 +316,76 @@
 		return `${formatWeekday(date)} ${formatDayNumber(date)}`;
 	}
 
-	function buildMatrixWeekGroups(dates: Sf2PreviewDate[]): MatrixWeekGroup[] {
+	function buildMatrixWeekGroups(dates: Sf2PreviewDate[], reportMonth: string): MatrixWeekGroup[] {
 		const groups: MatrixWeekGroup[] = [];
+		const month = sf2MonthByValue(reportMonth);
+
+		if (month) {
+			const year = new Date().getFullYear();
+			const dayCount = new Date(year, month.monthIndex + 1, 0).getDate();
+
+			for (let day = 1; day <= dayCount; day += 1) {
+				const dateKey = localDateKey(new Date(year, month.monthIndex, day));
+				const weekdayIndex = weekdayIndexForDate(dateKey);
+				if (weekdayIndex < 0 || weekdayIndex > 4) continue;
+
+				let group = groups.find((item) => item.key === mondayDateKey(dateKey));
+				if (!group) {
+					group = createMatrixWeekGroup(mondayDateKey(dateKey));
+					groups.push(group);
+				}
+
+				group.slots[weekdayIndex] = {
+					key: dateKey,
+					weekday: MATRIX_WEEKDAYS[weekdayIndex],
+					date: dates.find((date) => date.date === dateKey) ?? null,
+					dateKey
+				};
+			}
+
+			return groups.map((group, index) => ({
+				...group,
+				label: `Week ${index + 1}`
+			}));
+		}
 
 		for (const date of dates) {
+			const weekdayIndex = weekdayIndexForDate(date.date);
+			if (weekdayIndex < 0 || weekdayIndex > 4) continue;
+
 			const key = mondayDateKey(date.date);
 			let group = groups.find((item) => item.key === key);
 
 			if (!group) {
-				group = {
-					key,
-					label: `Week ${groups.length + 1}`,
-					dates: []
-				};
+				group = createMatrixWeekGroup(key);
 				groups.push(group);
 			}
 
-			group.dates.push(date);
+			group.slots[weekdayIndex] = {
+				key: date.date,
+				weekday: MATRIX_WEEKDAYS[weekdayIndex],
+				date,
+				dateKey: date.date
+			};
 		}
 
-		return groups;
+		return groups.map((group, index) => ({
+			...group,
+			label: `Week ${index + 1}`
+		}));
+	}
+
+	function createMatrixWeekGroup(key: string): MatrixWeekGroup {
+		return {
+			key,
+			label: '',
+			slots: MATRIX_WEEKDAYS.map((weekday) => ({
+				key: `${key}-${weekday}`,
+				weekday,
+				date: null,
+				dateKey: null
+			}))
+		};
 	}
 
 	function mondayDateKey(date: string) {
@@ -320,6 +396,13 @@
 		return localDateKey(new Date(year, month - 1, day + mondayOffset));
 	}
 
+	function weekdayIndexForDate(date: string) {
+		const value = new Date(`${date}T00:00:00`);
+		const weekday = value.getDay();
+		if (weekday === 0 || weekday === 6) return -1;
+		return weekday - 1;
+	}
+
 	function localDateKey(date: Date) {
 		const year = date.getFullYear();
 		const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -328,14 +411,17 @@
 	}
 
 	function weekRangeLabel(group: MatrixWeekGroup) {
-		const first = group.dates[0];
-		const last = group.dates.at(-1);
+		const dates = group.slots
+			.map((slot) => slot.dateKey)
+			.filter((date): date is string => date !== null);
+		const first = dates[0];
+		const last = dates.at(-1);
 		if (!first || !last) return 'Mon-Fri';
-		if (first.date === last.date) return matrixDateLabel(first.date);
+		if (first === last) return matrixDateLabel(first);
 
-		return `${formatWeekday(first.date)}-${formatWeekday(last.date)} / ${formatDayNumber(
-			first.date
-		)}-${formatDayNumber(last.date)}`;
+		return `${formatWeekday(first)}-${formatWeekday(last)} / ${formatDayNumber(
+			first
+		)}-${formatDayNumber(last)}`;
 	}
 
 	function formatImportedAt(value?: number) {
@@ -359,6 +445,10 @@
 
 	function cellForDate(row: Sf2PreviewStudentRow, date: string) {
 		return row.cells.find((cell) => cell.date === date);
+	}
+
+	function unmappedCellLabel(row: Sf2PreviewStudentRow, date: string) {
+		return `${row.studentName}, ${matrixDateLabel(date)}: no SF2 column mapped`;
 	}
 
 	function cellClass(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
@@ -513,7 +603,7 @@
 							</div>
 							<button
 								type="button"
-								onclick={saveWorkbookDetails}
+								onclick={() => saveWorkbookDetails()}
 								disabled={!workbookSettings || savingDetails}
 								class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 							>
@@ -529,6 +619,7 @@
 								<span class="label-mono">Report Month</span>
 								<select
 									bind:value={draftReportMonth}
+									onchange={onReportMonthChange}
 									disabled={!workbookSettings || savingDetails}
 									class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none disabled:opacity-60"
 								>
@@ -595,7 +686,7 @@
 										</th>
 										{#each matrixWeekGroups as week (week.key)}
 											<th
-												colspan={week.dates.length}
+												colspan={week.slots.length}
 												class="sticky top-0 z-20 border-b border-l-2 border-border border-l-primary/45 bg-orange-50 px-2 py-2 text-center"
 												title={weekRangeLabel(week)}
 											>
@@ -608,21 +699,25 @@
 									</tr>
 									<tr>
 										{#each matrixWeekGroups as week (week.key)}
-											{#each week.dates as date, dateIndex (date.date)}
+											{#each week.slots as slot, dateIndex (slot.key)}
 												<th
 													class="sticky top-[43px] z-10 min-w-14 border-b border-border bg-card px-2 py-2 text-center {dateIndex ===
 													0
 														? 'border-l-2 border-l-primary/45'
 														: 'border-l border-l-border/60'}"
-													title={`${matrixDateLabel(date.date)} ${date.columnLetter}${date.columnIndex}`}
+													title={slot.date
+														? `${matrixDateLabel(slot.date.date)} ${slot.date.columnLetter}${slot.date.columnIndex}`
+														: slot.dateKey
+															? `${matrixDateLabel(slot.dateKey)}, no SF2 column mapped`
+															: `${slot.weekday}, no class day in this month`}
 												>
 													<div class="font-mono text-sm leading-none font-bold">
-														{formatDayNumber(date.date)}
+														{slot.dateKey ? formatDayNumber(slot.dateKey) : ''}
 													</div>
 													<div
 														class="mt-1 font-mono text-[10px] font-semibold text-muted-foreground"
 													>
-														{formatWeekday(date.date)}
+														{slot.weekday}
 													</div>
 												</th>
 											{/each}
@@ -655,8 +750,8 @@
 												</div>
 											</th>
 											{#each matrixWeekGroups as week (week.key)}
-												{#each week.dates as date, dateIndex (date.date)}
-													{@const cell = cellForDate(row, date.date)}
+												{#each week.slots as slot, dateIndex (slot.key)}
+													{@const cell = slot.dateKey ? cellForDate(row, slot.dateKey) : null}
 													<td
 														class="border-b border-border/80 px-1.5 py-1.5 text-center {dateIndex ===
 														0
@@ -687,11 +782,21 @@
 																	<span aria-hidden="true">-</span>
 																{/if}
 															</button>
-														{:else}
+														{:else if slot.dateKey}
 															<span
-																class="inline-grid size-9 place-items-center text-muted-foreground"
+																role="img"
+																aria-label={unmappedCellLabel(row, slot.dateKey)}
+																title={unmappedCellLabel(row, slot.dateKey)}
+																class="inline-grid size-9 place-items-center rounded-md border border-dashed border-border bg-background text-xs font-bold text-muted-foreground"
 															>
 																-
+															</span>
+														{:else}
+															<span
+																aria-hidden="true"
+																class="inline-grid size-9 place-items-center text-muted-foreground"
+															>
+																&nbsp;
 															</span>
 														{/if}
 													</td>
