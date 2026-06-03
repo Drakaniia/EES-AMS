@@ -7,10 +7,14 @@ use chrono::{DateTime, Local, Utc};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension, Row};
+use serde::Serialize;
 use std::path::Path;
 
 /// Database connection pool type
 pub type DbPool = Pool<SqliteConnectionManager>;
+
+/// Current SQLite schema version.
+pub const CURRENT_SCHEMA_VERSION: i32 = 15;
 
 /// Initialize the database with schema and migrations
 pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
@@ -20,6 +24,13 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
 
     let conn = pool.get()?;
 
+    migrate_db(&conn)?;
+
+    Ok(pool)
+}
+
+/// Run all pending database migrations on an existing SQLite connection.
+pub fn migrate_db(conn: &rusqlite::Connection) -> Result<()> {
     // Check if we need to run migrations
     let user_version: i32 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
@@ -27,76 +38,84 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
 
     if user_version < 1 {
         // Initial schema creation or migration to version 1
-        migrate_to_v1(&conn)?;
+        migrate_to_v1(conn)?;
         conn.execute("PRAGMA user_version = 1", [])?;
     }
 
     if user_version < 2 {
-        migrate_to_v2(&conn)?;
+        migrate_to_v2(conn)?;
         conn.execute("PRAGMA user_version = 2", [])?;
     }
 
     if user_version < 3 {
-        migrate_to_v3(&conn)?;
+        migrate_to_v3(conn)?;
         conn.execute("PRAGMA user_version = 3", [])?;
     }
 
     if user_version < 4 {
-        migrate_to_v4(&conn)?;
+        migrate_to_v4(conn)?;
         conn.execute("PRAGMA user_version = 4", [])?;
     }
 
     if user_version < 5 {
-        migrate_to_v5(&conn)?;
+        migrate_to_v5(conn)?;
         conn.execute("PRAGMA user_version = 5", [])?;
     }
 
     if user_version < 6 {
-        migrate_to_v6(&conn)?;
+        migrate_to_v6(conn)?;
         conn.execute("PRAGMA user_version = 6", [])?;
     }
 
     if user_version < 7 {
-        migrate_to_v7(&conn)?;
+        migrate_to_v7(conn)?;
         conn.execute("PRAGMA user_version = 7", [])?;
     }
 
     if user_version < 8 {
-        migrate_to_v8(&conn)?;
+        migrate_to_v8(conn)?;
         conn.execute("PRAGMA user_version = 8", [])?;
     }
 
     if user_version < 9 {
-        migrate_to_v9(&conn)?;
+        migrate_to_v9(conn)?;
         conn.execute("PRAGMA user_version = 9", [])?;
     }
 
     if user_version < 10 {
-        migrate_to_v10(&conn)?;
+        migrate_to_v10(conn)?;
         conn.execute("PRAGMA user_version = 10", [])?;
     }
 
     if user_version < 11 {
-        migrate_to_v11(&conn)?;
+        migrate_to_v11(conn)?;
         conn.execute("PRAGMA user_version = 11", [])?;
     }
 
     if user_version < 12 {
-        migrate_to_v12(&conn)?;
+        migrate_to_v12(conn)?;
         conn.execute("PRAGMA user_version = 12", [])?;
     }
 
     if user_version < 13 {
-        migrate_to_v13(&conn)?;
+        migrate_to_v13(conn)?;
         conn.execute("PRAGMA user_version = 13", [])?;
     }
 
     if user_version < 14 {
-        migrate_to_v14(&conn)?;
+        migrate_to_v14(conn)?;
         conn.execute("PRAGMA user_version = 14", [])?;
     }
 
-    Ok(pool)
+    if user_version < 15 {
+        migrate_to_v15(conn)?;
+        conn.execute(
+            &format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"),
+            [],
+        )?;
+    }
+
+    Ok(())
 }
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
@@ -167,6 +186,140 @@ fn attendance_audit_entry_from_row(row: &Row<'_>) -> rusqlite::Result<Attendance
             .with_timezone(&Utc),
         actor: row.get(10)?,
     })
+}
+
+struct AuditEventDraft {
+    entity_type: String,
+    entity_id: Option<String>,
+    action: String,
+    summary: String,
+    before_json: Option<String>,
+    after_json: Option<String>,
+    metadata_json: Option<String>,
+    actor: String,
+}
+
+impl AuditEventDraft {
+    fn new(
+        entity_type: impl Into<String>,
+        entity_id: Option<String>,
+        action: impl Into<String>,
+        summary: impl Into<String>,
+    ) -> Self {
+        Self {
+            entity_type: entity_type.into(),
+            entity_id,
+            action: action.into(),
+            summary: summary.into(),
+            before_json: None,
+            after_json: None,
+            metadata_json: None,
+            actor: "admin".to_string(),
+        }
+    }
+
+    fn before_json(mut self, value: String) -> Self {
+        self.before_json = Some(value);
+        self
+    }
+
+    fn after_json(mut self, value: String) -> Self {
+        self.after_json = Some(value);
+        self
+    }
+
+    fn metadata_json(mut self, value: String) -> Self {
+        self.metadata_json = Some(value);
+        self
+    }
+}
+
+fn audit_event_from_row(row: &Row<'_>) -> rusqlite::Result<AuditEvent> {
+    Ok(AuditEvent {
+        id: row.get(0)?,
+        entity_type: row.get(1)?,
+        entity_id: row.get(2)?,
+        action: row.get(3)?,
+        summary: row.get(4)?,
+        before_json: row.get(5)?,
+        after_json: row.get(6)?,
+        metadata_json: row.get(7)?,
+        created_at: DateTime::from_timestamp(row.get::<_, i64>(8)?, 0)
+            .unwrap()
+            .with_timezone(&Utc),
+        actor: row.get(9)?,
+    })
+}
+
+fn serialize_audit_payload<T: Serialize>(label: &str, value: &T) -> Result<String> {
+    serde_json::to_string(value)
+        .map_err(|error| AppError::Internal(format!("failed to serialize {label}: {error}")))
+}
+
+fn audit_metadata(value: serde_json::Value) -> Result<String> {
+    serde_json::to_string(&value)
+        .map_err(|error| AppError::Internal(format!("failed to serialize audit metadata: {error}")))
+}
+
+fn insert_audit_event(conn: &rusqlite::Connection, draft: AuditEventDraft) -> Result<AuditEvent> {
+    let event = AuditEvent {
+        id: uuid::Uuid::new_v4().to_string(),
+        entity_type: draft.entity_type,
+        entity_id: draft.entity_id,
+        action: draft.action,
+        summary: draft.summary,
+        before_json: draft.before_json,
+        after_json: draft.after_json,
+        metadata_json: draft.metadata_json,
+        created_at: Utc::now(),
+        actor: draft.actor,
+    };
+
+    conn.execute(
+        "INSERT INTO audit_events (id, entity_type, entity_id, action, summary, before_json, after_json, metadata_json, created_at, actor)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![
+            event.id,
+            event.entity_type,
+            event.entity_id,
+            event.action,
+            event.summary,
+            event.before_json,
+            event.after_json,
+            event.metadata_json,
+            event.created_at.timestamp(),
+            event.actor,
+        ],
+    )?;
+
+    Ok(event)
+}
+
+pub struct AuditEventInput<'a> {
+    pub entity_type: &'a str,
+    pub entity_id: Option<&'a str>,
+    pub action: &'a str,
+    pub summary: &'a str,
+    pub before_json: Option<String>,
+    pub after_json: Option<String>,
+    pub metadata_json: Option<String>,
+}
+
+pub fn record_audit_event(
+    conn: &rusqlite::Connection,
+    input: AuditEventInput<'_>,
+) -> Result<AuditEvent> {
+    let mut draft = AuditEventDraft::new(
+        input.entity_type,
+        input.entity_id.map(str::to_string),
+        input.action,
+        input.summary,
+    );
+    draft.before_json = input.before_json;
+    draft.after_json = input.after_json;
+    draft.metadata_json = input.metadata_json;
+
+    insert_audit_event(conn, draft)
 }
 
 /// Migrate database to version 1 (add class support)
@@ -568,6 +721,58 @@ fn migrate_to_v14(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migrate database to version 15 (general audit trail)
+fn migrate_to_v15(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(include_str!("../../sql/migrate_to_v15.sql"))?;
+    Ok(())
+}
+
+/// General audit repository
+pub struct AuditRepository {
+    pool: DbPool,
+}
+
+impl AuditRepository {
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    pub fn record(&self, input: AuditEventInput<'_>) -> Result<AuditEvent> {
+        let conn = self.pool.get()?;
+        record_audit_event(&conn, input)
+    }
+
+    pub fn list(&self, limit: Option<i64>) -> Result<Vec<AuditEvent>> {
+        let conn = self.pool.get()?;
+        let limit = limit.unwrap_or(200).clamp(1, 1_000);
+        let mut stmt = conn.prepare(
+            "SELECT id, entity_type, entity_id, action, summary, before_json, after_json, metadata_json, created_at, actor
+             FROM audit_events
+             ORDER BY created_at DESC, id DESC
+             LIMIT ?1",
+        )?;
+        let events = stmt
+            .query_map(params![limit], audit_event_from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        Ok(events)
+    }
+
+    pub fn list_all(&self) -> Result<Vec<AuditEvent>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, entity_type, entity_id, action, summary, before_json, after_json, metadata_json, created_at, actor
+             FROM audit_events
+             ORDER BY created_at ASC, id ASC",
+        )?;
+        let events = stmt
+            .query_map([], audit_event_from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        Ok(events)
+    }
+}
+
 /// Student repository
 pub struct StudentRepository {
     pool: DbPool,
@@ -714,19 +919,32 @@ impl StudentRepository {
             created_at: Utc::now(),
         };
 
-        let conn = self.pool.get()?;
-        conn.execute(
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+        transaction.execute(
             "INSERT INTO students (id, name, gender, card_serial, class_id, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 student.id.0.to_string(),
-                student.name,
+                student.name.as_str(),
                 student.gender.map(StudentGender::as_db_value),
-                student.card_serial,
-                student.class_id,
+                student.card_serial.as_deref(),
+                student.class_id.as_deref(),
                 student.created_at.timestamp(),
             ],
         )?;
+        let after_json = serialize_audit_payload("student audit payload", &student)?;
+        insert_audit_event(
+            &transaction,
+            AuditEventDraft::new(
+                "student",
+                Some(student.id.to_string()),
+                "create",
+                format!("Created student {}", student.name),
+            )
+            .after_json(after_json),
+        )?;
+        transaction.commit()?;
 
         Ok(student)
     }
@@ -749,7 +967,8 @@ impl StudentRepository {
             }
         }
 
-        let mut student = self.get(id)?;
+        let before = self.get(id)?;
+        let mut student = before.clone();
 
         if let Some(name) = req.name {
             student.name = name;
@@ -764,27 +983,50 @@ impl StudentRepository {
             student.class_id = class_id;
         }
 
-        let conn = self.pool.get()?;
-        conn.execute(
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+        transaction.execute(
             "UPDATE students 
              SET name = ?1, gender = ?2, card_serial = ?3, class_id = ?4
              WHERE id = ?5",
             params![
-                student.name,
+                student.name.as_str(),
                 student.gender.map(StudentGender::as_db_value),
-                student.card_serial,
-                student.class_id,
+                student.card_serial.as_deref(),
+                student.class_id.as_deref(),
                 id.0.to_string(),
             ],
         )?;
+        let before_json = serialize_audit_payload("student audit before payload", &before)?;
+        let after_json = serialize_audit_payload("student audit after payload", &student)?;
+        insert_audit_event(
+            &transaction,
+            AuditEventDraft::new(
+                "student",
+                Some(student.id.to_string()),
+                "update",
+                format!("Updated student {}", student.name),
+            )
+            .before_json(before_json)
+            .after_json(after_json),
+        )?;
+        transaction.commit()?;
 
         Ok(student)
     }
 
     /// Delete a student and all their events
     pub fn delete(&self, id: StudentId) -> Result<()> {
+        let before = self.get(id)?;
         let mut conn = self.pool.get()?;
         let transaction = conn.transaction()?;
+        let deleted_events: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM events WHERE student_id = ?1",
+                params![id.0.to_string()],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         transaction.execute(
             "DELETE FROM sf2_student_mappings WHERE student_id = ?1",
@@ -803,6 +1045,21 @@ impl StudentRepository {
             return Err(AppError::StudentNotFound(id.0.to_string()));
         }
 
+        let before_json = serialize_audit_payload("student audit before payload", &before)?;
+        let metadata_json = audit_metadata(serde_json::json!({
+            "deletedEvents": deleted_events,
+        }))?;
+        insert_audit_event(
+            &transaction,
+            AuditEventDraft::new(
+                "student",
+                Some(before.id.to_string()),
+                "delete",
+                format!("Deleted student {}", before.name),
+            )
+            .before_json(before_json)
+            .metadata_json(metadata_json),
+        )?;
         transaction.commit()?;
         Ok(())
     }
@@ -962,6 +1219,22 @@ impl EventRepository {
             )?;
         }
 
+        let after_json = serialize_audit_payload("attendance event audit payload", &event)?;
+        let metadata_json = audit_metadata(serde_json::json!({
+            "overrideReason": event.override_reason.as_deref(),
+        }))?;
+        insert_audit_event(
+            &transaction,
+            AuditEventDraft::new(
+                "attendance_event",
+                Some(event.id.0.to_string()),
+                "create",
+                format!("Recorded attendance for student {}", event.student_id),
+            )
+            .after_json(after_json)
+            .metadata_json(metadata_json),
+        )?;
+
         transaction.commit()?;
         Ok(event)
     }
@@ -1039,6 +1312,21 @@ impl EventRepository {
                 updated_at.timestamp(),
             ],
         )?;
+        let metadata_json = audit_metadata(serde_json::json!({
+            "reason": reason,
+        }))?;
+        insert_audit_event(
+            &transaction,
+            AuditEventDraft::new(
+                "attendance_event",
+                Some(event.id.0.to_string()),
+                "update",
+                format!("Updated attendance record for student {}", event.student_id),
+            )
+            .before_json(before_json.clone())
+            .after_json(after_json)
+            .metadata_json(metadata_json),
+        )?;
 
         transaction.commit()?;
         Ok(event)
@@ -1059,7 +1347,7 @@ impl EventRepository {
             return Err(AppError::EventNotFound(id.0.to_string()));
         }
 
-        if let Some(reason) = audit_reason {
+        if let Some(reason) = audit_reason.as_ref() {
             let before_json = serialize_audit_event(&before)?;
             transaction.execute(
                 "INSERT INTO attendance_event_audit (id, event_id, student_id, class_id, session_key, action, reason, before_json, after_json, created_at, actor)
@@ -1076,6 +1364,25 @@ impl EventRepository {
                 ],
             )?;
         }
+
+        let before_json = serialize_audit_payload("attendance event audit payload", &before)?;
+        let metadata_json = audit_metadata(serde_json::json!({
+            "reason": audit_reason.as_deref(),
+        }))?;
+        insert_audit_event(
+            &transaction,
+            AuditEventDraft::new(
+                "attendance_event",
+                Some(before.id.0.to_string()),
+                "delete",
+                format!(
+                    "Deleted attendance record for student {}",
+                    before.student_id
+                ),
+            )
+            .before_json(before_json)
+            .metadata_json(metadata_json),
+        )?;
 
         transaction.commit()?;
         Ok(())
@@ -1201,6 +1508,7 @@ impl SettingsRepository {
 
     /// Update settings
     pub fn update(&self, settings: Settings) -> Result<Settings> {
+        let before = self.get()?;
         let mut settings = settings;
         if !matches!(
             settings.quarter.as_str(),
@@ -1210,33 +1518,48 @@ impl SettingsRepository {
         }
         settings.attendance_mode = settings.attendance_mode.normalize();
 
-        let conn = self.pool.get()?;
-        conn.execute(
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+        transaction.execute(
             "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode, school_id, school_name, school_year, report_month, grade_level, section, adviser_name, school_head_name)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
             params![
-                settings.id,
-                settings.day_start,
-                settings.day_end,
-                settings.late_after,
-                settings.quarter,
-                settings.q1_start,
-                settings.q1_end,
-                settings.q2_start,
-                settings.q2_end,
-                settings.q3_start,
-                settings.q3_end,
+                settings.id.as_str(),
+                settings.day_start.as_str(),
+                settings.day_end.as_str(),
+                settings.late_after.as_str(),
+                settings.quarter.as_str(),
+                settings.q1_start.as_deref(),
+                settings.q1_end.as_deref(),
+                settings.q2_start.as_deref(),
+                settings.q2_end.as_deref(),
+                settings.q3_start.as_deref(),
+                settings.q3_end.as_deref(),
                 settings.attendance_mode.as_str(),
-                settings.school_id,
-                settings.school_name,
-                settings.school_year,
-                settings.report_month,
-                settings.grade_level,
-                settings.section,
-                settings.adviser_name,
-                settings.school_head_name,
+                settings.school_id.as_deref(),
+                settings.school_name.as_deref(),
+                settings.school_year.as_deref(),
+                settings.report_month.as_deref(),
+                settings.grade_level.as_deref(),
+                settings.section.as_deref(),
+                settings.adviser_name.as_deref(),
+                settings.school_head_name.as_deref(),
             ],
         )?;
+        let before_json = serialize_audit_payload("settings audit before payload", &before)?;
+        let after_json = serialize_audit_payload("settings audit after payload", &settings)?;
+        insert_audit_event(
+            &transaction,
+            AuditEventDraft::new(
+                "settings",
+                Some(settings.id.clone()),
+                "update",
+                "Updated global settings",
+            )
+            .before_json(before_json)
+            .after_json(after_json),
+        )?;
+        transaction.commit()?;
 
         Ok(settings)
     }
@@ -1351,31 +1674,45 @@ impl ClassRepository {
             created_at: Utc::now(),
         };
 
-        let conn = self.pool.get()?;
-        conn.execute(
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+        transaction.execute(
             "INSERT INTO classes (id, name, room, day_start, day_end, late_after, sessions, days, created_at) 
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
-                class.id,
-                class.name,
-                class.room,
-                class.day_start,
-                class.day_end,
-                class.late_after,
-                sessions_json,
-                days_json,
+                class.id.as_str(),
+                class.name.as_str(),
+                class.room.as_deref(),
+                class.day_start.as_str(),
+                class.day_end.as_str(),
+                class.late_after.as_str(),
+                sessions_json.as_str(),
+                days_json.as_str(),
                 class.created_at.timestamp(),
             ],
         )?;
+        let after_json = serialize_audit_payload("class audit payload", &class)?;
+        insert_audit_event(
+            &transaction,
+            AuditEventDraft::new(
+                "class",
+                Some(class.id.clone()),
+                "create",
+                format!("Created class {}", class.name),
+            )
+            .after_json(after_json),
+        )?;
+        transaction.commit()?;
 
         Ok(class)
     }
 
     /// Update a class
     pub fn update(&self, id: &str, req: UpdateClassRequest) -> Result<Class> {
-        let mut class = self
+        let before = self
             .get(id)?
             .ok_or_else(|| AppError::ClassNotFound(id.to_string()))?;
+        let mut class = before.clone();
 
         if let Some(name) = req.name {
             class.name = name;
@@ -1403,30 +1740,69 @@ impl ClassRepository {
             serde_json::to_string(&class.sessions).unwrap_or_else(|_| "[]".to_string());
         let days_json = serde_json::to_string(&class.days).unwrap_or_else(|_| "[]".to_string());
 
-        let conn = self.pool.get()?;
-        conn.execute(
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+        transaction.execute(
             "UPDATE classes 
              SET name = ?1, room = ?2, day_start = ?3, day_end = ?4, late_after = ?5, sessions = ?6, days = ?7 
              WHERE id = ?8",
             params![
-                class.name,
-                class.room,
-                class.day_start,
-                class.day_end,
-                class.late_after,
-                sessions_json,
-                days_json,
+                class.name.as_str(),
+                class.room.as_deref(),
+                class.day_start.as_str(),
+                class.day_end.as_str(),
+                class.late_after.as_str(),
+                sessions_json.as_str(),
+                days_json.as_str(),
                 id,
             ],
         )?;
+        let before_json = serialize_audit_payload("class audit before payload", &before)?;
+        let after_json = serialize_audit_payload("class audit after payload", &class)?;
+        insert_audit_event(
+            &transaction,
+            AuditEventDraft::new(
+                "class",
+                Some(class.id.clone()),
+                "update",
+                format!("Updated class {}", class.name),
+            )
+            .before_json(before_json)
+            .after_json(after_json),
+        )?;
+        transaction.commit()?;
 
         Ok(class)
     }
 
     /// Delete a class
     pub fn delete(&self, id: &str) -> Result<()> {
+        let before = self
+            .get(id)?
+            .ok_or_else(|| AppError::ClassNotFound(id.to_string()))?;
         let mut conn = self.pool.get()?;
         let transaction = conn.transaction()?;
+        let affected_students: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM students WHERE class_id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let affected_events: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM events WHERE class_id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let deleted_templates: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM sf2_templates WHERE active_class_id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         transaction.execute(
             "DELETE FROM sf2_templates WHERE active_class_id = ?1",
@@ -1450,6 +1826,23 @@ impl ClassRepository {
             return Err(AppError::ClassNotFound(id.to_string()));
         }
 
+        let before_json = serialize_audit_payload("class audit before payload", &before)?;
+        let metadata_json = audit_metadata(serde_json::json!({
+            "affectedStudents": affected_students,
+            "affectedEvents": affected_events,
+            "deletedSf2Templates": deleted_templates,
+        }))?;
+        insert_audit_event(
+            &transaction,
+            AuditEventDraft::new(
+                "class",
+                Some(before.id.clone()),
+                "delete",
+                format!("Deleted class {}", before.name),
+            )
+            .before_json(before_json)
+            .metadata_json(metadata_json),
+        )?;
         transaction.commit()?;
         Ok(())
     }
@@ -1539,6 +1932,85 @@ mod tests {
                 .gender,
             Some(StudentGender::Male)
         );
+    }
+
+    #[test]
+    fn init_db_creates_general_audit_events_table() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database file should be created");
+        let pool = init_db(temp_db.path()).expect("database should initialize");
+        let conn = pool.get().expect("database connection should be available");
+
+        let audit_table_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'audit_events'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("audit table should be inspectable");
+        let schema_version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("schema version should be readable");
+
+        assert_eq!(audit_table_count, 1);
+        assert_eq!(schema_version, CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn student_lifecycle_writes_general_audit_events() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database file should be created");
+        let pool = init_db(temp_db.path()).expect("database should initialize");
+        let student_repo = StudentRepository::new(pool.clone());
+        let audit_repo = AuditRepository::new(pool);
+
+        let student = student_repo
+            .create(CreateStudentRequest {
+                name: "Ada Lovelace".to_string(),
+                gender: Some(StudentGender::Female),
+                card_serial: Some("CARD-001".to_string()),
+                class_id: None,
+            })
+            .expect("student should be created");
+        student_repo
+            .update(
+                student.id,
+                UpdateStudentRequest {
+                    name: Some("Ada Byron".to_string()),
+                    gender: Some(StudentGender::Female),
+                    card_serial: Some("CARD-002".to_string()),
+                    class_id: None,
+                },
+            )
+            .expect("student should be updated");
+        student_repo
+            .delete(student.id)
+            .expect("student should be deleted");
+
+        let audit_events = audit_repo
+            .list(Some(10))
+            .expect("audit events should be readable");
+        let student_events: Vec<&AuditEvent> = audit_events
+            .iter()
+            .filter(|event| {
+                event.entity_type == "student"
+                    && event.entity_id.as_deref() == Some(&student.id.to_string())
+            })
+            .collect();
+        let actions: Vec<&str> = student_events
+            .iter()
+            .map(|event| event.action.as_str())
+            .collect();
+
+        assert!(actions.contains(&"create"));
+        assert!(actions.contains(&"update"));
+        assert!(actions.contains(&"delete"));
+        assert!(student_events.iter().any(|event| event
+            .after_json
+            .as_deref()
+            .is_some_and(|json| json.contains("Ada Lovelace"))));
+        assert!(student_events.iter().any(|event| event
+            .before_json
+            .as_deref()
+            .is_some_and(|json| json.contains("Ada Byron"))));
     }
 
     #[test]
