@@ -6,12 +6,17 @@ import type {
 	Session,
 	AttendanceEvent,
 	AttendanceAuditEntry,
+	AuditEvent,
 	AttendanceType,
 	AttendanceMode,
 	Settings,
 	CreateEventRequest,
 	UpdateEventRequest,
 	ExportData,
+	BackupSummary,
+	BackupStatus,
+	BackupPreview,
+	RestoreResult,
 	Sf2ImportSummary,
 	Sf2TemplateDraft,
 	Sf2WorkbookSettings,
@@ -29,12 +34,17 @@ export type {
 	Session,
 	AttendanceEvent,
 	AttendanceAuditEntry,
+	AuditEvent,
 	AttendanceType,
 	AttendanceMode,
 	Settings,
 	CreateEventRequest,
 	UpdateEventRequest,
 	ExportData,
+	BackupSummary,
+	BackupStatus,
+	BackupPreview,
+	RestoreResult,
 	Sf2ImportSummary,
 	Sf2TemplateDraft,
 	Sf2WorkbookSettings,
@@ -214,6 +224,10 @@ export async function listAttendanceAudit(filters?: {
 
 // ── Settings Operations ───────────────────────────────────────────────────────
 
+export async function listAuditEvents(limit = 200): Promise<AuditEvent[]> {
+	return await invoke('list_audit_events', { limit });
+}
+
 export async function getSettings(): Promise<Settings> {
 	const backendSettings = (await invoke('get_settings')) as {
 		id: string;
@@ -299,6 +313,46 @@ export async function importAll(payload: ExportData): Promise<void> {
 
 export async function wipeAll(): Promise<void> {
 	return await invoke('wipe_all');
+}
+
+export async function getBackupStatus(): Promise<BackupStatus> {
+	return await invoke('get_backup_status');
+}
+
+export async function createBackupNow(): Promise<BackupStatus> {
+	return await invoke('create_backup_now');
+}
+
+export async function listBackups(): Promise<BackupSummary[]> {
+	return await invoke('list_backups');
+}
+
+export async function chooseBackupSyncFolder(): Promise<BackupStatus> {
+	return await invoke('choose_backup_sync_folder');
+}
+
+export async function clearBackupSyncFolder(): Promise<BackupStatus> {
+	return await invoke('clear_backup_sync_folder');
+}
+
+export async function connectGoogleDriveBackup(): Promise<BackupStatus> {
+	return await invoke('connect_google_drive_backup');
+}
+
+export async function disconnectGoogleDriveBackup(): Promise<BackupStatus> {
+	return await invoke('disconnect_google_drive_backup');
+}
+
+export async function uploadLatestBackupToGoogleDrive(): Promise<BackupStatus> {
+	return await invoke('upload_latest_backup_to_google_drive');
+}
+
+export async function chooseRestoreBackup(): Promise<BackupPreview | null> {
+	return await invoke('choose_restore_backup');
+}
+
+export async function restoreBackup(sourcePath: string): Promise<RestoreResult> {
+	return await invoke('restore_backup', { sourcePath });
 }
 
 // ── SF2 Excel Bridge Operations ─────────────────────────────────────────────

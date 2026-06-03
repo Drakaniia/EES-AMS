@@ -59,6 +59,19 @@ export interface AttendanceAuditEntry {
 	actor: string;
 }
 
+export interface AuditEvent {
+	id: string;
+	entityType: string;
+	entityId?: string;
+	action: string;
+	summary: string;
+	beforeJson?: string;
+	afterJson?: string;
+	metadataJson?: string;
+	createdAt: string;
+	actor: string;
+}
+
 export interface Settings {
 	id: string;
 	dayStart: string;
@@ -131,7 +144,59 @@ export interface ExportData {
 	classes: Class[];
 	events: AttendanceEvent[];
 	settings: Settings[];
+	auditEvents?: AuditEvent[];
 	exportedAt: number;
+}
+
+export type BackupKind = 'auto' | 'manual' | 'pre_restore' | 'unknown';
+
+export interface BackupSummary {
+	path: string;
+	fileName: string;
+	createdAt: number;
+	sizeBytes: number;
+	kind: BackupKind;
+}
+
+export interface BackupStatus {
+	localBackupDir: string;
+	backupCount: number;
+	retentionLimit: number;
+	lastBackupAt?: number;
+	lastBackupPath?: string;
+	syncFolderPath?: string;
+	lastError?: string;
+	lastSyncError?: string;
+	googleDriveConfigured: boolean;
+	googleDriveConnected: boolean;
+	googleDriveFolderId?: string;
+	googleDriveFolderName?: string;
+	lastGoogleDriveBackupAt?: number;
+	lastGoogleDriveFileId?: string;
+	lastGoogleDriveError?: string;
+}
+
+export interface BackupPreview {
+	sourcePath: string;
+	fileName: string;
+	modifiedAt: number;
+	sizeBytes: number;
+	schemaVersion: number;
+	studentCount: number;
+	classCount: number;
+	eventCount: number;
+	settingsCount: number;
+	sf2TemplateCount: number;
+	warnings: string[];
+}
+
+export interface RestoreResult {
+	restoredPath: string;
+	preRestoreBackupPath: string;
+	restoredAt: number;
+	schemaVersion: number;
+	migrated: boolean;
+	warnings: string[];
 }
 
 export interface ServerInfo {
