@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { X, CheckCircle, AlertCircle, Info, Download } from 'lucide-svelte';
+	import { AlertCircle, CheckCircle, Download, Info, LoaderCircle, X } from 'lucide-svelte';
 
 	interface Props {
 		type?: 'info' | 'success' | 'warning' | 'error' | 'update';
@@ -10,6 +10,7 @@
 		closable?: boolean;
 		show?: boolean;
 		actionText?: string;
+		actionDisabled?: boolean;
 		action?: () => void;
 		onClose?: () => void;
 		onAction?: () => void;
@@ -23,6 +24,7 @@
 		closable = true,
 		show = true,
 		actionText = '',
+		actionDisabled = false,
 		action,
 		onClose,
 		onAction
@@ -39,19 +41,19 @@
 	};
 
 	const colors = {
-		info: 'bg-blue-50 border-blue-200 text-blue-800',
-		success: 'bg-green-50 border-green-200 text-green-800',
-		warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
-		error: 'bg-red-50 border-red-200 text-red-800',
-		update: 'bg-purple-50 border-purple-200 text-purple-800'
+		info: 'border-slate-200 bg-white text-slate-800',
+		success: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+		warning: 'border-amber-200 bg-amber-50 text-amber-900',
+		error: 'border-red-200 bg-red-50 text-red-900',
+		update: 'border-orange-200 bg-orange-50 text-stone-900'
 	};
 
 	const iconColors = {
-		info: 'text-blue-500',
-		success: 'text-green-500',
-		warning: 'text-yellow-500',
-		error: 'text-red-500',
-		update: 'text-purple-500'
+		info: 'text-slate-500',
+		success: 'text-emerald-600',
+		warning: 'text-amber-600',
+		error: 'text-red-600',
+		update: 'text-orange-600'
 	};
 
 	function close() {
@@ -60,6 +62,7 @@
 	}
 
 	function handleAction() {
+		if (actionDisabled) return;
 		action?.();
 		onAction?.();
 	}
@@ -93,7 +96,11 @@
 	>
 		<div class="flex items-start rounded-lg border p-4 shadow-lg {colorClass}">
 			<div class="shrink-0">
-				<IconComponent class="h-6 w-6 {iconColorClass}" />
+				{#if actionDisabled && type === 'update'}
+					<LoaderCircle class="h-6 w-6 animate-spin {iconColorClass}" />
+				{:else}
+					<IconComponent class="h-6 w-6 {iconColorClass}" />
+				{/if}
 			</div>
 
 			<div class="ml-3 flex-1">
@@ -101,13 +108,14 @@
 					<h3 class="mb-1 text-sm font-semibold">{title}</h3>
 				{/if}
 				{#if message}
-					<p class="text-sm">{message}</p>
+					<p class="text-sm leading-5 whitespace-pre-line">{message}</p>
 				{/if}
 
 				{#if actionText}
 					<button
 						onclick={handleAction}
-						class="mt-2 rounded bg-white/20 px-3 py-1 text-xs font-medium transition-colors hover:bg-white/30"
+						disabled={actionDisabled}
+						class="mt-3 rounded-md border border-current/15 bg-white/70 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
 					>
 						{actionText}
 					</button>

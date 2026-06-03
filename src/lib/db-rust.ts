@@ -5,9 +5,12 @@ import type {
 	Class,
 	Session,
 	AttendanceEvent,
+	AttendanceAuditEntry,
 	AttendanceType,
 	AttendanceMode,
 	Settings,
+	CreateEventRequest,
+	UpdateEventRequest,
 	ExportData,
 	Sf2ImportSummary,
 	Sf2TemplateDraft,
@@ -25,9 +28,12 @@ export type {
 	Class,
 	Session,
 	AttendanceEvent,
+	AttendanceAuditEntry,
 	AttendanceType,
 	AttendanceMode,
 	Settings,
+	CreateEventRequest,
+	UpdateEventRequest,
 	ExportData,
 	Sf2ImportSummary,
 	Sf2TemplateDraft,
@@ -182,16 +188,28 @@ export async function lastEventForStudent(studentId: string): Promise<Attendance
 	return await invoke('last_event_for_student', { studentId });
 }
 
-export async function addEvent(
-	event: Omit<AttendanceEvent, 'id' | 'timestamp'>
-): Promise<AttendanceEvent> {
+export async function addEvent(event: CreateEventRequest): Promise<AttendanceEvent> {
 	return await invoke('add_event', {
 		req: event
 	});
 }
 
-export async function deleteEvent(id: string): Promise<void> {
-	return await invoke('delete_event', { id });
+export async function updateEvent(id: string, req: UpdateEventRequest): Promise<AttendanceEvent> {
+	return await invoke('update_event', { id, req });
+}
+
+export async function deleteEvent(id: string, reason?: string): Promise<void> {
+	return await invoke('delete_event', { id, reason });
+}
+
+export async function listAttendanceAudit(filters?: {
+	eventId?: string;
+	studentId?: string;
+}): Promise<AttendanceAuditEntry[]> {
+	return await invoke('list_attendance_audit', {
+		eventId: filters?.eventId,
+		studentId: filters?.studentId
+	});
 }
 
 // ── Settings Operations ───────────────────────────────────────────────────────

@@ -15,6 +15,7 @@
 	let showUpdateToast = $state(false);
 	let isDownloading = $state(false);
 	let downloadError = $state('');
+	let installMessage = $state('');
 
 	onMount(async () => {
 		await checkForUpdates();
@@ -40,10 +41,9 @@
 		downloadError = '';
 
 		try {
-			await invoke<string>('download_and_install');
-			// The app will restart automatically after successful installation
+			installMessage = await invoke<string>('download_and_install');
 		} catch (error) {
-			downloadError = error as string;
+			downloadError = error instanceof Error ? error.message : String(error);
 			console.error('Update failed:', error);
 		} finally {
 			isDownloading = false;
@@ -57,13 +57,12 @@
 	function formatUpdateMessage(info: UpdateInfo): string {
 		if (!info.version) return 'An update is available';
 
-		let message = `Version ${info.version} is available`;
+		let message = `Version ${info.version} is ready to install`;
 		if (info.currentVersion) {
-			message += ` (you have ${info.currentVersion})`;
+			message += ` (current ${info.currentVersion})`;
 		}
 
 		if (info.notes) {
-			// Truncate notes if too long
 			const notes = info.notes.length > 100 ? info.notes.substring(0, 100) + '...' : info.notes;
 			message += `\n\n${notes}`;
 		}
@@ -80,8 +79,20 @@
 		duration={0}
 		closable={!isDownloading}
 		actionText={isDownloading ? 'Downloading...' : 'Download & Install'}
+		actionDisabled={isDownloading}
 		action={isDownloading ? undefined : downloadAndInstall}
 		onClose={dismissUpdate}
+	/>
+{/if}
+
+{#if installMessage}
+	<Toast
+		type="success"
+		title="Update Installed"
+		message={installMessage}
+		duration={10000}
+		closable={true}
+		onClose={() => (installMessage = '')}
 	/>
 {/if}
 
@@ -92,5 +103,6 @@
 		message={downloadError}
 		duration={10000}
 		closable={true}
+		onClose={() => (downloadError = '')}
 	/>
 {/if}

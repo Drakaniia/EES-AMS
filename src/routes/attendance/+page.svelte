@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Grid2X2, List, Search, ScanLine } from 'lucide-svelte';
+	import { Grid2X2, List, Search, ScanLine, ShieldAlert } from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -37,6 +37,20 @@
 	};
 
 	type ManualViewMode = 'boxes' | 'list';
+	type OverrideTarget = {
+		student: Student;
+		type: AttendanceType;
+		timestamp: number;
+		classId?: string;
+		className: string;
+		sessionKey: string;
+		message: string;
+		isLate: boolean;
+	};
+	type LogOptions = {
+		overrideReason?: string;
+		timestamp?: number;
+	};
 
 	let log = $state<LogLine[]>([]);
 	let students = $state<Student[]>([]);
@@ -69,6 +83,9 @@
 	let lastEventId = $state<string | null>(null);
 	let undoTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastScan = $state<{ serial: string; timestamp: number } | null>(null);
+	let overrideTarget = $state<OverrideTarget | null>(null);
+	let overrideReason = $state('');
+	let isOverrideSaving = $state(false);
 
 	onMount(async () => {
 		await loadInitial();
@@ -156,7 +173,7 @@
 	);
 
 	const recordedCount = $derived(
-		manualStudents.filter((student) => getLastEventToday(student)?.type === 'in').length
+		manualStudents.filter((student) => getLastEventForSession(student)?.type === 'in').length
 	);
 	const pendingCount = $derived(manualStudents.length - recordedCount);
 
@@ -227,20 +244,74 @@
 		return students.find((student) => student.id === studentId)?.name ?? 'Unknown student';
 	}
 
-	function getLastEventToday(student: Student) {
+	function getStudentClass(student: Student) {
+		return classes.find((classItem) => classItem.id === student.classId);
+	}
+
+	function getAttendanceClass(student: Student) {
+		return currentClass ?? (isCardReaderMode ? activeClass : undefined) ?? getStudentClass(student);
+	}
+
+	function getSessionSegment(classObj: Class | undefined, timestamp: number) {
+		if (!classObj?.sessions || classObj.sessions.length <= 1) return 'day';
+
+		const now = new Date(timestamp);
+		const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+		const session = classObj.sessions.find(
+			(item) => timeStr >= item.startTime && timeStr <= item.endTime
+		);
+
+		return (session?.name || 'off-schedule')
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-|-$/g, '');
+	}
+
+	function getSessionKey(classObj: Class | undefined, timestamp: number) {
+		const classKey = classObj?.id || 'unassigned';
+		const segment = getSessionSegment(classObj, timestamp) || 'day';
+		return `${fmtDate(timestamp)}|${classKey}|${segment}`;
+	}
+
+	function getAttendanceDraft(student: Student, timestamp = Date.now()) {
+		const classObj = getAttendanceClass(student);
+		const classId = classObj?.id || selectedClassId || student.classId || undefined;
+		const sessionKey = getSessionKey(classObj, timestamp);
+
+		return {
+			classObj,
+			classId,
+			sessionKey,
+			isLate: checkLate(classObj, timestamp),
+			className: classObj?.name ?? 'Unassigned class'
+		};
+	}
+
+	function matchesCurrentSession(event: AttendanceEvent, student: Student, timestamp = Date.now()) {
+		const draft = getAttendanceDraft(student, timestamp);
+		if (event.sessionKey) return event.sessionKey === draft.sessionKey;
+		const eventClassId = event.classId || student.classId || 'unassigned';
+		return (
+			fmtDate(event.timestamp) === fmtDate(timestamp) &&
+			eventClassId === (draft.classId || 'unassigned')
+		);
+	}
+
+	function getLastEventForSession(student: Student) {
 		return todayEvents
-			.filter((event) => event.studentId === student.id)
+			.filter((event) => event.studentId === student.id && matchesCurrentSession(event, student))
 			.sort((a, b) => eventTime(b) - eventTime(a))[0];
 	}
 
 	function getNextAttendanceType(student: Student): AttendanceType | null {
-		const last = getLastEventToday(student);
+		const last = getLastEventForSession(student);
 		if (!last) return 'in';
 		return null;
 	}
 
 	function getStudentStatus(student: Student) {
-		const last = getLastEventToday(student);
+		const last = getLastEventForSession(student);
 		if (!last) return { label: 'Not recorded', tone: 'idle' };
 		return { label: `Recorded ${fmtTime(last.timestamp)}`, tone: 'in' };
 	}
@@ -257,7 +328,7 @@
 	}
 
 	function getStudentClassName(student: Student) {
-		return classes.find((classItem) => classItem.id === student.classId)?.name ?? 'No class';
+		return getStudentClass(student)?.name ?? 'No class';
 	}
 
 	function toast(msg: string, ok = true) {
@@ -359,29 +430,77 @@
 		}
 	}
 
-	async function logForStudent(student: Student, forcedType?: AttendanceType) {
+	function openOverride(student: Student, type: AttendanceType, message: string) {
+		const timestamp = Date.now();
+		const draft = getAttendanceDraft(student, timestamp);
+		overrideTarget = {
+			student,
+			type,
+			timestamp,
+			classId: draft.classId,
+			className: draft.className,
+			sessionKey: draft.sessionKey,
+			message,
+			isLate: draft.isLate
+		};
+		overrideReason = '';
+		pickerOpen = false;
+	}
+
+	async function submitOverride() {
+		if (!overrideTarget || isOverrideSaving) return;
+
+		const reason = overrideReason.trim();
+		if (reason.length < 3) {
+			toast('Override reason is required', false);
+			return;
+		}
+
+		isOverrideSaving = true;
+		isProcessing = true;
+		try {
+			await logForStudent(overrideTarget.student, overrideTarget.type, {
+				overrideReason: reason,
+				timestamp: overrideTarget.timestamp
+			});
+			overrideTarget = null;
+			overrideReason = '';
+		} finally {
+			isOverrideSaving = false;
+			isProcessing = false;
+		}
+	}
+
+	async function logForStudent(
+		student: Student,
+		forcedType?: AttendanceType,
+		options: LogOptions = {}
+	) {
 		const type = forcedType ?? getNextAttendanceType(student);
 		if (!type) {
-			toast(`${student.name} already recorded today`, false);
+			openOverride(student, 'in', `${student.name} is already recorded for this session.`);
 			return;
 		}
 
-		const studentClass = classes.find((c) => c.id === student.classId) || currentClass;
-		const ts = Date.now();
+		const ts = options.timestamp ?? Date.now();
+		const draft = getAttendanceDraft(student, ts);
 
-		if (!isWithinClassHours(studentClass, ts)) {
-			toast('Not within class hours - attendance not allowed', false);
+		if (!options.overrideReason && !isWithinClassHours(draft.classObj, ts)) {
+			openOverride(student, type, 'This attendance is outside the selected class session.');
 			return;
 		}
 
-		const isLate = type === 'in' && checkLate(studentClass, ts);
+		const isLate = type === 'in' && draft.isLate;
 
 		try {
 			const createdEvent = await addEvent({
 				studentId: student.id,
-				classId: student.classId || selectedClassId || sessionClass?.id || undefined,
+				classId: draft.classId,
 				type,
-				note: isLate ? 'Late' : undefined
+				note: isLate ? 'Late' : undefined,
+				sessionKey: draft.sessionKey,
+				overrideReason: options.overrideReason,
+				timestamp: new Date(ts).toISOString()
 			});
 
 			lastEventId = createdEvent.id;
@@ -413,14 +532,18 @@
 				lastEventId = null;
 			}, 5000);
 		} catch (err: unknown) {
-			handleAttendanceError(err, student.name);
+			handleAttendanceError(err, student);
 		}
 	}
 
-	function handleAttendanceError(err: unknown, name?: string) {
+	function handleAttendanceError(err: unknown, student?: Student) {
 		const message = err instanceof Error ? err.message : String(err);
 		if (message.includes('duplicate attendance') || message.includes('already recorded')) {
-			toast(name ? `${name} already recorded today` : 'Already recorded today', false);
+			if (student) {
+				openOverride(student, 'in', `${student.name} is already recorded for this session.`);
+				return;
+			}
+			toast('Already recorded for this session', false);
 			return;
 		}
 		toast(`Error: ${message}`, false);
@@ -428,7 +551,7 @@
 
 	async function markStudent(student: Student, action: AttendanceType | null, closePicker = false) {
 		if (!action) {
-			toast(`${student.name} already recorded today`, false);
+			openOverride(student, 'in', `${student.name} is already recorded for this session.`);
 			return;
 		}
 
@@ -475,7 +598,7 @@
 
 		const classStudents = students.filter((student) => student.classId === classObj.id);
 		const presentCount = classStudents.filter(
-			(student) => getLastEventToday(student)?.type === 'in'
+			(student) => getLastEventForSession(student)?.type === 'in'
 		).length;
 		const summary = `${presentCount}/${classStudents.length} students present${closeSummary}`;
 
@@ -774,7 +897,7 @@
 								<button
 									type="button"
 									title={`${student.name} - ${status.label}`}
-									disabled={!action || isProcessing}
+									disabled={isProcessing}
 									onclick={() => markStudent(student, action)}
 									class="group flex min-h-[116px] min-w-0 flex-col justify-between rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-65 {action ===
 									'in'
@@ -807,7 +930,7 @@
 												? 'text-primary'
 												: 'text-muted-foreground'}"
 										>
-											{action === 'in' ? 'IN' : 'REC'}
+											{action === 'in' ? 'IN' : 'OVR'}
 										</span>
 									</span>
 								</button>
@@ -842,14 +965,14 @@
 											</div>
 										</div>
 										<button
-											disabled={!action || isProcessing}
+											disabled={isProcessing}
 											onclick={() => markStudent(student, action)}
 											class="w-fit min-w-28 rounded-pill px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
 											'in'
 												? 'bg-primary text-primary-foreground hover:bg-accent'
 												: 'border border-border bg-surface text-muted-foreground'}"
 										>
-											{action === 'in' ? 'Record' : 'Recorded'}
+											{action === 'in' ? 'Record' : 'Override'}
 										</button>
 									</li>
 								{/each}
@@ -965,7 +1088,7 @@
 				{@const action = getNextAttendanceType(student)}
 				<li>
 					<button
-						disabled={!action || isProcessing}
+						disabled={isProcessing}
 						onclick={() => markStudent(student, action, true)}
 						class="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 					>
@@ -976,7 +1099,7 @@
 							</span>
 						</span>
 						<span class="label-mono text-xs font-bold text-primary">
-							{action === 'in' ? 'RECORD' : 'RECORDED'}
+							{action === 'in' ? 'RECORD' : 'OVERRIDE'}
 						</span>
 					</button>
 				</li>
@@ -992,6 +1115,82 @@
 			Close
 		</button>
 	</div>
+</Dialog>
+
+<Dialog
+	open={!!overrideTarget}
+	title="Admin override"
+	description="Save an exception with a reason for audit history."
+	onClose={() => {
+		if (!isOverrideSaving) {
+			overrideTarget = null;
+			overrideReason = '';
+		}
+	}}
+>
+	{#if overrideTarget}
+		<div class="rounded-xl border border-primary/20 bg-primary/10 p-4 text-sm">
+			<div class="flex items-start gap-3">
+				<div
+					class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"
+				>
+					<ShieldAlert class="size-5" aria-hidden="true" />
+				</div>
+				<div class="min-w-0 flex-1">
+					<div class="font-semibold">{overrideTarget.student.name}</div>
+					<p class="mt-1 text-muted-foreground">{overrideTarget.message}</p>
+					<div class="mt-3 flex flex-wrap gap-2 font-mono text-[11px]">
+						<span class="rounded-pill border border-border bg-background px-2 py-1">
+							{overrideTarget.className}
+						</span>
+						<span class="rounded-pill border border-border bg-background px-2 py-1">
+							{fmtTime(overrideTarget.timestamp)}
+						</span>
+						{#if overrideTarget.isLate}
+							<span
+								class="rounded-pill border border-destructive/20 bg-destructive/10 px-2 py-1 text-destructive"
+							>
+								LATE
+							</span>
+						{/if}
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="space-y-2">
+			<label for="override-reason" class="label-mono">Reason</label>
+			<textarea
+				id="override-reason"
+				bind:value={overrideReason}
+				rows="4"
+				placeholder="Example: substitute class, late arrival, mistaken earlier tap..."
+				class="min-h-28 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+			></textarea>
+		</div>
+
+		<div class="flex justify-end gap-2 pt-2">
+			<button
+				type="button"
+				disabled={isOverrideSaving}
+				onclick={() => {
+					overrideTarget = null;
+					overrideReason = '';
+				}}
+				class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+			>
+				Cancel
+			</button>
+			<button
+				type="button"
+				disabled={isOverrideSaving || overrideReason.trim().length < 3}
+				onclick={submitOverride}
+				class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+			>
+				{isOverrideSaving ? 'Saving...' : 'Save override'}
+			</button>
+		</div>
+	{/if}
 </Dialog>
 
 <FeedbackToast
