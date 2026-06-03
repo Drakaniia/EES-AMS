@@ -1,15 +1,3 @@
-!always follow @DESIGN.md and /reference when generating UI
-!we start by converting typescript (/reference) into svelte
-!always run `bun run check && bun run lint && bun run typecheck` / `cargo check` and `clippy fmt --check` after implementation to ensure quality
-read @rust-skills before implementing rust code
-read @rust-skills before implementing rust code
-read @rust-skills before implementing rust code
-read @rust-skills before implementing rust code
-always read @rust-skills when implimenting code
-always use @tauri-v2
-always use @svelte-best-practices
-always use @svelte-code-writer
-
 # EES-AMS - Student Attendance Management System
 
 ## Project Snapshot
@@ -69,6 +57,8 @@ cd src-tauri && cargo check && cargo clippy
 - SF2 report preview/export is monthly: the class-day matrix must only show and export dates matching the saved `Report for the Month of` header in the real current calendar year.
 - Do not include workbook dates from future or other months in the SF2 Reports page.
 - SF2 weekday/date layout must follow the real current calendar year for the report month, not the School Year input.
+- SF2 class-day matrix is Monday-Friday only; never render Saturday/Sunday. Only leading/trailing weekday slots outside the report month stay blank; middle weeks must show normal Monday-Friday dates.
+- Changing `Report Month` in the Reports page must immediately rebuild the visible class-day matrix and refresh the preview so saved absences for that month still show as `X`.
 - Verify behavior when refreshing to a new day.
 - Ensure attendance records are maintained until the end of the month.
 - Dashboard should show who is absent and the present/absent student counts.
