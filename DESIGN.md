@@ -71,6 +71,8 @@ Authentication and CTA controls should preserve the source button hierarchy, inp
 
 Preserve existing motion cues such as masked reveals, staggered entrance, hover lift, scroll-triggered transitions, and ambient movement. Keep easing smooth and restrained.
 
+Global navigation and full-screen review overlays should use a simple fade-out and fade-in on main content, roughly 140-180ms. Do not move, slide, scale, or drop page content during route or review transitions. Keep route changes subtle, avoid heavy page flips or long crossfades, and honor reduced-motion preferences.
+
 ## WebGL & Effects
 
 If the source includes canvas, WebGL, Three.js, gradients, particles, or atmospheric effects, rebuild them as supporting layers behind the content. Keep effects performant, responsive, and secondary to the interface.

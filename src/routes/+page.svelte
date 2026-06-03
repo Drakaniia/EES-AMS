@@ -4,7 +4,6 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
@@ -206,225 +205,217 @@
 	<meta name="description" content="Today's attendance at a glance." />
 </svelte:head>
 
-<AppShell>
-	<PageHeader
-		category={activeClass ? 'Live Session' : 'Dashboard'}
-		title={dynamicTitle}
-		description={dynamicDescription}
-	>
-		{#snippet actions()}
-			<a
-				href={resolve('/students')}
-				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
-			>
-				<UsersRound class="size-4" aria-hidden="true" />
-				Manage students
-			</a>
-			<a
-				href={resolve(attendanceHref(activeClass?.id))}
-				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-primary bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
-			>
-				{#if activeClass}
-					<span class="relative flex h-2 w-2" aria-hidden="true">
-						<span
-							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"
-						></span>
-						<span class="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
-					</span>
-				{/if}
-				<ScanLine class="size-4" aria-hidden="true" />
-				{attendanceActionLabel}
-			</a>
-		{/snippet}
-	</PageHeader>
+<PageHeader
+	category={activeClass ? 'Live Session' : 'Dashboard'}
+	title={dynamicTitle}
+	description={dynamicDescription}
+>
+	{#snippet actions()}
+		<a
+			href={resolve('/students')}
+			class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+		>
+			<UsersRound class="size-4" aria-hidden="true" />
+			Manage students
+		</a>
+		<a
+			href={resolve(attendanceHref(activeClass?.id))}
+			class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-primary bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+		>
+			{#if activeClass}
+				<span class="relative flex h-2 w-2" aria-hidden="true">
+					<span
+						class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"
+					></span>
+					<span class="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
+				</span>
+			{/if}
+			<ScanLine class="size-4" aria-hidden="true" />
+			{attendanceActionLabel}
+		</a>
+	{/snippet}
+</PageHeader>
 
-	<div class="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-5 md:px-8 lg:px-10">
-		{#if sessionSummary}
-			<div
-				class="flex flex-col gap-4 rounded-2xl border border-primary/25 bg-primary/10 p-4 text-primary sm:flex-row sm:items-center sm:justify-between"
-				role="status"
-				aria-live="polite"
-			>
-				<div class="flex min-w-0 items-center gap-3">
-					<div
-						class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"
-					>
-						<CheckCircle2 class="size-5" aria-hidden="true" />
-					</div>
-					<div class="min-w-0">
-						<h2 class="text-balance-safe font-semibold">
-							Session complete: {sessionSummary.className}
-						</h2>
-						<p class="text-balance-safe mt-0.5 text-sm text-primary/80">{sessionSummary.summary}</p>
-					</div>
+<div class="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-5 md:px-8 lg:px-10">
+	{#if sessionSummary}
+		<div
+			class="flex flex-col gap-4 rounded-2xl border border-primary/25 bg-primary/10 p-4 text-primary sm:flex-row sm:items-center sm:justify-between"
+			role="status"
+			aria-live="polite"
+		>
+			<div class="flex min-w-0 items-center gap-3">
+				<div
+					class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"
+				>
+					<CheckCircle2 class="size-5" aria-hidden="true" />
 				</div>
+				<div class="min-w-0">
+					<h2 class="text-balance-safe font-semibold">
+						Session complete: {sessionSummary.className}
+					</h2>
+					<p class="text-balance-safe mt-0.5 text-sm text-primary/80">{sessionSummary.summary}</p>
+				</div>
+			</div>
+			<button
+				type="button"
+				onclick={() => (sessionSummary = null)}
+				class="control-ring w-fit rounded-md border border-primary/20 px-3 py-2 text-sm font-medium hover:bg-primary/10"
+			>
+				Dismiss
+			</button>
+		</div>
+	{/if}
+
+	{#if loading}
+		<LoadingBlock rows={3} label="Loading attendance dashboard" />
+	{:else if loadError}
+		<EmptyState tone="warning" title="Attendance data could not be loaded" description={loadError}>
+			{#snippet actions()}
 				<button
 					type="button"
-					onclick={() => (sessionSummary = null)}
-					class="control-ring w-fit rounded-md border border-primary/20 px-3 py-2 text-sm font-medium hover:bg-primary/10"
+					onclick={reload}
+					class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
 				>
-					Dismiss
+					Retry
 				</button>
-			</div>
-		{/if}
+			{/snippet}
+		</EmptyState>
+	{:else}
+		<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Today summary">
+			{@render statCard('Roster', activeClassStudents.length, 'Students in scope')}
+			{@render statCard('Recorded', checkedIn.length, 'Marked present today', true)}
+			{@render statCard('Pending', pendingCount, 'Not yet recorded')}
+			{@render statCard('Rate', `${attendanceRate}%`, 'Current completion')}
+		</section>
 
-		{#if loading}
-			<LoadingBlock rows={3} label="Loading attendance dashboard" />
-		{:else if loadError}
-			<EmptyState
-				tone="warning"
-				title="Attendance data could not be loaded"
-				description={loadError}
-			>
-				{#snippet actions()}
-					<button
-						type="button"
-						onclick={reload}
-						class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
-					>
-						Retry
-					</button>
-				{/snippet}
-			</EmptyState>
-		{:else}
-			<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Today summary">
-				{@render statCard('Roster', activeClassStudents.length, 'Students in scope')}
-				{@render statCard('Recorded', checkedIn.length, 'Marked present today', true)}
-				{@render statCard('Pending', pendingCount, 'Not yet recorded')}
-				{@render statCard('Rate', `${attendanceRate}%`, 'Current completion')}
-			</section>
-
-			<section
-				class="grid min-h-[26rem] gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]"
-			>
-				<div class="flex min-h-0 flex-col rounded-2xl border border-border bg-card">
-					<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border p-5">
-						<div class="min-w-0">
-							<h2 class="text-lg font-semibold">
-								{activeClass ? 'Session roster' : 'Next class roster'}
-							</h2>
-							<p class="mt-1 text-sm text-muted-foreground">
-								{activeClass
-									? `${checkedIn.length} recorded / ${pendingCount} pending`
-									: nextClass
-										? `${nextClassStudents.length} students for ${nextClass.cls.name}`
-										: 'No scheduled class is currently active.'}
-							</p>
-						</div>
-						{#if activeClass}
-							<a
-								href={resolve(attendanceHref(activeClass.id, true))}
-								class="control-ring inline-flex h-9 items-center gap-2 rounded-pill border border-border bg-background px-3 text-xs font-semibold hover:bg-surface"
-							>
-								{attendanceFallbackLabel}
-								<ArrowUpRight class="size-3.5" aria-hidden="true" />
-							</a>
-						{/if}
+		<section class="grid min-h-[26rem] gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+			<div class="flex min-h-0 flex-col rounded-2xl border border-border bg-card">
+				<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border p-5">
+					<div class="min-w-0">
+						<h2 class="text-lg font-semibold">
+							{activeClass ? 'Session roster' : 'Next class roster'}
+						</h2>
+						<p class="mt-1 text-sm text-muted-foreground">
+							{activeClass
+								? `${checkedIn.length} recorded / ${pendingCount} pending`
+								: nextClass
+									? `${nextClassStudents.length} students for ${nextClass.cls.name}`
+									: 'No scheduled class is currently active.'}
+						</p>
 					</div>
-
-					<div class="min-h-0 flex-1 overflow-y-auto p-3">
-						{#if rosterStudents.length === 0}
-							<EmptyState
-								title={activeClass ? 'No students assigned to this class' : 'No roster to show'}
-								description={activeClass
-									? 'Assign students to this class from the Class List before taking attendance.'
-									: 'Create a class schedule in Configuration to see upcoming rosters here.'}
-							/>
-						{:else}
-							<ul class="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
-								{#each rosterStudents as student (student.id)}
-									{@const event = lastEventForStudentToday(student)}
-									<li
-										class="flex min-w-0 items-center gap-3 rounded-xl border border-border bg-background p-3"
-									>
-										<div
-											class="grid size-10 shrink-0 place-items-center rounded-lg border font-mono text-xs font-bold {event
-												? 'border-primary/30 bg-primary text-primary-foreground'
-												: 'border-border bg-surface text-muted-foreground'}"
-											aria-hidden="true"
-										>
-											{initials(student.name)}
-										</div>
-										<div class="min-w-0 flex-1">
-											<div class="text-balance-safe text-sm leading-snug font-semibold">
-												{student.name}
-											</div>
-											<div
-												class="mt-1 font-mono text-[11px] {event
-													? 'text-primary'
-													: 'text-muted-foreground'}"
-											>
-												{event ? `Recorded ${fmtTime(event.timestamp)}` : 'Pending'}
-											</div>
-										</div>
-									</li>
-								{/each}
-							</ul>
-						{/if}
-					</div>
-				</div>
-
-				<aside class="flex min-h-0 flex-col rounded-2xl border border-border bg-card">
-					<div class="flex items-start justify-between gap-3 border-b border-border p-5">
-						<div>
-							<h2 class="text-lg font-semibold">Recent activity</h2>
-							<p class="mt-1 text-sm text-muted-foreground">Latest attendance events</p>
-						</div>
-						<span
-							class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]"
-						>
-							{recentEvents.length} shown
-						</span>
-					</div>
-
-					<div class="min-h-0 flex-1 overflow-y-auto p-3">
-						{#if recentEvents.length === 0}
-							<EmptyState
-								title="No activity yet"
-								description="Attendance events will appear here as soon as a card tap or manual log is saved."
-							/>
-						{:else}
-							<ul class="divide-y divide-border">
-								{#each recentEvents as event (event.id)}
-									{@const student = studentMap.get(event.studentId)}
-									<li class="flex min-w-0 items-center justify-between gap-3 py-3">
-										<div class="min-w-0">
-											<div class="truncate text-sm font-semibold">
-												{student?.name ?? 'Unknown student'}
-											</div>
-											<div
-												class="mt-0.5 flex flex-wrap gap-x-2 gap-y-1 font-mono text-[11px] text-muted-foreground"
-											>
-												<span>{fmtDate(event.timestamp)}</span>
-												<span aria-hidden="true">/</span>
-												<span>{fmtTime(event.timestamp)}</span>
-											</div>
-										</div>
-										<span
-											class="rounded-pill bg-primary px-2 py-1 font-mono text-[10px] font-bold text-primary-foreground"
-										>
-											IN
-										</span>
-									</li>
-								{/each}
-							</ul>
-						{/if}
-					</div>
-
-					<div class="border-t border-border p-4">
+					{#if activeClass}
 						<a
-							href={resolve('/records')}
-							class="control-ring inline-flex h-9 items-center gap-2 rounded-pill border border-border bg-background px-3 text-xs font-semibold text-primary hover:bg-surface"
+							href={resolve(attendanceHref(activeClass.id, true))}
+							class="control-ring inline-flex h-9 items-center gap-2 rounded-pill border border-border bg-background px-3 text-xs font-semibold hover:bg-surface"
 						>
-							View all records
+							{attendanceFallbackLabel}
 							<ArrowUpRight class="size-3.5" aria-hidden="true" />
 						</a>
+					{/if}
+				</div>
+
+				<div class="min-h-0 flex-1 overflow-y-auto p-3">
+					{#if rosterStudents.length === 0}
+						<EmptyState
+							title={activeClass ? 'No students assigned to this class' : 'No roster to show'}
+							description={activeClass
+								? 'Assign students to this class from the Class List before taking attendance.'
+								: 'Create a class schedule in Configuration to see upcoming rosters here.'}
+						/>
+					{:else}
+						<ul class="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
+							{#each rosterStudents as student (student.id)}
+								{@const event = lastEventForStudentToday(student)}
+								<li
+									class="flex min-w-0 items-center gap-3 rounded-xl border border-border bg-background p-3"
+								>
+									<div
+										class="grid size-10 shrink-0 place-items-center rounded-lg border font-mono text-xs font-bold {event
+											? 'border-primary/30 bg-primary text-primary-foreground'
+											: 'border-border bg-surface text-muted-foreground'}"
+										aria-hidden="true"
+									>
+										{initials(student.name)}
+									</div>
+									<div class="min-w-0 flex-1">
+										<div class="text-balance-safe text-sm leading-snug font-semibold">
+											{student.name}
+										</div>
+										<div
+											class="mt-1 font-mono text-[11px] {event
+												? 'text-primary'
+												: 'text-muted-foreground'}"
+										>
+											{event ? `Recorded ${fmtTime(event.timestamp)}` : 'Pending'}
+										</div>
+									</div>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			</div>
+
+			<aside class="flex min-h-0 flex-col rounded-2xl border border-border bg-card">
+				<div class="flex items-start justify-between gap-3 border-b border-border p-5">
+					<div>
+						<h2 class="text-lg font-semibold">Recent activity</h2>
+						<p class="mt-1 text-sm text-muted-foreground">Latest attendance events</p>
 					</div>
-				</aside>
-			</section>
-		{/if}
-	</div>
-</AppShell>
+					<span
+						class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]"
+					>
+						{recentEvents.length} shown
+					</span>
+				</div>
+
+				<div class="min-h-0 flex-1 overflow-y-auto p-3">
+					{#if recentEvents.length === 0}
+						<EmptyState
+							title="No activity yet"
+							description="Attendance events will appear here as soon as a card tap or manual log is saved."
+						/>
+					{:else}
+						<ul class="divide-y divide-border">
+							{#each recentEvents as event (event.id)}
+								{@const student = studentMap.get(event.studentId)}
+								<li class="flex min-w-0 items-center justify-between gap-3 py-3">
+									<div class="min-w-0">
+										<div class="truncate text-sm font-semibold">
+											{student?.name ?? 'Unknown student'}
+										</div>
+										<div
+											class="mt-0.5 flex flex-wrap gap-x-2 gap-y-1 font-mono text-[11px] text-muted-foreground"
+										>
+											<span>{fmtDate(event.timestamp)}</span>
+											<span aria-hidden="true">/</span>
+											<span>{fmtTime(event.timestamp)}</span>
+										</div>
+									</div>
+									<span
+										class="rounded-pill bg-primary px-2 py-1 font-mono text-[10px] font-bold text-primary-foreground"
+									>
+										IN
+									</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+
+				<div class="border-t border-border p-4">
+					<a
+						href={resolve('/records')}
+						class="control-ring inline-flex h-9 items-center gap-2 rounded-pill border border-border bg-background px-3 text-xs font-semibold text-primary hover:bg-surface"
+					>
+						View all records
+						<ArrowUpRight class="size-3.5" aria-hidden="true" />
+					</a>
+				</div>
+			</aside>
+		</section>
+	{/if}
+</div>
 
 <FeedbackToast message={settingsStore.error} ok={false} />
 

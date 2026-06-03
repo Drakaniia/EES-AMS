@@ -2,6 +2,7 @@
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import UpdateNotification from '../components/ui/UpdateNotification.svelte';
+	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import ClickSpark from '$lib/components/ui/ClickSpark.svelte';
 	import TitleBar from '$lib/components/ui/TitleBar.svelte';
 	import { onMount } from 'svelte';
@@ -26,7 +27,9 @@
 		<UpdateNotification />
 
 		<ClickSpark sparkColor="#FF8A4C" sparkSize={8} sparkRadius={12} sparkCount={6} duration={300}>
-			{@render children()}
+			<AppShell>
+				{@render children()}
+			</AppShell>
 		</ClickSpark>
 	</div>
 </div>
