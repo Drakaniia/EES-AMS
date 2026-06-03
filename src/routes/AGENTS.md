@@ -2,7 +2,7 @@
 
 ## Package Identity
 
-SvelteKit route modules organized by feature: attendance, dashboard, records, reports, settings, students, and teachers for the attendance management system.
+SvelteKit route modules organized by feature: attendance, dashboard, records, reports, settings, and students for the attendance management system.
 
 ## Setup & Run
 
@@ -42,7 +42,6 @@ Examples with actual file paths:
 - **Reports**: `src/routes/reports/` - Analytics and reporting
 - **Settings**: `src/routes/settings/` - System configuration
 - **Students**: `src/routes/students/` - Student management
-- **Teachers**: `src/routes/teachers/` - Teacher management
 
 ## Route Patterns
 
