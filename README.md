@@ -6,6 +6,7 @@
 [![Svelte](https://img.shields.io/badge/svelte-svelte-orange?style=flat-square&logo=svelte&logoColor=white)](https://svelte.dev)
 [![Tauri](https://img.shields.io/badge/tauri-tauri-orange?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Download for Windows](https://img.shields.io/badge/download-Windows%20installer-EA580C?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Drakaniia/EES-AMS/releases/latest/download/EES-AMS_windows-setup.exe)
 
 A cross-platform desktop application for student attendance management at Espiritu Elementary School with ID card reader support. Built with Tauri v2, SvelteKit 5, and Rust.
 
@@ -47,6 +48,12 @@ A cross-platform desktop application for student attendance management at Espiri
 - **USB card reader** (keyboard wedge mode, optional)
 
 ## Installation
+
+### Windows Release
+
+Download the latest signed Windows installer from the button above, or open the [latest GitHub release](https://github.com/Drakaniia/EES-AMS/releases/latest) and choose `EES-AMS_windows-setup.exe`.
+
+Installed apps check GitHub Releases for signed updates and show an in-app notification when a newer release is available.
 
 ### 1. Clone Repository
 
