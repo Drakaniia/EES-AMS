@@ -6,7 +6,7 @@ use crate::domain::{
 use chrono::{DateTime, Local, Utc};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Row};
 use std::path::Path;
 
 /// Database connection pool type
@@ -91,6 +91,11 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
         conn.execute("PRAGMA user_version = 13", [])?;
     }
 
+    if user_version < 14 {
+        migrate_to_v14(&conn)?;
+        conn.execute("PRAGMA user_version = 14", [])?;
+    }
+
     Ok(pool)
 }
 
@@ -105,25 +110,63 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
     })
 }
 
-fn local_day_bounds_timestamps() -> Result<(i64, i64)> {
-    let today = Local::now().date_naive();
-    let tomorrow = today.succ_opt().ok_or_else(|| {
-        AppError::Internal("failed to calculate local attendance date".to_string())
-    })?;
+fn attendance_session_key(timestamp: DateTime<Utc>, class_id: Option<&str>) -> String {
+    let local_date = timestamp.with_timezone(&Local).format("%Y-%m-%d");
+    let class_key = class_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("unassigned");
 
-    let start = today
-        .and_hms_opt(0, 0, 0)
-        .and_then(|time| time.and_local_timezone(Local).earliest())
-        .ok_or_else(|| AppError::Internal("failed to calculate local day start".to_string()))?;
-    let end = tomorrow
-        .and_hms_opt(0, 0, 0)
-        .and_then(|time| time.and_local_timezone(Local).earliest())
-        .ok_or_else(|| AppError::Internal("failed to calculate local day end".to_string()))?;
+    format!("{local_date}|{class_key}|day")
+}
 
-    Ok((
-        start.with_timezone(&Utc).timestamp(),
-        end.with_timezone(&Utc).timestamp(),
-    ))
+fn serialize_audit_event(event: &AttendanceEvent) -> Result<String> {
+    serde_json::to_string(event)
+        .map_err(|error| AppError::Internal(format!("failed to serialize audit event: {error}")))
+}
+
+fn attendance_event_from_row(row: &Row<'_>) -> rusqlite::Result<AttendanceEvent> {
+    let updated_at = row
+        .get::<_, Option<i64>>(8)?
+        .and_then(|timestamp| DateTime::from_timestamp(timestamp, 0))
+        .map(|timestamp| timestamp.with_timezone(&Utc));
+
+    Ok(AttendanceEvent {
+        id: EventId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
+        student_id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(1)?).unwrap()),
+        class_id: row.get(2)?,
+        event_type: AttendanceType::In,
+        timestamp: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
+            .unwrap()
+            .with_timezone(&Utc),
+        note: row.get(5)?,
+        session_key: row.get(6)?,
+        override_reason: row.get(7)?,
+        updated_at,
+    })
+}
+
+fn attendance_audit_entry_from_row(row: &Row<'_>) -> rusqlite::Result<AttendanceAuditEntry> {
+    let event_id = row
+        .get::<_, Option<String>>(1)?
+        .and_then(|id| uuid::Uuid::parse_str(&id).ok())
+        .map(EventId);
+
+    Ok(AttendanceAuditEntry {
+        id: row.get(0)?,
+        event_id,
+        student_id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(2)?).unwrap()),
+        class_id: row.get(3)?,
+        session_key: row.get(4)?,
+        action: row.get(5)?,
+        reason: row.get(6)?,
+        before_json: row.get(7)?,
+        after_json: row.get(8)?,
+        created_at: DateTime::from_timestamp(row.get::<_, i64>(9)?, 0)
+            .unwrap()
+            .with_timezone(&Utc),
+        actor: row.get(10)?,
+    })
 }
 
 /// Migrate database to version 1 (add class support)
@@ -519,6 +562,12 @@ fn migrate_to_v13(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migrate database to version 14 (attendance exception workflow)
+fn migrate_to_v14(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(include_str!("../../sql/migrate_to_v14.sql"))?;
+    Ok(())
+}
+
 /// Student repository
 pub struct StudentRepository {
     pool: DbPool,
@@ -773,37 +822,41 @@ impl EventRepository {
     pub fn list(&self) -> Result<Vec<AttendanceEvent>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(
-            "SELECT id, student_id, class_id, event_type, timestamp, note 
+            "SELECT id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at
              FROM events 
              WHERE event_type = 'in'
              ORDER BY timestamp DESC",
         )?;
 
         let events = stmt
-            .query_map([], |row| {
-                Ok(AttendanceEvent {
-                    id: EventId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
-                    student_id: StudentId(
-                        uuid::Uuid::parse_str(&row.get::<_, String>(1)?).unwrap(),
-                    ),
-                    class_id: row.get(2)?,
-                    event_type: AttendanceType::In,
-                    timestamp: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
-                        .unwrap()
-                        .with_timezone(&Utc),
-                    note: row.get(5)?,
-                })
-            })?
+            .query_map([], attendance_event_from_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(events)
+    }
+
+    /// Get event by ID
+    pub fn get(&self, id: EventId) -> Result<AttendanceEvent> {
+        let conn = self.pool.get()?;
+        let event = conn
+            .query_row(
+                "SELECT id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at
+                 FROM events
+                 WHERE id = ?1",
+                params![id.0.to_string()],
+                attendance_event_from_row,
+            )
+            .optional()?
+            .ok_or_else(|| AppError::EventNotFound(id.0.to_string()))?;
+
+        Ok(event)
     }
 
     /// List events for a specific student
     pub fn list_for_student(&self, student_id: StudentId) -> Result<Vec<AttendanceEvent>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(
-            "SELECT id, student_id, class_id, event_type, timestamp, note 
+            "SELECT id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at
              FROM events 
              WHERE student_id = ?1
              AND event_type = 'in'
@@ -811,20 +864,7 @@ impl EventRepository {
         )?;
 
         let events = stmt
-            .query_map(params![student_id.0.to_string()], |row| {
-                Ok(AttendanceEvent {
-                    id: EventId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
-                    student_id: StudentId(
-                        uuid::Uuid::parse_str(&row.get::<_, String>(1)?).unwrap(),
-                    ),
-                    class_id: row.get(2)?,
-                    event_type: AttendanceType::In,
-                    timestamp: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
-                        .unwrap()
-                        .with_timezone(&Utc),
-                    note: row.get(5)?,
-                })
-            })?
+            .query_map(params![student_id.0.to_string()], attendance_event_from_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(events)
@@ -835,27 +875,14 @@ impl EventRepository {
         let conn = self.pool.get()?;
         let event = conn
             .query_row(
-                "SELECT id, student_id, class_id, event_type, timestamp, note 
+                "SELECT id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at
                  FROM events 
                  WHERE student_id = ?1
                  AND event_type = 'in'
                  ORDER BY timestamp DESC 
                  LIMIT 1",
                 params![student_id.0.to_string()],
-                |row| {
-                    Ok(AttendanceEvent {
-                        id: EventId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
-                        student_id: StudentId(
-                            uuid::Uuid::parse_str(&row.get::<_, String>(1)?).unwrap(),
-                        ),
-                        class_id: row.get(2)?,
-                        event_type: AttendanceType::In,
-                        timestamp: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
-                            .unwrap()
-                            .with_timezone(&Utc),
-                        note: row.get(5)?,
-                    })
-                },
+                attendance_event_from_row,
             )
             .optional()?;
 
@@ -864,57 +891,166 @@ impl EventRepository {
 
     /// Create an attendance event
     pub fn create(&self, req: CreateEventRequest) -> Result<AttendanceEvent> {
-        let conn = self.pool.get()?;
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+        let timestamp = req.timestamp.unwrap_or_else(Utc::now);
+        let class_id = normalize_optional_text(req.class_id);
+        let session_key = normalize_optional_text(req.session_key)
+            .unwrap_or_else(|| attendance_session_key(timestamp, class_id.as_deref()));
+        let override_reason = normalize_optional_text(req.override_reason);
 
-        let (today_start, today_end) = local_day_bounds_timestamps()?;
-
-        let existing_count: i32 = conn
+        let existing_count: i32 = transaction
             .query_row(
                 "SELECT COUNT(*) FROM events 
                  WHERE student_id = ?1 
                  AND event_type = 'in' 
-                 AND timestamp >= ?2 
-                 AND timestamp < ?3",
-                params![req.student_id.0.to_string(), today_start, today_end],
+                 AND session_key = ?2",
+                params![req.student_id.0.to_string(), session_key],
                 |row| row.get(0),
             )
             .unwrap_or(0);
 
-        if existing_count > 0 {
+        if existing_count > 0 && override_reason.is_none() {
             return Err(AppError::DuplicateAttendance(
-                "Student already recorded today".to_string(),
+                "Student already recorded for this session".to_string(),
             ));
         }
 
         let event = AttendanceEvent {
             id: EventId::new(),
             student_id: req.student_id,
-            class_id: req.class_id,
+            class_id,
             event_type: req.event_type,
-            timestamp: Utc::now(),
-            note: req.note,
+            timestamp,
+            note: normalize_optional_text(req.note),
+            session_key: Some(session_key),
+            override_reason,
+            updated_at: None,
         };
 
-        conn.execute(
-            "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        transaction.execute(
+            "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 event.id.0.to_string(),
                 event.student_id.0.to_string(),
-                event.class_id,
+                event.class_id.as_deref(),
                 "in",
                 event.timestamp.timestamp(),
-                event.note,
+                event.note.as_deref(),
+                event.session_key.as_deref(),
+                event.override_reason.as_deref(),
+                event.updated_at.map(|timestamp| timestamp.timestamp()),
             ],
         )?;
 
+        if let Some(reason) = event.override_reason.as_ref() {
+            let after_json = serialize_audit_event(&event)?;
+            transaction.execute(
+                "INSERT INTO attendance_event_audit (id, event_id, student_id, class_id, session_key, action, reason, before_json, after_json, created_at, actor)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'create_override', ?6, NULL, ?7, ?8, 'admin')",
+                params![
+                    uuid::Uuid::new_v4().to_string(),
+                    event.id.0.to_string(),
+                    event.student_id.0.to_string(),
+                    event.class_id.as_deref(),
+                    event.session_key.as_deref(),
+                    reason,
+                    after_json,
+                    Utc::now().timestamp(),
+                ],
+            )?;
+        }
+
+        transaction.commit()?;
+        Ok(event)
+    }
+
+    /// Update an attendance event and record the edit reason
+    pub fn update(&self, id: EventId, req: UpdateEventRequest) -> Result<AttendanceEvent> {
+        let reason = normalize_optional_text(Some(req.reason))
+            .ok_or_else(|| AppError::InvalidInput("audit reason is required".to_string()))?;
+        let has_class_update = req.class_id.is_some();
+        let has_session_update = req.session_key.is_some();
+        let has_timestamp_update = req.timestamp.is_some();
+        let before = self.get(id)?;
+        let timestamp = req.timestamp.unwrap_or(before.timestamp);
+        let class_id = if has_class_update {
+            normalize_optional_text(req.class_id)
+        } else {
+            before.class_id.clone()
+        };
+        let note = match req.note {
+            Some(note) => normalize_optional_text(Some(note)),
+            None => before.note.clone(),
+        };
+        let session_key = if has_session_update {
+            normalize_optional_text(req.session_key)
+                .unwrap_or_else(|| attendance_session_key(timestamp, class_id.as_deref()))
+        } else if has_class_update || has_timestamp_update || before.session_key.is_none() {
+            attendance_session_key(timestamp, class_id.as_deref())
+        } else {
+            before.session_key.clone().unwrap()
+        };
+        let updated_at = Utc::now();
+        let event = AttendanceEvent {
+            id: before.id,
+            student_id: before.student_id,
+            class_id,
+            event_type: before.event_type,
+            timestamp,
+            note,
+            session_key: Some(session_key),
+            override_reason: Some(reason.clone()),
+            updated_at: Some(updated_at),
+        };
+
+        let before_json = serialize_audit_event(&before)?;
+        let after_json = serialize_audit_event(&event)?;
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+
+        transaction.execute(
+            "UPDATE events
+             SET class_id = ?1, timestamp = ?2, note = ?3, session_key = ?4, override_reason = ?5, updated_at = ?6
+             WHERE id = ?7",
+            params![
+                event.class_id.as_deref(),
+                event.timestamp.timestamp(),
+                event.note.as_deref(),
+                event.session_key.as_deref(),
+                event.override_reason.as_deref(),
+                updated_at.timestamp(),
+                event.id.0.to_string(),
+            ],
+        )?;
+        transaction.execute(
+            "INSERT INTO attendance_event_audit (id, event_id, student_id, class_id, session_key, action, reason, before_json, after_json, created_at, actor)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'update', ?6, ?7, ?8, ?9, 'admin')",
+            params![
+                uuid::Uuid::new_v4().to_string(),
+                event.id.0.to_string(),
+                event.student_id.0.to_string(),
+                event.class_id.as_deref(),
+                event.session_key.as_deref(),
+                reason,
+                before_json,
+                after_json,
+                updated_at.timestamp(),
+            ],
+        )?;
+
+        transaction.commit()?;
         Ok(event)
     }
 
     /// Delete an event
-    pub fn delete(&self, id: EventId) -> Result<()> {
-        let conn = self.pool.get()?;
-        let rows = conn.execute(
+    pub fn delete(&self, id: EventId, reason: Option<String>) -> Result<()> {
+        let before = self.get(id)?;
+        let audit_reason = normalize_optional_text(reason);
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+        let rows = transaction.execute(
             "DELETE FROM events WHERE id = ?1",
             params![id.0.to_string()],
         )?;
@@ -923,7 +1059,86 @@ impl EventRepository {
             return Err(AppError::EventNotFound(id.0.to_string()));
         }
 
+        if let Some(reason) = audit_reason {
+            let before_json = serialize_audit_event(&before)?;
+            transaction.execute(
+                "INSERT INTO attendance_event_audit (id, event_id, student_id, class_id, session_key, action, reason, before_json, after_json, created_at, actor)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'delete', ?6, ?7, NULL, ?8, 'admin')",
+                params![
+                    uuid::Uuid::new_v4().to_string(),
+                    before.id.0.to_string(),
+                    before.student_id.0.to_string(),
+                    before.class_id.as_deref(),
+                    before.session_key.as_deref(),
+                    reason,
+                    before_json,
+                    Utc::now().timestamp(),
+                ],
+            )?;
+        }
+
+        transaction.commit()?;
         Ok(())
+    }
+
+    /// List attendance audit entries
+    pub fn list_audit(
+        &self,
+        event_id: Option<EventId>,
+        student_id: Option<StudentId>,
+    ) -> Result<Vec<AttendanceAuditEntry>> {
+        let conn = self.pool.get()?;
+        let sql = "SELECT id, event_id, student_id, class_id, session_key, action, reason, before_json, after_json, created_at, actor
+                   FROM attendance_event_audit";
+
+        let entries = match (event_id, student_id) {
+            (Some(event_id), Some(student_id)) => {
+                let mut stmt = conn.prepare(&format!(
+                    "{sql} WHERE event_id = ?1 OR student_id = ?2 ORDER BY created_at DESC"
+                ))?;
+                let entries = stmt
+                    .query_map(
+                        params![event_id.0.to_string(), student_id.0.to_string()],
+                        attendance_audit_entry_from_row,
+                    )?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                entries
+            }
+            (Some(event_id), None) => {
+                let mut stmt = conn.prepare(&format!(
+                    "{sql} WHERE event_id = ?1 ORDER BY created_at DESC"
+                ))?;
+                let entries = stmt
+                    .query_map(
+                        params![event_id.0.to_string()],
+                        attendance_audit_entry_from_row,
+                    )?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                entries
+            }
+            (None, Some(student_id)) => {
+                let mut stmt = conn.prepare(&format!(
+                    "{sql} WHERE student_id = ?1 ORDER BY created_at DESC"
+                ))?;
+                let entries = stmt
+                    .query_map(
+                        params![student_id.0.to_string()],
+                        attendance_audit_entry_from_row,
+                    )?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                entries
+            }
+            (None, None) => {
+                let mut stmt =
+                    conn.prepare(&format!("{sql} ORDER BY created_at DESC LIMIT 200"))?;
+                let entries = stmt
+                    .query_map([], attendance_audit_entry_from_row)?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                entries
+            }
+        };
+
+        Ok(entries)
     }
 }
 
@@ -1243,6 +1458,7 @@ impl ClassRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
     #[test]
     fn init_db_creates_in_only_schema_without_external_student_numbers() {
@@ -1346,6 +1562,9 @@ mod tests {
                 class_id: None,
                 event_type: AttendanceType::In,
                 note: None,
+                session_key: None,
+                override_reason: None,
+                timestamp: None,
             })
             .expect("event should be created");
 
@@ -1358,6 +1577,136 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
             .expect("event count should be readable");
         assert_eq!(event_count, 0);
+    }
+
+    #[test]
+    fn duplicate_attendance_is_scoped_to_session_key_and_override_is_audited() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database file should be created");
+        let pool = init_db(temp_db.path()).expect("database should initialize");
+        let student_repo = StudentRepository::new(pool.clone());
+        let event_repo = EventRepository::new(pool);
+
+        let student = student_repo
+            .create(CreateStudentRequest {
+                name: "Katherine Johnson".to_string(),
+                gender: None,
+                card_serial: None,
+                class_id: None,
+            })
+            .expect("student should be created");
+        let timestamp = Utc
+            .with_ymd_and_hms(2026, 6, 3, 8, 0, 0)
+            .single()
+            .expect("test timestamp should be valid");
+
+        event_repo
+            .create(CreateEventRequest {
+                student_id: student.id,
+                class_id: Some("class-a".to_string()),
+                event_type: AttendanceType::In,
+                note: None,
+                session_key: Some("2026-06-03|class-a|morning".to_string()),
+                override_reason: None,
+                timestamp: Some(timestamp),
+            })
+            .expect("first session event should be created");
+        event_repo
+            .create(CreateEventRequest {
+                student_id: student.id,
+                class_id: Some("class-a".to_string()),
+                event_type: AttendanceType::In,
+                note: None,
+                session_key: Some("2026-06-03|class-a|afternoon".to_string()),
+                override_reason: None,
+                timestamp: Some(timestamp),
+            })
+            .expect("different session event should be allowed");
+
+        let duplicate = event_repo.create(CreateEventRequest {
+            student_id: student.id,
+            class_id: Some("class-a".to_string()),
+            event_type: AttendanceType::In,
+            note: None,
+            session_key: Some("2026-06-03|class-a|morning".to_string()),
+            override_reason: None,
+            timestamp: Some(timestamp),
+        });
+        assert!(matches!(duplicate, Err(AppError::DuplicateAttendance(_))));
+
+        let override_event = event_repo
+            .create(CreateEventRequest {
+                student_id: student.id,
+                class_id: Some("class-a".to_string()),
+                event_type: AttendanceType::In,
+                note: None,
+                session_key: Some("2026-06-03|class-a|morning".to_string()),
+                override_reason: Some("Substitute class exception".to_string()),
+                timestamp: Some(timestamp),
+            })
+            .expect("override event should be created");
+        let audit = event_repo
+            .list_audit(Some(override_event.id), None)
+            .expect("audit should be readable");
+
+        assert_eq!(audit.len(), 1);
+        assert_eq!(audit[0].action, "create_override");
+        assert_eq!(audit[0].reason, "Substitute class exception");
+    }
+
+    #[test]
+    fn updating_and_deleting_attendance_events_writes_audit_entries() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database file should be created");
+        let pool = init_db(temp_db.path()).expect("database should initialize");
+        let student_repo = StudentRepository::new(pool.clone());
+        let event_repo = EventRepository::new(pool);
+
+        let student = student_repo
+            .create(CreateStudentRequest {
+                name: "Dorothy Vaughan".to_string(),
+                gender: None,
+                card_serial: None,
+                class_id: None,
+            })
+            .expect("student should be created");
+        let timestamp = Utc
+            .with_ymd_and_hms(2026, 6, 3, 8, 0, 0)
+            .single()
+            .expect("test timestamp should be valid");
+        let event = event_repo
+            .create(CreateEventRequest {
+                student_id: student.id,
+                class_id: Some("class-a".to_string()),
+                event_type: AttendanceType::In,
+                note: None,
+                session_key: Some("2026-06-03|class-a|day".to_string()),
+                override_reason: None,
+                timestamp: Some(timestamp),
+            })
+            .expect("event should be created");
+
+        let updated = event_repo
+            .update(
+                event.id,
+                UpdateEventRequest {
+                    class_id: Some("class-b".to_string()),
+                    note: Some("Corrected".to_string()),
+                    session_key: Some("2026-06-03|class-b|day".to_string()),
+                    timestamp: Some(timestamp),
+                    reason: "Mistaken class selection".to_string(),
+                },
+            )
+            .expect("event should be updated");
+        event_repo
+            .delete(updated.id, Some("Mistaken tap".to_string()))
+            .expect("event should be deleted");
+
+        let audit = event_repo
+            .list_audit(None, Some(student.id))
+            .expect("audit should be readable");
+        let actions: Vec<&str> = audit.iter().map(|entry| entry.action.as_str()).collect();
+
+        assert!(actions.contains(&"update"));
+        assert!(actions.contains(&"delete"));
     }
 
     #[test]
@@ -1398,6 +1747,9 @@ mod tests {
                 class_id: Some(class.id.clone()),
                 event_type: AttendanceType::In,
                 note: None,
+                session_key: None,
+                override_reason: None,
+                timestamp: None,
             })
             .expect("event should be created");
 
