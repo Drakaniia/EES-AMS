@@ -956,21 +956,8 @@ fn month_name(month: u32) -> &'static str {
     }
 }
 
-fn report_year(school_year: &str, month: u32) -> i32 {
-    let years = school_year
-        .split(|ch: char| !ch.is_ascii_digit())
-        .filter_map(|part| {
-            (part.len() == 4 && part.starts_with("20"))
-                .then(|| part.parse::<i32>().ok())
-                .flatten()
-        })
-        .collect::<Vec<_>>();
-
-    match years.as_slice() {
-        [first, second, ..] if month >= 6 => *first,
-        [_, second, ..] => *second,
-        _ => chrono::Local::now().year(),
-    }
+fn report_year(_school_year: &str, _month: u32) -> i32 {
+    chrono::Local::now().year()
 }
 
 fn year_from_sheet_name(name: &str) -> i32 {
