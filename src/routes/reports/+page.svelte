@@ -521,6 +521,16 @@
 	function reportMonthLabel(value: string) {
 		return sf2ReportMonthLabel(value) || 'Blank';
 	}
+
+	function headerReviewValue(draftValue: string, templateValue: string) {
+		const value = workbookSettings ? draftValue : draftValue || templateValue;
+		return value.trim() || 'Blank';
+	}
+
+	function headerReviewMonthValue(templateValue: string) {
+		const value = workbookSettings ? draftReportMonth : draftReportMonth || templateValue;
+		return reportMonthLabel(value);
+	}
 </script>
 
 <svelte:head>
@@ -840,38 +850,38 @@
 				<dl class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
 					{@render headerReviewField(
 						'School ID',
-						draftSchoolId || preview.template.schoolId || 'Blank'
+						headerReviewValue(draftSchoolId, preview.template.schoolId)
 					)}
 					{@render headerReviewField(
 						'School Year',
-						draftSchoolYear || preview.template.schoolYear || 'Blank'
+						headerReviewValue(draftSchoolYear, preview.template.schoolYear)
 					)}
 					{@render headerReviewField(
 						'Report Month',
-						reportMonthLabel(draftReportMonth || preview.template.reportMonth)
+						headerReviewMonthValue(preview.template.reportMonth)
 					)}
 					{@render headerReviewField(
 						'Grade Level',
-						draftGradeLevel || preview.template.gradeLevel || 'Blank'
+						headerReviewValue(draftGradeLevel, preview.template.gradeLevel)
 					)}
 					<div class="md:col-span-2">
 						{@render headerReviewField(
 							'Name of School',
-							draftSchoolName || preview.template.schoolName || 'Blank'
+							headerReviewValue(draftSchoolName, preview.template.schoolName)
 						)}
 					</div>
 					{@render headerReviewField(
 						'Section',
-						draftSection || preview.template.section || 'Blank'
+						headerReviewValue(draftSection, preview.template.section)
 					)}
 					{@render headerReviewField(
 						'Adviser / LIS Name',
-						draftAdviserName || preview.template.adviserName || 'Blank'
+						headerReviewValue(draftAdviserName, preview.template.adviserName)
 					)}
 					<div class="md:col-span-2">
 						{@render headerReviewField(
 							'School Head Name',
-							draftSchoolHeadName || preview.template.schoolHeadName || 'Blank'
+							headerReviewValue(draftSchoolHeadName, preview.template.schoolHeadName)
 						)}
 					</div>
 				</dl>
