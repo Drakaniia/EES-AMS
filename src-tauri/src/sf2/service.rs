@@ -4,7 +4,8 @@ use crate::domain::models::{
     StudentGender, UpdateStudentRequest,
 };
 use crate::infrastructure::database::{
-    ClassRepository, DbPool, EventRepository, SettingsRepository, StudentRepository,
+    record_audit_event, AuditEventInput, ClassRepository, DbPool, EventRepository,
+    SettingsRepository, StudentRepository,
 };
 use crate::sf2::excel;
 use crate::sf2::logic::{
@@ -1981,6 +1982,18 @@ fn set_attendance_event_for_day(
     let (day_start_timestamp, day_end_timestamp) = local_day_bounds_timestamps_for_date(date)?;
     let mut conn = pool.get()?;
     let transaction = conn.transaction()?;
+    let deleted_events: i64 = transaction
+        .query_row(
+            "SELECT COUNT(*) FROM events
+             WHERE student_id = ?1
+             AND event_type = 'in'
+             AND timestamp >= ?2
+             AND timestamp < ?3
+             AND (class_id IS NULL OR class_id = ?4)",
+            params![student_id, day_start_timestamp, day_end_timestamp, class_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
     transaction.execute(
         "DELETE FROM events
          WHERE student_id = ?1
@@ -1991,14 +2004,16 @@ fn set_attendance_event_for_day(
         params![student_id, day_start_timestamp, day_end_timestamp, class_id],
     )?;
 
+    let mut created_event_id: Option<String> = None;
     if present {
         let attendance_timestamp = attendance_timestamp_for_date(date, day_start)?;
         let session_key = format!("{date}|{class_id}|day");
+        let event_id = uuid::Uuid::new_v4().to_string();
         transaction.execute(
             "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at)
              VALUES (?1, ?2, ?3, 'in', ?4, ?5, ?6, ?7, NULL)",
             params![
-                uuid::Uuid::new_v4().to_string(),
+                event_id.as_str(),
                 student_id,
                 class_id,
                 attendance_timestamp,
@@ -2007,7 +2022,34 @@ fn set_attendance_event_for_day(
                 "SF2 preview correction",
             ],
         )?;
+        created_event_id = Some(event_id);
     }
+
+    let metadata_json = serde_json::to_string(&serde_json::json!({
+        "studentId": student_id,
+        "classId": class_id,
+        "date": date.to_string(),
+        "present": present,
+        "deletedEvents": deleted_events,
+        "createdEventId": created_event_id.as_deref(),
+    }))
+    .map_err(|error| AppError::Internal(format!("failed to serialize audit metadata: {error}")))?;
+    let summary = format!(
+        "Set SF2 preview attendance for student {student_id} on {date} to {}",
+        if present { "present" } else { "absent" }
+    );
+    record_audit_event(
+        &transaction,
+        AuditEventInput {
+            entity_type: "attendance_event",
+            entity_id: created_event_id.as_deref(),
+            action: if present { "create" } else { "delete" },
+            summary: &summary,
+            before_json: None,
+            after_json: None,
+            metadata_json: Some(metadata_json),
+        },
+    )?;
 
     transaction.commit()?;
     Ok(())

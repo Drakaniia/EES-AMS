@@ -7,6 +7,19 @@
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import TaskProgress from '$lib/components/ui/TaskProgress.svelte';
 	import {
+		Cloud,
+		CloudUpload,
+		DatabaseBackup,
+		Download,
+		FolderSync,
+		History,
+		LogOut,
+		RotateCcw,
+		ShieldCheck,
+		Trash2,
+		Upload
+	} from 'lucide-svelte';
+	import {
 		SF2_CALENDAR_WEEKDAYS,
 		SF2_SCHOOL_MONTHS,
 		defaultSf2FirstSchoolDay,
@@ -28,15 +41,28 @@
 		listClasses,
 		saveClass,
 		deleteClass,
+		chooseBackupSyncFolder,
+		chooseRestoreBackup,
+		clearBackupSyncFolder,
+		connectGoogleDriveBackup,
+		createBackupNow,
+		disconnectGoogleDriveBackup,
 		exportDatabase,
 		exportJsonWithFolder,
+		getBackupStatus,
+		listAuditEvents,
 		createSf2WorkbookFromTemplate,
 		getSf2WorkbookSettings,
 		importSf2Workbook,
 		importAll,
+		restoreBackup,
+		uploadLatestBackupToGoogleDrive,
 		updateSf2WorkbookSettings,
 		wipeAll,
+		type AuditEvent,
 		type AttendanceMode,
+		type BackupPreview,
+		type BackupStatus,
 		type Settings,
 		type Class,
 		type Session,
@@ -131,6 +157,17 @@
 	let exportDialogOpen = $state(false);
 	let exportFormat = $state<'json' | 'database'>('json');
 
+	// Backup and restore state
+	let backupStatus = $state<BackupStatus | null>(null);
+	let backupBusy = $state(false);
+	let syncFolderBusy = $state(false);
+	let googleDriveBusy = $state(false);
+	let restoreChoosing = $state(false);
+	let restoreBusy = $state(false);
+	let restorePreview = $state<BackupPreview | null>(null);
+	let auditEvents = $state<AuditEvent[]>([]);
+	let auditLoading = $state(false);
+
 	// SF2 workbook state
 	let sf2Importing = $state(false);
 	let sf2TemplateCreating = $state(false);
@@ -187,6 +224,92 @@
 			const msg = errorMessage(err, 'Database error');
 			toast(`Failed to load: ${msg}`, false);
 		}
+	}
+
+	async function reloadBackupStatus() {
+		try {
+			backupStatus = await getBackupStatus();
+		} catch (err: unknown) {
+			const msg = errorMessage(err, 'Backup status unavailable');
+			toast(`Backup status unavailable: ${msg}`, false);
+		}
+	}
+
+	async function reloadAuditEvents() {
+		auditLoading = true;
+		try {
+			auditEvents = await listAuditEvents(50);
+		} catch (err: unknown) {
+			const msg = errorMessage(err, 'Audit trail unavailable');
+			toast(`Audit trail unavailable: ${msg}`, false);
+		} finally {
+			auditLoading = false;
+		}
+	}
+
+	function formatBackupTimestamp(value?: number) {
+		if (!value) return 'Never';
+		return new Date(value * 1000).toLocaleString(undefined, {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
+	}
+
+	function formatAuditTimestamp(value: string) {
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) return 'Unknown time';
+		return date.toLocaleString(undefined, {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
+	}
+
+	function auditEntityLabel(event: AuditEvent) {
+		const entityType = event.entityType.replaceAll('_', ' ');
+		if (!event.entityId) return entityType;
+		const id =
+			event.entityId.length > 12
+				? `${event.entityId.slice(0, 8)}...${event.entityId.slice(-4)}`
+				: event.entityId;
+		return `${entityType} ${id}`;
+	}
+
+	function auditMetadataPreview(event: AuditEvent) {
+		if (!event.metadataJson) return '';
+		try {
+			const metadata = JSON.parse(event.metadataJson) as Record<string, unknown>;
+			const important = ['students', 'classes', 'events', 'presentCount', 'absentCount', 'format'];
+			return important
+				.filter((key) => metadata[key] !== undefined && metadata[key] !== null)
+				.map((key) => `${key}: ${metadata[key]}`)
+				.join(' · ');
+		} catch {
+			return '';
+		}
+	}
+
+	function formatBackupBytes(value: number) {
+		if (value < 1024) return `${value} B`;
+		if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+		return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+	}
+
+	function backupPathLabel(path?: string) {
+		if (!path) return 'Not set';
+		const parts = path.split(/[\\/]/).filter(Boolean);
+		return parts.length > 2 ? `...${parts.slice(-2).join('\\')}` : path;
+	}
+
+	function googleDriveStatusLabel() {
+		if (!backupStatus?.googleDriveConfigured) return 'OAuth not configured';
+		if (!backupStatus.googleDriveConnected) return 'Not connected';
+		return backupStatus.googleDriveFolderName ?? 'Connected';
 	}
 
 	// ── Actions ──────────────────────────────────────────────────────────────
@@ -275,6 +398,7 @@
 			applyGlobalSettings(savedSettings);
 			unsavedGlobalDialogOpen = false;
 			toast('Global configuration saved');
+			reloadAuditEvents();
 			return true;
 		} catch (error) {
 			const msg = errorMessage(error, 'Failed to save settings');
@@ -432,6 +556,7 @@
 			toast(editingClass ? 'Class updated' : 'Class added');
 			classDialogOpen = false;
 			reload();
+			reloadAuditEvents();
 		} catch (error) {
 			toast(`Failed to save class: ${error}`, false);
 		}
@@ -443,6 +568,7 @@
 		toast('Class deleted');
 		deleteTarget = null;
 		reload();
+		reloadAuditEvents();
 	}
 
 	async function onDeleteClass(event: MouseEvent, id: string) {
@@ -475,6 +601,7 @@
 			}
 
 			exportDialogOpen = false;
+			reloadAuditEvents();
 		} catch (error) {
 			const msg = errorMessage(error, 'Export failed');
 			toast(`Export failed: ${msg}`, false);
@@ -487,6 +614,7 @@
 			const data = JSON.parse(txt);
 			await importAll(data);
 			await reload();
+			await reloadAuditEvents();
 			toast('Backup imported');
 		} catch (err: unknown) {
 			const msg = errorMessage(err, 'Unknown error');
@@ -501,6 +629,121 @@
 		input.value = '';
 	}
 
+	async function onCreateBackupNow() {
+		if (backupBusy) return;
+		backupBusy = true;
+		try {
+			backupStatus = await createBackupNow();
+			await reloadAuditEvents();
+			toast('Backup created');
+		} catch (error) {
+			const msg = errorMessage(error, 'Backup failed');
+			toast(`Backup failed: ${msg}`, false);
+		} finally {
+			backupBusy = false;
+		}
+	}
+
+	async function onChooseBackupSyncFolder() {
+		if (syncFolderBusy) return;
+		syncFolderBusy = true;
+		try {
+			backupStatus = await chooseBackupSyncFolder();
+			toast(backupStatus.syncFolderPath ? 'Local sync folder set' : 'Backup folder unchanged');
+		} catch (error) {
+			const msg = errorMessage(error, 'Sync folder selection failed');
+			toast(`Sync folder selection failed: ${msg}`, false);
+		} finally {
+			syncFolderBusy = false;
+		}
+	}
+
+	async function onClearBackupSyncFolder() {
+		if (syncFolderBusy) return;
+		syncFolderBusy = true;
+		try {
+			backupStatus = await clearBackupSyncFolder();
+			toast('Backup sync folder cleared');
+		} catch (error) {
+			const msg = errorMessage(error, 'Failed to clear sync folder');
+			toast(`Failed to clear sync folder: ${msg}`, false);
+		} finally {
+			syncFolderBusy = false;
+		}
+	}
+
+	async function onConnectGoogleDriveBackup() {
+		if (googleDriveBusy) return;
+		googleDriveBusy = true;
+		try {
+			backupStatus = await connectGoogleDriveBackup();
+			toast('Google Drive connected');
+		} catch (error) {
+			const msg = errorMessage(error, 'Google Drive connection failed');
+			toast(`Google Drive connection failed: ${msg}`, false);
+		} finally {
+			googleDriveBusy = false;
+		}
+	}
+
+	async function onDisconnectGoogleDriveBackup() {
+		if (googleDriveBusy) return;
+		googleDriveBusy = true;
+		try {
+			backupStatus = await disconnectGoogleDriveBackup();
+			toast('Google Drive disconnected');
+		} catch (error) {
+			const msg = errorMessage(error, 'Google Drive disconnect failed');
+			toast(`Google Drive disconnect failed: ${msg}`, false);
+		} finally {
+			googleDriveBusy = false;
+		}
+	}
+
+	async function onUploadLatestBackupToGoogleDrive() {
+		if (googleDriveBusy) return;
+		googleDriveBusy = true;
+		try {
+			backupStatus = await uploadLatestBackupToGoogleDrive();
+			toast('Latest backup uploaded to Google Drive');
+		} catch (error) {
+			const msg = errorMessage(error, 'Google Drive upload failed');
+			toast(`Google Drive upload failed: ${msg}`, false);
+		} finally {
+			googleDriveBusy = false;
+		}
+	}
+
+	async function onChooseRestoreBackup() {
+		if (restoreChoosing || restoreBusy) return;
+		restoreChoosing = true;
+		try {
+			const preview = await chooseRestoreBackup();
+			if (preview) restorePreview = preview;
+		} catch (error) {
+			const msg = errorMessage(error, 'Restore preview failed');
+			toast(`Restore preview failed: ${msg}`, false);
+		} finally {
+			restoreChoosing = false;
+		}
+	}
+
+	async function onConfirmRestoreBackup() {
+		if (!restorePreview || restoreBusy) return;
+		restoreBusy = true;
+		try {
+			const result = await restoreBackup(restorePreview.sourcePath);
+			restorePreview = null;
+			await Promise.all([reload(), reloadBackupStatus(), reloadAuditEvents()]);
+			toast(`Database restored. Safety backup: ${result.preRestoreBackupPath}`);
+		} catch (error) {
+			const msg = errorMessage(error, 'Restore failed');
+			toast(`Restore failed: ${msg}`, false);
+		} finally {
+			restoreBusy = false;
+		}
+	}
+
 	async function onImportSf2() {
 		if (sf2Importing) return;
 		sf2Importing = true;
@@ -510,6 +753,7 @@
 			sf2ImportSummary = summary;
 			sf2TemplateClassId = summary.classId;
 			await reload();
+			await reloadAuditEvents();
 
 			try {
 				const settings = await getSf2WorkbookSettings(summary.classId);
@@ -639,6 +883,7 @@
 			sf2TemplateClassId = summary.classId;
 			closeSf2TemplateDialog(true);
 			await reload();
+			await reloadAuditEvents();
 			toast(
 				creating
 					? `Created SF2 working copy for ${summary.learnersFound} learners`
@@ -679,6 +924,8 @@
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
 		reload();
+		reloadBackupStatus();
+		reloadAuditEvents();
 	});
 </script>
 
@@ -812,51 +1059,144 @@
 
 			<!-- ── Backups ───────────────────────────────────────────────────── -->
 			<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
-				<h3 class="text-lg font-medium">Data Management</h3>
-				<p class="text-sm text-muted-foreground">
-					Your data is stored locally. Backups include the student list, attendance records,
-					classes, and system configuration.
-				</p>
+				<div class="flex flex-wrap items-start justify-between gap-4">
+					<div>
+						<h3 class="text-lg font-medium">Data Management</h3>
+						<p class="mt-1 text-sm text-muted-foreground">
+							Your data is stored locally. Automatic SQLite backups protect students, classes,
+							attendance records, settings, and SF2 workbook mappings. Connect Google Drive with
+							full Drive access to upload backups through browser sign-in, or use a local sync
+							folder as a fallback.
+						</p>
+					</div>
+					<div class="flex flex-wrap gap-2">
+						<button
+							onclick={onCreateBackupNow}
+							disabled={backupBusy}
+							class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<DatabaseBackup class="size-4" aria-hidden="true" />
+							{backupBusy ? 'Backing Up...' : 'Back Up Now'}
+						</button>
+						<button
+							onclick={onChooseRestoreBackup}
+							disabled={restoreChoosing || restoreBusy}
+							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<RotateCcw class="size-4" aria-hidden="true" />
+							{restoreChoosing ? 'Checking...' : 'Restore Backup'}
+						</button>
+					</div>
+				</div>
 
-				<div class="flex flex-wrap gap-2">
+				<div class="grid gap-3 sm:grid-cols-4">
+					<div class="rounded-xl border border-border bg-surface p-4">
+						<div class="label-mono">Last Backup</div>
+						<div class="mt-2 text-sm font-semibold">
+							{formatBackupTimestamp(backupStatus?.lastBackupAt)}
+						</div>
+					</div>
+					<div class="rounded-xl border border-border bg-surface p-4">
+						<div class="label-mono">Stored Locally</div>
+						<div class="mt-2 text-sm font-semibold">
+							{backupStatus
+								? `${backupStatus.backupCount} / ${backupStatus.retentionLimit}`
+								: 'Loading'}
+						</div>
+					</div>
+					<div class="rounded-xl border border-border bg-surface p-4">
+						<div class="label-mono">Sync Folder</div>
+						<div class="mt-2 text-sm font-semibold break-all">
+							{backupPathLabel(backupStatus?.syncFolderPath)}
+						</div>
+					</div>
+					<div class="rounded-xl border border-border bg-surface p-4">
+						<div class="label-mono">Google Drive</div>
+						<div class="mt-2 text-sm font-semibold break-all">
+							{googleDriveStatusLabel()}
+						</div>
+						{#if backupStatus?.lastGoogleDriveBackupAt}
+							<div class="mt-1 text-xs text-muted-foreground">
+								Last upload {formatBackupTimestamp(backupStatus.lastGoogleDriveBackupAt)}
+							</div>
+						{/if}
+					</div>
+				</div>
+
+				{#if backupStatus?.lastError || backupStatus?.lastSyncError || backupStatus?.lastGoogleDriveError}
+					<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+						{#if backupStatus.lastError}
+							<div>{backupStatus.lastError}</div>
+						{/if}
+						{#if backupStatus.lastSyncError}
+							<div>{backupStatus.lastSyncError}</div>
+						{/if}
+						{#if backupStatus.lastGoogleDriveError}
+							<div>{backupStatus.lastGoogleDriveError}</div>
+						{/if}
+					</div>
+				{/if}
+
+				<div class="flex flex-wrap gap-2 border-t border-border pt-5">
+					{#if backupStatus?.googleDriveConnected}
+						<button
+							onclick={onUploadLatestBackupToGoogleDrive}
+							disabled={googleDriveBusy}
+							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<CloudUpload class="size-4" aria-hidden="true" />
+							Upload Latest to Drive
+						</button>
+						<button
+							onclick={onDisconnectGoogleDriveBackup}
+							disabled={googleDriveBusy}
+							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<LogOut class="size-4" aria-hidden="true" />
+							Disconnect Google Drive
+						</button>
+					{:else}
+						<button
+							onclick={onConnectGoogleDriveBackup}
+							disabled={googleDriveBusy || backupStatus?.googleDriveConfigured === false}
+							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+							title={backupStatus?.googleDriveConfigured === false
+								? 'Set EES_AMS_GOOGLE_CLIENT_ID before building the app'
+								: 'Open browser sign-in for full Google Drive access'}
+						>
+							<Cloud class="size-4" aria-hidden="true" />
+							{googleDriveBusy ? 'Connecting...' : 'Connect Google Drive'}
+						</button>
+					{/if}
+					<button
+						onclick={onChooseBackupSyncFolder}
+						disabled={syncFolderBusy}
+						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						<FolderSync class="size-4" aria-hidden="true" />
+						Choose Local Sync Folder
+					</button>
+					<button
+						onclick={onClearBackupSyncFolder}
+						disabled={syncFolderBusy || !backupStatus?.syncFolderPath}
+						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						<Trash2 class="size-4" aria-hidden="true" />
+						Clear Sync Folder
+					</button>
 					<button
 						onclick={openExportDialog}
 						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 					>
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="7 10 12 15 17 10" />
-							<line x1="12" y1="15" x2="12" y2="3" />
-						</svg>
+						<Download class="size-4" aria-hidden="true" />
 						Export Data
 					</button>
-
 					<button
 						onclick={() => fileInput?.click()}
 						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 					>
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="17 8 12 3 7 8" />
-							<line x1="12" y1="3" x2="12" y2="15" />
-						</svg>
-						Import Backup
+						<Upload class="size-4" aria-hidden="true" />
+						Import JSON Merge
 					</button>
 					<input
 						bind:this={fileInput}
@@ -1090,6 +1430,61 @@
 					{globalSettingsSaving ? 'Saving...' : 'Save Configuration'}
 				</button>
 			</form>
+
+			<section class="space-y-4 rounded-2xl border border-border bg-card p-6">
+				<div class="flex items-start justify-between gap-3">
+					<div class="space-y-1">
+						<h3 class="text-lg font-medium">Audit Trail</h3>
+						<p class="text-xs text-muted-foreground">Latest accountability events.</p>
+					</div>
+					<button
+						type="button"
+						onclick={reloadAuditEvents}
+						disabled={auditLoading}
+						class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+						title="Refresh audit trail"
+					>
+						<History class="size-4" aria-hidden="true" />
+					</button>
+				</div>
+
+				{#if auditLoading && auditEvents.length === 0}
+					<div class="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground">
+						Loading audit trail...
+					</div>
+				{:else if auditEvents.length === 0}
+					<div class="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground">
+						No audit events recorded.
+					</div>
+				{:else}
+					<div
+						class="max-h-[28rem] divide-y divide-border overflow-y-auto rounded-xl border border-border"
+					>
+						{#each auditEvents as event (event.id)}
+							<div class="space-y-2 bg-background p-4">
+								<div class="flex items-start justify-between gap-3">
+									<div class="min-w-0">
+										<div class="text-sm font-medium">{event.summary}</div>
+										<div class="mt-1 text-xs text-muted-foreground">
+											{formatAuditTimestamp(event.createdAt)} · {event.actor} · {auditEntityLabel(
+												event
+											)}
+										</div>
+									</div>
+									<span
+										class="shrink-0 rounded-md bg-surface px-2 py-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
+									>
+										{event.action}
+									</span>
+								</div>
+								{#if auditMetadataPreview(event)}
+									<div class="text-xs text-muted-foreground">{auditMetadataPreview(event)}</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</section>
 		</div>
 	</div>
 {/if}
@@ -1772,6 +2167,7 @@
 					onclick={async () => {
 						await wipeAll();
 						await reload();
+						await reloadAuditEvents();
 						toast('All data wiped');
 						wipeTarget = false;
 					}}
@@ -1860,4 +2256,95 @@
 {/if}
 
 <!-- ── Toast ──────────────────────────────────────────────────────────────── -->
+<Dialog
+	open={restorePreview !== null}
+	title="Restore Backup"
+	description="Review this SQLite backup before replacing the current database."
+	maxWidth="lg"
+	onClose={() => {
+		if (!restoreBusy) restorePreview = null;
+	}}
+>
+	{#if restorePreview}
+		<div class="space-y-4">
+			<div class="rounded-xl border border-border bg-surface p-4">
+				<div class="flex items-start gap-3">
+					<div
+						class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"
+					>
+						<ShieldCheck class="size-5" aria-hidden="true" />
+					</div>
+					<div class="min-w-0">
+						<div class="text-sm font-semibold">{restorePreview.fileName}</div>
+						<div class="mt-1 text-xs break-all text-muted-foreground">
+							{restorePreview.sourcePath}
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="grid gap-3 sm:grid-cols-3">
+				<div class="rounded-xl border border-border p-4">
+					<div class="label-mono">Students</div>
+					<div class="mt-2 text-2xl font-semibold">{restorePreview.studentCount}</div>
+				</div>
+				<div class="rounded-xl border border-border p-4">
+					<div class="label-mono">Classes</div>
+					<div class="mt-2 text-2xl font-semibold">{restorePreview.classCount}</div>
+				</div>
+				<div class="rounded-xl border border-border p-4">
+					<div class="label-mono">Attendance</div>
+					<div class="mt-2 text-2xl font-semibold">{restorePreview.eventCount}</div>
+				</div>
+				<div class="rounded-xl border border-border p-4">
+					<div class="label-mono">Settings</div>
+					<div class="mt-2 text-2xl font-semibold">{restorePreview.settingsCount}</div>
+				</div>
+				<div class="rounded-xl border border-border p-4">
+					<div class="label-mono">SF2 Templates</div>
+					<div class="mt-2 text-2xl font-semibold">{restorePreview.sf2TemplateCount}</div>
+				</div>
+				<div class="rounded-xl border border-border p-4">
+					<div class="label-mono">Size</div>
+					<div class="mt-2 text-2xl font-semibold">
+						{formatBackupBytes(restorePreview.sizeBytes)}
+					</div>
+				</div>
+			</div>
+
+			<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+				Restoring replaces the current database. A pre-restore safety backup is created first, and
+				restore stops if that safety backup cannot be created.
+			</div>
+
+			{#if restorePreview.warnings.length > 0}
+				<div class="rounded-xl border border-border p-4 text-sm text-muted-foreground">
+					{#each restorePreview.warnings as warning (warning)}
+						<div>{warning}</div>
+					{/each}
+				</div>
+			{/if}
+
+			<div class="flex justify-end gap-2 pt-2">
+				<button
+					type="button"
+					onclick={() => (restorePreview = null)}
+					disabled={restoreBusy}
+					class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					Cancel
+				</button>
+				<button
+					type="button"
+					onclick={onConfirmRestoreBackup}
+					disabled={restoreBusy}
+					class="rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					{restoreBusy ? 'Restoring...' : 'Restore Database'}
+				</button>
+			</div>
+		</div>
+	{/if}
+</Dialog>
+
 <FeedbackToast message={toastMessage} ok={toastOk} onClose={() => (toastMessage = null)} />
