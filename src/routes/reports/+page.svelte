@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
+	import { fade, fly } from 'svelte/transition';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
@@ -31,11 +32,13 @@
 	} from '$lib/sf2-settings';
 	import {
 		AlertTriangle,
+		ArrowLeft,
 		CalendarDays,
 		Check,
 		CircleAlert,
 		ExternalLink,
 		FileCheck2,
+		Maximize2,
 		RefreshCw,
 		Save,
 		Settings2,
@@ -54,6 +57,7 @@
 	let savingDetails = $state(false);
 	let correctingCellKey = $state<string | null>(null);
 	let exportDialogOpen = $state(false);
+	let fullReviewOpen = $state(false);
 	let toastMessage = $state<string | null>(null);
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -94,7 +98,9 @@
 	const selectedClass = $derived(classes.find((item) => item.id === activeClassId));
 	const closedDateCount = $derived(preview?.closedDays.length ?? 0);
 	const mappedClosedDateCount = $derived(preview?.dates.filter((date) => date.closed).length ?? 0);
-	const exportDisabled = $derived(!preview?.canExport || exporting || !activeClassId);
+	const exportDisabled = $derived(
+		!preview?.canExport || exporting || savingDetails || !activeClassId
+	);
 	const issueCount = $derived(preview?.issues.length ?? 0);
 	const warningCount = $derived(preview?.warnings.length ?? 0);
 	const activeReportMonth = $derived(draftReportMonth || preview?.template?.reportMonth || '');
@@ -175,8 +181,23 @@
 		}
 	}
 
-	function requestExport() {
+	async function requestExport() {
 		if (exportDisabled) return;
+
+		const missingFields = blankSf2HeaderFields();
+		if (missingFields.length > 0) {
+			toast(
+				`Fill required SF2 header fields before exporting: ${missingFields.join(', ')}.`,
+				false
+			);
+			return;
+		}
+
+		if (hasWorkbookDraftChanges()) {
+			const saved = await saveWorkbookDetails(null);
+			if (!saved) return;
+		}
+
 		exportDialogOpen = true;
 	}
 
@@ -196,14 +217,14 @@
 		}
 	}
 
-	async function saveWorkbookDetails(successMessage = 'SF2 workbook details saved') {
+	async function saveWorkbookDetails(successMessage: string | null = 'SF2 workbook details saved') {
 		const draft = workbookDraftPayload();
 		if (!draft || savingDetails) return false;
 
 		savingDetails = true;
 		try {
 			await updateSf2WorkbookSettings(draft);
-			toast(successMessage);
+			if (successMessage) toast(successMessage);
 			await loadReport(draft.classId);
 			return true;
 		} catch (error) {
@@ -220,6 +241,12 @@
 			workbookSettings?.reportMonth || preview?.template?.reportMonth || '';
 		const saved = await saveWorkbookDetails('SF2 report month updated');
 		if (!saved) draftReportMonth = previousReportMonth;
+	}
+
+	function onWindowKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape' && fullReviewOpen) {
+			fullReviewOpen = false;
+		}
 	}
 
 	async function toggleAttendance(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
@@ -243,6 +270,39 @@
 		} finally {
 			correctingCellKey = null;
 		}
+	}
+
+	function blankSf2HeaderFields() {
+		return sf2HeaderFields()
+			.filter((field) => field.value.trim() === '')
+			.map((field) => field.label);
+	}
+
+	function sf2HeaderFields() {
+		return [
+			{ label: 'School ID', value: draftSchoolId },
+			{ label: 'Name of School', value: draftSchoolName },
+			{ label: 'School Year', value: draftSchoolYear },
+			{ label: 'Report Month', value: draftReportMonth },
+			{ label: 'Grade Level', value: draftGradeLevel },
+			{ label: 'Section', value: draftSection },
+			{ label: 'Adviser / LIS Name', value: draftAdviserName },
+			{ label: 'School Head Name', value: draftSchoolHeadName }
+		];
+	}
+
+	function hasWorkbookDraftChanges() {
+		if (!workbookSettings) return false;
+		return (
+			draftSchoolId !== workbookSettings.schoolId ||
+			draftSchoolName !== workbookSettings.schoolName ||
+			draftSchoolYear !== workbookSettings.schoolYear ||
+			draftReportMonth !== workbookSettings.reportMonth ||
+			draftGradeLevel !== workbookSettings.gradeLevel ||
+			draftSection !== workbookSettings.section ||
+			draftAdviserName !== workbookSettings.adviserName ||
+			draftSchoolHeadName !== workbookSettings.schoolHeadName
+		);
 	}
 
 	function workbookDraftPayload(): Sf2TemplateDraft | null {
@@ -468,6 +528,8 @@
 	<meta name="description" content="Review and export DepEd SF2 Excel reports." />
 </svelte:head>
 
+<svelte:window onkeydown={onWindowKeydown} />
+
 <AppShell>
 	<div class="flex h-full flex-col overflow-hidden">
 		<PageHeader
@@ -504,6 +566,15 @@
 					>
 						<ExternalLink class="size-4" aria-hidden="true" />
 						{opening ? 'Opening...' : 'Open SF2'}
+					</button>
+					<button
+						type="button"
+						onclick={() => (fullReviewOpen = true)}
+						disabled={!preview?.template}
+						class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						<Maximize2 class="size-4" aria-hidden="true" />
+						View Full Review
 					</button>
 					<button
 						type="button"
@@ -590,224 +661,9 @@
 						)}
 					</div>
 
-					<div class="rounded-2xl border border-border bg-card p-5 shadow-sm">
-						<div class="flex flex-wrap items-start justify-between gap-3">
-							<div>
-								<div class="label-mono text-primary">Original SF2 header details</div>
-								<h2 class="mt-1 text-xl font-semibold">
-									{draftSchoolName || preview.template.schoolName || 'Name of School'}
-								</h2>
-								<p class="mt-1 text-sm text-muted-foreground">
-									These fields are written into the SF2 workbook before export.
-								</p>
-							</div>
-							<button
-								type="button"
-								onclick={() => saveWorkbookDetails()}
-								disabled={!workbookSettings || savingDetails}
-								class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-							>
-								<Settings2 class="size-4" aria-hidden="true" />
-								{savingDetails ? 'Saving...' : 'Save Details'}
-							</button>
-						</div>
+					{@render sf2HeaderDetails(false)}
 
-						<div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-							{@render textField('School ID', draftSchoolId, 'draftSchoolId')}
-							{@render textField('School Year', draftSchoolYear, 'draftSchoolYear')}
-							<label class="space-y-1.5">
-								<span class="label-mono">Report Month</span>
-								<select
-									bind:value={draftReportMonth}
-									onchange={onReportMonthChange}
-									disabled={!workbookSettings || savingDetails}
-									class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none disabled:opacity-60"
-								>
-									<option value="">Select month</option>
-									{#each SF2_SCHOOL_MONTHS as month (month.value)}
-										<option value={month.value}>{month.label}</option>
-									{/each}
-								</select>
-							</label>
-							{@render textField('Grade Level', draftGradeLevel, 'draftGradeLevel')}
-							<div class="md:col-span-2">
-								{@render textField('Name of School', draftSchoolName, 'draftSchoolName')}
-							</div>
-							{@render textField('Section', draftSection, 'draftSection')}
-							{@render textField('Adviser / LIS Name', draftAdviserName, 'draftAdviserName')}
-							<div class="md:col-span-2">
-								{@render textField('School Head Name', draftSchoolHeadName, 'draftSchoolHeadName')}
-							</div>
-						</div>
-					</div>
-
-					<div class="rounded-2xl border border-border bg-card shadow-sm">
-						<div
-							class="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4"
-						>
-							<div>
-								<div class="label-mono text-primary">Class-day matrix</div>
-								<h2 class="mt-1 text-xl font-semibold">
-									{preview.template.gradeLevel} - {preview.template.section}
-								</h2>
-								<p class="mt-1 text-sm text-muted-foreground">
-									Click a closed-day cell to toggle the individual learner between present and
-									absent.
-								</p>
-							</div>
-							<div class="flex flex-wrap gap-2 text-xs">
-								<span
-									class="rounded-pill border border-emerald-500/30 bg-emerald-50 px-2.5 py-1 text-emerald-700"
-								>
-									Present
-								</span>
-								<span
-									class="rounded-pill border border-red-500/35 bg-red-50 px-2.5 py-1 text-red-700"
-								>
-									Absent
-								</span>
-								<span
-									class="rounded-pill border border-border bg-background px-2.5 py-1 text-muted-foreground"
-								>
-									Open day
-								</span>
-							</div>
-						</div>
-
-						<div class="max-h-[560px] overflow-auto">
-							<table class="min-w-full border-separate border-spacing-0 text-sm">
-								<thead>
-									<tr>
-										<th
-											rowspan="2"
-											class="sticky top-0 left-0 z-30 w-72 min-w-72 border-r border-b border-border bg-card px-4 py-3 text-left align-middle"
-										>
-											Learner
-										</th>
-										{#each matrixWeekGroups as week (week.key)}
-											<th
-												colspan={week.slots.length}
-												class="sticky top-0 z-20 border-b border-l-2 border-border border-l-primary/45 bg-orange-50 px-2 py-2 text-center"
-												title={weekRangeLabel(week)}
-											>
-												<div class="label-mono text-primary">{week.label}</div>
-												<div class="mt-0.5 font-mono text-[10px] font-medium text-muted-foreground">
-													{weekRangeLabel(week)}
-												</div>
-											</th>
-										{/each}
-									</tr>
-									<tr>
-										{#each matrixWeekGroups as week (week.key)}
-											{#each week.slots as slot, dateIndex (slot.key)}
-												<th
-													class="sticky top-[43px] z-10 min-w-14 border-b border-border bg-card px-2 py-2 text-center {dateIndex ===
-													0
-														? 'border-l-2 border-l-primary/45'
-														: 'border-l border-l-border/60'}"
-													title={slot.date
-														? `${matrixDateLabel(slot.date.date)} ${slot.date.columnLetter}${slot.date.columnIndex}`
-														: slot.dateKey
-															? `${matrixDateLabel(slot.dateKey)}, no SF2 column mapped`
-															: `${slot.weekday}, no class day in this month`}
-												>
-													<div class="font-mono text-sm leading-none font-bold">
-														{slot.dateKey ? formatDayNumber(slot.dateKey) : ''}
-													</div>
-													<div
-														class="mt-1 font-mono text-[10px] font-semibold text-muted-foreground"
-													>
-														{slot.weekday}
-													</div>
-												</th>
-											{/each}
-										{/each}
-									</tr>
-								</thead>
-								<tbody>
-									{#each preview.students as row (row.studentId)}
-										<tr class={row.mapped ? 'bg-background' : 'bg-amber-50/60'}>
-											<th
-												class="sticky left-0 z-10 w-72 min-w-72 border-r border-b border-border bg-inherit px-4 py-2 text-left align-middle"
-											>
-												<div class="flex items-center gap-2">
-													<div class="min-w-0 flex-1">
-														<div class="truncate font-medium">{row.studentName}</div>
-														<div
-															class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground"
-														>
-															<span>{row.gender ?? 'No gender'}</span>
-															<span aria-hidden="true">/</span>
-															<span>{row.mapped ? `Row ${row.rowIndex}` : 'Unmapped'}</span>
-														</div>
-													</div>
-													{#if row.warnings.length > 0}
-														<AlertTriangle
-															class="size-4 shrink-0 text-amber-600"
-															aria-hidden="true"
-														/>
-													{/if}
-												</div>
-											</th>
-											{#each matrixWeekGroups as week (week.key)}
-												{#each week.slots as slot, dateIndex (slot.key)}
-													{@const cell = slot.dateKey ? cellForDate(row, slot.dateKey) : null}
-													<td
-														class="border-b border-border/80 px-1.5 py-1.5 text-center {dateIndex ===
-														0
-															? 'border-l-2 border-l-primary/30 bg-primary/5'
-															: 'border-l border-l-border/40'}"
-													>
-														{#if cell}
-															<button
-																type="button"
-																disabled={!cell.editable ||
-																	!row.mapped ||
-																	correctingCellKey !== null}
-																onclick={() => toggleAttendance(row, cell)}
-																aria-label={cellLabel(row, cell)}
-																title={cellLabel(row, cell)}
-																class="control-ring inline-grid size-9 place-items-center rounded-md border text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-70 {cellClass(
-																	row,
-																	cell
-																)}"
-															>
-																{#if correctingCellKey === cellKey(row.studentId, cell.date)}
-																	<span class="font-mono text-[10px]">...</span>
-																{:else if cell.status === 'present'}
-																	<Check class="size-4" aria-hidden="true" />
-																{:else if cell.status === 'absent'}
-																	<X class="size-4" aria-hidden="true" />
-																{:else}
-																	<span aria-hidden="true">-</span>
-																{/if}
-															</button>
-														{:else if slot.dateKey}
-															<span
-																role="img"
-																aria-label={unmappedCellLabel(row, slot.dateKey)}
-																title={unmappedCellLabel(row, slot.dateKey)}
-																class="inline-grid size-9 place-items-center rounded-md border border-dashed border-border bg-background text-xs font-bold text-muted-foreground"
-															>
-																-
-															</span>
-														{:else}
-															<span
-																aria-hidden="true"
-																class="inline-grid size-9 place-items-center text-muted-foreground"
-															>
-																&nbsp;
-															</span>
-														{/if}
-													</td>
-												{/each}
-											{/each}
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-					</div>
+					{@render classDayMatrix(false)}
 				</div>
 
 				<aside class="min-h-0 space-y-5 overflow-auto">
@@ -822,56 +678,6 @@
 							{@render metaRow('School Head', preview.template.schoolHeadName || 'Blank')}
 							{@render metaRow('Imported', formatImportedAt(preview.template.importedAt))}
 						</dl>
-					</div>
-
-					<div class="rounded-2xl border border-border bg-card p-5">
-						<div class="flex items-center justify-between gap-3">
-							<div>
-								<div class="label-mono text-primary">Export checks</div>
-								<h2 class="mt-1 text-lg font-semibold">
-									{issueCount > 0 ? 'Blocked' : warningCount > 0 ? 'Review warnings' : 'Ready'}
-								</h2>
-							</div>
-							<div
-								class="rounded-pill border px-2.5 py-1 text-xs font-semibold {issueCount > 0
-									? 'border-red-500/35 bg-red-50 text-red-700'
-									: warningCount > 0
-										? 'border-amber-500/40 bg-amber-50 text-amber-700'
-										: 'border-emerald-500/30 bg-emerald-50 text-emerald-700'}"
-							>
-								{issueCount > 0 ? 'Fix required' : warningCount > 0 ? 'Confirm' : 'Clean'}
-							</div>
-						</div>
-
-						{#if preview.issues.length > 0}
-							<ul class="mt-4 space-y-2">
-								{#each preview.issues as issue, index (`issue-${index}-${issue}`)}
-									<li
-										class="rounded-md border border-red-500/25 bg-red-50 p-3 text-sm text-red-800"
-									>
-										{issue}
-									</li>
-								{/each}
-							</ul>
-						{/if}
-
-						{#if preview.warnings.length > 0}
-							<ul class="mt-4 max-h-72 space-y-2 overflow-auto pr-1">
-								{#each preview.warnings as warning, index (`warning-${index}-${warning}`)}
-									<li
-										class="rounded-md border border-amber-500/30 bg-amber-50 p-3 text-sm text-amber-900"
-									>
-										{warning}
-									</li>
-								{/each}
-							</ul>
-						{:else if preview.issues.length === 0}
-							<div
-								class="mt-4 rounded-md border border-emerald-500/30 bg-emerald-50 p-3 text-sm text-emerald-800"
-							>
-								No missing mappings or blank SF2 header fields were detected.
-							</div>
-						{/if}
 					</div>
 
 					<div class="rounded-2xl border border-border bg-card p-5">
@@ -908,6 +714,47 @@
 		{/if}
 	</div>
 </AppShell>
+
+{#if fullReviewOpen && preview?.template}
+	<div
+		role="dialog"
+		aria-modal="true"
+		aria-label="Full SF2 review"
+		class="fixed inset-x-0 top-8 bottom-0 z-[65] bg-background text-foreground"
+		transition:fade={{ duration: 160 }}
+	>
+		<div class="flex h-full min-h-0 flex-col overflow-hidden">
+			<div
+				class="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur md:px-6"
+			>
+				<button
+					type="button"
+					onclick={() => (fullReviewOpen = false)}
+					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface"
+				>
+					<ArrowLeft class="size-4" aria-hidden="true" />
+					Back
+				</button>
+				<div class="min-w-0 text-right">
+					<div class="label-mono text-primary">Full review</div>
+					<div class="truncate text-sm font-semibold">
+						{draftSchoolName || preview.template.schoolName || 'SF2 Workbook'}
+					</div>
+				</div>
+			</div>
+
+			<div
+				class="min-h-0 flex-1 overflow-hidden px-4 py-4 md:px-6"
+				transition:fly={{ y: 14, duration: 180 }}
+			>
+				<div class="flex h-full min-h-0 flex-col gap-4">
+					{@render sf2HeaderDetails(true)}
+					{@render classDayMatrix(true)}
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <Dialog
 	open={exportDialogOpen}
@@ -958,6 +805,280 @@
 </Dialog>
 
 <FeedbackToast message={toastMessage} ok={toastOk} onClose={() => (toastMessage = null)} />
+
+{#snippet sf2HeaderDetails(fullReview: boolean)}
+	{#if preview?.template}
+		<div
+			class="border border-border bg-card p-5 shadow-sm {fullReview ? 'rounded-xl' : 'rounded-2xl'}"
+		>
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div>
+					<div class="label-mono text-primary">Original SF2 header details</div>
+					<h2 class="mt-1 text-xl font-semibold">
+						{draftSchoolName || preview.template.schoolName || 'Name of School'}
+					</h2>
+					{#if !fullReview}
+						<p class="mt-1 text-sm text-muted-foreground">
+							These fields are written into the SF2 workbook before export.
+						</p>
+					{/if}
+				</div>
+				{#if !fullReview}
+					<button
+						type="button"
+						onclick={() => saveWorkbookDetails()}
+						disabled={!workbookSettings || savingDetails}
+						class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						<Settings2 class="size-4" aria-hidden="true" />
+						{savingDetails ? 'Saving...' : 'Save Details'}
+					</button>
+				{/if}
+			</div>
+
+			{#if fullReview}
+				<dl class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+					{@render headerReviewField(
+						'School ID',
+						draftSchoolId || preview.template.schoolId || 'Blank'
+					)}
+					{@render headerReviewField(
+						'School Year',
+						draftSchoolYear || preview.template.schoolYear || 'Blank'
+					)}
+					{@render headerReviewField(
+						'Report Month',
+						reportMonthLabel(draftReportMonth || preview.template.reportMonth)
+					)}
+					{@render headerReviewField(
+						'Grade Level',
+						draftGradeLevel || preview.template.gradeLevel || 'Blank'
+					)}
+					<div class="md:col-span-2">
+						{@render headerReviewField(
+							'Name of School',
+							draftSchoolName || preview.template.schoolName || 'Blank'
+						)}
+					</div>
+					{@render headerReviewField(
+						'Section',
+						draftSection || preview.template.section || 'Blank'
+					)}
+					{@render headerReviewField(
+						'Adviser / LIS Name',
+						draftAdviserName || preview.template.adviserName || 'Blank'
+					)}
+					<div class="md:col-span-2">
+						{@render headerReviewField(
+							'School Head Name',
+							draftSchoolHeadName || preview.template.schoolHeadName || 'Blank'
+						)}
+					</div>
+				</dl>
+			{:else}
+				<div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+					{@render textField('School ID', draftSchoolId, 'draftSchoolId')}
+					{@render textField('School Year', draftSchoolYear, 'draftSchoolYear')}
+					<label class="space-y-1.5">
+						<span class="label-mono">Report Month</span>
+						<select
+							bind:value={draftReportMonth}
+							onchange={onReportMonthChange}
+							disabled={!workbookSettings || savingDetails}
+							class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none disabled:opacity-60"
+						>
+							<option value="">Select month</option>
+							{#each SF2_SCHOOL_MONTHS as month (month.value)}
+								<option value={month.value}>{month.label}</option>
+							{/each}
+						</select>
+					</label>
+					{@render textField('Grade Level', draftGradeLevel, 'draftGradeLevel')}
+					<div class="md:col-span-2">
+						{@render textField('Name of School', draftSchoolName, 'draftSchoolName')}
+					</div>
+					{@render textField('Section', draftSection, 'draftSection')}
+					{@render textField('Adviser / LIS Name', draftAdviserName, 'draftAdviserName')}
+					<div class="md:col-span-2">
+						{@render textField('School Head Name', draftSchoolHeadName, 'draftSchoolHeadName')}
+					</div>
+				</div>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
+{#snippet classDayMatrix(fullReview: boolean)}
+	{#if preview?.template}
+		<div
+			class="border border-border bg-card shadow-sm {fullReview
+				? 'flex min-h-0 flex-1 flex-col rounded-xl'
+				: 'rounded-2xl'}"
+		>
+			<div
+				class="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4"
+			>
+				<div>
+					<div class="label-mono text-primary">Class-day matrix</div>
+					<h2 class="mt-1 text-xl font-semibold">
+						{preview.template.gradeLevel} - {preview.template.section}
+					</h2>
+					<p class="mt-1 text-sm text-muted-foreground">
+						Click a closed-day cell to toggle the individual learner between present and absent.
+					</p>
+				</div>
+				<div class="flex flex-wrap gap-2 text-xs">
+					<span
+						class="rounded-pill border border-emerald-500/30 bg-emerald-50 px-2.5 py-1 text-emerald-700"
+					>
+						Present
+					</span>
+					<span class="rounded-pill border border-red-500/35 bg-red-50 px-2.5 py-1 text-red-700">
+						Absent
+					</span>
+					<span
+						class="rounded-pill border border-border bg-background px-2.5 py-1 text-muted-foreground"
+					>
+						Open day
+					</span>
+				</div>
+			</div>
+
+			<div class={fullReview ? 'min-h-0 flex-1 overflow-auto' : 'max-h-[560px] overflow-auto'}>
+				<table class="min-w-full border-separate border-spacing-0 text-sm">
+					<thead>
+						<tr>
+							<th
+								rowspan="2"
+								class="sticky top-0 left-0 z-30 w-72 min-w-72 border-r border-b border-border bg-card px-4 py-3 text-left align-middle"
+							>
+								Learner
+							</th>
+							{#each matrixWeekGroups as week (week.key)}
+								<th
+									colspan={week.slots.length}
+									class="sticky top-0 z-20 border-b border-l-2 border-border border-l-primary/45 bg-orange-50 px-2 py-2 text-center"
+									title={weekRangeLabel(week)}
+								>
+									<div class="label-mono text-primary">{week.label}</div>
+									<div class="mt-0.5 font-mono text-[10px] font-medium text-muted-foreground">
+										{weekRangeLabel(week)}
+									</div>
+								</th>
+							{/each}
+						</tr>
+						<tr>
+							{#each matrixWeekGroups as week (week.key)}
+								{#each week.slots as slot, dateIndex (slot.key)}
+									<th
+										class="sticky top-[43px] z-10 min-w-14 border-b border-border bg-card px-2 py-2 text-center {dateIndex ===
+										0
+											? 'border-l-2 border-l-primary/45'
+											: 'border-l border-l-border/60'}"
+										title={slot.date
+											? `${matrixDateLabel(slot.date.date)} ${slot.date.columnLetter}${slot.date.columnIndex}`
+											: slot.dateKey
+												? `${matrixDateLabel(slot.dateKey)}, no SF2 column mapped`
+												: `${slot.weekday}, no class day in this month`}
+									>
+										<div class="font-mono text-sm leading-none font-bold">
+											{slot.dateKey ? formatDayNumber(slot.dateKey) : ''}
+										</div>
+										<div class="mt-1 font-mono text-[10px] font-semibold text-muted-foreground">
+											{slot.weekday}
+										</div>
+									</th>
+								{/each}
+							{/each}
+						</tr>
+					</thead>
+					<tbody>
+						{#each preview.students as row (row.studentId)}
+							<tr class={row.mapped ? 'bg-background' : 'bg-amber-50/60'}>
+								<th
+									class="sticky left-0 z-10 w-72 min-w-72 border-r border-b border-border bg-inherit px-4 py-2 text-left align-middle"
+								>
+									<div class="flex items-center gap-2">
+										<div class="min-w-0 flex-1">
+											<div class="truncate font-medium">{row.studentName}</div>
+											<div
+												class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground"
+											>
+												<span>{row.gender ?? 'No gender'}</span>
+												<span aria-hidden="true">/</span>
+												<span>{row.mapped ? `Row ${row.rowIndex}` : 'Unmapped'}</span>
+											</div>
+										</div>
+										{#if row.warnings.length > 0}
+											<AlertTriangle class="size-4 shrink-0 text-amber-600" aria-hidden="true" />
+										{/if}
+									</div>
+								</th>
+								{#each matrixWeekGroups as week (week.key)}
+									{#each week.slots as slot, dateIndex (slot.key)}
+										{@const cell = slot.dateKey ? cellForDate(row, slot.dateKey) : null}
+										<td
+											class="border-b border-border/80 px-1.5 py-1.5 text-center {dateIndex === 0
+												? 'border-l-2 border-l-primary/30 bg-primary/5'
+												: 'border-l border-l-border/40'}"
+										>
+											{#if cell}
+												<button
+													type="button"
+													disabled={!cell.editable || !row.mapped || correctingCellKey !== null}
+													onclick={() => toggleAttendance(row, cell)}
+													aria-label={cellLabel(row, cell)}
+													title={cellLabel(row, cell)}
+													class="control-ring inline-grid size-9 place-items-center rounded-md border text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-70 {cellClass(
+														row,
+														cell
+													)}"
+												>
+													{#if correctingCellKey === cellKey(row.studentId, cell.date)}
+														<span class="font-mono text-[10px]">...</span>
+													{:else if cell.status === 'present'}
+														<Check class="size-4" aria-hidden="true" />
+													{:else if cell.status === 'absent'}
+														<X class="size-4" aria-hidden="true" />
+													{:else}
+														<span aria-hidden="true">-</span>
+													{/if}
+												</button>
+											{:else if slot.dateKey}
+												<span
+													role="img"
+													aria-label={unmappedCellLabel(row, slot.dateKey)}
+													title={unmappedCellLabel(row, slot.dateKey)}
+													class="inline-grid size-9 place-items-center rounded-md border border-dashed border-border bg-background text-xs font-bold text-muted-foreground"
+												>
+													-
+												</span>
+											{:else}
+												<span
+													aria-hidden="true"
+													class="inline-grid size-9 place-items-center text-muted-foreground"
+												>
+													&nbsp;
+												</span>
+											{/if}
+										</td>
+									{/each}
+								{/each}
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	{/if}
+{/snippet}
+
+{#snippet headerReviewField(label: string, value: string)}
+	<div class="rounded-md border border-border bg-background px-3 py-2">
+		<dt class="label-mono">{label}</dt>
+		<dd class="mt-1 truncate text-sm font-semibold">{value}</dd>
+	</div>
+{/snippet}
 
 {#snippet summaryTile(
 	label: string,
