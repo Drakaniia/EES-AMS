@@ -534,12 +534,16 @@ pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2Exp
         );
     }
 
-    let closed_days = sf2_repo.closed_days_for_class(&template.active_class_id)?;
+    let closed_days = sf2_closed_days_for_report_month(
+        &template,
+        &sf2_repo.closed_days_for_class(&template.active_class_id)?,
+    );
     let mapped_students = sf2_repo.student_mappings_for_template(&template.id)?.len();
 
-    let mapped_dates = sf2_repo.date_mappings_for_template(&template.id)?.len();
+    let date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
+    let mapped_dates = sf2_date_mappings_for_report_month(&template, &date_mappings).len();
     if mapped_dates == 0 {
-        issues.push("No attendance dates are mapped to this SF2 template.".to_string());
+        issues.push("No attendance dates are mapped to this SF2 report month.".to_string());
     }
 
     Ok(Sf2ExportReadiness {
@@ -582,7 +586,10 @@ pub fn export_preview(pool: DbPool, class_id: Option<String>) -> Result<Sf2Expor
         .latest_template_for_class(&summary.class_id)?
         .ok_or_else(|| AppError::InvalidInput("No SF2 template imported".to_string()))?;
     let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
-    let date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
+    let date_mappings = sf2_date_mappings_for_report_month(
+        &template,
+        &sf2_repo.date_mappings_for_template(&template.id)?,
+    );
 
     let class_repo = ClassRepository::new(pool.clone());
     let class = class_repo.get(&template.active_class_id)?;
@@ -806,7 +813,10 @@ pub fn set_preview_attendance(
         .ok_or_else(|| {
             AppError::InvalidInput("No SF2 template imported for this class".to_string())
         })?;
-    let date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
+    let date_mappings = sf2_date_mappings_for_report_month(
+        &template,
+        &sf2_repo.date_mappings_for_template(&template.id)?,
+    );
     if !date_mappings
         .iter()
         .any(|mapping| mapping.date.as_str() == date.as_str())
@@ -816,7 +826,8 @@ pub fn set_preview_attendance(
         )));
     }
 
-    let closed_days = sf2_repo.closed_days_for_class(&class_id)?;
+    let closed_days =
+        sf2_closed_days_for_report_month(&template, &sf2_repo.closed_days_for_class(&class_id)?);
     if !closed_days.iter().any(|day| day == &date) {
         return Err(AppError::InvalidInput(format!(
             "{date} is not a closed SF2 attendance day"
@@ -873,7 +884,8 @@ pub fn export_workbook(
         ));
     }
 
-    let closed_days = sf2_repo.closed_days_for_class(&class_id)?;
+    let closed_days =
+        sf2_closed_days_for_report_month(&template, &sf2_repo.closed_days_for_class(&class_id)?);
     let marks_written = write_template_marks_for_days(pool.clone(), &template, &closed_days)?;
 
     let metadata = template_metadata(&template);
@@ -993,7 +1005,10 @@ fn write_template_marks_for_days(
 
     let sf2_repo = Sf2Repository::new(pool.clone());
     let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
-    let date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
+    let date_mappings = sf2_date_mappings_for_report_month(
+        template,
+        &sf2_repo.date_mappings_for_template(&template.id)?,
+    );
     if date_mappings.is_empty() {
         return Ok(0);
     }
@@ -1226,6 +1241,37 @@ fn template_metadata(template: &Sf2TemplateRecord) -> Sf2WorkbookMetadata {
         configure_calendar: false,
         first_school_day: None,
     }
+}
+
+fn sf2_date_mappings_for_report_month(
+    template: &Sf2TemplateRecord,
+    date_mappings: &[Sf2DateMappingRecord],
+) -> Vec<Sf2DateMappingRecord> {
+    date_mappings
+        .iter()
+        .filter(|mapping| sf2_is_report_month_date(template, &mapping.date))
+        .cloned()
+        .collect()
+}
+
+fn sf2_closed_days_for_report_month(
+    template: &Sf2TemplateRecord,
+    closed_days: &[String],
+) -> Vec<String> {
+    closed_days
+        .iter()
+        .filter(|day| sf2_is_report_month_date(template, day))
+        .cloned()
+        .collect()
+}
+
+fn sf2_is_report_month_date(template: &Sf2TemplateRecord, date: &str) -> bool {
+    let Some(month) = sf2_month_number(&template.report_month) else {
+        return false;
+    };
+    let year = sf2_report_year(&template.school_year, month);
+
+    parse_date(date).is_ok_and(|date| date.year() == year && date.month() == month)
 }
 
 fn resolve_template_class(
@@ -1713,14 +1759,17 @@ fn set_attendance_event_for_day(
 
     if present {
         let attendance_timestamp = attendance_timestamp_for_date(date, day_start)?;
+        let session_key = format!("{date}|{class_id}|day");
         transaction.execute(
-            "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note)
-             VALUES (?1, ?2, ?3, 'in', ?4, ?5)",
+            "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at)
+             VALUES (?1, ?2, ?3, 'in', ?4, ?5, ?6, ?7, NULL)",
             params![
                 uuid::Uuid::new_v4().to_string(),
                 student_id,
                 class_id,
                 attendance_timestamp,
+                "SF2 preview correction",
+                session_key,
                 "SF2 preview correction",
             ],
         )?;
@@ -2148,24 +2197,46 @@ mod tests {
             row_index: 8,
             gender_block: Some("MALE".to_string()),
         };
-        let date_mapping = Sf2DateMappingRecord {
-            template_id: template.id.clone(),
-            sheet_name: "JUNE 2026".to_string(),
-            date: "2026-06-08".to_string(),
-            column_letter: "F".to_string(),
-            column_index: 6,
-        };
+        let date_mappings = vec![
+            Sf2DateMappingRecord {
+                template_id: template.id.clone(),
+                sheet_name: "JUNE 2026".to_string(),
+                date: "2026-06-08".to_string(),
+                column_letter: "F".to_string(),
+                column_index: 6,
+            },
+            Sf2DateMappingRecord {
+                template_id: template.id.clone(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-01".to_string(),
+                column_letter: "F".to_string(),
+                column_index: 6,
+            },
+        ];
         let sf2_repo = Sf2Repository::new(pool.clone());
         sf2_repo
-            .upsert_template_with_mappings(&template, &[student_mapping], &[date_mapping])
+            .upsert_template_with_mappings(&template, &[student_mapping], &date_mappings)
             .expect("template mappings should save");
         sf2_repo
             .close_day(&class.id, "2026-06-08", 0)
             .expect("closed day should save");
+        sf2_repo
+            .close_day(&class.id, "2026-07-01", 0)
+            .expect("future month closed day should save");
 
         let preview = export_preview(pool, Some(class.id)).expect("preview should be generated");
 
         assert!(preview.can_export);
+        assert_eq!(preview.mapped_dates, 1);
+        assert_eq!(preview.closed_days, vec!["2026-06-08".to_string()]);
+        assert_eq!(
+            preview
+                .dates
+                .iter()
+                .map(|date| date.date.as_str())
+                .collect::<Vec<_>>(),
+            vec!["2026-06-08"]
+        );
         assert_eq!(preview.absence_count, 1);
         assert_eq!(preview.absent_list.len(), 1);
         assert_eq!(preview.unmapped_student_count, 1);
