@@ -212,6 +212,26 @@ pub struct AttendanceAuditEntry {
     pub actor: String,
 }
 
+/// General audit trail entry for PII and data-management actions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditEvent {
+    pub id: String,
+    pub entity_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_id: Option<String>,
+    pub action: String,
+    pub summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before_json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after_json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata_json: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub actor: String,
+}
+
 /// Application settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -371,5 +391,7 @@ pub struct ExportData {
     pub classes: Vec<Class>,
     pub events: Vec<AttendanceEvent>,
     pub settings: Vec<Settings>,
+    #[serde(default)]
+    pub audit_events: Vec<AuditEvent>,
     pub exported_at: i64,
 }
