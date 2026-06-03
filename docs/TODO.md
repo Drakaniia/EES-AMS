@@ -36,3 +36,6 @@
 -Validation if export the sf2 xlsx, the dates should be  if whats report of the month of epecially the dates. becaues we create our own copy when importing, it modifies also the exel when import, the months dates  in weekly, also include the x mark when absent because currently there is no x mark
 
 - No end session, i should dont have to click end session just to end. when i click attendance in the list should automaticall record
+- Automatically close session when the days ends to record automatically
+
+- page where can eassisy modify attendance absent or not with ignoring  the class houurs
