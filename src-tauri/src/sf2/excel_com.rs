@@ -1051,6 +1051,11 @@ mod tests {
     }
 
     #[test]
+    fn report_year_uses_current_calendar_year() {
+        assert_eq!(report_year("2025-2026", 6), chrono::Local::now().year());
+    }
+
+    #[test]
     #[ignore = "requires Microsoft Excel COM automation"]
     fn sf2_template_com_round_trip() {
         let dir = tempfile::tempdir().unwrap();
