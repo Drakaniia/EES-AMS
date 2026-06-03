@@ -2103,6 +2103,14 @@ mod tests {
     }
 
     #[test]
+    fn sf2_report_year_uses_current_calendar_year() {
+        assert_eq!(
+            sf2_report_year("2025-2026", 6),
+            chrono::Local::now().year()
+        );
+    }
+
+    #[test]
     fn metadata_from_draft_requires_first_attendance_day() {
         let error = metadata_from_draft(&template_draft(None)).unwrap_err();
 
