@@ -1,5 +1,5 @@
 use crate::domain::error::{AppError, Result};
-use crate::sf2::logic::Sf2CellMark;
+use crate::sf2::logic::{is_learner_name, Sf2CellMark};
 use crate::sf2::models::{
     Sf2WorkbookAnalysis, Sf2WorkbookDate, Sf2WorkbookLearner, Sf2WorkbookMetadata, Sf2WorkbookSheet,
 };
@@ -35,6 +35,7 @@ pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
             let mut sheet_infos = Vec::new();
             let mut dates = Vec::new();
             let mut first_monthly_sheet = None;
+            let mut best_roster_sheet: Option<(ComObject, Sf2SheetQuality)> = None;
             let mut school_year = String::new();
             let mut school_id = String::new();
             let mut school_name = String::new();
@@ -86,6 +87,14 @@ pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
                     first_monthly_sheet = Some(sheet.clone());
                 }
 
+                let quality = sf2_sheet_quality(&sheet)?;
+                if best_roster_sheet
+                    .as_ref()
+                    .is_none_or(|(_, best_quality)| quality > *best_quality)
+                {
+                    best_roster_sheet = Some((sheet.clone(), quality));
+                }
+
                 for column in 6..=38 {
                     let day_text = cell_text(&sheet, 6, column)?.trim().to_string();
                     let Ok(day) = day_text.parse::<u32>() else {
@@ -106,7 +115,10 @@ pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
                 }
             }
 
-            let learners = match first_monthly_sheet {
+            let learner_sheet = best_roster_sheet
+                .map(|(sheet, _)| sheet)
+                .or(first_monthly_sheet);
+            let learners = match learner_sheet {
                 Some(sheet) => workbook_learners(&sheet)?,
                 None => Vec::new(),
             };
@@ -231,6 +243,61 @@ fn workbook_learners(sheet: &ComObject) -> Result<Vec<Sf2WorkbookLearner>> {
     Ok(learners)
 }
 
+fn best_sf2_monthly_sheet(sheets: &[ComObject]) -> Result<Option<ComObject>> {
+    let mut best_sheet: Option<(ComObject, Sf2SheetQuality)> = None;
+    for sheet in sheets {
+        let quality = sf2_sheet_quality(sheet)?;
+        if best_sheet
+            .as_ref()
+            .is_none_or(|(_, best_quality)| quality > *best_quality)
+        {
+            best_sheet = Some((sheet.clone(), quality));
+        }
+    }
+
+    Ok(best_sheet.map(|(sheet, _)| sheet))
+}
+
+fn sf2_sheet_quality(sheet: &ComObject) -> Result<Sf2SheetQuality> {
+    let learners = workbook_learners(sheet)?;
+    let learner_count = learners
+        .iter()
+        .filter(|learner| is_learner_name(&learner.name))
+        .count();
+    let male_count = learners
+        .iter()
+        .filter(|learner| {
+            learner.gender_block.as_deref() == Some("MALE") && is_learner_name(&learner.name)
+        })
+        .count();
+    let female_count = learners
+        .iter()
+        .filter(|learner| {
+            learner.gender_block.as_deref() == Some("FEMALE") && is_learner_name(&learner.name)
+        })
+        .count();
+    let total_day_cells = sf2_total_day_cell_count(sheet)?;
+
+    Ok(Sf2SheetQuality {
+        total_day_cells,
+        learner_count,
+        male_count,
+        female_count,
+    })
+}
+
+fn sf2_total_day_cell_count(sheet: &ComObject) -> Result<usize> {
+    let mut count = 0usize;
+    for row in [29, 49] {
+        for column in 6..=38 {
+            if !cell_text(sheet, row, column)?.trim().is_empty() {
+                count += 1;
+            }
+        }
+    }
+    Ok(count)
+}
+
 fn configure_sf2_calendar(
     monthly_sheets: &[ComObject],
     sf2_sheets: &[ComObject],
@@ -245,15 +312,16 @@ fn configure_sf2_calendar(
 
     let report_year = report_year(&metadata.school_year, report_month);
     let target_sheet_name = format!("{} {}", month_name(report_month), report_year);
-    let target_sheet = monthly_sheets
-        .iter()
-        .find(|sheet| {
-            sheet
-                .get_string("Name")
-                .is_ok_and(|name| name == target_sheet_name)
-        })
-        .cloned()
-        .unwrap_or_else(|| monthly_sheets[0].clone());
+    let target_sheet = match monthly_sheets.iter().find(|sheet| {
+        sheet
+            .get_string("Name")
+            .is_ok_and(|name| name == target_sheet_name)
+    }) {
+        Some(sheet) => sheet.clone(),
+        None => {
+            best_sf2_monthly_sheet(monthly_sheets)?.unwrap_or_else(|| monthly_sheets[0].clone())
+        }
+    };
 
     target_sheet.put_i4("Visible", EXCEL_SHEET_VISIBLE)?;
     rename_sheet_unique(&target_sheet, &target_sheet_name)?;
@@ -1035,6 +1103,14 @@ struct Sf2WeekdaySlot {
     label: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct Sf2SheetQuality {
+    total_day_cells: usize,
+    learner_count: usize,
+    male_count: usize,
+    female_count: usize,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1117,5 +1193,58 @@ mod tests {
             .learners
             .iter()
             .any(|learner| learner.row_index == 8 && learner.name == "Learner, One"));
+    }
+
+    #[test]
+    #[ignore = "requires Microsoft Excel COM automation and SF2_FIXTURE_WORKBOOK"]
+    fn sf2_fixture_uses_best_roster_sheet_when_rebuilding_calendar() {
+        let fixture_path = std::env::var("SF2_FIXTURE_WORKBOOK")
+            .expect("SF2_FIXTURE_WORKBOOK must point to an SF2 .xls fixture");
+        let dir = tempfile::tempdir().unwrap();
+        let workbook_path = dir.path().join("sf2-fixture-round-trip.xls");
+        std::fs::copy(&fixture_path, &workbook_path).unwrap();
+
+        let initial = analyze_workbook(&workbook_path).unwrap();
+        assert!(initial.learners.iter().any(|learner| {
+            learner.row_index == 8 && learner.name.contains("CAMANIA,LIAN CARLO")
+        }));
+
+        let metadata = Sf2WorkbookMetadata {
+            school_id: "123456".to_string(),
+            school_name: "Sample Integrated School".to_string(),
+            school_year: "2025-2026".to_string(),
+            report_month: "JUNE".to_string(),
+            grade_level: "GRADE 3".to_string(),
+            section: "MATAPAT".to_string(),
+            adviser_name: "Teacher Adviser".to_string(),
+            school_head_name: "School Head".to_string(),
+            configure_calendar: true,
+            first_school_day: Some(2),
+        };
+
+        write_metadata(&workbook_path, &metadata).unwrap();
+        let updated = analyze_workbook(&workbook_path).unwrap();
+        assert!(updated
+            .sheets
+            .iter()
+            .any(|sheet| sheet.name == "JUNE 2026" && sheet.visible == EXCEL_SHEET_VISIBLE));
+        assert!(updated.learners.iter().any(|learner| {
+            learner.row_index == 8 && learner.name.contains("CAMANIA,LIAN CARLO")
+        }));
+
+        run_excel_task(move || {
+            with_workbook(&workbook_path, true, false, |_, workbook| {
+                let sheets = workbook.get_object("Worksheets")?;
+                let sheet =
+                    sheets.get_object_with_args("Item", vec![ComVariant::bstr("JUNE 2026")])?;
+                assert_eq!(cell_text(&sheet, 8, 3)?, "CAMANIA,LIAN CARLO, SUGAY");
+                assert_eq!(cell_text(&sheet, 29, 1)?, "13.");
+                assert_eq!(cell_text(&sheet, 49, 1)?, "14.");
+                assert!(!cell_text(&sheet, 29, 8)?.trim().is_empty());
+                assert!(!cell_text(&sheet, 49, 8)?.trim().is_empty());
+                Ok(())
+            })
+        })
+        .unwrap();
     }
 }
