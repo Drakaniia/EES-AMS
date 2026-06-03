@@ -23,3 +23,5 @@
 - In Dashboard, show who is absent, and the count of absent/present students.
 
 - Remove Export Check card in SF2 Report page. its unnecesary.. make a validation instead that there will be popup dialogue tost if there is still empty or blank header that needs to fill before exporting
+- I dont want the bounch loading.
+- After Export- should open emedieatly
