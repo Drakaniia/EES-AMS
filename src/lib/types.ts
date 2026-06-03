@@ -40,6 +40,23 @@ export interface AttendanceEvent {
 	type: AttendanceType;
 	timestamp: string;
 	note?: string;
+	sessionKey?: string;
+	overrideReason?: string;
+	updatedAt?: string;
+}
+
+export interface AttendanceAuditEntry {
+	id: string;
+	eventId?: string;
+	studentId: string;
+	classId?: string;
+	sessionKey?: string;
+	action: 'create_override' | 'update' | 'delete';
+	reason: string;
+	beforeJson?: string;
+	afterJson?: string;
+	createdAt: string;
+	actor: string;
 }
 
 export interface Settings {
@@ -96,6 +113,17 @@ export interface CreateEventRequest {
 	classId?: string;
 	type: AttendanceType;
 	note?: string;
+	sessionKey?: string;
+	overrideReason?: string;
+	timestamp?: string;
+}
+
+export interface UpdateEventRequest {
+	classId?: string;
+	timestamp?: string;
+	note?: string;
+	sessionKey?: string;
+	reason: string;
 }
 
 export interface ExportData {

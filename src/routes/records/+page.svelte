@@ -4,6 +4,7 @@
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import DateRangePicker from '$lib/components/ui/DateRangePicker.svelte';
+	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
@@ -15,20 +16,24 @@
 		listClasses,
 		getSettings,
 		deleteEvent,
+		updateEvent,
+		listAttendanceAudit,
 		exportCsvWithFolder,
 		type Student,
 		type AttendanceEvent,
+		type AttendanceAuditEntry,
 		type Class
 	} from '$lib/db-rust';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { fmtDate, fmtTime } from '$lib/csv';
-	import { Download, FileSpreadsheet } from 'lucide-svelte';
+	import { Download, FileSpreadsheet, History, Pencil, Trash2 } from 'lucide-svelte';
 
 	// ── Types ────────────────────────────────────────────────────────────────
 	type StudentAttendance = {
 		studentId: string;
 		studentName: string;
+		classId?: string;
 		className: string;
 		date: string;
 		checkInTime?: string;
@@ -62,6 +67,19 @@
 		date: string;
 		events: AttendanceEvent[];
 	} | null>(null);
+	let deleteReason = $state('');
+
+	let editTarget = $state<StudentAttendance | null>(null);
+	let editDate = $state('');
+	let editTime = $state('');
+	let editClassId = $state('');
+	let editReason = $state('');
+	let isSavingEdit = $state(false);
+
+	let auditTarget = $state<StudentAttendance | null>(null);
+	let auditEntries = $state<AttendanceAuditEntry[]>([]);
+	let auditLoading = $state(false);
+	let auditError = $state<string | null>(null);
 
 	// Pagination
 	let currentPage = $state(1);
@@ -101,9 +119,11 @@
 
 			if (!groups.has(key)) {
 				const className = getEventClassName(event);
+				const eventClassId = event.classId || student.classId;
 				groups.set(key, {
 					studentId: event.studentId,
 					studentName: student.name,
+					classId: eventClassId,
 					className,
 					date,
 					events: []
@@ -198,6 +218,38 @@
 		toastTimer = setTimeout(() => (toastMessage = null), 3000);
 	}
 
+	function eventTime(event: AttendanceEvent) {
+		return new Date(event.timestamp).getTime();
+	}
+
+	function primaryEvent(record: StudentAttendance) {
+		return [...record.events].sort((a, b) => eventTime(a) - eventTime(b))[0];
+	}
+
+	function sessionSegment(classObj: Class | undefined, timestamp: Date) {
+		if (!classObj?.sessions || classObj.sessions.length <= 1) return 'day';
+
+		const timeStr = `${String(timestamp.getHours()).padStart(2, '0')}:${String(
+			timestamp.getMinutes()
+		).padStart(2, '0')}`;
+		const session = classObj.sessions.find(
+			(item) => timeStr >= item.startTime && timeStr <= item.endTime
+		);
+
+		return (session?.name || 'off-schedule')
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-|-$/g, '');
+	}
+
+	function sessionKeyFor(classId: string, timestamp: Date) {
+		const classObj = classMap.get(classId);
+		const classKey = classId || 'unassigned';
+		const segment = sessionSegment(classObj, timestamp) || 'day';
+		return `${fmtDate(timestamp.getTime())}|${classKey}|${segment}`;
+	}
+
 	async function reload() {
 		loading = true;
 		loadError = null;
@@ -223,25 +275,88 @@
 
 	async function confirmDeleteAttendanceRecords(target = deleteTarget) {
 		if (!target) return;
-		await Promise.all(target.events.map((event: AttendanceEvent) => deleteEvent(event.id)));
+		const reason = deleteReason.trim();
+		if (reason.length < 3) {
+			toast('Delete reason is required', false);
+			return;
+		}
+		await Promise.all(target.events.map((event: AttendanceEvent) => deleteEvent(event.id, reason)));
 		toast('Deleted');
 		deleteTarget = null;
+		deleteReason = '';
 		reload();
 	}
 
-	async function onDeleteAttendanceRecord(event: MouseEvent, record: StudentAttendance) {
+	async function onDeleteAttendanceRecord(_event: MouseEvent, record: StudentAttendance) {
 		const target = {
 			studentName: record.studentName,
 			date: record.date,
 			events: record.events
 		};
 
-		if (event.shiftKey) {
-			await confirmDeleteAttendanceRecords(target);
+		deleteTarget = target;
+	}
+
+	function onEditAttendanceRecord(record: StudentAttendance) {
+		const event = primaryEvent(record);
+		if (!event) return;
+
+		editTarget = record;
+		editDate = record.date;
+		editTime = record.checkInTime || fmtTime(event.timestamp);
+		editClassId =
+			event.classId || record.classId || studentMap.get(record.studentId)?.classId || '';
+		editReason = '';
+	}
+
+	async function saveAttendanceEdit() {
+		if (!editTarget || isSavingEdit) return;
+		const event = primaryEvent(editTarget);
+		if (!event) return;
+
+		const reason = editReason.trim();
+		if (reason.length < 3) {
+			toast('Edit reason is required', false);
 			return;
 		}
 
-		deleteTarget = target;
+		const timestamp = new Date(`${editDate}T${editTime}:00`);
+		if (Number.isNaN(timestamp.getTime())) {
+			toast('Enter a valid date and time', false);
+			return;
+		}
+
+		isSavingEdit = true;
+		try {
+			await updateEvent(event.id, {
+				classId: editClassId || undefined,
+				timestamp: timestamp.toISOString(),
+				sessionKey: sessionKeyFor(editClassId, timestamp),
+				reason
+			});
+			toast('Record updated');
+			editTarget = null;
+			await reload();
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : 'Update failed';
+			toast(`Update failed: ${msg}`, false);
+		} finally {
+			isSavingEdit = false;
+		}
+	}
+
+	async function openAudit(record: StudentAttendance) {
+		auditTarget = record;
+		auditEntries = [];
+		auditError = null;
+		auditLoading = true;
+		try {
+			auditEntries = await listAttendanceAudit({ studentId: record.studentId });
+		} catch (error) {
+			auditError = error instanceof Error ? error.message : 'Audit history could not be loaded.';
+		} finally {
+			auditLoading = false;
+		}
 	}
 
 	async function onExport() {
@@ -419,7 +534,7 @@
 								<th class="label-mono px-4 py-3">Student</th>
 								<th class="label-mono px-4 py-3">Class</th>
 								<th class="label-mono px-4 py-3">Check In</th>
-								<th class="label-mono w-20 px-4 py-3 text-right"> </th>
+								<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-border">
@@ -441,8 +556,13 @@
 										</td>
 										<td class="px-4 py-3 align-top">
 											{#if record.checkInTime}
-												<div class="flex items-center gap-2">
+												<div class="flex flex-col items-start gap-1">
 													{@render checkInPill(record.checkInTime, record.isLate)}
+													{#if primaryEvent(record)?.overrideReason}
+														<span class="max-w-56 text-xs leading-5 text-muted-foreground">
+															{primaryEvent(record)?.overrideReason}
+														</span>
+													{/if}
 												</div>
 											{:else}
 												<span class="font-mono text-xs text-muted-foreground">—</span>
@@ -450,28 +570,32 @@
 										</td>
 										<td class="px-4 py-3 text-right align-top">
 											{#if record.events.length > 0}
-												<button
-													onclick={(event) => onDeleteAttendanceRecord(event, record)}
-													aria-label="Delete attendance record"
-													class="inline-flex size-8 items-center justify-center rounded-md border border-border text-destructive transition-colors hover:bg-destructive/10"
-												>
-													<svg
-														class="size-3.5"
-														viewBox="0 0 24 24"
-														fill="none"
-														stroke="currentColor"
-														stroke-width="2"
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														aria-hidden="true"
+												<div class="inline-flex items-center gap-1">
+													<button
+														type="button"
+														onclick={() => onEditAttendanceRecord(record)}
+														aria-label="Edit attendance record"
+														class="inline-flex size-8 items-center justify-center rounded-md border border-border text-primary transition-colors hover:bg-primary/10"
 													>
-														<polyline points="3 6 5 6 21 6" />
-														<path
-															d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"
-														/>
-														<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-													</svg>
-												</button>
+														<Pencil class="size-3.5" aria-hidden="true" />
+													</button>
+													<button
+														type="button"
+														onclick={() => openAudit(record)}
+														aria-label="View audit history"
+														class="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-surface"
+													>
+														<History class="size-3.5" aria-hidden="true" />
+													</button>
+													<button
+														type="button"
+														onclick={(event) => onDeleteAttendanceRecord(event, record)}
+														aria-label="Delete attendance record"
+														class="inline-flex size-8 items-center justify-center rounded-md border border-border text-destructive transition-colors hover:bg-destructive/10"
+													>
+														<Trash2 class="size-3.5" aria-hidden="true" />
+													</button>
+												</div>
 											{/if}
 										</td>
 									</tr>
@@ -502,6 +626,135 @@
 	}}
 />
 
+<Dialog
+	open={!!editTarget}
+	title="Edit attendance"
+	description="Adjust the stored class or time and keep an audit reason."
+	onClose={() => {
+		if (!isSavingEdit) editTarget = null;
+	}}
+>
+	{#if editTarget}
+		<div class="grid gap-4 sm:grid-cols-2">
+			<div class="space-y-2">
+				<label for="edit-date" class="label-mono">Date</label>
+				<input
+					id="edit-date"
+					type="date"
+					bind:value={editDate}
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				/>
+			</div>
+			<div class="space-y-2">
+				<label for="edit-time" class="label-mono">Time</label>
+				<input
+					id="edit-time"
+					type="time"
+					bind:value={editTime}
+					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				/>
+			</div>
+		</div>
+
+		<div class="space-y-2">
+			<label for="edit-class" class="label-mono">Class</label>
+			<select
+				id="edit-class"
+				bind:value={editClassId}
+				class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+			>
+				<option value="">Unassigned</option>
+				{#each classes as classItem (classItem.id)}
+					<option value={classItem.id}>{classItem.name}</option>
+				{/each}
+			</select>
+		</div>
+
+		<div class="space-y-2">
+			<label for="edit-reason" class="label-mono">Reason</label>
+			<textarea
+				id="edit-reason"
+				rows="4"
+				bind:value={editReason}
+				placeholder="Example: corrected mistaken tap time..."
+				class="min-h-28 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+			></textarea>
+		</div>
+
+		<div class="flex justify-end gap-2 pt-2">
+			<button
+				type="button"
+				disabled={isSavingEdit}
+				onclick={() => (editTarget = null)}
+				class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+			>
+				Cancel
+			</button>
+			<button
+				type="button"
+				disabled={isSavingEdit || editReason.trim().length < 3}
+				onclick={saveAttendanceEdit}
+				class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+			>
+				{isSavingEdit ? 'Saving...' : 'Save edit'}
+			</button>
+		</div>
+	{/if}
+</Dialog>
+
+<Dialog
+	open={!!auditTarget}
+	title="Audit history"
+	description="Override, edit, and delete reasons for this learner."
+	onClose={() => (auditTarget = null)}
+>
+	{#if auditTarget}
+		<div class="rounded-xl border border-border bg-surface/60 p-3">
+			<div class="font-medium">{auditTarget.studentName}</div>
+			<div class="mt-1 font-mono text-xs text-muted-foreground">{auditTarget.date}</div>
+		</div>
+
+		{#if auditLoading}
+			<div
+				class="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground"
+			>
+				Loading audit history...
+			</div>
+		{:else if auditError}
+			<div
+				class="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
+			>
+				{auditError}
+			</div>
+		{:else if auditEntries.length === 0}
+			<div
+				class="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground"
+			>
+				No audited changes for this learner yet.
+			</div>
+		{:else}
+			<ul class="max-h-80 divide-y divide-border overflow-y-auto rounded-xl border border-border">
+				{#each auditEntries as entry (entry.id)}
+					<li class="px-4 py-3">
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<span
+								class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]"
+							>
+								{entry.action.replace('_', ' ')}
+							</span>
+							<span class="font-mono text-xs text-muted-foreground">
+								{fmtDate(entry.createdAt)}
+								{fmtTime(entry.createdAt)}
+							</span>
+						</div>
+						<p class="mt-2 text-sm leading-6">{entry.reason}</p>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	{/if}
+</Dialog>
+
 {#snippet emptyState()}
 	<tr>
 		<td colspan={5} class="px-4 py-12 text-center text-muted-foreground">
@@ -526,8 +779,16 @@
 	<div
 		class="fixed inset-0 z-40 bg-black/50"
 		role="presentation"
-		onclick={() => (deleteTarget = null)}
-		onkeydown={(e) => e.key === 'Escape' && (deleteTarget = null)}
+		onclick={() => {
+			deleteTarget = null;
+			deleteReason = '';
+		}}
+		onkeydown={(e) => {
+			if (e.key === 'Escape') {
+				deleteTarget = null;
+				deleteReason = '';
+			}
+		}}
 	></div>
 
 	<div
@@ -563,26 +824,34 @@
 						on <span class="font-medium text-foreground">{deleteTarget.date}</span> will be permanently
 						removed.
 					</p>
-					<p class="mt-4 text-xs leading-relaxed text-muted-foreground">
-						<strong class="font-semibold text-accent">PROTIP:</strong>
-						<span class="block">
-							You can hold down <strong class="font-semibold">Shift</strong> when clicking the delete
-							button to bypass this confirmation entirely.
-						</span>
-					</p>
 				</div>
+			</div>
+
+			<div class="space-y-2">
+				<label for="delete-reason" class="label-mono">Reason</label>
+				<textarea
+					id="delete-reason"
+					rows="3"
+					bind:value={deleteReason}
+					placeholder="Example: duplicate mistaken tap..."
+					class="min-h-24 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				></textarea>
 			</div>
 
 			<div class="flex gap-2">
 				<button
-					onclick={() => (deleteTarget = null)}
+					onclick={() => {
+						deleteTarget = null;
+						deleteReason = '';
+					}}
 					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
 				>
 					Cancel
 				</button>
 				<button
+					disabled={deleteReason.trim().length < 3}
 					onclick={() => confirmDeleteAttendanceRecords()}
-					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
 				>
 					Delete
 				</button>
