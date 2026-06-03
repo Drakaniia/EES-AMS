@@ -58,4 +58,4 @@ use mcp and skills
 
 ## ⚠️ Known Discrepancies & TODOs
 
-- **Authentication**: The system currently operates without authentication, designed for single-teacher local use.
+- **Authentication**: The system currently operates without authentication, designed for single-classroom local use.

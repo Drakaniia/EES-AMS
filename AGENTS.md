@@ -10,11 +10,11 @@ always use @tauri-v2
 always use @svelte-best-practices
 always use @svelte-code-writer
 
-# EES-AMS - Teacher Attendance Management System
+# EES-AMS - Student Attendance Management System
 
 ## Project Snapshot
 
-Tauri v2 desktop application for teacher attendance management with ID card reader support. SvelteKit 5 frontend with Rust backend, SQLite database, and modular feature architecture.
+Tauri v2 desktop application for student attendance management with ID card reader support. SvelteKit 5 frontend with Rust backend, SQLite database, and modular feature architecture.
 
 ## Root Setup Commands
 
