@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { CheckCheck, Grid2X2, List, Search, ScanLine, ShieldAlert } from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -86,9 +86,16 @@
 	let overrideTarget = $state<OverrideTarget | null>(null);
 	let overrideReason = $state('');
 	let isOverrideSaving = $state(false);
+	let todayKey = $state(fmtDate(Date.now()));
+	let midnightTimer: ReturnType<typeof setTimeout> | null = null;
 
 	onMount(async () => {
 		await loadInitial();
+		scheduleMidnightRefresh();
+	});
+
+	onDestroy(() => {
+		if (midnightTimer) clearTimeout(midnightTimer);
 	});
 
 	$effect(() => {
@@ -108,7 +115,7 @@
 				selectedClassId = requestedClassId;
 			} else {
 				const active = getActiveClass();
-				if (active) selectedClassId = active.id;
+				selectedClassId = active?.id ?? classes[0]?.id ?? '';
 			}
 
 			if (page.url.searchParams.get('manual') === 'true') {
@@ -133,7 +140,7 @@
 	const attendanceMode = $derived(settingsStore.settings?.attendanceMode ?? 'manual');
 	const isCardReaderMode = $derived(attendanceMode === 'card_reader');
 	const currentClass = $derived(classes.find((c) => c.id === selectedClassId));
-	const today = $derived(fmtDate(Date.now()));
+	const today = $derived(todayKey);
 	const todayEvents = $derived(events.filter((event) => fmtDate(event.timestamp) === today));
 
 	const manualStudents = $derived.by(() => {
@@ -330,6 +337,20 @@
 
 	function getStudentClassName(student: Student) {
 		return getStudentClass(student)?.name ?? 'No class';
+	}
+
+	function scheduleMidnightRefresh() {
+		if (midnightTimer) clearTimeout(midnightTimer);
+		const now = new Date();
+		const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 2, 0);
+		midnightTimer = setTimeout(
+			async () => {
+				todayKey = fmtDate(Date.now());
+				await reload();
+				scheduleMidnightRefresh();
+			},
+			Math.max(1000, nextMidnight.getTime() - now.getTime())
+		);
 	}
 
 	function toast(msg: string, ok = true) {
@@ -710,16 +731,12 @@
 <PageHeader category={pageCategory} title={dynamicTitle} description={dynamicDescription}>
 	{#snippet actions()}
 		<div class="flex flex-wrap items-center gap-3">
-			<select
+			<span
+				class="inline-flex h-10 min-w-56 items-center rounded-pill border border-border bg-background px-4 text-sm font-medium"
 				aria-label="Class"
-				bind:value={selectedClassId}
-				class="h-10 min-w-56 rounded-pill border border-border bg-background px-4 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 			>
-				<option value="">{isCardReaderMode ? 'Auto class' : 'All classes'}</option>
-				{#each classes as c (c.id)}
-					<option value={c.id}>{c.name}</option>
-				{/each}
-			</select>
+				{currentClass?.name ?? sessionClass?.name ?? 'No class configured'}
+			</span>
 
 			{#if isCardReaderMode}
 				<button
@@ -740,10 +757,7 @@
 				class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 			>
 				{#if isClosingDay}
-					<span
-						class="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary"
-						aria-hidden="true"
-					></span>
+					<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
 				{/if}
 				{isClosingDay ? 'Closing...' : 'End Session'}
 			</button>
@@ -809,8 +823,8 @@
 			{:else}
 				<div class="relative w-full max-w-md text-center" role="status" aria-live="polite">
 					<div class="label-mono mb-4 text-primary">
-						<span class="inline-block size-2 animate-pulse rounded-full bg-primary align-middle"
-						></span> Ready for card taps
+						<span class="inline-block size-2 rounded-full bg-primary align-middle"></span> Ready for card
+						taps
 					</div>
 
 					<div
@@ -947,10 +961,7 @@
 					class="inline-flex h-10 shrink-0 items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 				>
 					{#if isPresentingAll}
-						<span
-							class="size-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground"
-							aria-hidden="true"
-						></span>
+						<span class="size-2 rounded-full bg-primary-foreground" aria-hidden="true"></span>
 					{:else}
 						<CheckCheck class="size-4" aria-hidden="true" />
 					{/if}
@@ -1002,7 +1013,7 @@
 					</div>
 				{:else if manualViewMode === 'boxes'}
 					<div
-						class="grid h-full auto-rows-[minmax(116px,auto)] grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3 overflow-y-auto pr-1"
+						class="grid h-full auto-rows-[116px] grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3 overflow-y-auto pr-1"
 					>
 						{#each manualStudents as student (student.id)}
 							{@const action = getNextAttendanceType(student)}
@@ -1012,7 +1023,7 @@
 								title={`${student.name} - ${status.label}`}
 								disabled={isProcessing}
 								onclick={() => markStudent(student, action)}
-								class="group flex min-h-[116px] min-w-0 flex-col justify-between rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-65 {action ===
+								class="group flex h-[116px] min-w-0 flex-col justify-between overflow-hidden rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-65 {action ===
 								'in'
 									? 'border-border bg-background hover:border-primary hover:bg-primary/10'
 									: 'border-border bg-surface/80 text-muted-foreground'}"
@@ -1027,13 +1038,15 @@
 										{getStudentInitials(student.name)}
 									</span>
 									<span class="min-w-0 flex-1">
-										<span class="text-sm leading-snug font-semibold break-words whitespace-normal">
+										<span
+											class="student-card-name text-sm leading-snug font-semibold break-words whitespace-normal"
+										>
 											{student.name}
 										</span>
 									</span>
 								</span>
 								<span class="flex items-center justify-between gap-2">
-									<span class="min-w-0 text-[10px] leading-snug text-muted-foreground">
+									<span class="min-w-0 truncate text-[10px] leading-snug text-muted-foreground">
 										{selectedClassId ? status.label : getStudentClassName(student)}
 									</span>
 									<span
@@ -1326,3 +1339,13 @@
 		<div class="mt-1 text-2xl font-semibold">{value}</div>
 	</div>
 {/snippet}
+
+<style>
+	.student-card-name {
+		display: -webkit-box;
+		overflow: hidden;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
+	}
+</style>
