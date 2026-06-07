@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
+	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
@@ -42,6 +43,7 @@
 	import {
 		auditEntityLabel,
 		auditMetadataPreview,
+		backupKindLabel,
 		backupPathLabel,
 		formatAuditTimestamp,
 		formatBackupBytes,
@@ -75,6 +77,7 @@
 		exportJsonWithFolder,
 		getBackupStatus,
 		listAuditEvents,
+		listBackups,
 		createSf2WorkbookFromTemplate,
 		getSf2WorkbookSettings,
 		importSf2Workbook,
@@ -87,6 +90,7 @@
 		type AuditEvent,
 		type AttendanceMode,
 		type BackupPreview,
+		type BackupSummary,
 		type BackupStatus,
 		type Settings,
 		type Class,
@@ -178,6 +182,7 @@
 
 	// Backup and restore state
 	let backupStatus = $state<BackupStatus | null>(null);
+	let backupSummaries = $state<BackupSummary[]>([]);
 	let backupBusy = $state(false);
 	let syncFolderBusy = $state(false);
 	let googleDriveBusy = $state(false);
@@ -222,6 +227,27 @@
 	let sf2TemplateProgressDescription = $derived(
 		resolveSf2TemplateProgressDescription(sf2TemplateCreating)
 	);
+	let sf2Progress = $state<{
+		task: 'import' | 'create' | 'settings' | string;
+		current: number;
+		total: number;
+		message: string;
+	} | null>(null);
+	let sf2ProgressValue = $derived(
+		sf2Progress?.task === 'settings' ? null : (sf2Progress?.current ?? null)
+	);
+	let sf2ProgressMax = $derived(sf2Progress?.total ?? 100);
+	let sf2ImportProgressDescription = $derived(
+		sf2Progress?.task === 'import'
+			? sf2Progress.message
+			: 'Reading the Excel form, matching learners, and preparing the working copy.'
+	);
+	let sf2TemplateProgressDetail = $derived(
+		sf2Progress && (sf2Progress.task === 'create' || sf2Progress.task === 'settings')
+			? sf2Progress.message
+			: sf2TemplateProgressDescription
+	);
+	let unlistenSf2Progress: UnlistenFn | null = null;
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string, ok = true) {
@@ -257,6 +283,19 @@
 			const msg = errorMessage(err, 'Backup status unavailable');
 			toast(`Backup status unavailable: ${msg}`, false);
 		}
+	}
+
+	async function reloadBackupSummaries() {
+		try {
+			backupSummaries = await listBackups();
+		} catch (err: unknown) {
+			const msg = errorMessage(err, 'Backup list unavailable');
+			toast(`Backup list unavailable: ${msg}`, false);
+		}
+	}
+
+	async function reloadBackups() {
+		await Promise.all([reloadBackupStatus(), reloadBackupSummaries()]);
 	}
 
 	async function reloadAuditEvents() {
@@ -365,6 +404,10 @@
 	}
 
 	function openAddClass() {
+		if (classes.length > 0) {
+			toast('One class is already configured. Edit the existing class instead.', false);
+			return;
+		}
 		editingClass = null;
 		formClassName = '';
 		formRoom = '';
@@ -561,6 +604,7 @@
 		backupBusy = true;
 		try {
 			backupStatus = await createBackupNow();
+			await reloadBackupSummaries();
 			await reloadAuditEvents();
 			toast('Backup created');
 		} catch (error) {
@@ -661,7 +705,7 @@
 		try {
 			const result = await restoreBackup(restorePreview.sourcePath);
 			restorePreview = null;
-			await Promise.all([reload(), reloadBackupStatus(), reloadAuditEvents()]);
+			await Promise.all([reload(), reloadBackups(), reloadAuditEvents()]);
 			toast(`Database restored. Safety backup: ${result.preRestoreBackupPath}`);
 		} catch (error) {
 			const msg = errorMessage(error, 'Restore failed');
@@ -674,6 +718,12 @@
 	async function onImportSf2() {
 		if (sf2Importing) return;
 		sf2Importing = true;
+		sf2Progress = {
+			task: 'import',
+			current: 0,
+			total: 7,
+			message: 'Starting SF2 import'
+		};
 
 		try {
 			const validation = await validateSf2WorkbookImport();
@@ -692,6 +742,7 @@
 			toast(`SF2 import failed: ${msg}`, false);
 		} finally {
 			sf2Importing = false;
+			sf2Progress = null;
 		}
 	}
 
@@ -728,6 +779,12 @@
 	async function proceedWithSf2MismatchImport() {
 		if (!sf2Validation || sf2Importing) return;
 		sf2Importing = true;
+		sf2Progress = {
+			task: 'import',
+			current: 3,
+			total: 7,
+			message: 'Continuing authorized SF2 import'
+		};
 		try {
 			await runSf2Import(sf2Validation, true);
 		} catch (error) {
@@ -735,6 +792,7 @@
 			toast(`SF2 import failed: ${msg}`, false);
 		} finally {
 			sf2Importing = false;
+			sf2Progress = null;
 		}
 	}
 
@@ -758,10 +816,26 @@
 		URL.revokeObjectURL(url);
 	}
 
-	function openSf2TemplateDialog() {
+	async function openSf2TemplateDialog() {
+		const classId = sf2TemplateClassId || classes[0]?.id || '';
+		if (classId) {
+			try {
+				const settings = await getSf2WorkbookSettings(classId);
+				populateSf2Draft(settings);
+				sf2TemplateDialogMode = 'edit';
+				sf2TemplateDialogNotice =
+					'An SF2 workbook already exists for this class. Update the saved workbook settings instead of creating a new SF2 copy.';
+				sf2TemplateDialogOpen = true;
+				toast('Existing SF2 workbook found. Update settings instead of creating a new one.', false);
+				return;
+			} catch {
+				// No workbook exists for this class yet.
+			}
+		}
+
 		sf2TemplateDialogMode = 'create';
 		sf2TemplateDialogNotice = null;
-		applySf2Draft(newSf2WorkbookDraftFields());
+		applySf2Draft({ ...newSf2WorkbookDraftFields(), classId });
 		sf2TemplateDialogOpen = true;
 	}
 
@@ -824,8 +898,20 @@
 		const creating = sf2TemplateDialogMode === 'create';
 		if (creating) {
 			sf2TemplateCreating = true;
+			sf2Progress = {
+				task: 'create',
+				current: 0,
+				total: 2,
+				message: 'Starting SF2 workbook creation'
+			};
 		} else {
 			sf2SettingsSaving = true;
+			sf2Progress = {
+				task: 'settings',
+				current: 0,
+				total: 1,
+				message: 'Saving SF2 workbook settings'
+			};
 		}
 		try {
 			const draft = sf2DraftPayload();
@@ -848,6 +934,7 @@
 		} finally {
 			sf2TemplateCreating = false;
 			sf2SettingsSaving = false;
+			sf2Progress = null;
 		}
 	}
 
@@ -863,8 +950,31 @@
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
 		reload();
-		reloadBackupStatus();
+		reloadBackups();
 		reloadAuditEvents();
+		listen<{
+			task?: string;
+			current?: number;
+			total?: number;
+			message?: string;
+		}>('sf2-progress', (event) => {
+			const payload = event.payload;
+			if (!payload || typeof payload.current !== 'number' || typeof payload.total !== 'number') {
+				return;
+			}
+			sf2Progress = {
+				task: payload.task ?? 'import',
+				current: payload.current,
+				total: payload.total,
+				message: payload.message ?? 'Working'
+			};
+		}).then((unlisten) => {
+			unlistenSf2Progress = unlisten;
+		});
+	});
+
+	onDestroy(() => {
+		unlistenSf2Progress?.();
 	});
 </script>
 
@@ -873,560 +983,640 @@
 	<meta name="description" content="Manage your classes and system configuration." />
 </svelte:head>
 
-<PageHeader
-	category="Settings"
-	title="System Configuration"
-	description="Manage your class schedule and system-wide attendance rules."
-/>
+<div class="flex h-full min-h-0 flex-col overflow-hidden">
+	<PageHeader
+		category="Settings"
+		title="System Configuration"
+		description="Manage your class schedule and system-wide attendance rules."
+	/>
 
-{#if settingsStore.loading}
-	<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading…</div>
-{:else if settingsStore.error}
-	<div class="px-6 py-12 text-sm text-destructive md:px-12">
-		Error: {settingsStore.error}
-		<button onclick={reload} class="ml-2 underline">Retry</button>
-	</div>
-{:else}
-	<div class="grid gap-6 px-6 py-6 md:px-12 lg:grid-cols-12">
-		<!-- ── Class Management ────────────────────────────────────────── -->
-		<div class="space-y-6 lg:col-span-8">
-			<section class="overflow-hidden rounded-2xl border border-border bg-card">
-				<div class="flex items-center justify-between p-6 pb-4">
-					<h3 class="text-lg font-medium">Classes & Schedule</h3>
-					<button
-						onclick={openAddClass}
-						class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
-					>
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="M12 5v14M5 12h14" />
-						</svg>
-						Add Class
-					</button>
-				</div>
-
-				<div class="divide-y divide-border border-t border-border pt-5">
-					{#if classes.length === 0}
-						<div class="p-12 text-center text-sm text-muted-foreground">
-							No classes configured. Add a class to start tracking attendance.
+	<div class="min-h-0 flex-1 overflow-auto">
+		{#if settingsStore.loading}
+			<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading…</div>
+		{:else if settingsStore.error}
+			<div class="px-6 py-12 text-sm text-destructive md:px-12">
+				Error: {settingsStore.error}
+				<button onclick={reload} class="ml-2 underline">Retry</button>
+			</div>
+		{:else}
+			<div class="grid gap-6 px-6 py-6 md:px-12 lg:grid-cols-12">
+				<!-- ── Class Management ────────────────────────────────────────── -->
+				<div class="space-y-6 lg:col-span-8">
+					<section class="overflow-hidden rounded-2xl border border-border bg-card">
+						<div class="flex items-center justify-between p-6 pb-4">
+							<h3 class="text-lg font-medium">Classes & Schedule</h3>
+							<button
+								onclick={openAddClass}
+								disabled={classes.length > 0}
+								title={classes.length > 0
+									? 'Only one class is supported for this teacher'
+									: 'Add class'}
+								class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<svg
+									class="size-4"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<path d="M12 5v14M5 12h14" />
+								</svg>
+								{classes.length > 0 ? 'One Class Only' : 'Add Class'}
+							</button>
 						</div>
-					{:else}
-						{#each classes as c (c.id)}
-							<div class="flex items-center justify-between p-6 transition-colors hover:bg-surface">
-								<div class="space-y-1">
-									<div class="flex items-center gap-3">
-										<div class="font-medium">{c.name}</div>
-										{#if c.days}
-											<span
-												class="rounded-md bg-accent/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-accent uppercase"
-											>
-												{getDaysLabel(c.days)}
-											</span>
-										{/if}
-									</div>
+
+						<div class="divide-y divide-border border-t border-border pt-5">
+							{#if classes.length === 0}
+								<div class="p-12 text-center text-sm text-muted-foreground">
+									No classes configured. Add a class to start tracking attendance.
+								</div>
+							{:else}
+								{#each classes as c (c.id)}
 									<div
-										class="label-mono flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
+										class="flex items-center justify-between p-6 transition-colors hover:bg-surface"
 									>
-										{#if c.room}
-											<span>Room {c.room}</span>
-										{/if}
-										{#if c.sessions && c.sessions.length > 0}
-											{#each c.sessions as s (s.name)}
-												<span class="inline-flex items-center gap-1">
-													<span class="font-medium text-foreground">{s.name}:</span>
-													{s.startTime}–{s.endTime}
-												</span>
-											{/each}
-										{:else}
-											<span>{c.dayStart} – {c.dayEnd}</span>
-											<span class="text-accent">Late after {c.lateAfter}</span>
-										{/if}
-									</div>
-								</div>
-								<div class="flex gap-2">
-									<button
-										onclick={() => openEditClass(c)}
-										class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
-										title="Edit class"
-									>
-										<svg
-											class="size-4"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-										>
-											<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-											<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-										</svg>
-									</button>
-									<button
-										onclick={(event) => onDeleteClass(event, c.id)}
-										class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
-										title="Delete class"
-									>
-										<svg
-											class="size-4"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-										>
-											<polyline points="3 6 5 6 21 6" />
-											<path
-												d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
-											/>
-										</svg>
-									</button>
-								</div>
-							</div>
-						{/each}
-					{/if}
-				</div>
-			</section>
-
-			<!-- ── Backups ───────────────────────────────────────────────────── -->
-			<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
-				<div class="flex flex-wrap items-start justify-between gap-4">
-					<div>
-						<h3 class="text-lg font-medium">Data Management</h3>
-						<p class="mt-1 text-sm text-muted-foreground">
-							Your data is stored locally. Automatic SQLite backups protect students, classes,
-							attendance records, settings, and SF2 workbook mappings. Connect Google Drive with
-							full Drive access to upload backups through browser sign-in, or use a local sync
-							folder as a fallback.
-						</p>
-					</div>
-					<div class="flex flex-wrap gap-2">
-						<button
-							onclick={onCreateBackupNow}
-							disabled={backupBusy}
-							class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							<DatabaseBackup class="size-4" aria-hidden="true" />
-							{backupBusy ? 'Backing Up...' : 'Back Up Now'}
-						</button>
-						<button
-							onclick={onChooseRestoreBackup}
-							disabled={restoreChoosing || restoreBusy}
-							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							<RotateCcw class="size-4" aria-hidden="true" />
-							{restoreChoosing ? 'Checking...' : 'Restore Backup'}
-						</button>
-					</div>
-				</div>
-
-				<div class="grid gap-3 sm:grid-cols-4">
-					<div class="rounded-xl border border-border bg-surface p-4">
-						<div class="label-mono">Last Backup</div>
-						<div class="mt-2 text-sm font-semibold">
-							{formatBackupTimestamp(backupStatus?.lastBackupAt)}
-						</div>
-					</div>
-					<div class="rounded-xl border border-border bg-surface p-4">
-						<div class="label-mono">Stored Locally</div>
-						<div class="mt-2 text-sm font-semibold">
-							{backupStatus
-								? `${backupStatus.backupCount} / ${backupStatus.retentionLimit}`
-								: 'Loading'}
-						</div>
-					</div>
-					<div class="rounded-xl border border-border bg-surface p-4">
-						<div class="label-mono">Sync Folder</div>
-						<div class="mt-2 text-sm font-semibold break-all">
-							{backupPathLabel(backupStatus?.syncFolderPath)}
-						</div>
-					</div>
-					<div class="rounded-xl border border-border bg-surface p-4">
-						<div class="label-mono">Google Drive</div>
-						<div class="mt-2 text-sm font-semibold break-all">
-							{googleDriveStatusLabel()}
-						</div>
-						{#if backupStatus?.lastGoogleDriveBackupAt}
-							<div class="mt-1 text-xs text-muted-foreground">
-								Last upload {formatBackupTimestamp(backupStatus.lastGoogleDriveBackupAt)}
-							</div>
-						{/if}
-					</div>
-				</div>
-
-				{#if backupStatus?.lastError || backupStatus?.lastSyncError || backupStatus?.lastGoogleDriveError}
-					<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-						{#if backupStatus.lastError}
-							<div>{backupStatus.lastError}</div>
-						{/if}
-						{#if backupStatus.lastSyncError}
-							<div>{backupStatus.lastSyncError}</div>
-						{/if}
-						{#if backupStatus.lastGoogleDriveError}
-							<div>{backupStatus.lastGoogleDriveError}</div>
-						{/if}
-					</div>
-				{/if}
-
-				<div class="flex flex-wrap gap-2 border-t border-border pt-5">
-					{#if backupStatus?.googleDriveConnected}
-						<button
-							onclick={onUploadLatestBackupToGoogleDrive}
-							disabled={googleDriveBusy}
-							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							<CloudUpload class="size-4" aria-hidden="true" />
-							Upload Latest to Drive
-						</button>
-						<button
-							onclick={onDisconnectGoogleDriveBackup}
-							disabled={googleDriveBusy}
-							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							<LogOut class="size-4" aria-hidden="true" />
-							Disconnect Google Drive
-						</button>
-					{:else}
-						<button
-							onclick={onConnectGoogleDriveBackup}
-							disabled={googleDriveBusy || backupStatus?.googleDriveConfigured === false}
-							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-							title={backupStatus?.googleDriveConfigured === false
-								? 'Set EES_AMS_GOOGLE_CLIENT_ID before building the app'
-								: 'Open browser sign-in for full Google Drive access'}
-						>
-							<Cloud class="size-4" aria-hidden="true" />
-							{googleDriveBusy ? 'Connecting...' : 'Connect Google Drive'}
-						</button>
-					{/if}
-					<button
-						onclick={onChooseBackupSyncFolder}
-						disabled={syncFolderBusy}
-						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						<FolderSync class="size-4" aria-hidden="true" />
-						Choose Local Sync Folder
-					</button>
-					<button
-						onclick={onClearBackupSyncFolder}
-						disabled={syncFolderBusy || !backupStatus?.syncFolderPath}
-						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						<Trash2 class="size-4" aria-hidden="true" />
-						Clear Sync Folder
-					</button>
-					<button
-						onclick={openExportDialog}
-						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
-					>
-						<Download class="size-4" aria-hidden="true" />
-						Export Data
-					</button>
-					<button
-						onclick={() => fileInput?.click()}
-						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
-					>
-						<Upload class="size-4" aria-hidden="true" />
-						Import JSON Merge
-					</button>
-					<input
-						bind:this={fileInput}
-						type="file"
-						accept="application/json"
-						class="hidden"
-						onchange={handleFileChange}
-					/>
-				</div>
-
-				<div class="space-y-3 border-t border-border pt-5">
-					<button
-						onclick={onWipe}
-						class="inline-flex items-center gap-2 rounded-pill border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
-					>
-						Wipe all data
-					</button>
-				</div>
-			</section>
-
-			<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
-				<div class="flex flex-wrap items-start justify-between gap-4">
-					<div>
-						<h3 class="text-lg font-medium">SF2 Workbook</h3>
-						<p class="mt-1 text-sm text-muted-foreground">
-							Import the official SF2 .xls form, or create a first-month working copy from the
-							bundled template.
-						</p>
-					</div>
-					<div class="flex flex-wrap gap-2">
-						<button
-							onclick={openSf2TemplateDialog}
-							disabled={sf2TemplateCreating || sf2SettingsSaving}
-							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							{#if sf2TemplateCreating}
-								<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-							{:else}
-								<svg
-									class="size-4"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-									<polyline points="14 2 14 8 20 8" />
-									<path d="M12 11v6" />
-									<path d="M9 14h6" />
-								</svg>
-							{/if}
-							{sf2TemplateCreating ? 'Creating...' : 'Create From Template'}
-						</button>
-						<button
-							onclick={onImportSf2}
-							disabled={sf2Importing}
-							class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							{#if sf2Importing}
-								<span class="size-2 rounded-full bg-primary-foreground" aria-hidden="true"></span>
-							{:else}
-								<svg
-									class="size-4"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-									<polyline points="14 2 14 8 20 8" />
-									<path d="M12 18v-6" />
-									<path d="m9 15 3 3 3-3" />
-								</svg>
-							{/if}
-							{sf2Importing ? 'Importing...' : 'Import SF2'}
-						</button>
-					</div>
-				</div>
-
-				<TaskProgress
-					active={sf2Importing}
-					title="Importing SF2 workbook"
-					description="Reading the Excel form, matching learners, and preparing the working copy."
-					simple
-				/>
-
-				{#if sf2ImportSummary}
-					<div class="space-y-4 border-t border-border pt-5">
-						<div class="grid gap-3 sm:grid-cols-4">
-							<div class="rounded-xl border border-border bg-surface p-4">
-								<div class="label-mono">Class</div>
-								<div class="mt-2 text-sm font-semibold">{sf2ImportSummary.className}</div>
-							</div>
-							<div class="rounded-xl border border-border bg-surface p-4">
-								<div class="label-mono">Learners</div>
-								<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.learnersFound}</div>
-							</div>
-							<div class="rounded-xl border border-border bg-surface p-4">
-								<div class="label-mono">Created</div>
-								<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.studentsCreated}</div>
-							</div>
-							<div class="rounded-xl border border-border bg-surface p-4">
-								<div class="label-mono">Dates</div>
-								<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.datesMapped}</div>
-							</div>
-						</div>
-						<div class="flex justify-end">
-							<button
-								onclick={startSf2Attendance}
-								class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
-							>
-								Start Attendance
-							</button>
-						</div>
-					</div>
-				{/if}
-			</section>
-		</div>
-
-		<!-- ── Sidebar: Global Defaults ────────────────────────────────── -->
-		<div class="space-y-6 lg:col-span-4">
-			<form
-				onsubmit={onSaveGlobal}
-				onfocusout={handleGlobalSettingsFocusOut}
-				class="space-y-5 rounded-2xl border border-border bg-card p-6"
-			>
-				<div class="space-y-1">
-					<h3 class="text-lg font-medium">Global Configuration</h3>
-					<p class="text-xs text-muted-foreground">
-						Controls attendance flow and defaults for new classes.
-					</p>
-				</div>
-
-				<div class="space-y-4">
-					<fieldset class="space-y-2">
-						<legend class="label-mono">Attendance Type</legend>
-						<div class="grid gap-2 rounded-xl border border-border bg-surface p-1">
-							<button
-								type="button"
-								aria-pressed={attendanceMode === 'manual'}
-								onclick={() => (attendanceMode = 'manual')}
-								class="rounded-lg border px-3 py-3 text-left transition-colors {attendanceMode ===
-								'manual'
-									? 'border-primary bg-background shadow-sm'
-									: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
-							>
-								<span class="block text-sm font-semibold">Without card reader</span>
-								<span class="mt-1 block text-xs leading-5">
-									Name-only manual attendance for daily use.
-								</span>
-							</button>
-							<button
-								type="button"
-								aria-pressed={attendanceMode === 'card_reader'}
-								onclick={() => (attendanceMode = 'card_reader')}
-								class="rounded-lg border px-3 py-3 text-left transition-colors {attendanceMode ===
-								'card_reader'
-									? 'border-primary bg-background shadow-sm'
-									: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
-							>
-								<span class="block text-sm font-semibold">With card reader</span>
-								<span class="mt-1 block text-xs leading-5">
-									Live session optimized for ID card taps.
-								</span>
-							</button>
-						</div>
-					</fieldset>
-
-					<div class="space-y-2">
-						<label for="defDayStart" class="label-mono">Default Day Start</label>
-						<input
-							id="defDayStart"
-							type="time"
-							bind:value={defaultDayStart}
-							class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-						/>
-					</div>
-					<div class="space-y-2">
-						<label for="defDayEnd" class="label-mono">Default Day End</label>
-						<input
-							id="defDayEnd"
-							type="time"
-							bind:value={defaultDayEnd}
-							class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-						/>
-					</div>
-					<div class="space-y-2">
-						<label for="defLateAfter" class="label-mono">Default Late After</label>
-						<input
-							id="defLateAfter"
-							type="time"
-							bind:value={defaultLateAfter}
-							class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-						/>
-					</div>
-					<div class="space-y-2">
-						<label for="defQuarter" class="label-mono">Current Quarter</label>
-						<button
-							type="button"
-							onclick={() => (quarterDialogOpen = true)}
-							class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-sm transition-colors hover:bg-accent/50 focus:ring-2 focus:ring-primary focus:outline-none"
-						>
-							<span>{defaultQuarter}</span>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								class="opacity-50"
-							>
-								<path d="m6 9 6 6 6-6" />
-							</svg>
-						</button>
-					</div>
-				</div>
-
-				<button
-					type="submit"
-					disabled={globalSettingsSaving}
-					class="w-full rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-				>
-					{globalSettingsSaving ? 'Saving...' : 'Save Configuration'}
-				</button>
-			</form>
-
-			<section class="space-y-4 rounded-2xl border border-border bg-card p-6">
-				<div class="flex items-start justify-between gap-3">
-					<div class="space-y-1">
-						<h3 class="text-lg font-medium">Audit Trail</h3>
-						<p class="text-xs text-muted-foreground">Latest accountability events.</p>
-					</div>
-					<button
-						type="button"
-						onclick={reloadAuditEvents}
-						disabled={auditLoading}
-						class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-						title="Refresh audit trail"
-					>
-						<History class="size-4" aria-hidden="true" />
-					</button>
-				</div>
-
-				{#if auditLoading && auditEvents.length === 0}
-					<div class="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground">
-						Loading audit trail...
-					</div>
-				{:else if auditEvents.length === 0}
-					<div class="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground">
-						No audit events recorded.
-					</div>
-				{:else}
-					<div
-						class="max-h-[28rem] divide-y divide-border overflow-y-auto rounded-xl border border-border"
-					>
-						{#each auditEvents as event (event.id)}
-							<div class="space-y-2 bg-background p-4">
-								<div class="flex items-start justify-between gap-3">
-									<div class="min-w-0">
-										<div class="text-sm font-medium">{event.summary}</div>
-										<div class="mt-1 text-xs text-muted-foreground">
-											{formatAuditTimestamp(event.createdAt)} · {event.actor} · {auditEntityLabel(
-												event
-											)}
+										<div class="space-y-1">
+											<div class="flex items-center gap-3">
+												<div class="font-medium">{c.name}</div>
+												{#if c.days}
+													<span
+														class="rounded-md bg-accent/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-accent uppercase"
+													>
+														{getDaysLabel(c.days)}
+													</span>
+												{/if}
+											</div>
+											<div
+												class="label-mono flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
+											>
+												{#if c.room}
+													<span>Room {c.room}</span>
+												{/if}
+												{#if c.sessions && c.sessions.length > 0}
+													{#each c.sessions as s (s.name)}
+														<span class="inline-flex items-center gap-1">
+															<span class="font-medium text-foreground">{s.name}:</span>
+															{s.startTime}–{s.endTime}
+														</span>
+													{/each}
+												{:else}
+													<span>{c.dayStart} – {c.dayEnd}</span>
+													<span class="text-accent">Late after {c.lateAfter}</span>
+												{/if}
+											</div>
+										</div>
+										<div class="flex gap-2">
+											<button
+												onclick={() => openEditClass(c)}
+												class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
+												title="Edit class"
+											>
+												<svg
+													class="size-4"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+													<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+												</svg>
+											</button>
+											<button
+												onclick={(event) => onDeleteClass(event, c.id)}
+												class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
+												title="Delete class"
+											>
+												<svg
+													class="size-4"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													<polyline points="3 6 5 6 21 6" />
+													<path
+														d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+													/>
+												</svg>
+											</button>
 										</div>
 									</div>
-									<span
-										class="shrink-0 rounded-md bg-surface px-2 py-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
-									>
-										{event.action}
-									</span>
+								{/each}
+							{/if}
+						</div>
+					</section>
+
+					<!-- ── Backups ───────────────────────────────────────────────────── -->
+					<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
+						<div class="flex flex-wrap items-start justify-between gap-4">
+							<div>
+								<h3 class="text-lg font-medium">Data Management</h3>
+								<p class="mt-1 text-sm text-muted-foreground">
+									Your data is stored locally. Automatic SQLite backups protect students, classes,
+									attendance records, settings, and SF2 workbook mappings. Connect Google Drive with
+									full Drive access to upload backups through browser sign-in, or use a local sync
+									folder as a fallback.
+								</p>
+							</div>
+							<div class="flex flex-wrap gap-2">
+								<button
+									onclick={onCreateBackupNow}
+									disabled={backupBusy}
+									class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+								>
+									<DatabaseBackup class="size-4" aria-hidden="true" />
+									{backupBusy ? 'Backing Up...' : 'Back Up Now'}
+								</button>
+								<button
+									onclick={onChooseRestoreBackup}
+									disabled={restoreChoosing || restoreBusy}
+									class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+								>
+									<RotateCcw class="size-4" aria-hidden="true" />
+									{restoreChoosing ? 'Checking...' : 'Restore Backup'}
+								</button>
+							</div>
+						</div>
+
+						<div class="grid gap-3 sm:grid-cols-4">
+							<div class="rounded-xl border border-border bg-surface p-4">
+								<div class="label-mono">Last Backup</div>
+								<div class="mt-2 text-sm font-semibold">
+									{formatBackupTimestamp(backupStatus?.lastBackupAt)}
 								</div>
-								{#if auditMetadataPreview(event)}
-									<div class="text-xs text-muted-foreground">{auditMetadataPreview(event)}</div>
+							</div>
+							<div class="rounded-xl border border-border bg-surface p-4">
+								<div class="label-mono">Stored Locally</div>
+								<div class="mt-2 text-sm font-semibold">
+									{backupStatus
+										? `${backupStatus.backupCount} / ${backupStatus.retentionLimit}`
+										: 'Loading'}
+								</div>
+							</div>
+							<div class="rounded-xl border border-border bg-surface p-4">
+								<div class="label-mono">Sync Folder</div>
+								<div class="mt-2 text-sm font-semibold break-all">
+									{backupPathLabel(backupStatus?.syncFolderPath)}
+								</div>
+							</div>
+							<div class="rounded-xl border border-border bg-surface p-4">
+								<div class="label-mono">Google Drive</div>
+								<div class="mt-2 text-sm font-semibold break-all">
+									{googleDriveStatusLabel()}
+								</div>
+								{#if backupStatus?.lastGoogleDriveBackupAt}
+									<div class="mt-1 text-xs text-muted-foreground">
+										Last upload {formatBackupTimestamp(backupStatus.lastGoogleDriveBackupAt)}
+									</div>
 								{/if}
 							</div>
-						{/each}
-					</div>
-				{/if}
-			</section>
-		</div>
+						</div>
+
+						<div class="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+							<div class="rounded-xl border border-border bg-background p-4">
+								<div class="label-mono">Supported Backup Types</div>
+								<div class="mt-3 grid gap-2 text-sm">
+									<div class="rounded-md border border-border bg-surface px-3 py-2">
+										<div class="font-semibold">SQLite full restore</div>
+										<div class="mt-0.5 text-xs text-muted-foreground">
+											Full database backup and restore, including SF2 mappings.
+										</div>
+									</div>
+									<div class="rounded-md border border-border bg-surface px-3 py-2">
+										<div class="font-semibold">JSON merge import</div>
+										<div class="mt-0.5 text-xs text-muted-foreground">
+											Merges students, attendance, classes, settings, and audit data.
+										</div>
+									</div>
+									<div class="rounded-md border border-border bg-surface px-3 py-2">
+										<div class="font-semibold">Local safety backups</div>
+										<div class="mt-0.5 text-xs text-muted-foreground">
+											Automatic, manual, and pre-restore SQLite backup files.
+										</div>
+									</div>
+								</div>
+							</div>
+
+							<div class="rounded-xl border border-border bg-background p-4">
+								<div class="flex items-center justify-between gap-3">
+									<div class="label-mono">Latest Local Backups</div>
+									<span class="font-mono text-xs text-muted-foreground">
+										{backupSummaries.length} files
+									</span>
+								</div>
+								{#if backupSummaries.length === 0}
+									<p class="mt-4 text-sm text-muted-foreground">No local backups found yet.</p>
+								{:else}
+									<div class="mt-3 max-h-44 space-y-2 overflow-auto pr-1">
+										{#each backupSummaries.slice(0, 5) as backup (backup.path)}
+											<div class="rounded-md border border-border bg-surface px-3 py-2 text-sm">
+												<div class="flex items-start justify-between gap-3">
+													<div class="min-w-0">
+														<div class="truncate font-semibold">{backup.fileName}</div>
+														<div class="mt-0.5 font-mono text-[11px] text-muted-foreground">
+															{formatBackupTimestamp(backup.createdAt)} / {formatBackupBytes(
+																backup.sizeBytes
+															)}
+														</div>
+													</div>
+													<span
+														class="shrink-0 rounded-pill border border-border bg-background px-2 py-1 font-mono text-[10px] font-bold text-primary"
+													>
+														{backupKindLabel(backup.kind)}
+													</span>
+												</div>
+											</div>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						</div>
+
+						{#if backupStatus?.lastError || backupStatus?.lastSyncError || backupStatus?.lastGoogleDriveError}
+							<div
+								class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+							>
+								{#if backupStatus.lastError}
+									<div>{backupStatus.lastError}</div>
+								{/if}
+								{#if backupStatus.lastSyncError}
+									<div>{backupStatus.lastSyncError}</div>
+								{/if}
+								{#if backupStatus.lastGoogleDriveError}
+									<div>{backupStatus.lastGoogleDriveError}</div>
+								{/if}
+							</div>
+						{/if}
+
+						<div class="flex flex-wrap gap-2 border-t border-border pt-5">
+							{#if backupStatus?.googleDriveConnected}
+								<button
+									onclick={onUploadLatestBackupToGoogleDrive}
+									disabled={googleDriveBusy}
+									class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+								>
+									<CloudUpload class="size-4" aria-hidden="true" />
+									Upload Latest to Drive
+								</button>
+								<button
+									onclick={onDisconnectGoogleDriveBackup}
+									disabled={googleDriveBusy}
+									class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+								>
+									<LogOut class="size-4" aria-hidden="true" />
+									Disconnect Google Drive
+								</button>
+							{:else}
+								<button
+									onclick={onConnectGoogleDriveBackup}
+									disabled={googleDriveBusy || backupStatus?.googleDriveConfigured === false}
+									class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+									title={backupStatus?.googleDriveConfigured === false
+										? 'Set EES_AMS_GOOGLE_CLIENT_ID before building the app'
+										: 'Open browser sign-in for full Google Drive access'}
+								>
+									<Cloud class="size-4" aria-hidden="true" />
+									{googleDriveBusy ? 'Connecting...' : 'Connect Google Drive'}
+								</button>
+							{/if}
+							<button
+								onclick={onChooseBackupSyncFolder}
+								disabled={syncFolderBusy}
+								class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<FolderSync class="size-4" aria-hidden="true" />
+								Choose Local Sync Folder
+							</button>
+							<button
+								onclick={onClearBackupSyncFolder}
+								disabled={syncFolderBusy || !backupStatus?.syncFolderPath}
+								class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<Trash2 class="size-4" aria-hidden="true" />
+								Clear Sync Folder
+							</button>
+							<button
+								onclick={openExportDialog}
+								class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+							>
+								<Download class="size-4" aria-hidden="true" />
+								Export Data
+							</button>
+							<button
+								onclick={() => fileInput?.click()}
+								class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+							>
+								<Upload class="size-4" aria-hidden="true" />
+								Import JSON Merge
+							</button>
+							<input
+								bind:this={fileInput}
+								type="file"
+								accept="application/json"
+								class="hidden"
+								onchange={handleFileChange}
+							/>
+						</div>
+
+						<div class="space-y-3 border-t border-border pt-5">
+							<button
+								onclick={onWipe}
+								class="inline-flex items-center gap-2 rounded-pill border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+							>
+								Wipe all data
+							</button>
+						</div>
+					</section>
+
+					<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
+						<div class="flex flex-wrap items-start justify-between gap-4">
+							<div>
+								<h3 class="text-lg font-medium">SF2 Workbook</h3>
+								<p class="mt-1 text-sm text-muted-foreground">
+									Import the official SF2 .xls form, or create a first-month working copy from the
+									bundled template.
+								</p>
+							</div>
+							<div class="flex flex-wrap gap-2">
+								<button
+									onclick={openSf2TemplateDialog}
+									disabled={sf2TemplateCreating || sf2SettingsSaving}
+									class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+								>
+									{#if sf2TemplateCreating}
+										<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+									{:else}
+										<svg
+											class="size-4"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+											<polyline points="14 2 14 8 20 8" />
+											<path d="M12 11v6" />
+											<path d="M9 14h6" />
+										</svg>
+									{/if}
+									{sf2TemplateCreating ? 'Creating...' : 'Create From Template'}
+								</button>
+								<button
+									onclick={onImportSf2}
+									disabled={sf2Importing}
+									class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+								>
+									{#if sf2Importing}
+										<span class="size-2 rounded-full bg-primary-foreground" aria-hidden="true"
+										></span>
+									{:else}
+										<svg
+											class="size-4"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+											<polyline points="14 2 14 8 20 8" />
+											<path d="M12 18v-6" />
+											<path d="m9 15 3 3 3-3" />
+										</svg>
+									{/if}
+									{sf2Importing ? 'Importing...' : 'Import SF2'}
+								</button>
+							</div>
+						</div>
+
+						<TaskProgress
+							active={sf2Importing}
+							title="Importing SF2 workbook"
+							description={sf2ImportProgressDescription}
+							value={sf2ProgressValue}
+							max={sf2ProgressMax}
+						/>
+
+						{#if sf2ImportSummary}
+							<div class="space-y-4 border-t border-border pt-5">
+								<div class="grid gap-3 sm:grid-cols-4">
+									<div class="rounded-xl border border-border bg-surface p-4">
+										<div class="label-mono">Class</div>
+										<div class="mt-2 text-sm font-semibold">{sf2ImportSummary.className}</div>
+									</div>
+									<div class="rounded-xl border border-border bg-surface p-4">
+										<div class="label-mono">Learners</div>
+										<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.learnersFound}</div>
+									</div>
+									<div class="rounded-xl border border-border bg-surface p-4">
+										<div class="label-mono">Created</div>
+										<div class="mt-2 text-2xl font-semibold">
+											{sf2ImportSummary.studentsCreated}
+										</div>
+									</div>
+									<div class="rounded-xl border border-border bg-surface p-4">
+										<div class="label-mono">Dates</div>
+										<div class="mt-2 text-2xl font-semibold">{sf2ImportSummary.datesMapped}</div>
+									</div>
+								</div>
+								<div class="flex justify-end">
+									<button
+										onclick={startSf2Attendance}
+										class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+									>
+										Start Attendance
+									</button>
+								</div>
+							</div>
+						{/if}
+					</section>
+				</div>
+
+				<!-- ── Sidebar: Global Defaults ────────────────────────────────── -->
+				<div class="space-y-6 lg:col-span-4">
+					<form
+						onsubmit={onSaveGlobal}
+						onfocusout={handleGlobalSettingsFocusOut}
+						class="space-y-5 rounded-2xl border border-border bg-card p-6"
+					>
+						<div class="space-y-1">
+							<h3 class="text-lg font-medium">Global Configuration</h3>
+							<p class="text-xs text-muted-foreground">
+								Controls attendance flow and defaults for new classes.
+							</p>
+						</div>
+
+						<div class="space-y-4">
+							<fieldset class="space-y-2">
+								<legend class="label-mono">Attendance Type</legend>
+								<div class="grid gap-2 rounded-xl border border-border bg-surface p-1">
+									<button
+										type="button"
+										aria-pressed={attendanceMode === 'manual'}
+										onclick={() => (attendanceMode = 'manual')}
+										class="rounded-lg border px-3 py-3 text-left transition-colors {attendanceMode ===
+										'manual'
+											? 'border-primary bg-background shadow-sm'
+											: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
+									>
+										<span class="block text-sm font-semibold">Without card reader</span>
+										<span class="mt-1 block text-xs leading-5">
+											Name-only manual attendance for daily use.
+										</span>
+									</button>
+									<button
+										type="button"
+										aria-pressed={attendanceMode === 'card_reader'}
+										onclick={() => (attendanceMode = 'card_reader')}
+										class="rounded-lg border px-3 py-3 text-left transition-colors {attendanceMode ===
+										'card_reader'
+											? 'border-primary bg-background shadow-sm'
+											: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
+									>
+										<span class="block text-sm font-semibold">With card reader</span>
+										<span class="mt-1 block text-xs leading-5">
+											Live session optimized for ID card taps.
+										</span>
+									</button>
+								</div>
+							</fieldset>
+
+							<div class="space-y-2">
+								<label for="defDayStart" class="label-mono">Default Day Start</label>
+								<input
+									id="defDayStart"
+									type="time"
+									bind:value={defaultDayStart}
+									class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+								/>
+							</div>
+							<div class="space-y-2">
+								<label for="defDayEnd" class="label-mono">Default Day End</label>
+								<input
+									id="defDayEnd"
+									type="time"
+									bind:value={defaultDayEnd}
+									class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+								/>
+							</div>
+							<div class="space-y-2">
+								<label for="defLateAfter" class="label-mono">Default Late After</label>
+								<input
+									id="defLateAfter"
+									type="time"
+									bind:value={defaultLateAfter}
+									class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+								/>
+							</div>
+							<div class="space-y-2">
+								<label for="defQuarter" class="label-mono">Current Quarter</label>
+								<button
+									type="button"
+									onclick={() => (quarterDialogOpen = true)}
+									class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-sm transition-colors hover:bg-accent/50 focus:ring-2 focus:ring-primary focus:outline-none"
+								>
+									<span>{defaultQuarter}</span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										class="opacity-50"
+									>
+										<path d="m6 9 6 6 6-6" />
+									</svg>
+								</button>
+							</div>
+						</div>
+
+						<button
+							type="submit"
+							disabled={globalSettingsSaving}
+							class="w-full rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							{globalSettingsSaving ? 'Saving...' : 'Save Configuration'}
+						</button>
+					</form>
+
+					<section class="space-y-4 rounded-2xl border border-border bg-card p-6">
+						<div class="flex items-start justify-between gap-3">
+							<div class="space-y-1">
+								<h3 class="text-lg font-medium">Audit Trail</h3>
+								<p class="text-xs text-muted-foreground">Latest accountability events.</p>
+							</div>
+							<button
+								type="button"
+								onclick={reloadAuditEvents}
+								disabled={auditLoading}
+								class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+								title="Refresh audit trail"
+							>
+								<History class="size-4" aria-hidden="true" />
+							</button>
+						</div>
+
+						{#if auditLoading && auditEvents.length === 0}
+							<div
+								class="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground"
+							>
+								Loading audit trail...
+							</div>
+						{:else if auditEvents.length === 0}
+							<div
+								class="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground"
+							>
+								No audit events recorded.
+							</div>
+						{:else}
+							<div
+								class="max-h-[28rem] divide-y divide-border overflow-y-auto rounded-xl border border-border"
+							>
+								{#each auditEvents as event (event.id)}
+									<div class="space-y-2 bg-background p-4">
+										<div class="flex items-start justify-between gap-3">
+											<div class="min-w-0">
+												<div class="text-sm font-medium">{event.summary}</div>
+												<div class="mt-1 text-xs text-muted-foreground">
+													{formatAuditTimestamp(event.createdAt)} · {event.actor} · {auditEntityLabel(
+														event
+													)}
+												</div>
+											</div>
+											<span
+												class="shrink-0 rounded-md bg-surface px-2 py-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
+											>
+												{event.action}
+											</span>
+										</div>
+										{#if auditMetadataPreview(event)}
+											<div class="text-xs text-muted-foreground">{auditMetadataPreview(event)}</div>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</section>
+				</div>
+			</div>
+		{/if}
 	</div>
-{/if}
+</div>
 
 <Dialog
 	open={unsavedGlobalDialogOpen}
@@ -1486,8 +1676,9 @@
 			<TaskProgress
 				active={sf2Importing}
 				title="Importing SF2 workbook"
-				description="Creating the new working copy and migrating saved attendance marks."
-				simple
+				description={sf2ImportProgressDescription}
+				value={sf2ProgressValue}
+				max={sf2ProgressMax}
 			/>
 
 			<div class="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
@@ -1693,8 +1884,9 @@
 		<TaskProgress
 			active={sf2TemplateCreating || sf2SettingsSaving}
 			title={sf2TemplateProgressTitle}
-			description={sf2TemplateProgressDescription}
-			simple
+			description={sf2TemplateProgressDetail}
+			value={sf2ProgressValue}
+			max={sf2ProgressMax}
 		/>
 
 		<div class="grid gap-4 sm:grid-cols-2">

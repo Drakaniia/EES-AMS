@@ -1,4 +1,4 @@
-import type { AuditEvent, BackupStatus } from '$lib/types';
+import type { AuditEvent, BackupKind, BackupStatus } from '$lib/types';
 
 const AUDIT_METADATA_KEYS = [
 	'students',
@@ -72,4 +72,11 @@ export function googleDriveStatusLabel(status?: BackupStatus | null) {
 	if (!status?.googleDriveConfigured) return 'OAuth not configured';
 	if (!status.googleDriveConnected) return 'Not connected';
 	return status.googleDriveFolderName ?? 'Connected';
+}
+
+export function backupKindLabel(kind: BackupKind) {
+	if (kind === 'auto') return 'Auto';
+	if (kind === 'manual') return 'Manual';
+	if (kind === 'pre_restore') return 'Pre-restore';
+	return 'Unknown';
 }
