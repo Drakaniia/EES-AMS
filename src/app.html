@@ -20,60 +20,33 @@
 				justify-content: center;
 			"
 		>
-			<div style="display: flex; gap: 4px; align-items: center">
+			<div style="display: flex; flex-direction: column; gap: 10px; align-items: center">
 				<div
 					style="
-						width: 4px;
-						height: 32px;
-						background-color: #fb923c;
-						border-radius: 2px;
-						animation: spin 1.2s ease-in-out infinite;
+						width: 112px;
+						height: 8px;
+						border: 1px solid rgba(251, 146, 60, 0.35);
+						background-color: rgba(251, 146, 60, 0.08);
+						border-radius: 999px;
+						overflow: hidden;
 					"
-				></div>
+				>
+					<div
+						style="width: 40%; height: 100%; background-color: #fb923c; border-radius: 999px"
+					></div>
+				</div>
 				<div
 					style="
-						width: 4px;
-						height: 32px;
-						background-color: #fb923c;
-						border-radius: 2px;
-						animation: spin 1.2s ease-in-out infinite 0.1s;
+						font:
+							12px system-ui,
+							sans-serif;
+						color: #78716c;
 					"
-				></div>
-				<div
-					style="
-						width: 4px;
-						height: 32px;
-						background-color: #fb923c;
-						border-radius: 2px;
-						animation: spin 1.2s ease-in-out infinite 0.2s;
-					"
-				></div>
-				<div
-					style="
-						width: 4px;
-						height: 32px;
-						background-color: #fb923c;
-						border-radius: 2px;
-						animation: spin 1.2s ease-in-out infinite 0.3s;
-					"
-				></div>
+				>
+					Loading
+				</div>
 			</div>
 		</div>
-
-		<style>
-			@keyframes spin {
-				0%,
-				40%,
-				100% {
-					transform: scaleY(0.4);
-					opacity: 0.5;
-				}
-				20% {
-					transform: scaleY(1);
-					opacity: 1;
-				}
-			}
-		</style>
 
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
