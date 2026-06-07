@@ -9,7 +9,6 @@
 		FileSpreadsheet,
 		FileText,
 		LayoutDashboard,
-		CalendarDays,
 		ScanLine,
 		Settings,
 		UsersRound
@@ -23,7 +22,6 @@
 			title: 'Main',
 			items: [
 				{ href: '/', label: 'Overview', icon: LayoutDashboard },
-				{ href: '/day-overview', label: 'Daily Overview', icon: CalendarDays },
 				{ href: '/attendance', label: 'Attendance', icon: ScanLine }
 			]
 		},

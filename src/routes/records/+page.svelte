@@ -405,7 +405,7 @@
 					SF2 Workbook
 				</a>
 				<a
-					href={resolve('/day-overview')}
+					href={resolve('/records/day-overview')}
 					class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 				>
 					<CalendarDays class="size-4" />
