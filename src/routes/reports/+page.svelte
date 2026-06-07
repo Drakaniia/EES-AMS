@@ -28,7 +28,7 @@
 		defaultSf2FirstSchoolDay,
 		sf2MonthByValue,
 		sf2ReportMonthLabel
-	} from '$lib/sf2-settings';
+	} from '$lib/features/settings/sf2-workbook';
 	import {
 		AlertTriangle,
 		ArrowLeft,
