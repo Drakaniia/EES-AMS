@@ -49,17 +49,39 @@ use chrono::{Local, NaiveDate, Utc};
 use rusqlite::params;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use tauri::Emitter;
 
 const SF2_NAME_COLUMN: &str = "C";
 const SF2_MALE_ROWS: std::ops::RangeInclusive<u32> = 8..=28;
 const SF2_FEMALE_ROWS: std::ops::RangeInclusive<u32> = 30..=48;
 
+fn emit_sf2_progress<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    task: &str,
+    current: u32,
+    total: u32,
+    message: &str,
+) {
+    let _ = app.emit(
+        "sf2-progress",
+        serde_json::json!({
+            "task": task,
+            "current": current,
+            "total": total,
+            "message": message,
+        }),
+    );
+}
+
 pub fn validate_workbook_import(
     app: tauri::AppHandle,
     pool: DbPool,
 ) -> Result<Sf2ImportValidation> {
+    emit_sf2_progress(&app, "import", 1, 7, "Choosing SF2 workbook");
     let workbook_path = pick_workbook_path(&app)?;
+    emit_sf2_progress(&app, "import", 2, 7, "Reading SF2 workbook");
     let source_analysis = excel::analyze_workbook(&workbook_path)?;
+    emit_sf2_progress(&app, "import", 3, 7, "Validating learner list");
 
     import_validation_from_analysis(pool, &workbook_path, &source_analysis)
 }
@@ -70,6 +92,7 @@ pub fn import_workbook(
     source_path: String,
     proceed_anyway: bool,
 ) -> Result<Sf2ImportSummary> {
+    emit_sf2_progress(&app, "import", 4, 7, "Preparing workbook import");
     let workbook_path = PathBuf::from(source_path);
     let source_analysis = excel::analyze_workbook(&workbook_path)?;
     let validation =
@@ -85,6 +108,7 @@ fn import_workbook_with_analysis(
     workbook_path: &Path,
     source_analysis: Sf2WorkbookAnalysis,
 ) -> Result<Sf2ImportSummary> {
+    emit_sf2_progress(&app, "import", 5, 7, "Copying SF2 working workbook");
     let source_hash = file_hash(workbook_path)?;
     let class_name = class_name(&source_analysis.grade_level, &source_analysis.section);
 
@@ -104,6 +128,7 @@ fn import_workbook_with_analysis(
     let working_copy_path =
         copy_workbook_to_app_data(&app, workbook_path, &template_id, &source_analysis)?;
     let metadata = metadata_from_import_analysis(&source_analysis)?;
+    emit_sf2_progress(&app, "import", 6, 7, "Writing SF2 details and date layout");
     excel::write_metadata(&working_copy_path, &metadata)?;
     let analysis = excel::analyze_workbook(&working_copy_path)?;
     validate_configured_calendar(&analysis, &metadata)?;
@@ -143,6 +168,7 @@ fn import_workbook_with_analysis(
         &date_mappings,
     )?;
     sf2_repo.upsert_template_with_mappings(&template, &student_mappings, &date_mappings)?;
+    emit_sf2_progress(&app, "import", 7, 7, "SF2 import complete");
 
     Ok(Sf2ImportSummary {
         template_id,
@@ -164,8 +190,11 @@ pub fn create_workbook_from_template<R: tauri::Runtime>(
     pool: DbPool,
     draft: Sf2TemplateDraft,
 ) -> Result<Sf2ImportSummary> {
+    emit_sf2_progress(&app, "create", 1, 2, "Creating SF2 working workbook");
     let workbook_dir = sf2_workbook_dir(&app)?;
-    create_workbook_from_template_in_dir(&workbook_dir, pool, draft)
+    let summary = create_workbook_from_template_in_dir(&workbook_dir, pool, draft)?;
+    emit_sf2_progress(&app, "create", 2, 2, "SF2 workbook ready");
+    Ok(summary)
 }
 
 fn create_workbook_from_template_in_dir(
@@ -178,10 +207,18 @@ fn create_workbook_from_template_in_dir(
     let class_repo = ClassRepository::new(pool.clone());
     let class =
         resolve_template_class(&class_repo, draft.class_id.as_deref(), &metadata, &settings)?;
+    let sf2_repo = Sf2Repository::new(pool.clone());
+    if sf2_repo.latest_template_for_class(&class.id)?.is_some() {
+        return Err(AppError::InvalidInput(format!(
+            "An SF2 workbook already exists for {}. Update the existing workbook settings instead of creating a new one",
+            class.name
+        )));
+    }
 
     let student_repo = StudentRepository::new(pool.clone());
     let (students, students_created, students_reused) =
         roster_students_for_draft(&student_repo, &class.id, &draft.learner_names)?;
+    reject_duplicate_roster_names(&students)?;
 
     let row_slots = template_roster_slots();
     let roster_assignments = template_roster_assignments(&students)?;
@@ -207,7 +244,6 @@ fn create_workbook_from_template_in_dir(
     let grade_level = metadata.grade_level.clone();
     let section = metadata.section.clone();
 
-    let sf2_repo = Sf2Repository::new(pool.clone());
     let template_id = sf2_repo
         .find_template(&source_hash, &grade_level, &section)?
         .map(|template| template.id)
@@ -282,6 +318,31 @@ fn create_workbook_from_template_in_dir(
         students_reused,
         dates_mapped: date_mappings.len(),
     })
+}
+
+fn reject_duplicate_roster_names(students: &[Student]) -> Result<()> {
+    let mut names_by_normalized: HashMap<String, Vec<String>> = HashMap::new();
+    for student in students {
+        names_by_normalized
+            .entry(normalize_learner_name(&student.name))
+            .or_default()
+            .push(student.name.clone());
+    }
+
+    let duplicates = names_by_normalized
+        .into_values()
+        .filter(|names| names.len() > 1)
+        .map(|names| names.join(", "))
+        .collect::<Vec<_>>();
+
+    if duplicates.is_empty() {
+        return Ok(());
+    }
+
+    Err(AppError::InvalidInput(format!(
+        "Duplicate learner names must be corrected before creating an SF2 workbook: {}",
+        duplicates.join("; ")
+    )))
 }
 
 pub fn workbook_settings(pool: DbPool, class_id: Option<String>) -> Result<Sf2WorkbookSettings> {
@@ -664,6 +725,7 @@ pub fn export_workbook(
 
     std::fs::copy(&working_copy_path, &output_path)
         .map_err(|error| AppError::Internal(format!("failed to export SF2 workbook: {error}")))?;
+    open_path_in_default_app(&output_path)?;
 
     Ok(Sf2ExportResult {
         output_path: output_path.to_string_lossy().to_string(),
