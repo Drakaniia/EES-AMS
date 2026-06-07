@@ -23,19 +23,43 @@
 		SF2_CALENDAR_WEEKDAYS,
 		SF2_SCHOOL_MONTHS,
 		defaultSf2FirstSchoolDay,
-		defaultSf2ReportMonth,
 		defaultSf2SchoolYear,
 		isSf2SchoolDay,
-		normalizeSf2ReportMonth,
 		normalizedSf2FirstSchoolDay,
+		newSf2WorkbookDraftFields,
 		sf2CalendarCells,
+		sf2DraftFromWorkbookSettings,
 		sf2ImportedSettingsDraftDefaults,
-		sf2MonthByValue,
-		sf2ReportMonthLabel,
-		sf2ReportYear,
+		sf2ImportedSettingsReviewNotice,
+		sf2SelectedFirstAttendanceLabel,
+		sf2TemplateDraftFromFields,
+		sf2TemplateProgressDescription as resolveSf2TemplateProgressDescription,
+		sf2TemplateProgressTitle as resolveSf2TemplateProgressTitle,
 		shouldPromptForSf2SettingsUpdate,
-		type Sf2DraftDefaults
-	} from '$lib/sf2-settings';
+		type Sf2DraftDefaults,
+		type Sf2WorkbookDraftFields
+	} from '$lib/features/settings/sf2-workbook';
+	import {
+		auditEntityLabel,
+		auditMetadataPreview,
+		backupPathLabel,
+		formatAuditTimestamp,
+		formatBackupBytes,
+		formatBackupTimestamp,
+		googleDriveStatusLabel as backupGoogleDriveStatusLabel
+	} from '$lib/features/settings/backup';
+	import { classDaysLabel as getDaysLabel } from '$lib/features/settings/class-schedule';
+	import {
+		buildGlobalSettingsPayload,
+		globalSettingsEqual,
+		normalizeGlobalSettings
+	} from '$lib/features/settings/global-settings';
+	import {
+		sf2ValidationDuplicateLabel,
+		sf2ValidationLearnerLabel,
+		sf2ValidationReportText,
+		sf2ValidationStudentLabel
+	} from '$lib/features/settings/sf2-validation';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import {
 		listClasses,
@@ -70,18 +94,8 @@
 		type Sf2ImportSummary,
 		type Sf2ImportValidation,
 		type Sf2TemplateDraft,
-		type Sf2ValidationDuplicate,
-		type Sf2ValidationLearner,
-		type Sf2ValidationStudent,
 		type Sf2WorkbookSettings
-	} from '$lib/db-rust';
-
-	function sf2SelectedFirstAttendanceLabel() {
-		const month = sf2MonthByValue(sf2DraftReportMonth);
-		if (!month) return `Day ${sf2DraftFirstSchoolDay}`;
-		const year = sf2ReportYear(sf2DraftReportMonth, sf2DraftSchoolYear);
-		return `${month.label} ${sf2DraftFirstSchoolDay}, ${year}`;
-	}
+	} from '$lib/features/settings/native';
 
 	function selectSf2FirstSchoolDay(day: number | null) {
 		if (day === null) return;
@@ -197,14 +211,16 @@
 	let sf2FirstAttendanceCalendar = $derived(
 		sf2CalendarCells(sf2DraftReportMonth, sf2DraftSchoolYear, sf2DraftFirstSchoolDay)
 	);
-	let sf2FirstAttendanceLabel = $derived(sf2SelectedFirstAttendanceLabel());
-	let sf2TemplateProgressTitle = $derived(
-		sf2TemplateCreating ? 'Creating SF2 workbook' : 'Saving SF2 settings'
+	let sf2FirstAttendanceLabel = $derived(
+		sf2SelectedFirstAttendanceLabel({
+			reportMonth: sf2DraftReportMonth,
+			schoolYear: sf2DraftSchoolYear,
+			firstSchoolDay: sf2DraftFirstSchoolDay
+		})
 	);
+	let sf2TemplateProgressTitle = $derived(resolveSf2TemplateProgressTitle(sf2TemplateCreating));
 	let sf2TemplateProgressDescription = $derived(
-		sf2TemplateCreating
-			? 'Building the workbook, writing SF2 details, and mapping attendance dates.'
-			: 'Updating workbook metadata and rebuilding the attendance date layout.'
+		resolveSf2TemplateProgressDescription(sf2TemplateCreating)
 	);
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
@@ -255,75 +271,13 @@
 		}
 	}
 
-	function formatBackupTimestamp(value?: number) {
-		if (!value) return 'Never';
-		return new Date(value * 1000).toLocaleString(undefined, {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
-		});
-	}
-
-	function formatAuditTimestamp(value: string) {
-		const date = new Date(value);
-		if (Number.isNaN(date.getTime())) return 'Unknown time';
-		return date.toLocaleString(undefined, {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
-		});
-	}
-
-	function auditEntityLabel(event: AuditEvent) {
-		const entityType = event.entityType.replaceAll('_', ' ');
-		if (!event.entityId) return entityType;
-		const id =
-			event.entityId.length > 12
-				? `${event.entityId.slice(0, 8)}...${event.entityId.slice(-4)}`
-				: event.entityId;
-		return `${entityType} ${id}`;
-	}
-
-	function auditMetadataPreview(event: AuditEvent) {
-		if (!event.metadataJson) return '';
-		try {
-			const metadata = JSON.parse(event.metadataJson) as Record<string, unknown>;
-			const important = ['students', 'classes', 'events', 'presentCount', 'absentCount', 'format'];
-			return important
-				.filter((key) => metadata[key] !== undefined && metadata[key] !== null)
-				.map((key) => `${key}: ${metadata[key]}`)
-				.join(' · ');
-		} catch {
-			return '';
-		}
-	}
-
-	function formatBackupBytes(value: number) {
-		if (value < 1024) return `${value} B`;
-		if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-		return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-	}
-
-	function backupPathLabel(path?: string) {
-		if (!path) return 'Not set';
-		const parts = path.split(/[\\/]/).filter(Boolean);
-		return parts.length > 2 ? `...${parts.slice(-2).join('\\')}` : path;
-	}
-
 	function googleDriveStatusLabel() {
-		if (!backupStatus?.googleDriveConfigured) return 'OAuth not configured';
-		if (!backupStatus.googleDriveConnected) return 'Not connected';
-		return backupStatus.googleDriveFolderName ?? 'Connected';
+		return backupGoogleDriveStatusLabel(backupStatus);
 	}
 
 	// ── Actions ──────────────────────────────────────────────────────────────
 	function currentSettingsPayload(): Settings {
-		return {
-			id: 'app',
+		return buildGlobalSettingsPayload({
 			dayStart: defaultDayStart,
 			dayEnd: defaultDayEnd,
 			lateAfter: defaultLateAfter,
@@ -335,42 +289,7 @@
 			q2End,
 			q3Start,
 			q3End
-		};
-	}
-
-	function normalizeGlobalSettings(settings: Settings): Settings {
-		return {
-			id: settings.id,
-			dayStart: settings.dayStart,
-			dayEnd: settings.dayEnd,
-			lateAfter: settings.lateAfter,
-			quarter: settings.quarter,
-			attendanceMode: settings.attendanceMode ?? 'manual',
-			q1Start: settings.q1Start ?? '',
-			q1End: settings.q1End ?? '',
-			q2Start: settings.q2Start ?? '',
-			q2End: settings.q2End ?? '',
-			q3Start: settings.q3Start ?? '',
-			q3End: settings.q3End ?? ''
-		};
-	}
-
-	function globalSettingsEqual(a: Settings, b: Settings) {
-		const left = normalizeGlobalSettings(a);
-		const right = normalizeGlobalSettings(b);
-		return (
-			left.dayStart === right.dayStart &&
-			left.dayEnd === right.dayEnd &&
-			left.lateAfter === right.lateAfter &&
-			left.quarter === right.quarter &&
-			left.attendanceMode === right.attendanceMode &&
-			left.q1Start === right.q1Start &&
-			left.q1End === right.q1End &&
-			left.q2Start === right.q2Start &&
-			left.q2End === right.q2End &&
-			left.q3Start === right.q3Start &&
-			left.q3End === right.q3End
-		);
+		});
 	}
 
 	function applyGlobalSettings(settings: Settings) {
@@ -826,61 +745,6 @@
 		sf2ValidationDetailsOpen = false;
 	}
 
-	function sf2ValidationStudentLabel(student: Sf2ValidationStudent) {
-		return student.gender ? `${student.name} (${student.gender})` : student.name;
-	}
-
-	function sf2ValidationLearnerLabel(learner: Sf2ValidationLearner) {
-		const name = learner.name.trim() || 'Blank learner name';
-		const gender = learner.genderBlock ? `, ${learner.genderBlock}` : '';
-		return `Row ${learner.rowIndex}: ${name}${gender}`;
-	}
-
-	function sf2ValidationDuplicateLabel(duplicate: Sf2ValidationDuplicate) {
-		const locations =
-			duplicate.rowIndexes.length > 0
-				? `Rows ${duplicate.rowIndexes.join(', ')}`
-				: `${duplicate.studentIds.length} current records`;
-		return `${duplicate.names.join(', ')} (${locations})`;
-	}
-
-	function sf2ValidationReportText(validation: Sf2ImportValidation) {
-		const lines = [
-			'Warning: Student List Mismatch Detected',
-			'',
-			`Source path: ${validation.sourcePath}`,
-			`Class: ${validation.className}`,
-			`Current records: ${validation.currentStudentCount}`,
-			`SF2 learners: ${validation.sf2LearnerCount}`,
-			'',
-			`Current records missing from SF2: ${validation.missingFromSf2.length}`,
-			...validation.missingFromSf2.map((student) => `- ${sf2ValidationStudentLabel(student)}`),
-			'',
-			`SF2 learners missing from current records: ${validation.missingFromCurrent.length}`,
-			...validation.missingFromCurrent.map((learner) => `- ${sf2ValidationLearnerLabel(learner)}`),
-			'',
-			`Potential name mismatches: ${validation.possibleNameMismatches.length}`,
-			...validation.possibleNameMismatches.map(
-				(mismatch) =>
-					`- ${mismatch.currentStudent.name} <-> ${mismatch.sf2Learner.name}: ${mismatch.reason}`
-			),
-			'',
-			`Duplicate current records: ${validation.duplicateCurrentStudents.length}`,
-			...validation.duplicateCurrentStudents.map(
-				(duplicate) => `- ${sf2ValidationDuplicateLabel(duplicate)}`
-			),
-			'',
-			`Duplicate SF2 learners: ${validation.duplicateSf2Learners.length}`,
-			...validation.duplicateSf2Learners.map(
-				(duplicate) => `- ${sf2ValidationDuplicateLabel(duplicate)}`
-			),
-			'',
-			`Missing learner information: ${validation.missingLearnerInfo.length}`,
-			...validation.missingLearnerInfo.map((learner) => `- ${sf2ValidationLearnerLabel(learner)}`)
-		];
-		return lines.join('\n');
-	}
-
 	function downloadSf2ValidationReport() {
 		if (!sf2Validation) return;
 		const blob = new Blob([sf2ValidationReportText(sf2Validation)], {
@@ -895,19 +759,9 @@
 	}
 
 	function openSf2TemplateDialog() {
-		const reportMonth = defaultSf2ReportMonth();
-		const schoolYear = defaultSf2SchoolYear();
 		sf2TemplateDialogMode = 'create';
 		sf2TemplateDialogNotice = null;
-		sf2DraftSchoolId = '';
-		sf2DraftSchoolName = '';
-		sf2DraftSchoolYear = schoolYear;
-		sf2DraftReportMonth = reportMonth;
-		sf2DraftGradeLevel = '';
-		sf2DraftSection = '';
-		sf2DraftAdviserName = '';
-		sf2DraftSchoolHeadName = '';
-		sf2DraftFirstSchoolDay = defaultSf2FirstSchoolDay(reportMonth, schoolYear);
+		applySf2Draft(newSf2WorkbookDraftFields());
 		sf2TemplateDialogOpen = true;
 	}
 
@@ -917,65 +771,50 @@
 		sf2TemplateDialogNotice = null;
 	}
 
-	function sf2ImportedMonthLabel(value: string) {
-		return sf2ReportMonthLabel(value) || 'a blank month';
-	}
-
 	function openImportedSf2SettingsReview(settings: Sf2WorkbookSettings) {
 		const defaults = sf2ImportedSettingsDraftDefaults(settings);
-		const importedMonth = sf2ImportedMonthLabel(settings.reportMonth);
-		const currentMonth = sf2ReportMonthLabel(defaults.reportMonth);
 
 		sf2TemplateDialogMode = 'edit';
-		sf2TemplateDialogNotice = `Imported workbook is for ${importedMonth}, but the current SF2 report month is ${currentMonth}. Save these settings to update the workbook before taking attendance.`;
+		sf2TemplateDialogNotice = sf2ImportedSettingsReviewNotice(settings, defaults);
 		populateSf2Draft(settings, defaults);
 		sf2TemplateDialogOpen = true;
 	}
 
 	function populateSf2Draft(settings: Sf2WorkbookSettings, defaults?: Partial<Sf2DraftDefaults>) {
-		const reportMonth =
-			(defaults?.reportMonth ?? normalizeSf2ReportMonth(settings.reportMonth)) ||
-			defaultSf2ReportMonth();
-		const schoolYear =
-			(defaults?.schoolYear ?? settings.schoolYear.trim()) || defaultSf2SchoolYear();
+		applySf2Draft(sf2DraftFromWorkbookSettings(settings, defaults));
+	}
 
-		sf2TemplateClassId = settings.classId;
-		sf2DraftSchoolId = defaults?.schoolId ?? settings.schoolId;
-		sf2DraftSchoolName = defaults?.schoolName ?? settings.schoolName;
-		sf2DraftSchoolYear = schoolYear;
-		sf2DraftReportMonth = reportMonth;
-		sf2DraftGradeLevel = defaults?.gradeLevel ?? settings.gradeLevel;
-		sf2DraftSection = defaults?.section ?? settings.section;
-		sf2DraftAdviserName = defaults?.adviserName ?? settings.adviserName;
-		sf2DraftSchoolHeadName = defaults?.schoolHeadName ?? settings.schoolHeadName;
-		sf2DraftFirstSchoolDay = normalizedSf2FirstSchoolDay(
-			sf2DraftReportMonth,
-			sf2DraftSchoolYear,
-			defaults?.firstSchoolDay ?? settings.firstSchoolDay ?? 1
-		);
+	function applySf2Draft(draft: Sf2WorkbookDraftFields) {
+		sf2TemplateClassId = draft.classId ?? '';
+		sf2DraftSchoolId = draft.schoolId;
+		sf2DraftSchoolName = draft.schoolName;
+		sf2DraftSchoolYear = draft.schoolYear;
+		sf2DraftReportMonth = draft.reportMonth;
+		sf2DraftGradeLevel = draft.gradeLevel;
+		sf2DraftSection = draft.section;
+		sf2DraftAdviserName = draft.adviserName;
+		sf2DraftSchoolHeadName = draft.schoolHeadName;
+		sf2DraftFirstSchoolDay = draft.firstSchoolDay;
 	}
 
 	function sf2DraftPayload(): Sf2TemplateDraft {
-		const firstSchoolDay = normalizedSf2FirstSchoolDay(
-			sf2DraftReportMonth,
-			sf2DraftSchoolYear,
-			sf2DraftFirstSchoolDay
+		const payload = sf2TemplateDraftFromFields(
+			{
+				classId: sf2TemplateClassId,
+				schoolId: sf2DraftSchoolId,
+				schoolName: sf2DraftSchoolName,
+				schoolYear: sf2DraftSchoolYear,
+				reportMonth: sf2DraftReportMonth,
+				gradeLevel: sf2DraftGradeLevel,
+				section: sf2DraftSection,
+				adviserName: sf2DraftAdviserName,
+				schoolHeadName: sf2DraftSchoolHeadName,
+				firstSchoolDay: sf2DraftFirstSchoolDay
+			},
+			sf2TemplateDialogMode
 		);
-		sf2DraftFirstSchoolDay = firstSchoolDay;
-
-		return {
-			classId: sf2TemplateDialogMode === 'edit' ? sf2TemplateClassId || undefined : undefined,
-			schoolId: sf2DraftSchoolId,
-			schoolName: sf2DraftSchoolName,
-			schoolYear: sf2DraftSchoolYear,
-			reportMonth: sf2DraftReportMonth,
-			gradeLevel: sf2DraftGradeLevel,
-			section: sf2DraftSection,
-			adviserName: sf2DraftAdviserName,
-			schoolHeadName: sf2DraftSchoolHeadName,
-			firstSchoolDay,
-			learnerNames: []
-		};
+		sf2DraftFirstSchoolDay = payload.firstSchoolDay ?? sf2DraftFirstSchoolDay;
+		return payload;
 	}
 
 	async function onCreateSf2FromTemplate(event: SubmitEvent) {
@@ -1019,20 +858,6 @@
 
 	async function onWipe() {
 		wipeTarget = true;
-	}
-
-	function getDaysLabel(days: number[]) {
-		if (!days || days.length === 0) return 'None';
-		if (days.length === 7) return 'Everyday';
-		const weekdays = [1, 2, 3, 4, 5];
-		if (days.length === 5 && weekdays.every((d) => days.includes(d))) return 'Weekdays';
-
-		const shortDayNames = ['S', 'M', 'T', 'W', 'TH', 'F', 'S'];
-		return days
-			.slice()
-			.sort((a, b) => a - b)
-			.map((d) => shortDayNames[d])
-			.join(' ');
 	}
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────

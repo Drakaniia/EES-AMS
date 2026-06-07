@@ -1,4 +1,8 @@
-import { getSettings, saveSettings as saveSettingsApi, type Settings } from '$lib/db-rust';
+import {
+	getSettings,
+	saveSettings as saveSettingsApi,
+	type Settings
+} from '$lib/features/settings/native';
 
 /**
  * Reactive settings store using Svelte 5 runes
