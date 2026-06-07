@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { CalendarDays, CheckCircle2, UserX } from 'lucide-svelte';
+	import { resolve } from '$app/paths';
+	import { ArrowLeft, CalendarDays, CheckCircle2, UserX } from 'lucide-svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
+	import DatePickerDialog from '$lib/components/ui/DatePickerDialog.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
@@ -30,6 +32,7 @@
 	let toastMessage = $state<string | null>(null);
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
+	let datePickerOpen = $state(false);
 
 	onMount(() => {
 		reload();
@@ -170,24 +173,30 @@
 
 <div class="flex h-full min-h-0 flex-col overflow-hidden">
 	<PageHeader
-		category="Overview"
+		category="Attendance Logs"
 		title="Daily Attendance Overview"
 		description={primaryClass
 			? `Review ${primaryClass.name} attendance for the selected day.`
 			: 'Review attendance for the selected day.'}
 	>
 		{#snippet actions()}
-			<label
-				class="flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 text-sm font-medium"
+			<a
+				href={resolve('/records')}
+				class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-surface"
+			>
+				<ArrowLeft class="size-4" aria-hidden="true" />
+				Back to logs
+			</a>
+			<button
+				type="button"
+				onclick={() => (datePickerOpen = true)}
+				aria-haspopup="dialog"
+				aria-expanded={datePickerOpen}
+				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-surface"
 			>
 				<CalendarDays class="size-4 text-primary" aria-hidden="true" />
-				<input
-					type="date"
-					bind:value={selectedDate}
-					class="bg-transparent font-mono focus:outline-none"
-					aria-label="Overview date"
-				/>
-			</label>
+				<span class="font-mono">{selectedDate}</span>
+			</button>
 		{/snippet}
 	</PageHeader>
 
@@ -267,6 +276,15 @@
 		</div>
 	</div>
 </div>
+
+<DatePickerDialog
+	open={datePickerOpen}
+	value={selectedDate}
+	onClose={() => (datePickerOpen = false)}
+	onSelect={({ date }) => {
+		selectedDate = date || fmtDate(Date.now());
+	}}
+/>
 
 <Dialog
 	open={!!absentTarget}
