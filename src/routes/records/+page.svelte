@@ -26,7 +26,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { fmtDate, fmtTime } from '$lib/csv';
-	import { Download, FileSpreadsheet, History, Pencil, Trash2 } from 'lucide-svelte';
+	import { CalendarDays, Download, FileSpreadsheet, History, Pencil, Trash2 } from 'lucide-svelte';
 
 	// ── Types ────────────────────────────────────────────────────────────────
 	type StudentAttendance = {
@@ -404,6 +404,13 @@
 					<FileSpreadsheet class="size-4" />
 					SF2 Workbook
 				</a>
+				<a
+					href={resolve('/day-overview')}
+					class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+				>
+					<CalendarDays class="size-4" />
+					Daily Overview
+				</a>
 				<button
 					onclick={onExport}
 					disabled={exportingLogs}
@@ -473,31 +480,39 @@
 			<!-- Class -->
 			<div class="space-y-2">
 				<div class="label-mono">Class</div>
-				<div class="relative">
-					<select
-						bind:value={classId}
-						onchange={() => (studentId = '')}
-						class="h-10 w-full appearance-none rounded-md border border-border bg-background px-3 pr-10 text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
-					>
-						<option value="">All classes</option>
-						{#each classes as c (c.id)}
-							<option value={c.id}>{c.name}</option>
-						{/each}
-					</select>
+				{#if classes.length <= 1}
 					<div
-						class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground"
+						class="flex h-10 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium"
 					>
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-						>
-							<path d="m6 9 6 6 6-6" />
-						</svg>
+						{classes[0]?.name ?? 'No class configured'}
 					</div>
-				</div>
+				{:else}
+					<div class="relative">
+						<select
+							bind:value={classId}
+							onchange={() => (studentId = '')}
+							class="h-10 w-full appearance-none rounded-md border border-border bg-background px-3 pr-10 text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
+						>
+							<option value="">All classes</option>
+							{#each classes as c (c.id)}
+								<option value={c.id}>{c.name}</option>
+							{/each}
+						</select>
+						<div
+							class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground"
+						>
+							<svg
+								class="size-4"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path d="m6 9 6 6 6-6" />
+							</svg>
+						</div>
+					</div>
+				{/if}
 			</div>
 
 			<!-- Student -->

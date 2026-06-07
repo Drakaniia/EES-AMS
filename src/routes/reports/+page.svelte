@@ -7,6 +7,7 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
+	import TaskProgress from '$lib/components/ui/TaskProgress.svelte';
 	import {
 		exportSf2Workbook,
 		getSf2ExportPreview,
@@ -56,7 +57,9 @@
 	let savingDetails = $state(false);
 	let correctingCellKey = $state<string | null>(null);
 	let exportDialogOpen = $state(false);
+	let exportLoadingOpen = $state(false);
 	let fullReviewOpen = $state(false);
+	let fullReviewHeaderVisible = $state(false);
 	let toastMessage = $state<string | null>(null);
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -87,6 +90,10 @@
 		slots: MatrixDateSlot[];
 	};
 
+	type MatrixStudentRow = Sf2PreviewStudentRow & {
+		cellsByDate: Map<string, Sf2PreviewCell>;
+	};
+
 	onMount(async () => {
 		await loadInitial();
 	});
@@ -104,6 +111,12 @@
 	const warningCount = $derived(preview?.warnings.length ?? 0);
 	const activeReportMonth = $derived(draftReportMonth || preview?.template?.reportMonth || '');
 	const matrixWeekGroups = $derived(buildMatrixWeekGroups(preview?.dates ?? [], activeReportMonth));
+	const matrixStudents = $derived.by((): MatrixStudentRow[] =>
+		(preview?.students ?? []).map((row) => ({
+			...row,
+			cellsByDate: new Map(row.cells.map((cell) => [cell.date, cell]))
+		}))
+	);
 
 	async function loadInitial() {
 		loading = true;
@@ -204,15 +217,17 @@
 		if (!activeClassId || !preview?.canExport || exporting) return;
 		exportDialogOpen = false;
 		exporting = true;
+		exportLoadingOpen = true;
 		try {
 			const result = await exportSf2Workbook(activeClassId);
-			toast(`SF2 exported to ${result.outputPath}`);
+			toast(`SF2 exported and opened: ${result.outputPath}`);
 			await loadReport(activeClassId);
 		} catch (error) {
 			const msg = errorMessage(error, 'SF2 export failed');
 			toast(`SF2 export failed: ${msg}`, false);
 		} finally {
 			exporting = false;
+			exportLoadingOpen = false;
 		}
 	}
 
@@ -502,8 +517,8 @@
 		return `${row.studentName}, ${matrixDateLabel(cell.date)}: ${state}`;
 	}
 
-	function cellForDate(row: Sf2PreviewStudentRow, date: string) {
-		return row.cells.find((cell) => cell.date === date);
+	function cellForDate(row: MatrixStudentRow, date: string) {
+		return row.cellsByDate.get(date);
 	}
 
 	function unmappedCellLabel(row: Sf2PreviewStudentRow, date: string) {
@@ -547,17 +562,25 @@
 	>
 		{#snippet actions()}
 			<div class="flex flex-wrap items-center gap-2">
-				<select
-					aria-label="Class"
-					bind:value={selectedClassId}
-					onchange={onClassChange}
-					class="h-10 min-w-56 rounded-pill border border-border bg-background px-4 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-				>
-					<option value="">Latest SF2 template</option>
-					{#each classes as item (item.id)}
-						<option value={item.id}>{item.name}</option>
-					{/each}
-				</select>
+				{#if classes.length <= 1}
+					<span
+						class="inline-flex h-10 min-w-56 items-center rounded-pill border border-border bg-background px-4 text-sm font-medium"
+					>
+						{classes[0]?.name ?? preview?.className ?? 'Latest SF2 template'}
+					</span>
+				{:else}
+					<select
+						aria-label="Class"
+						bind:value={selectedClassId}
+						onchange={onClassChange}
+						class="h-10 min-w-56 rounded-pill border border-border bg-background px-4 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					>
+						<option value="">Latest SF2 template</option>
+						{#each classes as item (item.id)}
+							<option value={item.id}>{item.name}</option>
+						{/each}
+					</select>
+				{/if}
 				<button
 					type="button"
 					onclick={loadInitial}
@@ -748,6 +771,14 @@
 						{draftSchoolName || preview.template.schoolName || 'SF2 Workbook'}
 					</div>
 				</div>
+				<button
+					type="button"
+					onclick={() => (fullReviewHeaderVisible = !fullReviewHeaderVisible)}
+					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface"
+				>
+					<Settings2 class="size-4" aria-hidden="true" />
+					{fullReviewHeaderVisible ? 'Hide Details' : 'Show Details'}
+				</button>
 			</div>
 
 			<div
@@ -755,7 +786,9 @@
 				transition:fade={{ duration: 180 }}
 			>
 				<div class="flex h-full min-h-0 flex-col gap-4">
-					{@render sf2HeaderDetails(true)}
+					{#if fullReviewHeaderVisible}
+						{@render sf2HeaderDetails(true)}
+					{/if}
 					{@render classDayMatrix(true)}
 				</div>
 			</div>
@@ -811,6 +844,21 @@
 	</div>
 </Dialog>
 
+<Dialog
+	open={exportLoadingOpen}
+	title="Exporting SF2 Workbook"
+	description="Saving the reviewed workbook and opening the exported file."
+	maxWidth="lg"
+	showCloseButton={false}
+>
+	<TaskProgress
+		active={exportLoadingOpen}
+		title="Exporting SF2 workbook"
+		description="Writing attendance marks, copying the workbook, and opening the generated file."
+		simple
+	/>
+</Dialog>
+
 <FeedbackToast message={toastMessage} ok={toastOk} onClose={() => (toastMessage = null)} />
 
 {#snippet sf2HeaderDetails(fullReview: boolean)}
@@ -820,7 +868,7 @@
 		>
 			<div class="flex flex-wrap items-start justify-between gap-3">
 				<div>
-					<div class="label-mono text-primary">Original SF2 header details</div>
+					<div class="label-mono text-primary">SF2 workbook details</div>
 					<h2 class="mt-1 text-xl font-semibold">
 						{draftSchoolName || preview.template.schoolName || 'Name of School'}
 					</h2>
@@ -926,12 +974,12 @@
 				class="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4"
 			>
 				<div>
-					<div class="label-mono text-primary">Class-day matrix</div>
+					<div class="label-mono text-primary">SF2 attendance grid</div>
 					<h2 class="mt-1 text-xl font-semibold">
 						{preview.template.gradeLevel} - {preview.template.section}
 					</h2>
 					<p class="mt-1 text-sm text-muted-foreground">
-						Click a closed-day cell to toggle the individual learner between present and absent.
+						Click a closed-day cell to toggle the learner between present and absent.
 					</p>
 				</div>
 				<div class="flex flex-wrap gap-2 text-xs">
@@ -1000,7 +1048,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each preview.students as row (row.studentId)}
+						{#each matrixStudents as row (row.studentId)}
 							<tr class={row.mapped ? 'bg-background' : 'bg-amber-50/60'}>
 								<th
 									class="sticky left-0 z-10 w-72 min-w-72 border-r border-b border-border bg-inherit px-4 py-2 text-left align-middle"
