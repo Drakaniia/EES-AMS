@@ -5,7 +5,7 @@ import {
 	normalizeSf2ReportMonth,
 	sf2ImportedSettingsDraftDefaults,
 	shouldPromptForSf2SettingsUpdate
-} from '../src/lib/sf2-settings';
+} from '../src/lib/features/settings/sf2-workbook';
 import type { Sf2WorkbookSettings } from '../src/lib/types';
 
 function workbookSettings(overrides: Partial<Sf2WorkbookSettings> = {}): Sf2WorkbookSettings {
