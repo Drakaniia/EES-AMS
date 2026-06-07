@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { X } from 'lucide-svelte';
 
@@ -25,6 +25,7 @@
 
 	let panel = $state<HTMLDivElement | null>(null);
 	let previousFocus: Element | null = null;
+	let previousBodyOverflow = '';
 	const titleId = $derived(
 		`dialog-title-${
 			title
@@ -51,13 +52,25 @@
 		if (!open) {
 			if (previousFocus instanceof HTMLElement) previousFocus.focus();
 			previousFocus = null;
+			if (typeof document !== 'undefined') document.body.style.overflow = previousBodyOverflow;
 			return;
 		}
 
 		previousFocus = document.activeElement;
+		previousBodyOverflow = document.body.style.overflow;
+		document.body.style.overflow = 'hidden';
 		tick().then(() => {
+			const firstFocusable = getFocusableElements()[0];
+			if (firstFocusable) {
+				firstFocusable.focus();
+				return;
+			}
 			panel?.focus();
 		});
+	});
+
+	onDestroy(() => {
+		if (typeof document !== 'undefined') document.body.style.overflow = previousBodyOverflow;
 	});
 
 	function handleClose() {
@@ -107,29 +120,29 @@
 
 {#if open}
 	<div
-		class="fixed inset-0 z-40 bg-foreground/45 backdrop-blur-[2px]"
+		class="fixed inset-0 z-40 bg-foreground/45 backdrop-blur-sm"
 		role="presentation"
 		onclick={handleBackdropClick}
 		transition:fade={{ duration: 120 }}
 	></div>
 
-	<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+	<div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
 		<div
 			bind:this={panel}
-			class="{widthClass} max-h-[min(86vh,760px)] w-full overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
+			class="surface-panel {widthClass} max-h-[min(86vh,760px)] w-full overflow-hidden shadow-2xl"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby={titleId}
 			aria-describedby={description ? descriptionId : undefined}
 			tabindex="-1"
 			onkeydown={handleKeydown}
-			transition:fly={{ duration: 160, y: -12 }}
+			transition:fly={{ duration: 160, y: -10 }}
 		>
-			<div class="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+			<div class="panel-header">
 				<div class="min-w-0 flex-1">
 					<h2
 						id={titleId}
-						class="text-balance-safe text-lg leading-tight font-semibold text-foreground"
+						class="text-balance-safe text-lg leading-tight font-black text-foreground"
 					>
 						{title}
 					</h2>
@@ -146,7 +159,7 @@
 					<button
 						type="button"
 						onclick={handleClose}
-						class="control-ring inline-grid size-9 shrink-0 place-items-center rounded-md border border-transparent text-muted-foreground hover:border-border hover:bg-surface hover:text-foreground"
+						class="control-ring inline-grid size-9 shrink-0 place-items-center rounded-lg border border-transparent text-muted-foreground hover:border-border hover:bg-surface hover:text-foreground"
 						aria-label="Close dialog"
 					>
 						<X class="size-4" aria-hidden="true" />

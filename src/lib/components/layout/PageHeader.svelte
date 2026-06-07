@@ -15,21 +15,19 @@
 </script>
 
 <header
-	class="shrink-0 border-b border-border bg-background/94 px-4 py-4 backdrop-blur md:px-8 lg:px-10"
+	class="shrink-0 border-b border-border bg-background/78 px-4 py-4 shadow-sm backdrop-blur-xl md:px-8 md:py-5 lg:px-10"
 >
 	<div
 		class="mx-auto flex w-full max-w-[1600px] flex-col gap-4 xl:flex-row xl:items-center xl:justify-between"
 	>
 		<div class="min-w-0">
 			{#if category}
-				<div
-					class="mb-2 inline-flex max-w-full rounded-pill border border-border bg-surface px-2.5 py-1 font-mono text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
-				>
+				<div class="chip mb-2">
 					<span class="truncate">{category}</span>
 				</div>
 			{/if}
 			<h1
-				class="text-balance-safe max-w-4xl text-2xl leading-tight font-semibold tracking-normal md:text-3xl"
+				class="text-balance-safe max-w-4xl text-2xl leading-tight font-black tracking-normal text-foreground md:text-3xl"
 			>
 				{title}
 			</h1>

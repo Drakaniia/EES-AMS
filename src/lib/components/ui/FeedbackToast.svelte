@@ -15,7 +15,7 @@
 
 {#if message}
 	<div
-		class="fixed top-12 right-4 z-[70] flex max-w-[min(28rem,calc(100vw-2rem))] items-start gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-xl backdrop-blur md:right-6
+		class="fixed right-4 bottom-4 z-[70] flex max-w-[min(28rem,calc(100vw-2rem))] items-start gap-3 rounded-2xl border px-4 py-3 text-sm font-medium shadow-xl backdrop-blur-xl md:top-12 md:right-6 md:bottom-auto
 			{ok
 			? 'border-primary/25 bg-background/96 text-foreground'
 			: 'border-destructive/40 bg-background/96 text-destructive'}"
