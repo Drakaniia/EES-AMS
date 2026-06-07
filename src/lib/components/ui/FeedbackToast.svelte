@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fade } from 'svelte/transition';
 	import { AlertCircle, CheckCircle2, X } from 'lucide-svelte';
 
 	type Props = {
@@ -21,6 +22,7 @@
 			: 'border-destructive/40 bg-background/96 text-destructive'}"
 		role={ok ? 'status' : 'alert'}
 		aria-live={ok ? 'polite' : 'assertive'}
+		transition:fade={{ duration: 140 }}
 	>
 		<Icon class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
 		<span class="text-balance-safe min-w-0 flex-1">{message}</span>

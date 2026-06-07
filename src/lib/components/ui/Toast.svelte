@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { AlertCircle, CheckCircle, Download, Info, LoaderCircle, X } from 'lucide-svelte';
+	import { AlertCircle, CheckCircle, Download, Info, X } from 'lucide-svelte';
 
 	interface Props {
 		type?: 'info' | 'success' | 'warning' | 'error' | 'update';
@@ -97,7 +97,7 @@
 		<div class="flex items-start rounded-lg border p-4 shadow-lg {colorClass}">
 			<div class="shrink-0">
 				{#if actionDisabled && type === 'update'}
-					<LoaderCircle class="h-6 w-6 animate-spin {iconColorClass}" />
+					<span class="mt-2 block size-2 rounded-full bg-orange-600" aria-hidden="true"></span>
 				{:else}
 					<IconComponent class="h-6 w-6 {iconColorClass}" />
 				{/if}
@@ -138,18 +138,16 @@
 {/if}
 
 <style>
-	@keyframes slide-in-from-top-full {
+	@keyframes toast-fade-in {
 		from {
-			transform: translateY(-100%);
 			opacity: 0;
 		}
 		to {
-			transform: translateY(0);
 			opacity: 1;
 		}
 	}
 
 	.animate-in {
-		animation: slide-in-from-top-full 0.3s ease-out;
+		animation: toast-fade-in 0.18s ease-out;
 	}
 </style>
