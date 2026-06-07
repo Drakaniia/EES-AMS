@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { ChevronLeft, ChevronRight } from 'lucide-svelte';
 	import Dialog from './Dialog.svelte';
 
 	type Props = {
@@ -14,7 +15,15 @@
 
 	// Calendar state
 	let currentMonth = $state(new Date());
-	let selectedDate = $derived.by(() => value || null);
+	let selectedDraft = $state<string | null | undefined>(undefined);
+	let selectedDate = $derived(selectedDraft !== undefined ? selectedDraft : value || null);
+
+	$effect(() => {
+		if (open) {
+			selectedDraft = undefined;
+			currentMonth = value ? parseDate(value) : new Date();
+		}
+	});
 
 	// Helper functions
 	function getDaysInMonth(date: Date): number {
@@ -65,7 +74,7 @@
 
 	function handleDateSelect(date: Date) {
 		if (isDisabled(date)) return;
-		selectedDate = formatDate(date);
+		selectedDraft = formatDate(date);
 	}
 
 	function handleConfirm() {
@@ -76,7 +85,7 @@
 	}
 
 	function handleClear() {
-		selectedDate = null;
+		selectedDraft = null;
 		onSelect?.({ date: '' });
 		onClose?.();
 	}
@@ -84,7 +93,8 @@
 	function handleToday() {
 		const today = new Date();
 		if (!isDisabled(today)) {
-			selectedDate = formatDate(today);
+			selectedDraft = formatDate(today);
+			currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 		}
 	}
 
@@ -133,21 +143,12 @@
 	<!-- Month navigation -->
 	<div class="mb-4 flex items-center justify-between">
 		<button
+			type="button"
 			onclick={() => navigateMonth(-1)}
 			class="p-1 text-muted-foreground transition-colors hover:text-foreground"
 			aria-label="Previous month"
 		>
-			<svg
-				class="size-5"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<polyline points="15 18 9 12 15 6"></polyline>
-			</svg>
+			<ChevronLeft class="size-5" aria-hidden="true" />
 		</button>
 
 		<div class="text-center">
@@ -156,21 +157,12 @@
 		</div>
 
 		<button
+			type="button"
 			onclick={() => navigateMonth(1)}
 			class="p-1 text-muted-foreground transition-colors hover:text-foreground"
 			aria-label="Next month"
 		>
-			<svg
-				class="size-5"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<polyline points="9 18 15 12 9 6"></polyline>
-			</svg>
+			<ChevronRight class="size-5" aria-hidden="true" />
 		</button>
 	</div>
 
@@ -190,6 +182,7 @@
 				{@const isDateSelected = isSelected(day as Date)}
 				{@const isDateToday = isToday(day as Date)}
 				<button
+					type="button"
 					onclick={() => handleDateSelect(day as Date)}
 					disabled={isDateDisabled}
 					class="relative rounded-md p-2 text-sm transition-colors
@@ -208,12 +201,14 @@
 	<div class="flex justify-between gap-2 border-t border-border pt-2">
 		<div class="flex gap-2">
 			<button
+				type="button"
 				onclick={handleClear}
 				class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
 			>
 				Clear
 			</button>
 			<button
+				type="button"
 				onclick={handleToday}
 				class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
 			>
@@ -221,6 +216,7 @@
 			</button>
 		</div>
 		<button
+			type="button"
 			onclick={handleConfirm}
 			class="rounded-pill bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 		>
