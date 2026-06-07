@@ -17,7 +17,12 @@
 	let downloadError = $state('');
 	let installMessage = $state('');
 
+	function isTauriRuntime() {
+		return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+	}
+
 	onMount(async () => {
+		if (!isTauriRuntime()) return;
 		await checkForUpdates();
 	});
 

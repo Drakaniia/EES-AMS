@@ -6,16 +6,27 @@
 	let isMaximized = $state(false);
 	let appWindow: ReturnType<typeof getCurrentWindow> | null = null;
 
+	function isTauriRuntime() {
+		return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+	}
+
 	onMount(() => {
-		appWindow = getCurrentWindow();
-		appWindow
-			.isMaximized()
-			.then((maximized) => {
-				isMaximized = maximized;
-			})
-			.catch((error) => {
-				console.error('Failed to initialize window:', error);
-			});
+		if (!isTauriRuntime()) return;
+
+		try {
+			appWindow = getCurrentWindow();
+			appWindow
+				.isMaximized()
+				.then((maximized) => {
+					isMaximized = maximized;
+				})
+				.catch((error) => {
+					console.error('Failed to initialize window:', error);
+				});
+		} catch (error) {
+			appWindow = null;
+			console.error('Failed to initialize window:', error);
+		}
 	});
 
 	async function minimize() {
@@ -98,7 +109,13 @@
 		justify-content: space-between;
 		align-items: center;
 		height: 32px;
-		background: var(--color-background);
+		background:
+			linear-gradient(
+				180deg,
+				color-mix(in oklab, var(--color-background) 94%, white),
+				color-mix(in oklab, var(--color-background) 96%, var(--color-surface))
+			),
+			var(--color-background);
 		border-bottom: 1px solid var(--color-border);
 		user-select: none;
 		-webkit-app-region: drag;
@@ -113,13 +130,14 @@
 	}
 
 	.app-title {
-		font-size: 14px;
-		font-weight: 500;
+		font-size: 12px;
+		font-weight: 700;
 		color: var(--color-muted-foreground);
 		-webkit-app-region: drag;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		letter-spacing: 0;
 	}
 
 	.window-controls {
@@ -138,12 +156,18 @@
 		cursor: pointer;
 		color: var(--color-muted-foreground);
 		transition:
-			background-color 0.15s ease,
-			color 0.15s ease;
+			background-color 0.15s var(--ease-ui),
+			color 0.15s var(--ease-ui);
 	}
 
 	.window-control:hover {
 		background: var(--color-surface);
+		color: var(--color-foreground);
+	}
+
+	.window-control:focus-visible {
+		outline: 2px solid color-mix(in oklab, var(--color-ring) 72%, white);
+		outline-offset: -2px;
 	}
 
 	.window-control.close:hover {
