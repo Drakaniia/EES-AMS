@@ -101,7 +101,11 @@
 		}
 		return [...lastByStudent.values()].filter((event) => event.type === 'in');
 	});
-	const pendingCount = $derived(Math.max(0, activeClassStudents.length - checkedIn.length));
+	const recordedStudentIds = $derived.by(() => new Set(checkedIn.map((event) => event.studentId)));
+	const notRecordedStudents = $derived.by(() =>
+		activeClassStudents.filter((student) => !recordedStudentIds.has(student.id))
+	);
+	const pendingCount = $derived(notRecordedStudents.length);
 	const attendanceRate = $derived(
 		activeClassStudents.length === 0
 			? 0
@@ -211,17 +215,11 @@
 	description={dynamicDescription}
 >
 	{#snippet actions()}
-		<a
-			href={resolve('/students')}
-			class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
-		>
+		<a href={resolve('/students')} class="btn btn-secondary control-ring">
 			<UsersRound class="size-4" aria-hidden="true" />
 			Manage students
 		</a>
-		<a
-			href={resolve(attendanceHref(activeClass?.id))}
-			class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-primary bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
-		>
+		<a href={resolve(attendanceHref(activeClass?.id))} class="btn btn-primary control-ring">
 			{#if activeClass}
 				<span class="relative flex h-2 w-2" aria-hidden="true">
 					<span
@@ -236,10 +234,10 @@
 	{/snippet}
 </PageHeader>
 
-<div class="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-5 md:px-8 lg:px-10">
+<div class="page-frame flex flex-col gap-5">
 	{#if sessionSummary}
 		<div
-			class="flex flex-col gap-4 rounded-2xl border border-primary/25 bg-primary/10 p-4 text-primary sm:flex-row sm:items-center sm:justify-between"
+			class="notice-banner flex flex-col gap-4 p-4 text-primary sm:flex-row sm:items-center sm:justify-between"
 			role="status"
 			aria-live="polite"
 		>
@@ -259,7 +257,7 @@
 			<button
 				type="button"
 				onclick={() => (sessionSummary = null)}
-				class="control-ring w-fit rounded-md border border-primary/20 px-3 py-2 text-sm font-medium hover:bg-primary/10"
+				class="btn btn-secondary control-ring w-fit"
 			>
 				Dismiss
 			</button>
@@ -271,11 +269,7 @@
 	{:else if loadError}
 		<EmptyState tone="warning" title="Attendance data could not be loaded" description={loadError}>
 			{#snippet actions()}
-				<button
-					type="button"
-					onclick={reload}
-					class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
-				>
+				<button type="button" onclick={reload} class="btn btn-secondary control-ring">
 					Retry
 				</button>
 			{/snippet}
@@ -284,15 +278,40 @@
 		<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Today summary">
 			{@render statCard('Roster', activeClassStudents.length, 'Students in scope')}
 			{@render statCard('Recorded', checkedIn.length, 'Marked present today', true)}
-			{@render statCard('Pending', pendingCount, 'Not yet recorded')}
+			{@render statCard('Not Recorded', pendingCount, 'Absent or pending')}
 			{@render statCard('Rate', `${attendanceRate}%`, 'Current completion')}
 		</section>
 
-		<section class="grid min-h-[26rem] gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-			<div class="flex min-h-0 flex-col rounded-2xl border border-border bg-card">
-				<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border p-5">
+		<section class="surface-panel p-5" aria-label="Attendance completion">
+			<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+				<div class="min-w-0">
+					<div class="label-mono">Today completion</div>
+					<h2 class="mt-2 text-xl leading-tight font-black text-foreground">
+						{checkedIn.length} present / {pendingCount} not recorded
+					</h2>
+					<p class="text-balance-safe mt-1 text-sm leading-6 text-muted-foreground">
+						{activeClass
+							? `Tracking ${activeClass.name} for the active session.`
+							: 'Tracking all students with attendance activity for today.'}
+					</p>
+				</div>
+				<div class="w-full min-w-0 md:max-w-sm">
+					<div class="mb-2 flex items-center justify-between gap-3 text-sm">
+						<span class="font-semibold text-foreground">{attendanceRate}% complete</span>
+						<span class="text-muted-foreground">{activeClassStudents.length} total</span>
+					</div>
+					<div class="progress-track" aria-hidden="true">
+						<div class="progress-fill" style={`width: ${attendanceRate}%`}></div>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="grid min-h-[28rem] gap-5 xl:grid-cols-[minmax(0,1.18fr)_minmax(320px,0.82fr)]">
+			<div class="surface-panel flex min-h-0 flex-col">
+				<div class="panel-header flex-wrap">
 					<div class="min-w-0">
-						<h2 class="text-lg font-semibold">
+						<h2 class="text-lg font-black">
 							{activeClass ? 'Session roster' : 'Next class roster'}
 						</h2>
 						<p class="mt-1 text-sm text-muted-foreground">
@@ -306,7 +325,7 @@
 					{#if activeClass}
 						<a
 							href={resolve(attendanceHref(activeClass.id, true))}
-							class="control-ring inline-flex h-9 items-center gap-2 rounded-pill border border-border bg-background px-3 text-xs font-semibold hover:bg-surface"
+							class="btn btn-secondary control-ring min-h-9 px-3 text-xs"
 						>
 							{attendanceFallbackLabel}
 							<ArrowUpRight class="size-3.5" aria-hidden="true" />
@@ -314,7 +333,7 @@
 					{/if}
 				</div>
 
-				<div class="min-h-0 flex-1 overflow-y-auto p-3">
+				<div class="panel-body min-h-0 flex-1 overflow-y-auto">
 					{#if rosterStudents.length === 0}
 						<EmptyState
 							title={activeClass ? 'No students assigned to this class' : 'No roster to show'}
@@ -323,12 +342,10 @@
 								: 'Create a class schedule in Configuration to see upcoming rosters here.'}
 						/>
 					{:else}
-						<ul class="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
+						<ul class="grid auto-rows-fr gap-2 sm:grid-cols-2 2xl:grid-cols-3">
 							{#each rosterStudents as student (student.id)}
 								{@const event = lastEventForStudentToday(student)}
-								<li
-									class="flex min-w-0 items-center gap-3 rounded-xl border border-border bg-background p-3"
-								>
+								<li class="list-row flex min-w-0 items-center gap-3 p-3">
 									<div
 										class="grid size-10 shrink-0 place-items-center rounded-lg border font-mono text-xs font-bold {event
 											? 'border-primary/30 bg-primary text-primary-foreground'
@@ -346,7 +363,7 @@
 												? 'text-primary'
 												: 'text-muted-foreground'}"
 										>
-											{event ? `Recorded ${fmtTime(event.timestamp)}` : 'Pending'}
+											{event ? `Recorded ${fmtTime(event.timestamp)}` : 'Not recorded'}
 										</div>
 									</div>
 								</li>
@@ -356,63 +373,111 @@
 				</div>
 			</div>
 
-			<aside class="flex min-h-0 flex-col rounded-2xl border border-border bg-card">
-				<div class="flex items-start justify-between gap-3 border-b border-border p-5">
-					<div>
-						<h2 class="text-lg font-semibold">Recent activity</h2>
-						<p class="mt-1 text-sm text-muted-foreground">Latest attendance events</p>
+			<div class="grid min-h-0 gap-5 xl:grid-rows-[auto_minmax(0,1fr)]">
+				<aside class="surface-panel">
+					<div class="panel-header">
+						<div class="min-w-0">
+							<h2 class="text-lg font-black">Needs attention</h2>
+							<p class="mt-1 text-sm text-muted-foreground">Students not recorded for today</p>
+						</div>
+						<span class="chip shrink-0">{pendingCount} pending</span>
 					</div>
-					<span
-						class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]"
-					>
-						{recentEvents.length} shown
-					</span>
-				</div>
 
-				<div class="min-h-0 flex-1 overflow-y-auto p-3">
-					{#if recentEvents.length === 0}
-						<EmptyState
-							title="No activity yet"
-							description="Attendance events will appear here as soon as a card tap or manual log is saved."
-						/>
-					{:else}
-						<ul class="divide-y divide-border">
-							{#each recentEvents as event (event.id)}
-								{@const student = studentMap.get(event.studentId)}
-								<li class="flex min-w-0 items-center justify-between gap-3 py-3">
-									<div class="min-w-0">
-										<div class="truncate text-sm font-semibold">
-											{student?.name ?? 'Unknown student'}
-										</div>
+					<div class="panel-body">
+						{#if notRecordedStudents.length === 0}
+							<div
+								class="rounded-xl border border-dashed border-border bg-surface/45 px-4 py-6 text-center"
+								role="status"
+							>
+								<CheckCircle2 class="mx-auto size-6 text-primary" aria-hidden="true" />
+								<p class="mt-2 text-sm font-semibold">Everyone in scope is recorded.</p>
+							</div>
+						{:else}
+							<ul class="space-y-2">
+								{#each notRecordedStudents.slice(0, 6) as student (student.id)}
+									<li class="list-row flex min-w-0 items-center gap-3 p-3">
 										<div
-											class="mt-0.5 flex flex-wrap gap-x-2 gap-y-1 font-mono text-[11px] text-muted-foreground"
+											class="grid size-9 shrink-0 place-items-center rounded-lg border border-border bg-surface font-mono text-[11px] font-bold text-muted-foreground"
+											aria-hidden="true"
 										>
-											<span>{fmtDate(event.timestamp)}</span>
-											<span aria-hidden="true">/</span>
-											<span>{fmtTime(event.timestamp)}</span>
+											{initials(student.name)}
 										</div>
-									</div>
-									<span
-										class="rounded-pill bg-primary px-2 py-1 font-mono text-[10px] font-bold text-primary-foreground"
-									>
-										IN
-									</span>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</div>
+										<div class="min-w-0 flex-1">
+											<div class="text-balance-safe text-sm font-semibold">{student.name}</div>
+											<div class="mt-0.5 font-mono text-[11px] text-muted-foreground">
+												No attendance event today
+											</div>
+										</div>
+									</li>
+								{/each}
+							</ul>
+							{#if notRecordedStudents.length > 6}
+								<p class="mt-3 text-xs text-muted-foreground">
+									+{notRecordedStudents.length - 6} more students not shown.
+								</p>
+							{/if}
+						{/if}
+					</div>
+				</aside>
 
-				<div class="border-t border-border p-4">
-					<a
-						href={resolve('/records')}
-						class="control-ring inline-flex h-9 items-center gap-2 rounded-pill border border-border bg-background px-3 text-xs font-semibold text-primary hover:bg-surface"
-					>
-						View all records
-						<ArrowUpRight class="size-3.5" aria-hidden="true" />
-					</a>
-				</div>
-			</aside>
+				<aside class="surface-panel flex min-h-0 flex-col">
+					<div class="panel-header">
+						<div>
+							<h2 class="text-lg font-black">Recent activity</h2>
+							<p class="mt-1 text-sm text-muted-foreground">Latest attendance events</p>
+						</div>
+						<span class="chip shrink-0">
+							{recentEvents.length} shown
+						</span>
+					</div>
+
+					<div class="panel-body min-h-0 flex-1 overflow-y-auto">
+						{#if recentEvents.length === 0}
+							<div
+								class="rounded-xl border border-dashed border-border bg-surface/45 px-4 py-8 text-center text-sm text-muted-foreground"
+								role="status"
+							>
+								Attendance events will appear here as soon as a card tap or manual log is saved.
+							</div>
+						{:else}
+							<ul class="space-y-2">
+								{#each recentEvents as event (event.id)}
+									{@const student = studentMap.get(event.studentId)}
+									<li class="list-row flex min-w-0 items-center justify-between gap-3 p-3">
+										<div class="min-w-0">
+											<div class="text-balance-safe text-sm font-semibold">
+												{student?.name ?? 'Unknown student'}
+											</div>
+											<div
+												class="mt-0.5 flex flex-wrap gap-x-2 gap-y-1 font-mono text-[11px] text-muted-foreground"
+											>
+												<span>{fmtDate(event.timestamp)}</span>
+												<span aria-hidden="true">/</span>
+												<span>{fmtTime(event.timestamp)}</span>
+											</div>
+										</div>
+										<span
+											class="rounded-pill bg-primary px-2 py-1 font-mono text-[10px] font-bold text-primary-foreground"
+										>
+											IN
+										</span>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</div>
+
+					<div class="border-t border-border p-4">
+						<a
+							href={resolve('/records')}
+							class="btn btn-secondary control-ring min-h-9 px-3 text-xs text-primary"
+						>
+							View all records
+							<ArrowUpRight class="size-3.5" aria-hidden="true" />
+						</a>
+					</div>
+				</aside>
+			</div>
 		</section>
 	{/if}
 </div>
@@ -420,11 +485,7 @@
 <FeedbackToast message={settingsStore.error} ok={false} />
 
 {#snippet statCard(label: string, value: number | string, detail: string, accent = false)}
-	<div
-		class="rounded-2xl border p-5 {accent
-			? 'border-primary bg-primary text-primary-foreground'
-			: 'border-border bg-card'}"
-	>
+	<div class="metric-card {accent ? 'metric-card-accent' : ''}">
 		<div class="flex items-start justify-between gap-3">
 			<div class="min-w-0">
 				<div class="label-mono {accent ? 'text-primary-foreground/80!' : ''}">{label}</div>
@@ -434,16 +495,14 @@
 				</div>
 			</div>
 			<div
-				class="grid size-10 shrink-0 place-items-center rounded-lg border {accent
-					? 'border-primary-foreground/20 bg-primary-foreground/10'
-					: 'border-border bg-surface text-muted-foreground'}"
+				class="metric-icon {accent ? 'border-primary-foreground/20 bg-primary-foreground/10' : ''}"
 				aria-hidden="true"
 			>
 				{#if label === 'Roster'}
 					<UsersRound class="size-5" />
 				{:else if label === 'Recorded'}
 					<CheckCircle2 class="size-5" />
-				{:else if label === 'Pending'}
+				{:else if label === 'Not Recorded'}
 					<CalendarClock class="size-5" />
 				{:else}
 					<History class="size-5" />
