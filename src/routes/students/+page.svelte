@@ -217,6 +217,12 @@
 		}
 	});
 
+	$effect(() => {
+		if (dialogOpen && classes.length === 1 && !formClassId) {
+			formClassId = classes[0].id;
+		}
+	});
+
 	// ── Dialog helpers ───────────────────────────────────────────────────────
 	function openAdd() {
 		editing = null;
@@ -480,15 +486,23 @@
 			<!-- Class Filter -->
 			<div class="space-y-2">
 				<div class="label-mono">Filter by Class</div>
-				<select
-					bind:value={selectedClassId}
-					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-				>
-					<option value="">All Classes</option>
-					{#each classes as c (c.id)}
-						<option value={c.id}>{c.name}</option>
-					{/each}
-				</select>
+				{#if classes.length <= 1}
+					<div
+						class="flex h-10 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium"
+					>
+						{classes[0]?.name ?? 'No class configured'}
+					</div>
+				{:else}
+					<select
+						bind:value={selectedClassId}
+						class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+					>
+						<option value="">All Classes</option>
+						{#each classes as c (c.id)}
+							<option value={c.id}>{c.name}</option>
+						{/each}
+					</select>
+				{/if}
 			</div>
 
 			<!-- Stats -->
@@ -752,21 +766,30 @@
 
 				<div class="space-y-1.5">
 					<label for="field-class" class="label-mono">Class / Section</label>
-					<select
-						id="field-class"
-						bind:value={formClassId}
-						required={classes.length > 0}
-						class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					>
-						{#if classes.length === 0}
-							<option value="">No classes available</option>
-						{:else}
-							<option value="" disabled>Select a class</option>
-							{#each classes as c (c.id)}
-								<option value={c.id}>{c.name}</option>
-							{/each}
-						{/if}
-					</select>
+					{#if classes.length === 1}
+						<div
+							id="field-class"
+							class="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium"
+						>
+							{classes[0].name}
+						</div>
+					{:else}
+						<select
+							id="field-class"
+							bind:value={formClassId}
+							required={classes.length > 0}
+							class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+						>
+							{#if classes.length === 0}
+								<option value="">No classes available</option>
+							{:else}
+								<option value="" disabled>Select a class</option>
+								{#each classes as c (c.id)}
+									<option value={c.id}>{c.name}</option>
+								{/each}
+							{/if}
+						</select>
+					{/if}
 					{#if classes.length === 0}
 						<p class="mt-1 text-xs text-muted-foreground">
 							Create a class first to assign students, or add student without class assignment.
