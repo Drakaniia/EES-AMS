@@ -219,6 +219,48 @@ export interface Sf2ImportSummary {
 	datesMapped: number;
 }
 
+export interface Sf2ImportValidation {
+	sourcePath: string;
+	classId?: string;
+	className: string;
+	currentStudentCount: number;
+	sf2LearnerCount: number;
+	missingFromSf2: Sf2ValidationStudent[];
+	missingFromCurrent: Sf2ValidationLearner[];
+	possibleNameMismatches: Sf2ValidationNameMismatch[];
+	duplicateCurrentStudents: Sf2ValidationDuplicate[];
+	duplicateSf2Learners: Sf2ValidationDuplicate[];
+	missingLearnerInfo: Sf2ValidationLearner[];
+	hasDiscrepancies: boolean;
+}
+
+export interface Sf2ValidationStudent {
+	studentId: string;
+	name: string;
+	normalizedName: string;
+	gender?: string;
+}
+
+export interface Sf2ValidationLearner {
+	rowIndex: number;
+	name: string;
+	normalizedName: string;
+	genderBlock?: string;
+}
+
+export interface Sf2ValidationNameMismatch {
+	currentStudent: Sf2ValidationStudent;
+	sf2Learner: Sf2ValidationLearner;
+	reason: string;
+}
+
+export interface Sf2ValidationDuplicate {
+	normalizedName: string;
+	names: string[];
+	studentIds: string[];
+	rowIndexes: number[];
+}
+
 export interface Sf2TemplateDraft {
 	classId?: string;
 	schoolId: string;

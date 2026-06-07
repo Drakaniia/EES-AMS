@@ -58,6 +58,7 @@ use commands::{
     update_sf2_workbook_settings,
     update_student,
     upload_latest_backup_to_google_drive,
+    validate_sf2_workbook_import,
     wipe_all,
 };
 use infrastructure::init_db;
@@ -109,6 +110,7 @@ pub fn run() {
             upload_latest_backup_to_google_drive,
             choose_restore_backup,
             restore_backup,
+            validate_sf2_workbook_import,
             import_sf2_workbook,
             create_sf2_workbook_from_template,
             get_sf2_workbook_settings,

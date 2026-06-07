@@ -8,7 +8,7 @@ use crate::infrastructure::database::{
 };
 use crate::sf2::models::{
     Sf2CloseDaySummary, Sf2ExportPreview, Sf2ExportReadiness, Sf2ExportResult, Sf2ImportSummary,
-    Sf2TemplateDraft, Sf2WorkbookSettings,
+    Sf2ImportValidation, Sf2TemplateDraft, Sf2WorkbookSettings,
 };
 use crate::sf2::service;
 use r2d2::Pool;
@@ -1117,19 +1117,61 @@ fn escape_csv_field(value: &str) -> String {
 }
 
 #[tauri::command]
+pub async fn validate_sf2_workbook_import(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+) -> std::result::Result<Sf2ImportValidation, String> {
+    let validation =
+        service::validate_workbook_import(app, pool.inner().clone()).map_err(|e| e.to_string())?;
+    let metadata_json = audit_metadata_json(serde_json::json!({
+        "sourcePath": validation.source_path.as_str(),
+        "classId": validation.class_id.as_deref(),
+        "className": validation.class_name.as_str(),
+        "currentStudentCount": validation.current_student_count,
+        "sf2LearnerCount": validation.sf2_learner_count,
+        "missingFromSf2": validation.missing_from_sf2.len(),
+        "missingFromCurrent": validation.missing_from_current.len(),
+        "possibleNameMismatches": validation.possible_name_mismatches.len(),
+        "duplicateCurrentStudents": validation.duplicate_current_students.len(),
+        "duplicateSf2Learners": validation.duplicate_sf2_learners.len(),
+        "missingLearnerInfo": validation.missing_learner_info.len(),
+        "hasDiscrepancies": validation.has_discrepancies,
+    }))?;
+    record_command_audit(
+        pool.inner(),
+        "sf2_workbook",
+        None,
+        "validate",
+        "Validated SF2 workbook import",
+        Some(metadata_json),
+    )?;
+    Ok(validation)
+}
+
+#[tauri::command]
 pub async fn import_sf2_workbook(
     app: tauri::AppHandle,
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    source_path: String,
+    proceed_anyway: bool,
 ) -> std::result::Result<Sf2ImportSummary, String> {
-    let summary = service::import_workbook(app, pool.inner().clone()).map_err(|e| e.to_string())?;
+    let summary = service::import_workbook(
+        app,
+        pool.inner().clone(),
+        source_path.clone(),
+        proceed_anyway,
+    )
+    .map_err(|e| e.to_string())?;
     let metadata_json = audit_metadata_json(serde_json::json!({
         "classId": summary.class_id.as_str(),
         "className": summary.class_name.as_str(),
+        "selectedSourcePath": source_path.as_str(),
         "sourcePath": summary.source_path.as_str(),
         "learnersFound": summary.learners_found,
         "studentsCreated": summary.students_created,
         "studentsReused": summary.students_reused,
         "datesMapped": summary.dates_mapped,
+        "proceedAnyway": proceed_anyway,
     }))?;
     record_command_audit(
         pool.inner(),
