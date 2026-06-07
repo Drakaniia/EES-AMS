@@ -15,7 +15,7 @@
 </script>
 
 <header
-	class="shrink-0 border-b border-border bg-background/78 px-4 py-4 shadow-sm backdrop-blur-xl md:px-8 md:py-5 lg:px-10"
+	class="sticky top-0 z-40 shrink-0 border-b border-border bg-background/88 px-4 py-4 shadow-sm backdrop-blur-xl md:px-8 md:py-5 lg:px-10"
 >
 	<div
 		class="mx-auto flex w-full max-w-[1600px] flex-col gap-4 xl:flex-row xl:items-center xl:justify-between"

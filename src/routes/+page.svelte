@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -33,9 +33,12 @@
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
 	let sessionSummary = $state<{ summary: string; className: string } | null>(null);
+	let todayKey = $state(fmtDate(Date.now()));
+	let midnightTimer: ReturnType<typeof setTimeout> | null = null;
 
 	onMount(async () => {
 		await reload();
+		scheduleMidnightRefresh();
 
 		const sessionEnd = page.url.searchParams.get('sessionEnd');
 		if (sessionEnd === 'true') {
@@ -46,6 +49,10 @@
 			goto(resolve('/'), { replaceState: true });
 			setTimeout(() => (sessionSummary = null), 10000);
 		}
+	});
+
+	onDestroy(() => {
+		if (midnightTimer) clearTimeout(midnightTimer);
 	});
 
 	async function reload() {
@@ -69,11 +76,11 @@
 		}
 	}
 
-	const today = $derived(fmtDate(Date.now()));
+	const today = $derived(todayKey);
 	const todayEvents = $derived(events.filter((event) => fmtDate(event.timestamp) === today));
 	const studentMap = $derived(new SvelteMap(students.map((student) => [student.id, student])));
 	const activeClass = $derived(getActiveClass());
-	const nextClass = $derived(getNextClass());
+	const assignedClass = $derived(activeClass ?? classes[0] ?? null);
 	const isCardReaderMode = $derived(settingsStore.settings?.attendanceMode === 'card_reader');
 	const attendanceActionLabel = $derived(
 		isCardReaderMode ? 'Start Live Session' : 'Take Attendance'
@@ -81,17 +88,14 @@
 	const attendanceFallbackLabel = $derived(isCardReaderMode ? 'Manual Entry' : 'Open Attendance');
 
 	const activeClassStudents = $derived(
-		activeClass ? students.filter((student) => student.classId === activeClass.id) : students
+		assignedClass ? students.filter((student) => student.classId === assignedClass.id) : students
 	);
-	const nextClassStudents = $derived(
-		nextClass ? students.filter((student) => student.classId === nextClass.cls.id) : []
-	);
-	const rosterStudents = $derived(activeClass ? activeClassStudents : nextClassStudents);
+	const rosterStudents = $derived(activeClassStudents);
 	const relevantTodayEvents = $derived.by(() => {
-		if (!activeClass) return todayEvents;
+		if (!assignedClass) return todayEvents;
 		return todayEvents.filter((event) => {
 			const student = studentMap.get(event.studentId);
-			return event.classId === activeClass.id || student?.classId === activeClass.id;
+			return event.classId === assignedClass.id || student?.classId === assignedClass.id;
 		});
 	});
 	const checkedIn = $derived.by(() => {
@@ -117,6 +121,7 @@
 
 	const dynamicTitle = $derived.by(() => {
 		if (activeClass) return `Currently Teaching: ${activeClass.name}`;
+		if (assignedClass) return `${assignedClass.name} Overview`;
 		return 'Attendance Overview';
 	});
 
@@ -125,10 +130,11 @@
 			const room = activeClass.room ? `Room ${activeClass.room} / ` : '';
 			return `${room}${activeClass.dayStart} - ${activeClass.dayEnd} / Session in progress`;
 		}
-		if (nextClass) {
-			return `Next session: ${nextClass.cls.name} starts in ${nextClass.minutes} minutes.`;
+		if (assignedClass) {
+			const room = assignedClass.room ? `Room ${assignedClass.room} / ` : '';
+			return `${room}${assignedClass.dayStart} - ${assignedClass.dayEnd} / Showing today's class roster.`;
 		}
-		return 'No active class is scheduled right now. Review logs, manage rosters, or prepare the next session.';
+		return 'No class is configured yet. Add the class schedule and roster to begin tracking attendance.';
 	});
 
 	function getActiveClass(): Class | null {
@@ -147,26 +153,6 @@
 			if (currentTime >= startTime && currentTime <= endTime) return classItem;
 		}
 		return null;
-	}
-
-	function getNextClass(): { cls: Class; minutes: number } | null {
-		const now = new Date();
-		const currentTime = now.getHours() * 60 + now.getMinutes();
-		const currentDay = now.getDay();
-		let next: { cls: Class; minutes: number } | null = null;
-
-		for (const classItem of classes) {
-			if (classItem.days && !classItem.days.includes(currentDay)) continue;
-
-			const [startHour, startMin] = classItem.dayStart.split(':').map(Number);
-			const startTime = startHour * 60 + startMin;
-
-			if (startTime > currentTime) {
-				const diff = startTime - currentTime;
-				if (!next || diff < next.minutes) next = { cls: classItem, minutes: diff };
-			}
-		}
-		return next;
 	}
 
 	function eventTime(event: AttendanceEvent) {
@@ -202,6 +188,20 @@
 				.join('') || 'ST'
 		);
 	}
+
+	function scheduleMidnightRefresh() {
+		if (midnightTimer) clearTimeout(midnightTimer);
+		const now = new Date();
+		const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 2, 0);
+		midnightTimer = setTimeout(
+			async () => {
+				todayKey = fmtDate(Date.now());
+				await reload();
+				scheduleMidnightRefresh();
+			},
+			Math.max(1000, nextMidnight.getTime() - now.getTime())
+		);
+	}
 </script>
 
 <svelte:head>
@@ -219,7 +219,7 @@
 			<UsersRound class="size-4" aria-hidden="true" />
 			Manage students
 		</a>
-		<a href={resolve(attendanceHref(activeClass?.id))} class="btn btn-primary control-ring">
+		<a href={resolve(attendanceHref(assignedClass?.id))} class="btn btn-primary control-ring">
 			{#if activeClass}
 				<span class="relative flex h-2 w-2" aria-hidden="true">
 					<span
@@ -277,8 +277,8 @@
 	{:else}
 		<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Today summary">
 			{@render statCard('Roster', activeClassStudents.length, 'Students in scope')}
-			{@render statCard('Recorded', checkedIn.length, 'Marked present today', true)}
-			{@render statCard('Not Recorded', pendingCount, 'Absent or pending')}
+			{@render statCard('Present', checkedIn.length, 'Marked present today', true)}
+			{@render statCard('Absent', pendingCount, 'No present record today')}
 			{@render statCard('Rate', `${attendanceRate}%`, 'Current completion')}
 		</section>
 
@@ -287,12 +287,14 @@
 				<div class="min-w-0">
 					<div class="label-mono">Today completion</div>
 					<h2 class="mt-2 text-xl leading-tight font-black text-foreground">
-						{checkedIn.length} present / {pendingCount} not recorded
+						{checkedIn.length} present / {pendingCount} absent
 					</h2>
 					<p class="text-balance-safe mt-1 text-sm leading-6 text-muted-foreground">
 						{activeClass
 							? `Tracking ${activeClass.name} for the active session.`
-							: 'Tracking all students with attendance activity for today.'}
+							: assignedClass
+								? `Tracking ${assignedClass.name} for today.`
+								: 'Tracking all students with attendance activity for today.'}
 					</p>
 				</div>
 				<div class="w-full min-w-0 md:max-w-sm">
@@ -312,14 +314,14 @@
 				<div class="panel-header flex-wrap">
 					<div class="min-w-0">
 						<h2 class="text-lg font-black">
-							{activeClass ? 'Session roster' : 'Next class roster'}
+							{activeClass ? 'Session roster' : 'Class roster'}
 						</h2>
 						<p class="mt-1 text-sm text-muted-foreground">
 							{activeClass
 								? `${checkedIn.length} recorded / ${pendingCount} pending`
-								: nextClass
-									? `${nextClassStudents.length} students for ${nextClass.cls.name}`
-									: 'No scheduled class is currently active.'}
+								: assignedClass
+									? `${activeClassStudents.length} students in this class`
+									: 'No class roster is configured.'}
 						</p>
 					</div>
 					{#if activeClass}
@@ -339,7 +341,7 @@
 							title={activeClass ? 'No students assigned to this class' : 'No roster to show'}
 							description={activeClass
 								? 'Assign students to this class from the Class List before taking attendance.'
-								: 'Create a class schedule in Configuration to see upcoming rosters here.'}
+								: 'Create a class schedule in Configuration and add students to the class.'}
 						/>
 					{:else}
 						<ul class="grid auto-rows-fr gap-2 sm:grid-cols-2 2xl:grid-cols-3">
@@ -405,7 +407,7 @@
 										<div class="min-w-0 flex-1">
 											<div class="text-balance-safe text-sm font-semibold">{student.name}</div>
 											<div class="mt-0.5 font-mono text-[11px] text-muted-foreground">
-												No attendance event today
+												No present record today
 											</div>
 										</div>
 									</li>
@@ -500,9 +502,9 @@
 			>
 				{#if label === 'Roster'}
 					<UsersRound class="size-5" />
-				{:else if label === 'Recorded'}
+				{:else if label === 'Present'}
 					<CheckCircle2 class="size-5" />
-				{:else if label === 'Not Recorded'}
+				{:else if label === 'Absent'}
 					<CalendarClock class="size-5" />
 				{:else}
 					<History class="size-5" />
