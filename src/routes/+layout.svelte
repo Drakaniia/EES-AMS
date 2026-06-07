@@ -1,7 +1,7 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
-	import UpdateNotification from '../components/ui/UpdateNotification.svelte';
+	import UpdateNotification from '$lib/components/ui/UpdateNotification.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import ClickSpark from '$lib/components/ui/ClickSpark.svelte';
 	import TitleBar from '$lib/components/ui/TitleBar.svelte';
