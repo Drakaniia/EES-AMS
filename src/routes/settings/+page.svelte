@@ -58,6 +58,7 @@
 		restoreBackup,
 		uploadLatestBackupToGoogleDrive,
 		updateSf2WorkbookSettings,
+		validateSf2WorkbookImport,
 		wipeAll,
 		type AuditEvent,
 		type AttendanceMode,
@@ -67,7 +68,11 @@
 		type Class,
 		type Session,
 		type Sf2ImportSummary,
+		type Sf2ImportValidation,
 		type Sf2TemplateDraft,
+		type Sf2ValidationDuplicate,
+		type Sf2ValidationLearner,
+		type Sf2ValidationStudent,
 		type Sf2WorkbookSettings
 	} from '$lib/db-rust';
 
@@ -174,6 +179,9 @@
 	let sf2TemplateClassId = $state('');
 	let sf2SettingsSaving = $state(false);
 	let sf2ImportSummary = $state<Sf2ImportSummary | null>(null);
+	let sf2Validation = $state<Sf2ImportValidation | null>(null);
+	let sf2ValidationDialogOpen = $state(false);
+	let sf2ValidationDetailsOpen = $state(false);
 	let sf2TemplateDialogOpen = $state(false);
 	let sf2TemplateDialogMode = $state<'create' | 'edit'>('create');
 	let sf2TemplateDialogNotice = $state<string | null>(null);
@@ -749,35 +757,141 @@
 		sf2Importing = true;
 
 		try {
-			const summary = await importSf2Workbook();
-			sf2ImportSummary = summary;
-			sf2TemplateClassId = summary.classId;
-			await reload();
-			await reloadAuditEvents();
+			const validation = await validateSf2WorkbookImport();
+			sf2Validation = validation;
 
-			try {
-				const settings = await getSf2WorkbookSettings(summary.classId);
-				if (shouldPromptForSf2SettingsUpdate(settings)) {
-					openImportedSf2SettingsReview(settings);
-					toast(`Imported ${summary.learnersFound} learners. Review SF2 settings first.`, false);
-					return;
-				}
-			} catch (error) {
-				const msg = errorMessage(error, 'SF2 settings check failed');
-				toast(
-					`Imported ${summary.learnersFound} learners, but settings check failed: ${msg}`,
-					false
-				);
+			if (validation.hasDiscrepancies) {
+				sf2ValidationDialogOpen = true;
+				sf2ValidationDetailsOpen = false;
+				toast('Student list mismatch detected. Review the SF2 validation report.', false);
 				return;
 			}
 
-			toast(`Imported ${summary.learnersFound} learners from SF2`);
+			await runSf2Import(validation, false);
 		} catch (error) {
 			const msg = errorMessage(error, 'SF2 import failed');
 			toast(`SF2 import failed: ${msg}`, false);
 		} finally {
 			sf2Importing = false;
 		}
+	}
+
+	async function runSf2Import(validation: Sf2ImportValidation, proceedAnyway: boolean) {
+		const summary = await importSf2Workbook(validation.sourcePath, proceedAnyway);
+		await finishSf2Import(summary);
+	}
+
+	async function finishSf2Import(summary: Sf2ImportSummary) {
+		sf2ImportSummary = summary;
+		sf2TemplateClassId = summary.classId;
+		sf2Validation = null;
+		sf2ValidationDialogOpen = false;
+		sf2ValidationDetailsOpen = false;
+		await reload();
+		await reloadAuditEvents();
+
+		try {
+			const settings = await getSf2WorkbookSettings(summary.classId);
+			if (shouldPromptForSf2SettingsUpdate(settings)) {
+				openImportedSf2SettingsReview(settings);
+				toast(`Imported ${summary.learnersFound} learners. Review SF2 settings first.`, false);
+				return;
+			}
+		} catch (error) {
+			const msg = errorMessage(error, 'SF2 settings check failed');
+			toast(`Imported ${summary.learnersFound} learners, but settings check failed: ${msg}`, false);
+			return;
+		}
+
+		toast(`Imported ${summary.learnersFound} learners from SF2`);
+	}
+
+	async function proceedWithSf2MismatchImport() {
+		if (!sf2Validation || sf2Importing) return;
+		sf2Importing = true;
+		try {
+			await runSf2Import(sf2Validation, true);
+		} catch (error) {
+			const msg = errorMessage(error, 'SF2 import failed');
+			toast(`SF2 import failed: ${msg}`, false);
+		} finally {
+			sf2Importing = false;
+		}
+	}
+
+	function cancelSf2ValidationImport() {
+		if (sf2Importing) return;
+		sf2Validation = null;
+		sf2ValidationDialogOpen = false;
+		sf2ValidationDetailsOpen = false;
+	}
+
+	function sf2ValidationStudentLabel(student: Sf2ValidationStudent) {
+		return student.gender ? `${student.name} (${student.gender})` : student.name;
+	}
+
+	function sf2ValidationLearnerLabel(learner: Sf2ValidationLearner) {
+		const name = learner.name.trim() || 'Blank learner name';
+		const gender = learner.genderBlock ? `, ${learner.genderBlock}` : '';
+		return `Row ${learner.rowIndex}: ${name}${gender}`;
+	}
+
+	function sf2ValidationDuplicateLabel(duplicate: Sf2ValidationDuplicate) {
+		const locations =
+			duplicate.rowIndexes.length > 0
+				? `Rows ${duplicate.rowIndexes.join(', ')}`
+				: `${duplicate.studentIds.length} current records`;
+		return `${duplicate.names.join(', ')} (${locations})`;
+	}
+
+	function sf2ValidationReportText(validation: Sf2ImportValidation) {
+		const lines = [
+			'Warning: Student List Mismatch Detected',
+			'',
+			`Source path: ${validation.sourcePath}`,
+			`Class: ${validation.className}`,
+			`Current records: ${validation.currentStudentCount}`,
+			`SF2 learners: ${validation.sf2LearnerCount}`,
+			'',
+			`Current records missing from SF2: ${validation.missingFromSf2.length}`,
+			...validation.missingFromSf2.map((student) => `- ${sf2ValidationStudentLabel(student)}`),
+			'',
+			`SF2 learners missing from current records: ${validation.missingFromCurrent.length}`,
+			...validation.missingFromCurrent.map((learner) => `- ${sf2ValidationLearnerLabel(learner)}`),
+			'',
+			`Potential name mismatches: ${validation.possibleNameMismatches.length}`,
+			...validation.possibleNameMismatches.map(
+				(mismatch) =>
+					`- ${mismatch.currentStudent.name} <-> ${mismatch.sf2Learner.name}: ${mismatch.reason}`
+			),
+			'',
+			`Duplicate current records: ${validation.duplicateCurrentStudents.length}`,
+			...validation.duplicateCurrentStudents.map(
+				(duplicate) => `- ${sf2ValidationDuplicateLabel(duplicate)}`
+			),
+			'',
+			`Duplicate SF2 learners: ${validation.duplicateSf2Learners.length}`,
+			...validation.duplicateSf2Learners.map(
+				(duplicate) => `- ${sf2ValidationDuplicateLabel(duplicate)}`
+			),
+			'',
+			`Missing learner information: ${validation.missingLearnerInfo.length}`,
+			...validation.missingLearnerInfo.map((learner) => `- ${sf2ValidationLearnerLabel(learner)}`)
+		];
+		return lines.join('\n');
+	}
+
+	function downloadSf2ValidationReport() {
+		if (!sf2Validation) return;
+		const blob = new Blob([sf2ValidationReportText(sf2Validation)], {
+			type: 'text/plain;charset=utf-8'
+		});
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = 'sf2-validation-report.txt';
+		link.click();
+		URL.revokeObjectURL(url);
 	}
 
 	function openSf2TemplateDialog() {
@@ -1531,6 +1645,199 @@
 			</button>
 		</div>
 	</div>
+</Dialog>
+
+<!-- SF2 Import Validation Dialog -->
+<Dialog
+	open={sf2ValidationDialogOpen}
+	title="Warning: Student List Mismatch Detected"
+	description="The imported SF2 does not match the current student records."
+	maxWidth="xl"
+	showCloseButton={!sf2Importing}
+	onClose={cancelSf2ValidationImport}
+>
+	{#if sf2Validation}
+		<div class="space-y-5">
+			<TaskProgress
+				active={sf2Importing}
+				title="Importing SF2 workbook"
+				description="Creating the new working copy and migrating saved attendance marks."
+				simple
+			/>
+
+			<div class="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+				<p>
+					The import is paused until these discrepancies are reviewed and explicitly acknowledged.
+				</p>
+			</div>
+
+			<div class="grid gap-3 sm:grid-cols-3">
+				<div class="rounded-md border border-border bg-surface p-4">
+					<div class="label-mono">Current Missing in SF2</div>
+					<div class="mt-2 text-2xl font-semibold">{sf2Validation.missingFromSf2.length}</div>
+				</div>
+				<div class="rounded-md border border-border bg-surface p-4">
+					<div class="label-mono">SF2 Missing Current</div>
+					<div class="mt-2 text-2xl font-semibold">
+						{sf2Validation.missingFromCurrent.length}
+					</div>
+				</div>
+				<div class="rounded-md border border-border bg-surface p-4">
+					<div class="label-mono">Potential Mismatches</div>
+					<div class="mt-2 text-2xl font-semibold">
+						{sf2Validation.possibleNameMismatches.length}
+					</div>
+				</div>
+			</div>
+
+			<div class="rounded-md border border-border p-4 text-sm">
+				<div class="grid gap-3 sm:grid-cols-2">
+					<div>
+						<div class="label-mono">Matched Class</div>
+						<div class="mt-1 font-medium">{sf2Validation.className}</div>
+					</div>
+					<div>
+						<div class="label-mono">Roster Counts</div>
+						<div class="mt-1 font-medium">
+							{sf2Validation.currentStudentCount} current / {sf2Validation.sf2LearnerCount} SF2
+						</div>
+					</div>
+				</div>
+				<div class="mt-3 text-xs break-all text-muted-foreground">{sf2Validation.sourcePath}</div>
+			</div>
+
+			{#if sf2ValidationDetailsOpen}
+				<div class="max-h-[45vh] space-y-4 overflow-y-auto pr-1">
+					<section class="rounded-md border border-border p-4">
+						<h4 class="text-sm font-semibold">
+							Students Found in Current Records but Missing in SF2
+						</h4>
+						{#if sf2Validation.missingFromSf2.length > 0}
+							<ul class="mt-3 space-y-1 text-sm text-muted-foreground">
+								{#each sf2Validation.missingFromSf2 as student (student.studentId)}
+									<li>{sf2ValidationStudentLabel(student)}</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="mt-3 text-sm text-muted-foreground">No records in this category.</p>
+						{/if}
+					</section>
+
+					<section class="rounded-md border border-border p-4">
+						<h4 class="text-sm font-semibold">
+							Students Found in SF2 but Missing in Current Records
+						</h4>
+						{#if sf2Validation.missingFromCurrent.length > 0}
+							<ul class="mt-3 space-y-1 text-sm text-muted-foreground">
+								{#each sf2Validation.missingFromCurrent as learner (`${learner.rowIndex}-${learner.normalizedName}`)}
+									<li>{sf2ValidationLearnerLabel(learner)}</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="mt-3 text-sm text-muted-foreground">No records in this category.</p>
+						{/if}
+					</section>
+
+					<section class="rounded-md border border-border p-4">
+						<h4 class="text-sm font-semibold">Potential Name Mismatches</h4>
+						{#if sf2Validation.possibleNameMismatches.length > 0}
+							<ul class="mt-3 space-y-2 text-sm text-muted-foreground">
+								{#each sf2Validation.possibleNameMismatches as mismatch (`${mismatch.currentStudent.studentId}-${mismatch.sf2Learner.rowIndex}`)}
+									<li>
+										<span class="font-medium text-foreground">{mismatch.currentStudent.name}</span>
+										<span> -> </span>
+										<span class="font-medium text-foreground">{mismatch.sf2Learner.name}</span>
+										<span class="block text-xs">{mismatch.reason}</span>
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="mt-3 text-sm text-muted-foreground">
+								No potential name mismatches detected.
+							</p>
+						{/if}
+					</section>
+
+					<section class="rounded-md border border-border p-4">
+						<h4 class="text-sm font-semibold">Additional Validation Checks</h4>
+						<div class="mt-3 grid gap-4 md:grid-cols-3">
+							<div>
+								<div class="label-mono">Duplicate Current Records</div>
+								{#if sf2Validation.duplicateCurrentStudents.length > 0}
+									<ul class="mt-2 space-y-1 text-sm text-muted-foreground">
+										{#each sf2Validation.duplicateCurrentStudents as duplicate (duplicate.normalizedName)}
+											<li>{sf2ValidationDuplicateLabel(duplicate)}</li>
+										{/each}
+									</ul>
+								{:else}
+									<p class="mt-2 text-sm text-muted-foreground">None</p>
+								{/if}
+							</div>
+							<div>
+								<div class="label-mono">Duplicate SF2 Entries</div>
+								{#if sf2Validation.duplicateSf2Learners.length > 0}
+									<ul class="mt-2 space-y-1 text-sm text-muted-foreground">
+										{#each sf2Validation.duplicateSf2Learners as duplicate (duplicate.normalizedName)}
+											<li>{sf2ValidationDuplicateLabel(duplicate)}</li>
+										{/each}
+									</ul>
+								{:else}
+									<p class="mt-2 text-sm text-muted-foreground">None</p>
+								{/if}
+							</div>
+							<div>
+								<div class="label-mono">Missing Learner Information</div>
+								{#if sf2Validation.missingLearnerInfo.length > 0}
+									<ul class="mt-2 space-y-1 text-sm text-muted-foreground">
+										{#each sf2Validation.missingLearnerInfo as learner (learner.rowIndex)}
+											<li>{sf2ValidationLearnerLabel(learner)}</li>
+										{/each}
+									</ul>
+								{:else}
+									<p class="mt-2 text-sm text-muted-foreground">None</p>
+								{/if}
+							</div>
+						</div>
+					</section>
+				</div>
+			{/if}
+
+			<div class="flex flex-wrap justify-end gap-2 pt-2">
+				<button
+					type="button"
+					onclick={() => (sf2ValidationDetailsOpen = !sf2ValidationDetailsOpen)}
+					disabled={sf2Importing}
+					class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					Review Differences
+				</button>
+				<button
+					type="button"
+					onclick={downloadSf2ValidationReport}
+					disabled={sf2Importing}
+					class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					Download Validation Report
+				</button>
+				<button
+					type="button"
+					onclick={cancelSf2ValidationImport}
+					disabled={sf2Importing}
+					class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					Cancel Import
+				</button>
+				<button
+					type="button"
+					onclick={proceedWithSf2MismatchImport}
+					disabled={sf2Importing}
+					class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					{sf2Importing ? 'Importing...' : 'Proceed Anyway (Authorized Users Only)'}
+				</button>
+			</div>
+		</div>
+	{/if}
 </Dialog>
 
 <!-- SF2 Template Dialog -->

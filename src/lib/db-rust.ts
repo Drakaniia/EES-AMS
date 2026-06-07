@@ -18,7 +18,11 @@ import type {
 	BackupPreview,
 	RestoreResult,
 	Sf2ImportSummary,
+	Sf2ImportValidation,
 	Sf2TemplateDraft,
+	Sf2ValidationDuplicate,
+	Sf2ValidationLearner,
+	Sf2ValidationStudent,
 	Sf2WorkbookSettings,
 	Sf2CloseDaySummary,
 	Sf2ExportPreview,
@@ -46,7 +50,11 @@ export type {
 	BackupPreview,
 	RestoreResult,
 	Sf2ImportSummary,
+	Sf2ImportValidation,
 	Sf2TemplateDraft,
+	Sf2ValidationDuplicate,
+	Sf2ValidationLearner,
+	Sf2ValidationStudent,
 	Sf2WorkbookSettings,
 	Sf2CloseDaySummary,
 	Sf2ExportPreview,
@@ -357,8 +365,15 @@ export async function restoreBackup(sourcePath: string): Promise<RestoreResult> 
 
 // ── SF2 Excel Bridge Operations ─────────────────────────────────────────────
 
-export async function importSf2Workbook(): Promise<Sf2ImportSummary> {
-	return await invoke('import_sf2_workbook');
+export async function validateSf2WorkbookImport(): Promise<Sf2ImportValidation> {
+	return await invoke('validate_sf2_workbook_import');
+}
+
+export async function importSf2Workbook(
+	sourcePath: string,
+	proceedAnyway: boolean
+): Promise<Sf2ImportSummary> {
+	return await invoke('import_sf2_workbook', { sourcePath, proceedAnyway });
 }
 
 export async function createSf2WorkbookFromTemplate(

@@ -187,6 +187,58 @@ pub struct Sf2ImportSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Sf2ImportValidation {
+    pub source_path: String,
+    pub class_id: Option<String>,
+    pub class_name: String,
+    pub current_student_count: usize,
+    pub sf2_learner_count: usize,
+    pub missing_from_sf2: Vec<Sf2ValidationStudent>,
+    pub missing_from_current: Vec<Sf2ValidationLearner>,
+    pub possible_name_mismatches: Vec<Sf2ValidationNameMismatch>,
+    pub duplicate_current_students: Vec<Sf2ValidationDuplicate>,
+    pub duplicate_sf2_learners: Vec<Sf2ValidationDuplicate>,
+    pub missing_learner_info: Vec<Sf2ValidationLearner>,
+    pub has_discrepancies: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sf2ValidationStudent {
+    pub student_id: String,
+    pub name: String,
+    pub normalized_name: String,
+    pub gender: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sf2ValidationLearner {
+    pub row_index: u32,
+    pub name: String,
+    pub normalized_name: String,
+    pub gender_block: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sf2ValidationNameMismatch {
+    pub current_student: Sf2ValidationStudent,
+    pub sf2_learner: Sf2ValidationLearner,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sf2ValidationDuplicate {
+    pub normalized_name: String,
+    pub names: Vec<String>,
+    pub student_ids: Vec<String>,
+    pub row_indexes: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Sf2CloseDaySummary {
     pub class_id: String,
     pub date: String,
