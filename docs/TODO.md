@@ -28,14 +28,23 @@
 - Remove the dropdown in section.
 - Make it real prograss bar when importing sf2, notr just harcoded or frontend manipulation,
 - Validation, should cannot create new sf2 in the settings
-- In attendance page. when i click the names in the box. the box grows, when there is recent activity. make it fixed
-- Do i need to always end session?what about if thre is incomeing
+- Do i need to always end session?what about if thre is incomeing (add docu for thhis)
 - dialogue modal for laoding animation when export
 - When in the first month. i alrady inputed the data. and the sf2 is now availble, what happenns when i import the sf2 (it makes a working copy) should modify the sf2 with the already recorded (for example there is absend in the first week it auto put x in the day without breaking or deleting the existing record). and the add validation if the names are right or other instances
 
--Validation if export the sf2 xlsx, the dates should be if whats report of the month of epecially the dates. becaues we create our own copy when importing, it modifies also the exel when import, the months dates in weekly, also include the x mark when absent because currently there is no x mark
+- Validation if export the sf2 xlsx, the dates should be if whats report of the month of epecially the dates. becaues we create our own copy when importing, it modifies also the exel when import, the months dates in weekly, also include the x mark when absent because currently there is no x mark
 
 - No end session, i should dont have to click end session just to end. when i click attendance in the list should automaticall record
 - Automatically close session when the days ends to record automatically
 
 - page where can eassisy modify attendance absent or not with ignoring the class houurs
+
+- Integrate with mobile app, can transfer data to mobile app.
+- should cannot scroll beyond or exeed scroll, should be fixed in all pages
+
+- IN attendance page. the more i click for attendance the more hte box expand.
+- In attendance page. when i click the names in the box. the box grows, when there is recent activity. make it fixed
+
+- Supported multiple backup types
+- Header should be fixed and floating on top, not include in scroll
+- There is no next class so no roster to show in Overview.. Note that one teacher handles one class only
