@@ -159,8 +159,12 @@
 		{#if loading}
 			<div class="flex h-64 items-center justify-center">
 				<div
-					class="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent"
-				></div>
+					class="flex items-center gap-2 text-sm font-medium text-muted-foreground"
+					role="status"
+				>
+					<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+					Loading attendance...
+				</div>
 			</div>
 		{:else}
 			<!-- Header Stats -->
