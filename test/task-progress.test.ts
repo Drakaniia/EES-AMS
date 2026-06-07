@@ -6,15 +6,17 @@ const progressComponentPath = 'src/lib/components/ui/TaskProgress.svelte';
 const settingsPage = readFileSync('src/routes/settings/+page.svelte', 'utf8');
 const attendancePage = readFileSync('src/routes/attendance/+page.svelte', 'utf8');
 
-test('provides an accessible animated task progress component', () => {
+test('provides an accessible measured task progress component', () => {
 	assert.equal(existsSync(progressComponentPath), true);
 
 	const progressComponent = readFileSync(progressComponentPath, 'utf8');
 
 	assert.match(progressComponent, /role="progressbar"/);
 	assert.match(progressComponent, /aria-live="polite"/);
-	assert.match(progressComponent, /animate-spin/);
-	assert.match(progressComponent, /progress-slide/);
+	assert.match(progressComponent, /value\?: number \| null/);
+	assert.match(progressComponent, /aria-valuenow=\{Number\(value\)\}/);
+	assert.doesNotMatch(progressComponent, /animate-spin/);
+	assert.doesNotMatch(progressComponent, /progress-slide/);
 });
 
 test('SF2 import and workbook creation expose progress indicators', () => {
@@ -35,5 +37,5 @@ test('attendance session closing exposes progress indicator', () => {
 	);
 	assert.match(attendancePage, /active=\{isClosingDay\}/);
 	assert.match(attendancePage, /title="Closing attendance session"/);
-	assert.match(attendancePage, /animate-spin/);
+	assert.doesNotMatch(attendancePage, /animate-spin/);
 });

@@ -4,9 +4,25 @@
 		title: string;
 		description?: string;
 		simple?: boolean;
+		value?: number | null;
+		max?: number;
 	};
 
-	let { active = false, title, description, simple = false }: Props = $props();
+	let {
+		active = false,
+		title,
+		description,
+		simple = false,
+		value = null,
+		max = 100
+	}: Props = $props();
+
+	const hasMeasuredProgress = $derived(value !== null && Number.isFinite(value));
+	const progressPercent = $derived.by(() => {
+		if (!hasMeasuredProgress) return 0;
+		const safeMax = max > 0 ? max : 100;
+		return Math.min(100, Math.max(0, (Number(value) / safeMax) * 100));
+	});
 </script>
 
 {#if active}
@@ -23,8 +39,7 @@
 				{#if simple}
 					<span class="size-2 rounded-full bg-primary"></span>
 				{:else}
-					<span class="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary"
-					></span>
+					<span class="size-4 rounded-full border-2 border-primary/25 bg-primary"></span>
 				{/if}
 			</span>
 
@@ -32,7 +47,7 @@
 				<div class="flex items-center justify-between gap-3">
 					<div class="text-sm font-semibold text-foreground">{title}</div>
 					<div class="label-mono text-[10px] text-primary">
-						{simple ? 'In progress' : 'Working'}
+						{hasMeasuredProgress ? `${Math.round(progressPercent)}%` : 'In progress'}
 					</div>
 				</div>
 
@@ -40,44 +55,27 @@
 					<p class="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
 				{/if}
 
-				{#if simple}
+				{#if hasMeasuredProgress}
+					<div
+						class="mt-3 h-2 overflow-hidden rounded-pill border border-primary/20 bg-background"
+						role="progressbar"
+						aria-valuemin="0"
+						aria-valuemax={max}
+						aria-valuenow={Number(value)}
+						aria-valuetext={`${Math.round(progressPercent)} percent`}
+					>
+						<div class="h-full rounded-pill bg-primary" style={`width: ${progressPercent}%`}></div>
+					</div>
+				{:else if !simple}
 					<div
 						class="mt-3 h-2 rounded-pill border border-primary/20 bg-background"
 						role="progressbar"
 						aria-valuetext={title}
 					>
-						<div class="h-full w-2/5 rounded-pill bg-primary"></div>
-					</div>
-				{:else}
-					<div
-						class="mt-3 h-2 overflow-hidden rounded-pill border border-primary/20 bg-background"
-						role="progressbar"
-						aria-valuemin="0"
-						aria-valuemax="100"
-						aria-valuetext={title}
-					>
-						<div class="task-progress-fill h-full w-1/3 rounded-pill bg-primary"></div>
+						<div class="h-full w-2/5 rounded-pill bg-primary/70"></div>
 					</div>
 				{/if}
 			</div>
 		</div>
 	</div>
 {/if}
-
-<style>
-	.task-progress-fill {
-		animation: progress-slide 1.2s ease-in-out infinite;
-	}
-
-	@keyframes progress-slide {
-		0% {
-			transform: translateX(-120%);
-		}
-		50% {
-			transform: translateX(110%);
-		}
-		100% {
-			transform: translateX(330%);
-		}
-	}
-</style>
