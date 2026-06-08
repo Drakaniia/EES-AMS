@@ -12,6 +12,7 @@
 		CloudUpload,
 		DatabaseBackup,
 		Download,
+		FolderOpen,
 		FolderSync,
 		History,
 		LogOut,
@@ -69,6 +70,7 @@
 		deleteClass,
 		chooseBackupSyncFolder,
 		chooseRestoreBackup,
+		clearAuditEvents,
 		clearBackupSyncFolder,
 		connectGoogleDriveBackup,
 		createBackupNow,
@@ -82,6 +84,7 @@
 		getSf2WorkbookSettings,
 		importSf2Workbook,
 		importAll,
+		openBackupFolder,
 		restoreBackup,
 		uploadLatestBackupToGoogleDrive,
 		updateSf2WorkbookSettings,
@@ -184,6 +187,7 @@
 	let backupStatus = $state<BackupStatus | null>(null);
 	let backupSummaries = $state<BackupSummary[]>([]);
 	let backupBusy = $state(false);
+	let backupFolderOpening = $state(false);
 	let syncFolderBusy = $state(false);
 	let googleDriveBusy = $state(false);
 	let restoreChoosing = $state(false);
@@ -191,6 +195,8 @@
 	let restorePreview = $state<BackupPreview | null>(null);
 	let auditEvents = $state<AuditEvent[]>([]);
 	let auditLoading = $state(false);
+	let auditClearing = $state(false);
+	let auditClearTarget = $state(false);
 
 	// SF2 workbook state
 	let sf2Importing = $state(false);
@@ -307,6 +313,22 @@
 			toast(`Audit trail unavailable: ${msg}`, false);
 		} finally {
 			auditLoading = false;
+		}
+	}
+
+	async function confirmClearAuditEvents() {
+		if (auditClearing) return;
+		auditClearing = true;
+		try {
+			const deletedCount = await clearAuditEvents();
+			auditEvents = [];
+			auditClearTarget = false;
+			toast(deletedCount === 1 ? 'Cleared 1 audit event' : `Cleared ${deletedCount} audit events`);
+		} catch (err: unknown) {
+			const msg = errorMessage(err, 'Audit trail could not be cleared');
+			toast(`Audit trail could not be cleared: ${msg}`, false);
+		} finally {
+			auditClearing = false;
 		}
 	}
 
@@ -612,6 +634,20 @@
 			toast(`Backup failed: ${msg}`, false);
 		} finally {
 			backupBusy = false;
+		}
+	}
+
+	async function onOpenBackupFolder() {
+		if (backupFolderOpening) return;
+		backupFolderOpening = true;
+		try {
+			await openBackupFolder();
+			toast('Backup folder opened');
+		} catch (error) {
+			const msg = errorMessage(error, 'Failed to open backup folder');
+			toast(`Failed to open backup folder: ${msg}`, false);
+		} finally {
+			backupFolderOpening = false;
 		}
 	}
 
@@ -1001,7 +1037,7 @@
 		{:else}
 			<div class="grid gap-6 px-6 py-6 md:px-12 lg:grid-cols-12">
 				<!-- ── Class Management ────────────────────────────────────────── -->
-				<div class="space-y-6 lg:col-span-8">
+				<div class="flex flex-col gap-6 lg:col-span-8">
 					<section class="overflow-hidden rounded-2xl border border-border bg-card">
 						<div class="flex items-center justify-between p-6 pb-4">
 							<h3 class="text-lg font-medium">Classes & Schedule</h3>
@@ -1115,7 +1151,7 @@
 					</section>
 
 					<!-- ── Backups ───────────────────────────────────────────────────── -->
-					<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
+					<section class="order-4 space-y-5 rounded-2xl border border-border bg-card p-6">
 						<div class="flex flex-wrap items-start justify-between gap-4">
 							<div>
 								<h3 class="text-lg font-medium">Data Management</h3>
@@ -1142,6 +1178,14 @@
 								>
 									<RotateCcw class="size-4" aria-hidden="true" />
 									{restoreChoosing ? 'Checking...' : 'Restore Backup'}
+								</button>
+								<button
+									onclick={onOpenBackupFolder}
+									disabled={backupFolderOpening}
+									class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+								>
+									<FolderOpen class="size-4" aria-hidden="true" />
+									{backupFolderOpening ? 'Opening...' : 'Open Backup Folder'}
 								</button>
 							</div>
 						</div>
@@ -1336,7 +1380,7 @@
 						</div>
 					</section>
 
-					<section class="space-y-5 rounded-2xl border border-border bg-card p-6">
+					<section class="order-3 space-y-5 rounded-2xl border border-border bg-card p-6">
 						<div class="flex flex-wrap items-start justify-between gap-4">
 							<div>
 								<h3 class="text-lg font-medium">SF2 Workbook</h3>
@@ -1560,15 +1604,27 @@
 								<h3 class="text-lg font-medium">Audit Trail</h3>
 								<p class="text-xs text-muted-foreground">Latest accountability events.</p>
 							</div>
-							<button
-								type="button"
-								onclick={reloadAuditEvents}
-								disabled={auditLoading}
-								class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-								title="Refresh audit trail"
-							>
-								<History class="size-4" aria-hidden="true" />
-							</button>
+							<div class="flex items-center gap-2">
+								<button
+									type="button"
+									onclick={() => (auditClearTarget = true)}
+									disabled={auditLoading || auditClearing || auditEvents.length === 0}
+									class="inline-flex h-9 items-center gap-2 rounded-md border border-destructive/40 bg-background px-3 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
+									title="Clear audit trail"
+								>
+									<Trash2 class="size-4" aria-hidden="true" />
+									Clear
+								</button>
+								<button
+									type="button"
+									onclick={reloadAuditEvents}
+									disabled={auditLoading || auditClearing}
+									class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+									title="Refresh audit trail"
+								>
+									<History class="size-4" aria-hidden="true" />
+								</button>
+							</div>
 						</div>
 
 						{#if auditLoading && auditEvents.length === 0}
@@ -2437,6 +2493,57 @@
 {/if}
 
 <!-- ── Wipe confirmation dialog ─────────────────────────────────────────── -->
+{#if auditClearTarget}
+	<div
+		class="fixed inset-0 z-40 bg-black/50"
+		role="presentation"
+		onclick={() => {
+			if (!auditClearing) auditClearTarget = false;
+		}}
+		onkeydown={(e) => e.key === 'Escape' && !auditClearing && (auditClearTarget = false)}
+	></div>
+
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center p-4"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="audit-clear-dialog-title"
+	>
+		<div
+			class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
+		>
+			<div class="flex flex-col items-center gap-3 text-center">
+				<div class="flex size-12 items-center justify-center rounded-full bg-destructive/10">
+					<Trash2 class="size-6 text-destructive" aria-hidden="true" />
+				</div>
+				<div>
+					<h2 id="audit-clear-dialog-title" class="text-lg font-semibold">Clear audit trail?</h2>
+					<p class="mt-1 text-sm text-muted-foreground">
+						This will permanently remove all Settings audit trail events.
+					</p>
+				</div>
+			</div>
+
+			<div class="flex gap-2">
+				<button
+					onclick={() => (auditClearTarget = false)}
+					disabled={auditClearing}
+					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					Cancel
+				</button>
+				<button
+					onclick={confirmClearAuditEvents}
+					disabled={auditClearing}
+					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					{auditClearing ? 'Clearing...' : 'Clear'}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
 {#if wipeTarget}
 	<div
 		class="fixed inset-0 z-40 bg-black/50"
