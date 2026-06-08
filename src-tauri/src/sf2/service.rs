@@ -541,8 +541,78 @@ pub fn close_day(
     })
 }
 
+pub fn sync_workbook_roster_for_class(pool: DbPool, class_id: &str) -> Result<()> {
+    let _ = sync_latest_workbook_roster_for_class(pool, class_id)?;
+    Ok(())
+}
+
+fn sync_latest_workbook_roster_for_class(
+    pool: DbPool,
+    class_id: &str,
+) -> Result<Option<Sf2TemplateRecord>> {
+    let sf2_repo = Sf2Repository::new(pool.clone());
+    let Some(template) = sf2_repo.latest_template_for_class(class_id)? else {
+        return Ok(None);
+    };
+
+    Ok(Some(sync_template_roster_from_class(pool, &template)?))
+}
+
+fn sync_template_roster_from_class(
+    pool: DbPool,
+    template: &Sf2TemplateRecord,
+) -> Result<Sf2TemplateRecord> {
+    let workbook_path = PathBuf::from(&template.source_path);
+    if !workbook_path.exists() {
+        return Err(AppError::InvalidInput(
+            "The app SF2 working workbook no longer exists. Import the SF2 workbook again"
+                .to_string(),
+        ));
+    }
+
+    let class = ClassRepository::new(pool.clone())
+        .get(&template.active_class_id)?
+        .ok_or_else(|| AppError::InvalidInput("Selected class was not found".to_string()))?;
+    let students = StudentRepository::new(pool.clone()).list_by_class(Some(&class.id))?;
+    reject_duplicate_roster_names(&students)?;
+
+    let row_slots = template_roster_slots();
+    let roster_assignments = template_roster_assignments(&students)?;
+    let analysis = excel::analyze_workbook(&workbook_path)?;
+    let roster_marks = roster_name_marks(&analysis, &roster_assignments, &row_slots);
+    excel::write_marks(&workbook_path, &roster_marks)?;
+
+    let refreshed_analysis = excel::analyze_workbook(&workbook_path)?;
+    let student_mappings =
+        student_mappings_from_roster_assignments(&template.id, &roster_assignments);
+    let date_mappings = date_mappings_from_analysis(&template.id, &refreshed_analysis);
+    let synced_template = Sf2TemplateRecord {
+        layout_fingerprint: layout_fingerprint(&refreshed_analysis),
+        ..template.clone()
+    };
+
+    let sf2_repo = Sf2Repository::new(pool.clone());
+    sf2_repo.update_template_with_mappings(&synced_template, &student_mappings, &date_mappings)?;
+
+    let closed_days = sf2_closed_days_for_report_month(
+        &synced_template,
+        &sf2_repo.closed_days_for_class(&class.id)?,
+    );
+    if let Err(error) = write_template_marks_for_mappings(
+        pool,
+        &synced_template,
+        &closed_days,
+        &student_mappings,
+        &sf2_date_mappings_for_report_month(&synced_template, &date_mappings),
+    ) {
+        log::warn!("failed to backfill synced SF2 workbook marks: {error}");
+    }
+
+    Ok(synced_template)
+}
+
 pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2ExportReadiness> {
-    let sf2_repo = Sf2Repository::new(pool);
+    let sf2_repo = Sf2Repository::new(pool.clone());
     let template = match class_id {
         Some(class_id) if !class_id.is_empty() => sf2_repo.latest_template_for_class(&class_id)?,
         _ => sf2_repo
@@ -595,7 +665,12 @@ pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2Exp
         &template,
         &sf2_repo.closed_days_for_class(&template.active_class_id)?,
     );
-    let mapped_students = sf2_repo.student_mappings_for_template(&template.id)?.len();
+    let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
+    let mapped_students = student_mappings.len();
+    let unmapped_students = unmapped_roster_student_names(pool, &template, &student_mappings)?;
+    if !unmapped_students.is_empty() {
+        issues.push(unmapped_roster_issue(&unmapped_students));
+    }
 
     let date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
     let mapped_dates = sf2_date_mappings_for_report_month(&template, &date_mappings).len();
@@ -689,6 +764,7 @@ pub fn export_workbook(
             AppError::InvalidInput("No SF2 template imported for this class".to_string())
         })?;
     let template = refresh_template_calendar_from_saved_month(pool.clone(), &template)?;
+    let template = sync_template_roster_from_class(pool.clone(), &template)?;
 
     let working_copy_path = PathBuf::from(&template.source_path);
     if !working_copy_path.exists() {
@@ -708,6 +784,14 @@ pub fn export_workbook(
         return Err(AppError::InvalidInput(
             "No attendance dates are mapped to this SF2 report month.".to_string(),
         ));
+    }
+    let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
+    let unmapped_students =
+        unmapped_roster_student_names(pool.clone(), &template, &student_mappings)?;
+    if !unmapped_students.is_empty() {
+        return Err(AppError::InvalidInput(unmapped_roster_issue(
+            &unmapped_students,
+        )));
     }
 
     let output_path = save_workbook_path(&app, &template)?;
@@ -1236,6 +1320,77 @@ fn template_roster_assignments(students: &[Student]) -> Result<Vec<TemplateRoste
             }),
     );
     Ok(assignments)
+}
+
+fn student_mappings_from_roster_assignments(
+    template_id: &str,
+    assignments: &[TemplateRosterAssignment],
+) -> Vec<Sf2StudentMappingRecord> {
+    let mut seen_normalized_names = HashSet::new();
+    assignments
+        .iter()
+        .map(|assignment| {
+            let student = &assignment.student;
+            let slot = assignment.slot;
+            let normalized_name = unique_normalized_name(
+                &mut seen_normalized_names,
+                &student.name,
+                &student.id.to_string(),
+            );
+            Sf2StudentMappingRecord {
+                template_id: template_id.to_string(),
+                student_id: student.id.to_string(),
+                workbook_name: student.name.clone(),
+                normalized_name,
+                row_index: slot.row_index,
+                gender_block: Some(slot.gender_block.to_string()),
+            }
+        })
+        .collect()
+}
+
+fn unmapped_roster_student_names(
+    pool: DbPool,
+    template: &Sf2TemplateRecord,
+    student_mappings: &[Sf2StudentMappingRecord],
+) -> Result<Vec<String>> {
+    let mapped_student_ids = student_mappings
+        .iter()
+        .map(|mapping| mapping.student_id.as_str())
+        .collect::<HashSet<_>>();
+    let students = StudentRepository::new(pool).list_by_class(Some(&template.active_class_id))?;
+
+    Ok(students
+        .into_iter()
+        .filter(|student| !mapped_student_ids.contains(student.id.to_string().as_str()))
+        .map(|student| student.name)
+        .collect())
+}
+
+fn unmapped_roster_issue(student_names: &[String]) -> String {
+    let shown = student_names
+        .iter()
+        .take(5)
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let more = student_names.len().saturating_sub(5);
+    let suffix = if more > 0 {
+        format!(", and {more} more")
+    } else {
+        String::new()
+    };
+
+    format!(
+        "{}{} {} not mapped to an SF2 learner row. Sync the SF2 workbook roster before exporting.",
+        shown,
+        suffix,
+        if student_names.len() == 1 {
+            "is"
+        } else {
+            "are"
+        }
+    )
 }
 
 fn roster_name_marks(
@@ -1932,7 +2087,11 @@ mod tests {
 
         let preview = export_preview(pool, Some(class.id)).expect("preview should be generated");
 
-        assert!(preview.can_export);
+        assert!(!preview.can_export);
+        assert!(preview
+            .issues
+            .iter()
+            .any(|issue| issue.contains("not mapped to an SF2 learner row")));
         assert_eq!(preview.mapped_dates, 1);
         assert_eq!(preview.closed_days, vec![current_june_day.clone()]);
         assert_eq!(
@@ -1957,7 +2116,87 @@ mod tests {
     }
 
     #[test]
-    fn clear_attendance_marks_covers_bundled_template_grid_without_students() {
+    fn export_readiness_blocks_unmapped_roster_students() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database should be created");
+        let workbook = tempfile::NamedTempFile::new().expect("workbook file should be created");
+        let pool = crate::infrastructure::init_db(temp_db.path()).expect("database should init");
+        let current_year = Local::now().year();
+        let mapped_date = format!("{current_year}-06-08");
+        let class = ClassRepository::new(pool.clone())
+            .create(CreateClassRequest {
+                name: "7 - Rose".to_string(),
+                room: Some("N/A".to_string()),
+                day_start: "08:30".to_string(),
+                day_end: "15:30".to_string(),
+                late_after: "08:45".to_string(),
+                sessions: Vec::new(),
+                days: vec![1, 2, 3, 4, 5],
+            })
+            .expect("class should be created");
+        let student_repo = StudentRepository::new(pool.clone());
+        let mapped_student = student_repo
+            .create(CreateStudentRequest {
+                name: "Abao, Ben".to_string(),
+                gender: Some(StudentGender::Male),
+                card_serial: None,
+                class_id: Some(class.id.clone()),
+            })
+            .expect("mapped student should be created");
+        student_repo
+            .create(CreateStudentRequest {
+                name: "Zamora, Ana".to_string(),
+                gender: Some(StudentGender::Female),
+                card_serial: None,
+                class_id: Some(class.id.clone()),
+            })
+            .expect("unmapped student should be created");
+
+        let template = Sf2TemplateRecord {
+            id: "template-readiness".to_string(),
+            source_path: workbook.path().to_string_lossy().to_string(),
+            source_hash: "readiness-hash".to_string(),
+            school_id: "123456".to_string(),
+            school_name: "Sample Integrated School".to_string(),
+            school_year: format!("{}-{}", current_year, current_year + 1),
+            report_month: "JUNE".to_string(),
+            grade_level: "7".to_string(),
+            section: "Rose".to_string(),
+            adviser_name: "Teacher Adviser".to_string(),
+            school_head_name: "School Head".to_string(),
+            layout_fingerprint: "readiness-layout".to_string(),
+            active_class_id: class.id.clone(),
+            imported_at: 0,
+        };
+        let student_mapping = Sf2StudentMappingRecord {
+            template_id: template.id.clone(),
+            student_id: mapped_student.id.to_string(),
+            workbook_name: mapped_student.name.clone(),
+            normalized_name: normalize_learner_name(&mapped_student.name),
+            row_index: 8,
+            gender_block: Some("MALE".to_string()),
+        };
+        let date_mapping = Sf2DateMappingRecord {
+            template_id: template.id.clone(),
+            sheet_name: format!("JUNE {current_year}"),
+            date: mapped_date,
+            column_letter: "F".to_string(),
+            column_index: 6,
+        };
+        Sf2Repository::new(pool.clone())
+            .upsert_template_with_mappings(&template, &[student_mapping], &[date_mapping])
+            .expect("template mappings should save");
+
+        let readiness = export_readiness(pool, Some(class.id)).expect("readiness should load");
+
+        assert!(!readiness.can_export);
+        assert!(readiness
+            .issues
+            .iter()
+            .any(|issue| issue.contains("not mapped to an SF2 learner row")));
+    }
+
+    #[test]
+    fn clear_attendance_marks_for_bundled_workbook_clears_empty_roster_rows() {
         let dates = vec![Sf2DateMappingRecord {
             template_id: "template-1".to_string(),
             sheet_name: "JUNE 2026".to_string(),
@@ -1967,7 +2206,16 @@ mod tests {
         }];
         let template = bundled_template_record("JUNE");
 
-        let marks = clear_attendance_marks_for_records(&template, &dates, &[]);
+        let students = vec![Sf2StudentMappingRecord {
+            template_id: "template-1".to_string(),
+            student_id: "student-1".to_string(),
+            workbook_name: "Learner, Sample".to_string(),
+            normalized_name: "LEARNER,SAMPLE".to_string(),
+            row_index: 8,
+            gender_block: Some("MALE".to_string()),
+        }];
+
+        let marks = clear_attendance_marks_for_records(&template, &dates, &students);
 
         assert_eq!(marks.len(), template_roster_slots().len());
         assert!(marks.contains(&Sf2CellMark {
@@ -1977,9 +2225,21 @@ mod tests {
         }));
         assert!(marks.contains(&Sf2CellMark {
             sheet_name: "JUNE 2026".to_string(),
+            cell_address: "F28".to_string(),
+            value: String::new(),
+        }));
+        assert!(marks.contains(&Sf2CellMark {
+            sheet_name: "JUNE 2026".to_string(),
+            cell_address: "F30".to_string(),
+            value: String::new(),
+        }));
+        assert!(marks.contains(&Sf2CellMark {
+            sheet_name: "JUNE 2026".to_string(),
             cell_address: "F48".to_string(),
             value: String::new(),
         }));
+        assert!(!marks.iter().any(|mark| mark.cell_address == "F29"));
+        assert!(!marks.iter().any(|mark| mark.cell_address == "F49"));
     }
 
     #[test]

@@ -10,12 +10,17 @@ use crate::domain::{
     error::{AppError, Result},
     models::*,
 };
-use chrono::Utc;
+use chrono::{Duration, Local, NaiveDate, TimeZone, Utc};
 use rusqlite::{params, OptionalExtension};
 
 /// Event repository
 pub struct EventRepository {
     pool: DbPool,
+}
+
+enum DuplicateAttendancePolicy {
+    Reject,
+    Skip,
 }
 
 impl EventRepository {
@@ -35,6 +40,41 @@ impl EventRepository {
 
         let events = stmt
             .query_map([], attendance_event_from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        Ok(events)
+    }
+
+    /// List events for a local calendar date.
+    pub fn list_for_local_date(&self, date: &str) -> Result<Vec<AttendanceEvent>> {
+        let date = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+            .map_err(|error| AppError::InvalidInput(format!("invalid attendance date: {error}")))?;
+        let start_naive = date
+            .and_hms_opt(0, 0, 0)
+            .ok_or_else(|| AppError::InvalidInput("invalid attendance date".to_string()))?;
+        let start_local = Local
+            .from_local_datetime(&start_naive)
+            .earliest()
+            .ok_or_else(|| AppError::InvalidInput("invalid local attendance date".to_string()))?;
+        let end_local = start_local + Duration::days(1);
+        let start_timestamp = start_local.with_timezone(&Utc).timestamp();
+        let end_timestamp = end_local.with_timezone(&Utc).timestamp();
+
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at
+             FROM events
+             WHERE event_type = 'in'
+             AND timestamp >= ?1
+             AND timestamp < ?2
+             ORDER BY timestamp DESC",
+        )?;
+
+        let events = stmt
+            .query_map(
+                params![start_timestamp, end_timestamp],
+                attendance_event_from_row,
+            )?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(events)
@@ -98,6 +138,39 @@ impl EventRepository {
     pub fn create(&self, req: CreateEventRequest) -> Result<AttendanceEvent> {
         let mut conn = self.pool.get()?;
         let transaction = conn.transaction()?;
+        let event =
+            Self::insert_create_event(&transaction, req, DuplicateAttendancePolicy::Reject)?
+                .ok_or_else(|| {
+                    AppError::Internal("attendance event was unexpectedly skipped".to_string())
+                })?;
+
+        transaction.commit()?;
+        Ok(event)
+    }
+
+    /// Create multiple attendance events in a single transaction.
+    pub fn create_many(&self, reqs: Vec<CreateEventRequest>) -> Result<Vec<AttendanceEvent>> {
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+        let mut events = Vec::with_capacity(reqs.len());
+
+        for req in reqs {
+            if let Some(event) =
+                Self::insert_create_event(&transaction, req, DuplicateAttendancePolicy::Skip)?
+            {
+                events.push(event);
+            }
+        }
+
+        transaction.commit()?;
+        Ok(events)
+    }
+
+    fn insert_create_event(
+        transaction: &rusqlite::Transaction<'_>,
+        req: CreateEventRequest,
+        duplicate_policy: DuplicateAttendancePolicy,
+    ) -> Result<Option<AttendanceEvent>> {
         let timestamp = req.timestamp.unwrap_or_else(Utc::now);
         let class_id = normalize_optional_text(req.class_id);
         let session_key = normalize_optional_text(req.session_key)
@@ -116,9 +189,12 @@ impl EventRepository {
             .unwrap_or(0);
 
         if existing_count > 0 && override_reason.is_none() {
-            return Err(AppError::DuplicateAttendance(
-                "Student already recorded for this session".to_string(),
-            ));
+            return match duplicate_policy {
+                DuplicateAttendancePolicy::Reject => Err(AppError::DuplicateAttendance(
+                    "Student already recorded for this session".to_string(),
+                )),
+                DuplicateAttendancePolicy::Skip => Ok(None),
+            };
         }
 
         let event = AttendanceEvent {
@@ -172,7 +248,7 @@ impl EventRepository {
             "overrideReason": event.override_reason.as_deref(),
         }))?;
         insert_audit_event(
-            &transaction,
+            transaction,
             AuditEventDraft::new(
                 "attendance_event",
                 Some(event.id.0.to_string()),
@@ -183,8 +259,7 @@ impl EventRepository {
             .metadata_json(metadata_json),
         )?;
 
-        transaction.commit()?;
-        Ok(event)
+        Ok(Some(event))
     }
 
     /// Update an attendance event and record the edit reason

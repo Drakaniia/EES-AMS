@@ -11,6 +11,15 @@ pub fn list_events(
 }
 
 #[tauri::command]
+pub fn list_events_for_date(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    date: String,
+) -> std::result::Result<Vec<AttendanceEvent>, String> {
+    let repo = EventRepository::new(pool.inner().clone());
+    repo.list_for_local_date(&date).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn list_events_for_student(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
     student_id: String,
@@ -37,6 +46,15 @@ pub fn add_event(
 ) -> std::result::Result<AttendanceEvent, String> {
     let repo = EventRepository::new(pool.inner().clone());
     repo.create(req).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn add_events(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    reqs: Vec<CreateEventRequest>,
+) -> std::result::Result<Vec<AttendanceEvent>, String> {
+    let repo = EventRepository::new(pool.inner().clone());
+    repo.create_many(reqs).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

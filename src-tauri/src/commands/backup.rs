@@ -37,6 +37,19 @@ pub fn list_backups(app: tauri::AppHandle) -> std::result::Result<Vec<BackupSumm
 }
 
 #[tauri::command]
+pub fn open_backup_folder(app: tauri::AppHandle) -> std::result::Result<String, String> {
+    let app_dir = app_data_dir(&app)?;
+    let status = backup_service::get_status(&app_dir).map_err(|e| e.to_string())?;
+    let backup_dir = PathBuf::from(status.local_backup_dir);
+
+    fs::create_dir_all(&backup_dir)
+        .map_err(|error| format!("Failed to create backup folder: {error}"))?;
+    open::that(&backup_dir).map_err(|error| format!("Failed to open backup folder: {error}"))?;
+
+    Ok(backup_dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub async fn choose_backup_sync_folder(
     app: tauri::AppHandle,
 ) -> std::result::Result<BackupStatus, String> {

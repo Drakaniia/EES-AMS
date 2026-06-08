@@ -12,6 +12,14 @@ pub fn list_audit_events(
 }
 
 #[tauri::command]
+pub fn clear_audit_events(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+) -> std::result::Result<usize, String> {
+    let repo = AuditRepository::new(pool.inner().clone());
+    repo.clear().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn get_settings(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
 ) -> std::result::Result<Settings, String> {

@@ -1,6 +1,7 @@
 export {
 	chooseBackupSyncFolder,
 	chooseRestoreBackup,
+	clearAuditEvents,
 	clearBackupSyncFolder,
 	connectGoogleDriveBackup,
 	createBackupNow,
@@ -17,6 +18,7 @@ export {
 	listAuditEvents,
 	listBackups,
 	listClasses,
+	openBackupFolder,
 	restoreBackup,
 	saveClass,
 	saveSettings,
