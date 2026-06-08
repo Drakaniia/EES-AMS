@@ -9,11 +9,15 @@
 	import {
 		listStudents,
 		saveStudent,
+		createStudents,
 		deleteStudent,
 		listClasses,
+		getSf2ExportReadiness,
 		type Student,
 		type StudentGender,
-		type Class
+		type CreateStudentRequest,
+		type Class,
+		type Sf2ExportReadiness
 	} from '$lib/db-rust';
 	import { resolve } from '$app/paths';
 
@@ -42,7 +46,7 @@
 	// ── State ────────────────────────────────────────────────────────────────
 	let students = $state<Student[]>([]);
 	let classes = $state<Class[]>([]);
-	let selectedClassId = $state<string>('');
+	let sf2Readiness = $state<Sf2ExportReadiness | null>(null);
 	let searchTerms = $state('');
 	let sortBy = $state<'name' | 'date'>('name');
 	let sortOrder = $state<'asc' | 'desc'>('asc');
@@ -167,6 +171,20 @@
 	const femaleStudentCount = $derived(
 		filteredStudents.filter((student) => student.gender === 'female').length
 	);
+	const sf2Template = $derived(sf2Readiness?.template ?? null);
+	const assignedClass = $derived.by(() => {
+		const sf2ClassId = sf2Template?.classId;
+		return sf2ClassId ? (classes.find((classItem) => classItem.id === sf2ClassId) ?? null) : null;
+	});
+	const canCreateStudents = $derived(Boolean(sf2Template && assignedClass));
+	const studentCreationBlockedMessage = $derived(
+		sf2Template
+			? 'The SF2 workbook class is unavailable. Recreate or import the SF2 workbook before adding students.'
+			: 'Create an SF2 workbook before adding students.'
+	);
+	const assignedClassLabel = $derived(
+		assignedClass?.name ?? (sf2Template ? 'Class unavailable' : 'No SF2 workbook created')
+	);
 
 	function handlePageChange(page: number) {
 		currentPage = page;
@@ -185,9 +203,14 @@
 		loading = true;
 		loadError = null;
 		try {
-			const [s, c] = await Promise.all([listStudents(selectedClassId || undefined), listClasses()]);
+			const [s, c, readiness] = await Promise.all([
+				listStudents(),
+				listClasses(),
+				getSf2ExportReadiness()
+			]);
 			students = s;
 			classes = c;
+			sf2Readiness = readiness;
 			currentPage = 1;
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : 'Database error';
@@ -203,13 +226,6 @@
 		reload();
 	});
 
-	// Re-load when filter changes
-	$effect(() => {
-		if (selectedClassId !== undefined) {
-			reload();
-		}
-	});
-
 	$effect(() => {
 		if (scanFor && cardSerialInput) {
 			cardSerial = scanFor.cardSerial ?? '';
@@ -218,20 +234,25 @@
 	});
 
 	$effect(() => {
-		if (dialogOpen && classes.length === 1 && !formClassId) {
-			formClassId = classes[0].id;
+		if (dialogOpen && assignedClass && formClassId !== assignedClass.id) {
+			formClassId = assignedClass.id;
 		}
 	});
 
 	// ── Dialog helpers ───────────────────────────────────────────────────────
 	function openAdd() {
+		if (!canCreateStudents) {
+			toast(studentCreationBlockedMessage);
+			return;
+		}
+
 		editing = null;
 		entryMode = 'single';
 		entryModeDirection = 1;
 		formName = '';
 		formGender = 'male';
 		formCardSerial = '';
-		formClassId = selectedClassId || (classes.length > 0 ? classes[0].id : '');
+		formClassId = assignedClass?.id ?? '';
 		bulkMaleStudentNames = '';
 		bulkFemaleStudentNames = '';
 		dialogOpen = true;
@@ -244,7 +265,7 @@
 		formName = s.name;
 		formGender = s.gender ?? 'male';
 		formCardSerial = s.cardSerial ?? '';
-		formClassId = s.classId ?? '';
+		formClassId = assignedClass?.id ?? s.classId ?? '';
 		bulkMaleStudentNames = '';
 		bulkFemaleStudentNames = '';
 		dialogOpen = true;
@@ -281,7 +302,12 @@
 		if (savingStudent) return;
 		const name = formName.trim();
 		const serial = formCardSerial.trim().toLowerCase();
-		const classId = formClassId;
+		const classId = formClassId || assignedClass?.id || '';
+
+		if (!editing && !canCreateStudents) {
+			toast(studentCreationBlockedMessage);
+			return;
+		}
 
 		if (!editing && entryMode === 'bulk') {
 			if (bulkStudentCount === 0) {
@@ -291,15 +317,22 @@
 
 			try {
 				savingStudent = true;
-				for (const bulkName of bulkMaleNames) {
-					await saveStudent(createStudent(bulkName, 'male', classId));
-				}
-				for (const bulkName of bulkFemaleNames) {
-					await saveStudent(createStudent(bulkName, 'female', classId));
-				}
+				const studentRequests: CreateStudentRequest[] = [
+					...bulkMaleNames.map((bulkName) => ({
+						name: bulkName,
+						gender: 'male' as const,
+						classId: classId || undefined
+					})),
+					...bulkFemaleNames.map((bulkName) => ({
+						name: bulkName,
+						gender: 'female' as const,
+						classId: classId || undefined
+					}))
+				];
+				const createdStudents = await createStudents(studentRequests);
+				students = [...createdStudents, ...students];
 				toast(`${bulkStudentCount} ${bulkStudentCount === 1 ? 'student' : 'students'} added`);
 				closeDialog();
-				reload();
 			} catch (error) {
 				const msg = error instanceof Error ? error.message : 'Failed to add students';
 				toast(`Error: ${msg}`);
@@ -325,10 +358,12 @@
 					}
 				: createStudent(name, formGender, classId, serial);
 
-			await saveStudent(studentData);
+			const savedStudent = await saveStudent(studentData);
+			students = editing
+				? students.map((student) => (student.id === savedStudent.id ? savedStudent : student))
+				: [savedStudent, ...students];
 			toast(editing ? 'Student updated' : 'Student added');
 			closeDialog();
-			reload();
 		} catch (error) {
 			console.error('Error saving student:', error);
 			const msg = error instanceof Error ? error.message : 'Failed to save student';
@@ -346,9 +381,9 @@
 	async function confirmDelete(target = deleteTarget) {
 		if (!target) return;
 		await deleteStudent(target.id);
+		students = students.filter((student) => student.id !== target.id);
 		toast('Deleted');
 		deleteTarget = null;
-		reload();
 	}
 
 	async function onDelete(event: MouseEvent, student: Student) {
@@ -364,11 +399,13 @@
 		const serial = cardSerial.trim().toLowerCase();
 		if (!scanFor || !serial) return;
 		try {
-			await saveStudent({ ...scanFor, cardSerial: serial });
+			const savedStudent = await saveStudent({ ...scanFor, cardSerial: serial });
+			students = students.map((student) =>
+				student.id === savedStudent.id ? savedStudent : student
+			);
 			toast(`Card paired to ${scanFor.name}`);
 			scanFor = null;
 			cardSerial = '';
-			reload();
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : 'Failed to pair card';
 			toast(`Card pairing failed: ${msg}`);
@@ -390,7 +427,7 @@
 	<PageHeader
 		category="Students"
 		title="Class List"
-		description="Manage your student list and class assignments."
+		description="Manage the student list for the assigned class."
 	>
 		{#snippet actions()}
 			<div class="flex items-center gap-3">
@@ -417,8 +454,11 @@
 				</a>
 
 				<button
+					type="button"
 					onclick={openAdd}
-					class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-6 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
+					disabled={!canCreateStudents}
+					title={canCreateStudents ? 'Add student' : studentCreationBlockedMessage}
+					class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-6 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					<svg
 						class="size-4"
@@ -483,26 +523,14 @@
 				</div>
 			</div>
 
-			<!-- Class Filter -->
+			<!-- Assigned class -->
 			<div class="space-y-2">
-				<div class="label-mono">Filter by Class</div>
-				{#if classes.length <= 1}
-					<div
-						class="flex h-10 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium"
-					>
-						{classes[0]?.name ?? 'No class configured'}
-					</div>
-				{:else}
-					<select
-						bind:value={selectedClassId}
-						class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					>
-						<option value="">All Classes</option>
-						{#each classes as c (c.id)}
-							<option value={c.id}>{c.name}</option>
-						{/each}
-					</select>
-				{/if}
+				<div class="label-mono">Class / Section</div>
+				<div
+					class="flex h-10 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium"
+				>
+					{assignedClassLabel}
+				</div>
 			</div>
 
 			<!-- Stats -->
@@ -766,33 +794,20 @@
 
 				<div class="space-y-1.5">
 					<label for="field-class" class="label-mono">Class / Section</label>
-					{#if classes.length === 1}
-						<div
-							id="field-class"
-							class="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium"
-						>
-							{classes[0].name}
-						</div>
-					{:else}
-						<select
-							id="field-class"
-							bind:value={formClassId}
-							required={classes.length > 0}
-							class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-						>
-							{#if classes.length === 0}
-								<option value="">No classes available</option>
-							{:else}
-								<option value="" disabled>Select a class</option>
-								{#each classes as c (c.id)}
-									<option value={c.id}>{c.name}</option>
-								{/each}
-							{/if}
-						</select>
-					{/if}
-					{#if classes.length === 0}
+					<div
+						id="field-class"
+						class="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium"
+					>
+						{assignedClassLabel}
+					</div>
+					{#if !sf2Template}
 						<p class="mt-1 text-xs text-muted-foreground">
-							Create a class first to assign students, or add student without class assignment.
+							Create an SF2 workbook in Settings before adding students.
+						</p>
+					{:else if !assignedClass}
+						<p class="mt-1 text-xs text-muted-foreground">
+							The SF2 workbook class is unavailable. Recreate or import the SF2 workbook before
+							adding students.
 						</p>
 					{/if}
 				</div>
@@ -906,7 +921,9 @@
 					</button>
 					<button
 						type="submit"
-						disabled={savingStudent || (!editing && entryMode === 'bulk' && bulkStudentCount === 0)}
+						disabled={savingStudent ||
+							(!editing &&
+								(!canCreateStudents || (entryMode === 'bulk' && bulkStudentCount === 0)))}
 						class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						{#if savingStudent}
@@ -1055,11 +1072,9 @@
 {#snippet emptyState()}
 	<div class="mt-8 rounded-2xl border border-dashed border-border bg-surface/50 p-12 text-center">
 		<p class="text-muted-foreground">
-			{#if selectedClassId}
-				No students assigned to this class yet.
-			{:else}
-				No students yet. Add your first student to begin.
-			{/if}
+			{canCreateStudents
+				? 'No students yet. Add your first student to begin.'
+				: studentCreationBlockedMessage}
 		</p>
 	</div>
 {/snippet}
