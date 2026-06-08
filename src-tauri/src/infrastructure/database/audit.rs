@@ -157,4 +157,10 @@ impl AuditRepository {
 
         Ok(events)
     }
+
+    pub fn clear(&self) -> Result<usize> {
+        let conn = self.pool.get()?;
+        let deleted = conn.execute("DELETE FROM audit_events", [])?;
+        Ok(deleted)
+    }
 }

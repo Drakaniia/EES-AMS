@@ -6,10 +6,12 @@ pub mod sf2;
 
 use commands::{
     add_event,
+    add_events,
     // Updater commands
     check_for_updates,
     choose_backup_sync_folder,
     choose_restore_backup,
+    clear_audit_events,
     clear_backup_sync_folder,
     close_sf2_attendance_day,
     connect_google_drive_backup,
@@ -17,6 +19,7 @@ use commands::{
     create_class,
     create_sf2_workbook_from_template,
     create_student,
+    create_students,
     delete_class,
     delete_event,
     delete_student,
@@ -46,9 +49,11 @@ use commands::{
     list_classes,
     // Event commands
     list_events,
+    list_events_for_date,
     list_events_for_student,
     // Student commands
     list_students,
+    open_backup_folder,
     open_sf2_workbook,
     restore_backup,
     save_settings,
@@ -73,6 +78,7 @@ pub fn run() {
             get_student,
             find_student_by_card,
             create_student,
+            create_students,
             update_student,
             delete_student,
             // Class commands
@@ -83,13 +89,16 @@ pub fn run() {
             delete_class,
             // Event commands
             list_events,
+            list_events_for_date,
             list_events_for_student,
             last_event_for_student,
             add_event,
+            add_events,
             update_event,
             delete_event,
             list_attendance_audit,
             list_audit_events,
+            clear_audit_events,
             // Settings commands
             get_settings,
             save_settings,
@@ -103,6 +112,7 @@ pub fn run() {
             get_backup_status,
             create_backup_now,
             list_backups,
+            open_backup_folder,
             choose_backup_sync_folder,
             clear_backup_sync_folder,
             connect_google_drive_backup,

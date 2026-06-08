@@ -9,6 +9,7 @@ use crate::domain::{
 };
 use chrono::Utc;
 use rusqlite::{params, OptionalExtension};
+use std::collections::HashSet;
 
 /// Student repository
 pub struct StudentRepository {
@@ -132,6 +133,86 @@ impl StudentRepository {
         transaction.commit()?;
 
         Ok(student)
+    }
+
+    /// Create multiple students in a single transaction.
+    pub fn create_many(&self, reqs: Vec<CreateStudentRequest>) -> Result<Vec<Student>> {
+        let mut normalized = Vec::with_capacity(reqs.len());
+        let mut seen_card_serials = HashSet::new();
+
+        for req in reqs {
+            let card_serial = normalize_optional_text(req.card_serial);
+            let class_id = normalize_optional_text(req.class_id);
+
+            if let Some(serial) = card_serial.as_ref() {
+                if !seen_card_serials.insert(serial.clone()) {
+                    return Err(AppError::CardAlreadyRegistered(serial.clone()));
+                }
+            }
+
+            normalized.push((req.name, req.gender, card_serial, class_id));
+        }
+
+        let mut conn = self.pool.get()?;
+        for (_, _, card_serial, _) in &normalized {
+            if let Some(serial) = card_serial.as_ref() {
+                let exists = conn
+                    .query_row(
+                        "SELECT 1 FROM students WHERE card_serial = ?1 LIMIT 1",
+                        params![serial],
+                        |_| Ok(true),
+                    )
+                    .optional()?
+                    .unwrap_or(false);
+
+                if exists {
+                    return Err(AppError::CardAlreadyRegistered(serial.clone()));
+                }
+            }
+        }
+
+        let transaction = conn.transaction()?;
+        let mut students = Vec::with_capacity(normalized.len());
+
+        for (name, gender, card_serial, class_id) in normalized {
+            let student = Student {
+                id: StudentId::new(),
+                name,
+                gender,
+                card_serial,
+                class_id,
+                created_at: Utc::now(),
+            };
+
+            transaction.execute(
+                "INSERT INTO students (id, name, gender, card_serial, class_id, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    student.id.0.to_string(),
+                    student.name.as_str(),
+                    student.gender.map(StudentGender::as_db_value),
+                    student.card_serial.as_deref(),
+                    student.class_id.as_deref(),
+                    student.created_at.timestamp(),
+                ],
+            )?;
+            let after_json = serialize_audit_payload("student audit payload", &student)?;
+            insert_audit_event(
+                &transaction,
+                AuditEventDraft::new(
+                    "student",
+                    Some(student.id.to_string()),
+                    "create",
+                    format!("Created student {}", student.name),
+                )
+                .after_json(after_json),
+            )?;
+            students.push(student);
+        }
+
+        transaction.commit()?;
+
+        Ok(students)
     }
 
     /// Update a student

@@ -10,6 +10,7 @@ import type {
 	AttendanceType,
 	AttendanceMode,
 	Settings,
+	CreateStudentRequest,
 	CreateEventRequest,
 	UpdateEventRequest,
 	ExportData,
@@ -42,6 +43,7 @@ export type {
 	AttendanceType,
 	AttendanceMode,
 	Settings,
+	CreateStudentRequest,
 	CreateEventRequest,
 	UpdateEventRequest,
 	ExportData,
@@ -99,6 +101,10 @@ export async function saveStudent(student: Student): Promise<Student> {
 			}
 		});
 	}
+}
+
+export async function createStudents(students: CreateStudentRequest[]): Promise<Student[]> {
+	return await invoke('create_students', { reqs: students });
 }
 
 export async function deleteStudent(id: string): Promise<void> {
@@ -198,6 +204,10 @@ export async function listEvents(): Promise<AttendanceEvent[]> {
 	return await invoke('list_events');
 }
 
+export async function listEventsForDate(date: string): Promise<AttendanceEvent[]> {
+	return await invoke('list_events_for_date', { date });
+}
+
 export async function listEventsForStudent(studentId: string): Promise<AttendanceEvent[]> {
 	return await invoke('list_events_for_student', { studentId });
 }
@@ -209,6 +219,12 @@ export async function lastEventForStudent(studentId: string): Promise<Attendance
 export async function addEvent(event: CreateEventRequest): Promise<AttendanceEvent> {
 	return await invoke('add_event', {
 		req: event
+	});
+}
+
+export async function addEvents(events: CreateEventRequest[]): Promise<AttendanceEvent[]> {
+	return await invoke('add_events', {
+		reqs: events
 	});
 }
 
@@ -234,6 +250,10 @@ export async function listAttendanceAudit(filters?: {
 
 export async function listAuditEvents(limit = 200): Promise<AuditEvent[]> {
 	return await invoke('list_audit_events', { limit });
+}
+
+export async function clearAuditEvents(): Promise<number> {
+	return await invoke('clear_audit_events');
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -333,6 +353,10 @@ export async function createBackupNow(): Promise<BackupStatus> {
 
 export async function listBackups(): Promise<BackupSummary[]> {
 	return await invoke('list_backups');
+}
+
+export async function openBackupFolder(): Promise<string> {
+	return await invoke('open_backup_folder');
 }
 
 export async function chooseBackupSyncFolder(): Promise<BackupStatus> {
