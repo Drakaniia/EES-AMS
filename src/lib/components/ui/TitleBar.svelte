@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { getCurrentWindow } from '@tauri-apps/api/window';
-	import { Minus, Square, X } from 'lucide-svelte';
+	import { Minimize2, Minus, Square, X } from 'lucide-svelte';
 
 	let isMaximized = $state(false);
 	let appWindow: ReturnType<typeof getCurrentWindow> | null = null;
+	let unlistenResize: (() => void) | null = null;
 
 	function isTauriRuntime() {
 		return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -15,19 +16,35 @@
 
 		try {
 			appWindow = getCurrentWindow();
+			void syncMaximizedState();
 			appWindow
-				.isMaximized()
-				.then((maximized) => {
-					isMaximized = maximized;
+				.onResized(() => {
+					void syncMaximizedState();
+				})
+				.then((unlisten) => {
+					unlistenResize = unlisten;
 				})
 				.catch((error) => {
-					console.error('Failed to initialize window:', error);
+					console.error('Failed to listen for window resize:', error);
 				});
 		} catch (error) {
 			appWindow = null;
 			console.error('Failed to initialize window:', error);
 		}
 	});
+
+	onDestroy(() => {
+		unlistenResize?.();
+	});
+
+	async function syncMaximizedState() {
+		if (!appWindow) return;
+		try {
+			isMaximized = await appWindow.isMaximized();
+		} catch (error) {
+			console.error('Failed to read maximize state:', error);
+		}
+	}
 
 	async function minimize() {
 		if (!appWindow) {
@@ -51,11 +68,10 @@
 
 			if (currentlyMaximized) {
 				await appWindow.unmaximize();
-				isMaximized = false;
 			} else {
 				await appWindow.maximize();
-				isMaximized = true;
 			}
+			await syncMaximizedState();
 		} catch (error) {
 			console.error('Failed to toggle maximize:', error);
 		}
@@ -95,7 +111,11 @@
 			title={isMaximized ? 'Restore' : 'Maximize'}
 			aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
 		>
-			<Square size={14} aria-hidden="true" />
+			{#if isMaximized}
+				<Minimize2 size={14} aria-hidden="true" />
+			{:else}
+				<Square size={14} aria-hidden="true" />
+			{/if}
 		</button>
 		<button class="window-control close" onclick={close} title="Close" aria-label="Close window">
 			<X size={14} aria-hidden="true" />
