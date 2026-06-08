@@ -28,16 +28,16 @@ A cross-platform desktop application for student attendance management at Espiri
 ┌─────────────────────────────────────────────────────────────┐
 │                    Laptop (Tauri App)                       │
 │                                                             │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
-│  │   Svelte UI  │───▶│  Tauri Cmds  │───▶│   SQLite DB  │ │
-│  │  (Frontend)  │    │    (Rust)    │    │  (Persistent)│ │
-│  └──────────────┘    └──────────────┘    └──────────────┘ │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐   │
+│  │   Svelte UI  │───▶│  Tauri Cmds │───▶│   SQLite DB  │   │
+│  │  (Frontend)  │    │    (Rust)    │    │  (Persistent)│   │
+│  └──────────────┘    └──────────────┘    └──────────────┘   │
 │         │                                                   │
-│    ┌────▼────┐                                             │
-│    │  Card   │  Tap card → auto-types serial → lookup     │
-│    │ Reader  │                                             │
-│    └─────────┘                                             │
-│                                                            │
+│    ┌────▼────┐                                              │
+│    │  Card   │  Tap card → auto-types serial → lookup       │
+│    │ Reader  │                                              │
+│    └─────────┘                                              │
+│                                                             │
 │              USB/Bluetooth Card Reader                      │
 └─────────────────────────────────────────────────────────────┘
 ```## Prerequisites
