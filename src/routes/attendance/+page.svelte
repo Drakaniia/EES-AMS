@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { CheckCheck, Grid2X2, List, Search, ScanLine, ShieldAlert } from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -13,13 +14,15 @@
 	import {
 		listStudents,
 		listClasses,
-		listEvents,
+		listEventsForDate,
 		findStudentByCard,
 		addEvent,
+		addEvents,
 		deleteEvent,
 		closeSf2AttendanceDay,
 		type AttendanceEvent,
 		type AttendanceType,
+		type CreateEventRequest,
 		type Student,
 		type Class
 	} from '$lib/db-rust';
@@ -130,7 +133,11 @@
 	}
 
 	async function reload() {
-		const [s, c, e] = await Promise.all([listStudents(), listClasses(), listEvents()]);
+		const [s, c, e] = await Promise.all([
+			listStudents(),
+			listClasses(),
+			listEventsForDate(todayKey)
+		]);
 		students = s;
 		classes = c;
 		events = e;
@@ -142,12 +149,17 @@
 	const currentClass = $derived(classes.find((c) => c.id === selectedClassId));
 	const today = $derived(todayKey);
 	const todayEvents = $derived(events.filter((event) => fmtDate(event.timestamp) === today));
+	const studentById = $derived(new SvelteMap(students.map((student) => [student.id, student])));
+	const classById = $derived(new SvelteMap(classes.map((classItem) => [classItem.id, classItem])));
 
 	const manualStudents = $derived.by(() => {
 		const query = rosterQuery.trim().toLowerCase();
 		return students
 			.filter((student) => {
-				const matchesClass = !selectedClassId || student.classId === selectedClassId;
+				const matchesClass =
+					!selectedClassId ||
+					student.classId === selectedClassId ||
+					(classes.length <= 1 && !student.classId);
 				const matchesQuery = !query || student.name.toLowerCase().includes(query);
 				return matchesClass && matchesQuery;
 			})
@@ -159,7 +171,10 @@
 		return students
 			.filter((student) => {
 				const matchesQuery = !query || student.name.toLowerCase().includes(query);
-				const matchesClass = !selectedClassId || student.classId === selectedClassId;
+				const matchesClass =
+					!selectedClassId ||
+					student.classId === selectedClassId ||
+					(classes.length <= 1 && !student.classId);
 				return matchesQuery && matchesClass;
 			})
 			.sort((a, b) => a.name.localeCompare(b.name));
@@ -168,16 +183,33 @@
 	const recentActivity = $derived.by(() =>
 		todayEvents
 			.filter((event) => {
-				const student = students.find((s) => s.id === event.studentId);
+				const student = studentById.get(event.studentId);
 				return (
 					!selectedClassId ||
 					event.classId === selectedClassId ||
-					student?.classId === selectedClassId
+					student?.classId === selectedClassId ||
+					(classes.length <= 1 && !event.classId && !student?.classId)
 				);
 			})
 			.sort((a, b) => eventTime(b) - eventTime(a))
 			.slice(0, 14)
 	);
+
+	const lastEventByStudentForSession = $derived.by(() => {
+		const byStudent = new SvelteMap<string, AttendanceEvent>();
+
+		for (const event of todayEvents) {
+			const student = studentById.get(event.studentId);
+			if (!student || !matchesCurrentSession(event, student)) continue;
+
+			const previous = byStudent.get(event.studentId);
+			if (!previous || eventTime(event) > eventTime(previous)) {
+				byStudent.set(event.studentId, event);
+			}
+		}
+
+		return byStudent;
+	});
 
 	const pendingManualStudents = $derived.by(() =>
 		manualStudents.filter((student) => getNextAttendanceType(student) === 'in')
@@ -249,11 +281,11 @@
 	}
 
 	function studentName(studentId: string) {
-		return students.find((student) => student.id === studentId)?.name ?? 'Unknown student';
+		return studentById.get(studentId)?.name ?? 'Unknown student';
 	}
 
 	function getStudentClass(student: Student) {
-		return classes.find((classItem) => classItem.id === student.classId);
+		return student.classId ? classById.get(student.classId) : undefined;
 	}
 
 	function getAttendanceClass(student: Student) {
@@ -307,9 +339,7 @@
 	}
 
 	function getLastEventForSession(student: Student) {
-		return todayEvents
-			.filter((event) => event.studentId === student.id && matchesCurrentSession(event, student))
-			.sort((a, b) => eventTime(b) - eventTime(a))[0];
+		return lastEventByStudentForSession.get(student.id);
 	}
 
 	function getNextAttendanceType(student: Student): AttendanceType | null {
@@ -621,10 +651,10 @@
 		lastEventId = null;
 		if (undoTimer) clearTimeout(undoTimer);
 
+		const eventRequests: CreateEventRequest[] = [];
+		const eventMetadata = new SvelteMap<string, { student: Student; isLate: boolean }>();
 		const createdEvents: AttendanceEvent[] = [];
 		const createdLogLines: LogLine[] = [];
-		let skippedCount = 0;
-		let failedCount = 0;
 		let lateCount = 0;
 
 		try {
@@ -632,35 +662,34 @@
 				const draft = getAttendanceDraft(student, timestamp);
 				const isLate = draft.isLate;
 
-				try {
-					const createdEvent = await addEvent({
-						studentId: student.id,
-						classId: draft.classId,
-						type: 'in',
-						note: isLate ? 'Late' : undefined,
-						sessionKey: draft.sessionKey,
-						timestamp: new Date(timestamp).toISOString()
-					});
+				eventRequests.push({
+					studentId: student.id,
+					classId: draft.classId,
+					type: 'in',
+					note: isLate ? 'Late' : undefined,
+					sessionKey: draft.sessionKey,
+					timestamp: new Date(timestamp).toISOString()
+				});
+				eventMetadata.set(student.id, { student, isLate });
+			}
 
-					createdEvents.push(createdEvent);
-					createdLogLines.push({
-						id: createdEvent.id,
-						studentName: student.name,
-						type: 'in',
-						isLate,
-						message: isLate ? 'Recorded late' : 'Recorded by Present all',
-						timestamp
-					});
+			const batchEvents = await addEvents(eventRequests);
+			createdEvents.push(...batchEvents);
+			const skippedCount = Math.max(0, eventRequests.length - batchEvents.length);
 
-					if (isLate) lateCount += 1;
-				} catch (err: unknown) {
-					const message = err instanceof Error ? err.message : String(err);
-					if (message.includes('duplicate attendance') || message.includes('already recorded')) {
-						skippedCount += 1;
-						continue;
-					}
-					failedCount += 1;
-				}
+			for (const createdEvent of batchEvents) {
+				const metadata = eventMetadata.get(createdEvent.studentId);
+				if (!metadata) continue;
+				createdLogLines.push({
+					id: createdEvent.id,
+					studentName: metadata.student.name,
+					type: 'in',
+					isLate: metadata.isLate,
+					message: metadata.isLate ? 'Recorded late' : 'Recorded by Present all',
+					timestamp
+				});
+
+				if (metadata.isLate) lateCount += 1;
 			}
 
 			if (createdEvents.length > 0) {
@@ -673,9 +702,11 @@
 			} marked present`;
 			const lateLabel = lateCount > 0 ? ` (${lateCount} late)` : '';
 			const skippedLabel = skippedCount > 0 ? `; ${skippedCount} already recorded` : '';
-			const failedLabel = failedCount > 0 ? `; ${failedCount} failed` : '';
 
-			toast(`${recordedLabel}${lateLabel}${skippedLabel}${failedLabel}`, failedCount === 0);
+			toast(`${recordedLabel}${lateLabel}${skippedLabel}`);
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err);
+			toast(`Present all failed: ${message}`, false);
 		} finally {
 			isPresentingAll = false;
 			isProcessing = false;
@@ -709,7 +740,9 @@
 			return;
 		}
 
-		const classStudents = students.filter((student) => student.classId === classObj.id);
+		const classStudents = students.filter(
+			(student) => student.classId === classObj.id || (classes.length <= 1 && !student.classId)
+		);
 		const presentCount = classStudents.filter(
 			(student) => getLastEventForSession(student)?.type === 'in'
 		).length;
@@ -817,7 +850,7 @@
 				<div class="relative w-full max-w-md text-center">
 					<h3 class="display-lg mb-2">No active class</h3>
 					<p class="mb-8 text-muted-foreground">
-						Choose a class from the header, or let the active schedule select one.
+						Check the assigned class schedule in Settings before starting a live session.
 					</p>
 				</div>
 			{:else}
