@@ -1,12 +1,11 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
-	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
-	import TaskProgress from '$lib/components/ui/TaskProgress.svelte';
+	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import {
 		Cloud,
 		CloudUpload,
@@ -35,8 +34,6 @@
 		sf2ImportedSettingsReviewNotice,
 		sf2SelectedFirstAttendanceLabel,
 		sf2TemplateDraftFromFields,
-		sf2TemplateProgressDescription as resolveSf2TemplateProgressDescription,
-		sf2TemplateProgressTitle as resolveSf2TemplateProgressTitle,
 		shouldPromptForSf2SettingsUpdate,
 		type Sf2DraftDefaults,
 		type Sf2WorkbookDraftFields
@@ -229,32 +226,6 @@
 			firstSchoolDay: sf2DraftFirstSchoolDay
 		})
 	);
-	let sf2TemplateProgressTitle = $derived(resolveSf2TemplateProgressTitle(sf2TemplateCreating));
-	let sf2TemplateProgressDescription = $derived(
-		resolveSf2TemplateProgressDescription(sf2TemplateCreating)
-	);
-	let sf2Progress = $state<{
-		task: 'import' | 'create' | 'settings' | string;
-		current: number;
-		total: number;
-		message: string;
-	} | null>(null);
-	let sf2ProgressValue = $derived(
-		sf2Progress?.task === 'settings' ? null : (sf2Progress?.current ?? null)
-	);
-	let sf2ProgressMax = $derived(sf2Progress?.total ?? 100);
-	let sf2ImportProgressDescription = $derived(
-		sf2Progress?.task === 'import'
-			? sf2Progress.message
-			: 'Reading the Excel form, matching learners, and preparing the working copy.'
-	);
-	let sf2TemplateProgressDetail = $derived(
-		sf2Progress && (sf2Progress.task === 'create' || sf2Progress.task === 'settings')
-			? sf2Progress.message
-			: sf2TemplateProgressDescription
-	);
-	let unlistenSf2Progress: UnlistenFn | null = null;
-
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string, ok = true) {
 		toastMessage = msg;
@@ -754,12 +725,6 @@
 	async function onImportSf2() {
 		if (sf2Importing) return;
 		sf2Importing = true;
-		sf2Progress = {
-			task: 'import',
-			current: 0,
-			total: 7,
-			message: 'Starting SF2 import'
-		};
 
 		try {
 			const validation = await validateSf2WorkbookImport();
@@ -778,7 +743,6 @@
 			toast(`SF2 import failed: ${msg}`, false);
 		} finally {
 			sf2Importing = false;
-			sf2Progress = null;
 		}
 	}
 
@@ -815,12 +779,6 @@
 	async function proceedWithSf2MismatchImport() {
 		if (!sf2Validation || sf2Importing) return;
 		sf2Importing = true;
-		sf2Progress = {
-			task: 'import',
-			current: 3,
-			total: 7,
-			message: 'Continuing authorized SF2 import'
-		};
 		try {
 			await runSf2Import(sf2Validation, true);
 		} catch (error) {
@@ -828,7 +786,6 @@
 			toast(`SF2 import failed: ${msg}`, false);
 		} finally {
 			sf2Importing = false;
-			sf2Progress = null;
 		}
 	}
 
@@ -934,20 +891,8 @@
 		const creating = sf2TemplateDialogMode === 'create';
 		if (creating) {
 			sf2TemplateCreating = true;
-			sf2Progress = {
-				task: 'create',
-				current: 0,
-				total: 2,
-				message: 'Starting SF2 workbook creation'
-			};
 		} else {
 			sf2SettingsSaving = true;
-			sf2Progress = {
-				task: 'settings',
-				current: 0,
-				total: 1,
-				message: 'Saving SF2 workbook settings'
-			};
 		}
 		try {
 			const draft = sf2DraftPayload();
@@ -970,7 +915,6 @@
 		} finally {
 			sf2TemplateCreating = false;
 			sf2SettingsSaving = false;
-			sf2Progress = null;
 		}
 	}
 
@@ -988,29 +932,6 @@
 		reload();
 		reloadBackups();
 		reloadAuditEvents();
-		listen<{
-			task?: string;
-			current?: number;
-			total?: number;
-			message?: string;
-		}>('sf2-progress', (event) => {
-			const payload = event.payload;
-			if (!payload || typeof payload.current !== 'number' || typeof payload.total !== 'number') {
-				return;
-			}
-			sf2Progress = {
-				task: payload.task ?? 'import',
-				current: payload.current,
-				total: payload.total,
-				message: payload.message ?? 'Working'
-			};
-		}).then((unlisten) => {
-			unlistenSf2Progress = unlisten;
-		});
-	});
-
-	onDestroy(() => {
-		unlistenSf2Progress?.();
 	});
 </script>
 
@@ -1168,7 +1089,11 @@
 									disabled={backupBusy}
 									class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 								>
-									<DatabaseBackup class="size-4" aria-hidden="true" />
+									{#if backupBusy}
+										<Spinner />
+									{:else}
+										<DatabaseBackup class="size-4" aria-hidden="true" />
+									{/if}
 									{backupBusy ? 'Backing Up...' : 'Back Up Now'}
 								</button>
 								<button
@@ -1176,7 +1101,11 @@
 									disabled={restoreChoosing || restoreBusy}
 									class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 								>
-									<RotateCcw class="size-4" aria-hidden="true" />
+									{#if restoreChoosing}
+										<Spinner />
+									{:else}
+										<RotateCcw class="size-4" aria-hidden="true" />
+									{/if}
 									{restoreChoosing ? 'Checking...' : 'Restore Backup'}
 								</button>
 								<button
@@ -1184,7 +1113,11 @@
 									disabled={backupFolderOpening}
 									class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 								>
-									<FolderOpen class="size-4" aria-hidden="true" />
+									{#if backupFolderOpening}
+										<Spinner />
+									{:else}
+										<FolderOpen class="size-4" aria-hidden="true" />
+									{/if}
 									{backupFolderOpening ? 'Opening...' : 'Open Backup Folder'}
 								</button>
 							</div>
@@ -1307,7 +1240,11 @@
 									disabled={googleDriveBusy}
 									class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 								>
-									<CloudUpload class="size-4" aria-hidden="true" />
+									{#if googleDriveBusy}
+										<Spinner />
+									{:else}
+										<CloudUpload class="size-4" aria-hidden="true" />
+									{/if}
 									Upload Latest to Drive
 								</button>
 								<button
@@ -1315,7 +1252,11 @@
 									disabled={googleDriveBusy}
 									class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 								>
-									<LogOut class="size-4" aria-hidden="true" />
+									{#if googleDriveBusy}
+										<Spinner />
+									{:else}
+										<LogOut class="size-4" aria-hidden="true" />
+									{/if}
 									Disconnect Google Drive
 								</button>
 							{:else}
@@ -1327,7 +1268,11 @@
 										? 'Set EES_AMS_GOOGLE_CLIENT_ID before building the app'
 										: 'Open browser sign-in for full Google Drive access'}
 								>
-									<Cloud class="size-4" aria-hidden="true" />
+									{#if googleDriveBusy}
+										<Spinner />
+									{:else}
+										<Cloud class="size-4" aria-hidden="true" />
+									{/if}
 									{googleDriveBusy ? 'Connecting...' : 'Connect Google Drive'}
 								</button>
 							{/if}
@@ -1336,7 +1281,11 @@
 								disabled={syncFolderBusy}
 								class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 							>
-								<FolderSync class="size-4" aria-hidden="true" />
+								{#if syncFolderBusy}
+									<Spinner />
+								{:else}
+									<FolderSync class="size-4" aria-hidden="true" />
+								{/if}
 								Choose Local Sync Folder
 							</button>
 							<button
@@ -1344,7 +1293,11 @@
 								disabled={syncFolderBusy || !backupStatus?.syncFolderPath}
 								class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 							>
-								<Trash2 class="size-4" aria-hidden="true" />
+								{#if syncFolderBusy}
+									<Spinner />
+								{:else}
+									<Trash2 class="size-4" aria-hidden="true" />
+								{/if}
 								Clear Sync Folder
 							</button>
 							<button
@@ -1395,8 +1348,8 @@
 									disabled={sf2TemplateCreating || sf2SettingsSaving}
 									class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 								>
-									{#if sf2TemplateCreating}
-										<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+									{#if sf2TemplateCreating || sf2SettingsSaving}
+										<Spinner />
 									{:else}
 										<svg
 											class="size-4"
@@ -1413,7 +1366,11 @@
 											<path d="M9 14h6" />
 										</svg>
 									{/if}
-									{sf2TemplateCreating ? 'Creating...' : 'Create From Template'}
+									{sf2TemplateCreating
+										? 'Creating...'
+										: sf2SettingsSaving
+											? 'Saving...'
+											: 'Create From Template'}
 								</button>
 								<button
 									onclick={onImportSf2}
@@ -1421,8 +1378,7 @@
 									class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 								>
 									{#if sf2Importing}
-										<span class="size-2 rounded-full bg-primary-foreground" aria-hidden="true"
-										></span>
+										<Spinner />
 									{:else}
 										<svg
 											class="size-4"
@@ -1443,14 +1399,6 @@
 								</button>
 							</div>
 						</div>
-
-						<TaskProgress
-							active={sf2Importing}
-							title="Importing SF2 workbook"
-							description={sf2ImportProgressDescription}
-							value={sf2ProgressValue}
-							max={sf2ProgressMax}
-						/>
 
 						{#if sf2ImportSummary}
 							<div class="space-y-4 border-t border-border pt-5">
@@ -1592,8 +1540,11 @@
 						<button
 							type="submit"
 							disabled={globalSettingsSaving}
-							class="w-full rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+							class="inline-flex w-full items-center justify-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 						>
+							{#if globalSettingsSaving}
+								<Spinner />
+							{/if}
 							{globalSettingsSaving ? 'Saving...' : 'Save Configuration'}
 						</button>
 					</form>
@@ -1612,7 +1563,11 @@
 									class="inline-flex h-9 items-center gap-2 rounded-md border border-destructive/40 bg-background px-3 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
 									title="Clear audit trail"
 								>
-									<Trash2 class="size-4" aria-hidden="true" />
+									{#if auditClearing}
+										<Spinner />
+									{:else}
+										<Trash2 class="size-4" aria-hidden="true" />
+									{/if}
 									Clear
 								</button>
 								<button
@@ -1622,7 +1577,11 @@
 									class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 									title="Refresh audit trail"
 								>
-									<History class="size-4" aria-hidden="true" />
+									{#if auditLoading}
+										<Spinner />
+									{:else}
+										<History class="size-4" aria-hidden="true" />
+									{/if}
 								</button>
 							</div>
 						</div>
@@ -1710,8 +1669,11 @@
 				type="button"
 				onclick={saveGlobalSettingsFromDialog}
 				disabled={globalSettingsSaving}
-				class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+				class="inline-flex items-center justify-center gap-2 rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 			>
+				{#if globalSettingsSaving}
+					<Spinner />
+				{/if}
 				{globalSettingsSaving ? 'Saving...' : 'Save Changes'}
 			</button>
 		</div>
@@ -1729,14 +1691,6 @@
 >
 	{#if sf2Validation}
 		<div class="space-y-5">
-			<TaskProgress
-				active={sf2Importing}
-				title="Importing SF2 workbook"
-				description={sf2ImportProgressDescription}
-				value={sf2ProgressValue}
-				max={sf2ProgressMax}
-			/>
-
 			<div class="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
 				<p>
 					The import is paused until these discrepancies are reviewed and explicitly acknowledged.
@@ -1903,8 +1857,11 @@
 					type="button"
 					onclick={proceedWithSf2MismatchImport}
 					disabled={sf2Importing}
-					class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+					class="inline-flex items-center justify-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 				>
+					{#if sf2Importing}
+						<Spinner />
+					{/if}
 					{sf2Importing ? 'Importing...' : 'Proceed Anyway (Authorized Users Only)'}
 				</button>
 			</div>
@@ -1936,14 +1893,6 @@
 				<p class="mt-2 leading-6">{sf2TemplateDialogNotice}</p>
 			</div>
 		{/if}
-
-		<TaskProgress
-			active={sf2TemplateCreating || sf2SettingsSaving}
-			title={sf2TemplateProgressTitle}
-			description={sf2TemplateProgressDetail}
-			value={sf2ProgressValue}
-			max={sf2ProgressMax}
-		/>
 
 		<div class="grid gap-4 sm:grid-cols-2">
 			<div class="space-y-1.5">
@@ -2093,19 +2042,13 @@
 			<button
 				type="submit"
 				disabled={sf2TemplateCreating || sf2SettingsSaving}
-				class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+				class="inline-flex items-center justify-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 			>
 				{#if sf2TemplateCreating}
-					<span
-						class="mr-2 inline-block size-2 rounded-full bg-primary-foreground align-[1px]"
-						aria-hidden="true"
-					></span>
+					<Spinner />
 					Creating...
 				{:else if sf2SettingsSaving}
-					<span
-						class="mr-2 inline-block size-2 rounded-full bg-primary-foreground align-[1px]"
-						aria-hidden="true"
-					></span>
+					<Spinner />
 					Saving...
 				{:else}
 					{sf2TemplateDialogMode === 'create' ? 'Create Workbook' : 'Save Workbook Settings'}
@@ -2535,8 +2478,11 @@
 				<button
 					onclick={confirmClearAuditEvents}
 					disabled={auditClearing}
-					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+					class="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
 				>
+					{#if auditClearing}
+						<Spinner />
+					{/if}
 					{auditClearing ? 'Clearing...' : 'Clear'}
 				</button>
 			</div>
@@ -2769,8 +2715,11 @@
 					type="button"
 					onclick={onConfirmRestoreBackup}
 					disabled={restoreBusy}
-					class="rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+					class="inline-flex items-center justify-center gap-2 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
 				>
+					{#if restoreBusy}
+						<Spinner />
+					{/if}
 					{restoreBusy ? 'Restoring...' : 'Restore Database'}
 				</button>
 			</div>
