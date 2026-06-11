@@ -7,3 +7,4 @@
 
 - Supported multiple backup types
 - Header should be fixed and floating on top, not include in scroll
+- Full feature in attendace page, can easily mark absent and export
