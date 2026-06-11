@@ -1,11 +1,20 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { CheckCheck, Grid2X2, List, Search, ScanLine, ShieldAlert } from 'lucide-svelte';
+	import {
+		CalendarDays,
+		CheckCheck,
+		Grid2X2,
+		List,
+		Search,
+		ScanLine,
+		ShieldAlert
+	} from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
+	import DatePickerDialog from '$lib/components/ui/DatePickerDialog.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
@@ -62,6 +71,8 @@
 	let manualViewMode = $state<ManualViewMode>('boxes');
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
+	let datePickerOpen = $state(false);
+	let dateLoading = $state(false);
 
 	let pickerOpen = $state(false);
 	let pickerQuery = $state('');
@@ -89,7 +100,7 @@
 	let overrideTarget = $state<OverrideTarget | null>(null);
 	let overrideReason = $state('');
 	let isOverrideSaving = $state(false);
-	let todayKey = $state(fmtDate(Date.now()));
+	let selectedDate = $state(fmtDate(Date.now()));
 	let midnightTimer: ReturnType<typeof setTimeout> | null = null;
 
 	onMount(async () => {
@@ -102,7 +113,15 @@
 	});
 
 	$effect(() => {
-		if (isCardReaderMode && !pickerOpen && cardInputElement && !loading && !loadError) {
+		if (
+			isCardReaderMode &&
+			!pickerOpen &&
+			!datePickerOpen &&
+			!overrideTarget &&
+			cardInputElement &&
+			!loading &&
+			!loadError
+		) {
 			cardInputElement.focus();
 		}
 	});
@@ -136,7 +155,7 @@
 		const [s, c, e] = await Promise.all([
 			listStudents(),
 			listClasses(),
-			listEventsForDate(todayKey)
+			listEventsForDate(selectedDate)
 		]);
 		students = s;
 		classes = c;
@@ -147,8 +166,11 @@
 	const attendanceMode = $derived(settingsStore.settings?.attendanceMode ?? 'manual');
 	const isCardReaderMode = $derived(attendanceMode === 'card_reader');
 	const currentClass = $derived(classes.find((c) => c.id === selectedClassId));
-	const today = $derived(todayKey);
-	const todayEvents = $derived(events.filter((event) => fmtDate(event.timestamp) === today));
+	const selectedDateEvents = $derived(
+		events.filter((event) => fmtDate(event.timestamp) === selectedDate)
+	);
+	const selectedDateLabel = $derived(formatAttendanceDate(selectedDate));
+	const selectedDateIsToday = $derived(selectedDate === fmtDate(Date.now()));
 	const studentById = $derived(new SvelteMap(students.map((student) => [student.id, student])));
 	const classById = $derived(new SvelteMap(classes.map((classItem) => [classItem.id, classItem])));
 
@@ -181,7 +203,7 @@
 	});
 
 	const recentActivity = $derived.by(() =>
-		todayEvents
+		selectedDateEvents
 			.filter((event) => {
 				const student = studentById.get(event.studentId);
 				return (
@@ -198,7 +220,7 @@
 	const lastEventByStudentForSession = $derived.by(() => {
 		const byStudent = new SvelteMap<string, AttendanceEvent>();
 
-		for (const event of todayEvents) {
+		for (const event of selectedDateEvents) {
 			const student = studentById.get(event.studentId);
 			if (!student || !matchesCurrentSession(event, student)) continue;
 
@@ -241,15 +263,15 @@
 		if (settingsPending) return 'Loading attendance mode and class roster.';
 		if (isCardReaderMode) {
 			if (sessionClass) {
-				return `Recording attendance for ${sessionClass.name} (${sessionClass.dayStart} - ${sessionClass.dayEnd})`;
+				return `Recording attendance for ${sessionClass.name} on ${selectedDateLabel} (${sessionClass.dayStart} - ${sessionClass.dayEnd})`;
 			}
-			return 'Active monitoring of student attendance.';
+			return `Active monitoring of student attendance for ${selectedDateLabel}.`;
 		}
 
 		if (currentClass) {
-			return `Name-only attendance for ${currentClass.name} (${currentClass.dayStart} - ${currentClass.dayEnd})`;
+			return `Name-only attendance for ${currentClass.name} on ${selectedDateLabel} (${currentClass.dayStart} - ${currentClass.dayEnd})`;
 		}
-		return 'Choose names from the class list and record attendance without card serials.';
+		return `Choose names from the class list and record attendance for ${selectedDateLabel}.`;
 	});
 
 	function getTimeOfDay(): 'Morning' | 'Afternoon' {
@@ -278,6 +300,56 @@
 		return typeof event.timestamp === 'string'
 			? new Date(event.timestamp).getTime()
 			: event.timestamp;
+	}
+
+	function parseDateKey(dateKey: string) {
+		const [year, month, day] = dateKey.split('-').map(Number);
+		if (
+			typeof year !== 'number' ||
+			typeof month !== 'number' ||
+			typeof day !== 'number' ||
+			!Number.isFinite(year) ||
+			!Number.isFinite(month) ||
+			!Number.isFinite(day)
+		) {
+			return null;
+		}
+
+		return { year, monthIndex: month - 1, day };
+	}
+
+	function formatAttendanceDate(dateKey: string) {
+		const parts = parseDateKey(dateKey);
+		if (!parts) return dateKey;
+
+		return new Date(parts.year, parts.monthIndex, parts.day).toLocaleDateString(undefined, {
+			weekday: 'short',
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		});
+	}
+
+	function firstClassTime(classObj: Class | undefined) {
+		return classObj?.sessions?.[0]?.startTime ?? classObj?.dayStart ?? '08:00';
+	}
+
+	function attendanceTimestampForSelectedDate(classObj: Class | undefined) {
+		if (selectedDateIsToday) return Date.now();
+
+		const parts = parseDateKey(selectedDate);
+		if (!parts) return Date.now();
+
+		const [hourValue, minuteValue] = firstClassTime(classObj).split(':').map(Number);
+		const hour = typeof hourValue === 'number' && Number.isFinite(hourValue) ? hourValue : 8;
+		const minute =
+			typeof minuteValue === 'number' && Number.isFinite(minuteValue) ? minuteValue : 0;
+
+		return new Date(parts.year, parts.monthIndex, parts.day, hour, minute, 0, 0).getTime();
+	}
+
+	function shouldRequireScheduleOverride(classObj: Class | undefined, timestamp: number) {
+		return selectedDateIsToday && !isWithinClassHours(classObj, timestamp);
 	}
 
 	function studentName(studentId: string) {
@@ -314,26 +386,29 @@
 		return `${fmtDate(timestamp)}|${classKey}|${segment}`;
 	}
 
-	function getAttendanceDraft(student: Student, timestamp = Date.now()) {
+	function getAttendanceDraft(student: Student, timestamp?: number) {
 		const classObj = getAttendanceClass(student);
+		const resolvedTimestamp = timestamp ?? attendanceTimestampForSelectedDate(classObj);
 		const classId = classObj?.id || selectedClassId || student.classId || undefined;
-		const sessionKey = getSessionKey(classObj, timestamp);
+		const sessionKey = getSessionKey(classObj, resolvedTimestamp);
 
 		return {
 			classObj,
 			classId,
 			sessionKey,
-			isLate: checkLate(classObj, timestamp),
+			isLate: checkLate(classObj, resolvedTimestamp),
 			className: classObj?.name ?? 'Unassigned class'
 		};
 	}
 
-	function matchesCurrentSession(event: AttendanceEvent, student: Student, timestamp = Date.now()) {
-		const draft = getAttendanceDraft(student, timestamp);
+	function matchesCurrentSession(event: AttendanceEvent, student: Student, timestamp?: number) {
+		const resolvedTimestamp =
+			timestamp ?? attendanceTimestampForSelectedDate(getAttendanceClass(student));
+		const draft = getAttendanceDraft(student, resolvedTimestamp);
 		if (event.sessionKey) return event.sessionKey === draft.sessionKey;
 		const eventClassId = event.classId || student.classId || 'unassigned';
 		return (
-			fmtDate(event.timestamp) === fmtDate(timestamp) &&
+			fmtDate(event.timestamp) === fmtDate(resolvedTimestamp) &&
 			eventClassId === (draft.classId || 'unassigned')
 		);
 	}
@@ -372,15 +447,50 @@
 	function scheduleMidnightRefresh() {
 		if (midnightTimer) clearTimeout(midnightTimer);
 		const now = new Date();
+		const dateAtScheduleTime = fmtDate(now.getTime());
 		const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 2, 0);
 		midnightTimer = setTimeout(
 			async () => {
-				todayKey = fmtDate(Date.now());
-				await reload();
+				if (selectedDate === dateAtScheduleTime) {
+					selectedDate = fmtDate(Date.now());
+					await reload();
+				}
 				scheduleMidnightRefresh();
 			},
 			Math.max(1000, nextMidnight.getTime() - now.getTime())
 		);
+	}
+
+	function resetRecentActionState() {
+		lastResult = null;
+		lastEventId = null;
+		log = [];
+		if (undoTimer) {
+			clearTimeout(undoTimer);
+			undoTimer = null;
+		}
+	}
+
+	async function selectAttendanceDate(date: string) {
+		const nextDate = date || fmtDate(Date.now());
+		datePickerOpen = false;
+		if (nextDate === selectedDate) return;
+
+		const previousDate = selectedDate;
+		selectedDate = nextDate;
+		resetRecentActionState();
+		dateLoading = true;
+		try {
+			events = await listEventsForDate(nextDate);
+			toast(`Loaded attendance for ${formatAttendanceDate(nextDate)}`);
+		} catch (error) {
+			selectedDate = previousDate;
+			const message =
+				error instanceof Error ? error.message : 'Attendance date could not be loaded.';
+			toast(`Date load failed: ${message}`, false);
+		} finally {
+			dateLoading = false;
+		}
 	}
 
 	function toast(msg: string, ok = true) {
@@ -450,7 +560,7 @@
 		const trimmed = serial.trim();
 		if (!trimmed) return;
 
-		if (isProcessing) {
+		if (isProcessing || dateLoading) {
 			toast('Please wait - processing previous tap', false);
 			return;
 		}
@@ -483,7 +593,7 @@
 	}
 
 	function openOverride(student: Student, type: AttendanceType, message: string) {
-		const timestamp = Date.now();
+		const timestamp = attendanceTimestampForSelectedDate(getAttendanceClass(student));
 		const draft = getAttendanceDraft(student, timestamp);
 		overrideTarget = {
 			student,
@@ -534,10 +644,10 @@
 			return;
 		}
 
-		const ts = options.timestamp ?? Date.now();
+		const ts = options.timestamp ?? attendanceTimestampForSelectedDate(getAttendanceClass(student));
 		const draft = getAttendanceDraft(student, ts);
 
-		if (!options.overrideReason && !isWithinClassHours(draft.classObj, ts)) {
+		if (!options.overrideReason && shouldRequireScheduleOverride(draft.classObj, ts)) {
 			openOverride(student, type, 'This attendance is outside the selected class session.');
 			return;
 		}
@@ -607,7 +717,7 @@
 			return;
 		}
 
-		if (isProcessing) {
+		if (isProcessing || dateLoading) {
 			toast('Please wait - processing previous request', false);
 			return;
 		}
@@ -622,7 +732,7 @@
 	}
 
 	async function presentAllStudents() {
-		if (isProcessing) {
+		if (isProcessing || dateLoading) {
 			toast('Please wait - processing previous request', false);
 			return;
 		}
@@ -633,13 +743,14 @@
 			return;
 		}
 
-		const timestamp = Date.now();
 		const blockedStudent = studentsToMark.find((student) => {
+			const timestamp = attendanceTimestampForSelectedDate(getAttendanceClass(student));
 			const draft = getAttendanceDraft(student, timestamp);
-			return !isWithinClassHours(draft.classObj, timestamp);
+			return shouldRequireScheduleOverride(draft.classObj, timestamp);
 		});
 
 		if (blockedStudent) {
+			const timestamp = attendanceTimestampForSelectedDate(getAttendanceClass(blockedStudent));
 			const draft = getAttendanceDraft(blockedStudent, timestamp);
 			toast(`Present all is only available during ${draft.className} class hours`, false);
 			return;
@@ -659,6 +770,7 @@
 
 		try {
 			for (const student of studentsToMark) {
+				const timestamp = attendanceTimestampForSelectedDate(getAttendanceClass(student));
 				const draft = getAttendanceDraft(student, timestamp);
 				const isLate = draft.isLate;
 
@@ -686,7 +798,7 @@
 					type: 'in',
 					isLate: metadata.isLate,
 					message: metadata.isLate ? 'Recorded late' : 'Recorded by Present all',
-					timestamp
+					timestamp: eventTime(createdEvent)
 				});
 
 				if (metadata.isLate) lateCount += 1;
@@ -722,7 +834,7 @@
 
 		if (
 			!confirm(
-				`Close attendance for ${classObj.name} today? Missing learners will be treated as absences in the SF2 export.`
+				`Close attendance for ${classObj.name} on ${selectedDateLabel}? Missing learners will be treated as absences in the SF2 export.`
 			)
 		) {
 			return;
@@ -731,7 +843,7 @@
 		isClosingDay = true;
 		let closeSummary: string;
 		try {
-			const summary = await closeSf2AttendanceDay(classObj.id, today);
+			const summary = await closeSf2AttendanceDay(classObj.id, selectedDate);
 			closeSummary = `; SF2 day closed with ${summary.absentCount} absent`;
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : 'Failed to close SF2 day';
@@ -764,12 +876,21 @@
 <PageHeader category={pageCategory} title={dynamicTitle} description={dynamicDescription}>
 	{#snippet actions()}
 		<div class="flex flex-wrap items-center gap-3">
-			<span
-				class="inline-flex h-10 min-w-56 items-center rounded-pill border border-border bg-background px-4 text-sm font-medium"
-				aria-label="Class"
+			<button
+				type="button"
+				onclick={() => (datePickerOpen = true)}
+				disabled={dateLoading || isProcessing || isClosingDay}
+				aria-haspopup="dialog"
+				aria-expanded={datePickerOpen}
+				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 			>
-				{currentClass?.name ?? sessionClass?.name ?? 'No class configured'}
-			</span>
+				{#if dateLoading}
+					<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+				{:else}
+					<CalendarDays class="size-4 text-primary" aria-hidden="true" />
+				{/if}
+				<span class="font-mono">{selectedDate}</span>
+			</button>
 
 			{#if isCardReaderMode}
 				<button
@@ -803,7 +924,7 @@
 		<TaskProgress
 			active={isClosingDay}
 			title="Closing attendance session"
-			description="Writing absences to the SF2 workbook and preparing the session summary."
+			description={`Writing ${selectedDateLabel} absences to the SF2 workbook and preparing the session summary.`}
 		/>
 	</div>
 {/if}
@@ -893,7 +1014,7 @@
 							autocomplete="off"
 							spellcheck="false"
 							aria-describedby="card-reader-help"
-							disabled={isProcessing}
+							disabled={isProcessing || dateLoading}
 							class="control-ring h-12 w-full rounded-md border border-border bg-background px-4 text-center font-mono text-sm disabled:cursor-wait disabled:opacity-70"
 						/>
 						<p id="card-reader-help" class="mt-2 text-xs text-muted-foreground">
@@ -957,7 +1078,8 @@
 					<div>
 						<h3 class="text-xl font-semibold">Student boxes</h3>
 						<p class="mt-1 max-w-xl text-sm text-muted-foreground">
-							One click per learner. Boxes show whether attendance has been recorded.
+							One click per learner. Boxes show whether attendance has been recorded for
+							{selectedDateLabel}.
 						</p>
 					</div>
 					<div class="grid grid-cols-3 overflow-hidden rounded-xl border border-border bg-surface">
@@ -985,6 +1107,7 @@
 				<button
 					type="button"
 					disabled={isProcessing ||
+						dateLoading ||
 						pendingManualStudents.length === 0 ||
 						manualStudents.length === 0}
 					onclick={presentAllStudents}
@@ -1054,7 +1177,7 @@
 							<button
 								type="button"
 								title={`${student.name} - ${status.label}`}
-								disabled={isProcessing}
+								disabled={isProcessing || dateLoading}
 								onclick={() => markStudent(student, action)}
 								class="group flex h-[116px] min-w-0 flex-col justify-between overflow-hidden rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-65 {action ===
 								'in'
@@ -1122,7 +1245,7 @@
 										</div>
 									</div>
 									<button
-										disabled={isProcessing}
+										disabled={isProcessing || dateLoading}
 										onclick={() => markStudent(student, action)}
 										class="w-fit min-w-28 rounded-pill px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
 										'in'
@@ -1143,7 +1266,7 @@
 			<div class="mb-4 flex shrink-0 items-start justify-between gap-3">
 				<div>
 					<h3 class="text-lg font-medium">Recent activity</h3>
-					<span class="label-mono text-xs opacity-60">Today</span>
+					<span class="label-mono text-xs opacity-60">{selectedDate}</span>
 				</div>
 				<span class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]">
 					{recentActivity.length} events
@@ -1155,7 +1278,7 @@
 					<div
 						class="flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
 					>
-						No attendance has been recorded today.
+						No attendance has been recorded for {selectedDateLabel}.
 					</div>
 				{:else}
 					<ul class="divide-y divide-border">
@@ -1220,10 +1343,19 @@
 	</div>
 {/if}
 
+<DatePickerDialog
+	open={datePickerOpen}
+	value={selectedDate}
+	onClose={() => (datePickerOpen = false)}
+	onSelect={({ date }) => {
+		void selectAttendanceDate(date);
+	}}
+/>
+
 <Dialog
 	open={pickerOpen}
 	title="Manual log"
-	description="Search by name to manually record attendance."
+	description={`Search by name to manually record attendance for ${selectedDateLabel}.`}
 	onClose={() => (pickerOpen = false)}
 >
 	<input
@@ -1242,7 +1374,7 @@
 				{@const action = getNextAttendanceType(student)}
 				<li>
 					<button
-						disabled={isProcessing}
+						disabled={isProcessing || dateLoading}
 						onclick={() => markStudent(student, action, true)}
 						class="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 					>
@@ -1296,6 +1428,9 @@
 					<div class="mt-3 flex flex-wrap gap-2 font-mono text-[11px]">
 						<span class="rounded-pill border border-border bg-background px-2 py-1">
 							{overrideTarget.className}
+						</span>
+						<span class="rounded-pill border border-border bg-background px-2 py-1">
+							{selectedDate}
 						</span>
 						<span class="rounded-pill border border-border bg-background px-2 py-1">
 							{fmtTime(overrideTarget.timestamp)}
