@@ -317,7 +317,6 @@ export interface Sf2TemplateSummary {
 
 export interface Sf2ExportReadiness {
 	template?: Sf2TemplateSummary;
-	closedDays: string[];
 	mappedStudents: number;
 	mappedDates: number;
 	canExport: boolean;
@@ -335,13 +334,11 @@ export interface Sf2ExportPreview {
 	dates: Sf2PreviewDate[];
 	students: Sf2PreviewStudentRow[];
 	absentList: Sf2PreviewAbsence[];
-	closedDays: string[];
 	mappedStudents: number;
 	mappedDates: number;
 	presentCount: number;
 	absenceCount: number;
 	unmappedStudentCount: number;
-	unmappedClosedDayCount: number;
 	canExport: boolean;
 	issues: string[];
 	warnings: string[];
@@ -352,7 +349,6 @@ export interface Sf2PreviewDate {
 	sheetName: string;
 	columnLetter: string;
 	columnIndex: number;
-	closed: boolean;
 }
 
 export interface Sf2PreviewStudentRow {
@@ -384,5 +380,4 @@ export interface Sf2PreviewAbsence {
 export interface Sf2ExportResult {
 	outputPath: string;
 	marksWritten: number;
-	closedDays: number;
 }
