@@ -250,7 +250,6 @@ pub struct Sf2CloseDaySummary {
 #[serde(rename_all = "camelCase")]
 pub struct Sf2ExportReadiness {
     pub template: Option<Sf2TemplateSummary>,
-    pub closed_days: Vec<String>,
     pub mapped_students: usize,
     pub mapped_dates: usize,
     pub can_export: bool,
@@ -268,13 +267,11 @@ pub struct Sf2ExportPreview {
     pub dates: Vec<Sf2PreviewDate>,
     pub students: Vec<Sf2PreviewStudentRow>,
     pub absent_list: Vec<Sf2PreviewAbsence>,
-    pub closed_days: Vec<String>,
     pub mapped_students: usize,
     pub mapped_dates: usize,
     pub present_count: usize,
     pub absence_count: usize,
     pub unmapped_student_count: usize,
-    pub unmapped_closed_day_count: usize,
     pub can_export: bool,
     pub issues: Vec<String>,
     pub warnings: Vec<String>,
@@ -287,7 +284,6 @@ pub struct Sf2PreviewDate {
     pub sheet_name: String,
     pub column_letter: String,
     pub column_index: u32,
-    pub closed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -335,5 +331,4 @@ pub struct Sf2PreviewAbsence {
 pub struct Sf2ExportResult {
     pub output_path: String,
     pub marks_written: usize,
-    pub closed_days: usize,
 }
