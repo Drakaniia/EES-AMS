@@ -132,32 +132,6 @@ pub fn update_sf2_workbook_settings(
 }
 
 #[tauri::command]
-pub fn close_sf2_attendance_day(
-    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
-    class_id: String,
-    date: Option<String>,
-) -> std::result::Result<Sf2CloseDaySummary, String> {
-    let summary =
-        service::close_day(pool.inner().clone(), class_id, date).map_err(|e| e.to_string())?;
-    let entity_id = format!("{}:{}", summary.class_id, summary.date);
-    let metadata_json = audit_metadata_json(serde_json::json!({
-        "classId": summary.class_id.as_str(),
-        "date": summary.date.as_str(),
-        "presentCount": summary.present_count,
-        "absentCount": summary.absent_count,
-    }))?;
-    record_command_audit(
-        pool.inner(),
-        "attendance_day_status",
-        Some(entity_id.as_str()),
-        "update",
-        "Closed SF2 attendance day",
-        Some(metadata_json),
-    )?;
-    Ok(summary)
-}
-
-#[tauri::command]
 pub fn get_sf2_export_readiness(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
     class_id: Option<String>,

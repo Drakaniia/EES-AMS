@@ -360,17 +360,6 @@ pub(super) fn sf2_date_mappings_for_report_month(
         .collect()
 }
 
-pub(super) fn sf2_closed_days_for_report_month(
-    template: &Sf2TemplateRecord,
-    closed_days: &[String],
-) -> Vec<String> {
-    closed_days
-        .iter()
-        .filter(|day| sf2_is_report_month_date(template, day))
-        .cloned()
-        .collect()
-}
-
 pub(super) fn sf2_is_report_month_date(template: &Sf2TemplateRecord, date: &str) -> bool {
     let Some(month) = sf2_month_number(&template.report_month) else {
         return false;

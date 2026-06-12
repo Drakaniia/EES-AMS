@@ -15,8 +15,6 @@ const INSERT_DATE_MAPPING_SQL: &str = include_str!("../../sql/sf2/insert_date_ma
 const LIST_TEMPLATES_SQL: &str = include_str!("../../sql/sf2/list_templates.sql");
 const LATEST_TEMPLATE_FOR_CLASS_SQL: &str =
     include_str!("../../sql/sf2/latest_template_for_class.sql");
-const CLOSE_DAY_SQL: &str = include_str!("../../sql/sf2/close_day.sql");
-const CLOSED_DAYS_FOR_CLASS_SQL: &str = include_str!("../../sql/sf2/closed_days_for_class.sql");
 const STUDENT_MAPPINGS_FOR_TEMPLATE_SQL: &str =
     include_str!("../../sql/sf2/student_mappings_for_template.sql");
 const DATE_MAPPINGS_FOR_TEMPLATE_SQL: &str =
@@ -199,21 +197,6 @@ impl Sf2Repository {
         )
         .optional()
         .map_err(Into::into)
-    }
-
-    pub fn close_day(&self, class_id: &str, date: &str, closed_at: i64) -> Result<()> {
-        let conn = self.pool.get()?;
-        conn.execute(CLOSE_DAY_SQL, params![class_id, date, closed_at])?;
-        Ok(())
-    }
-
-    pub fn closed_days_for_class(&self, class_id: &str) -> Result<Vec<String>> {
-        let conn = self.pool.get()?;
-        let mut statement = conn.prepare(CLOSED_DAYS_FOR_CLASS_SQL)?;
-        let rows = statement.query_map(params![class_id], |row| row.get::<_, String>(0))?;
-
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
     }
 
     pub fn student_mappings_for_template(

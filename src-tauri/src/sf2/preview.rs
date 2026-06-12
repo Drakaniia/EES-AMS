@@ -27,13 +27,11 @@ pub(super) fn export_preview(
             dates: Vec::new(),
             students: Vec::new(),
             absent_list: Vec::new(),
-            closed_days: readiness.closed_days,
             mapped_students: readiness.mapped_students,
             mapped_dates: readiness.mapped_dates,
             present_count: 0,
             absence_count: 0,
             unmapped_student_count: 0,
-            unmapped_closed_day_count: 0,
             can_export: false,
             issues: readiness.issues,
             warnings: readiness.warnings,
@@ -63,15 +61,6 @@ pub(super) fn export_preview(
         .iter()
         .map(|student| (student.id.to_string(), student))
         .collect::<HashMap<_, _>>();
-    let closed_day_set = readiness
-        .closed_days
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
-    let mapped_day_set = date_mappings
-        .iter()
-        .map(|mapping| mapping.date.as_str())
-        .collect::<HashSet<_>>();
 
     let dates = date_mappings
         .iter()
@@ -80,7 +69,6 @@ pub(super) fn export_preview(
             sheet_name: mapping.sheet_name.clone(),
             column_letter: mapping.column_letter.clone(),
             column_index: mapping.column_index,
-            closed: closed_day_set.contains(mapping.date.as_str()),
         })
         .collect::<Vec<_>>();
 
@@ -88,7 +76,6 @@ pub(super) fn export_preview(
     let events = event_repo.list()?;
     let present_by_day = dates
         .iter()
-        .filter(|date| date.closed)
         .map(|date| {
             (
                 date.date.clone(),
@@ -133,13 +120,12 @@ pub(super) fn export_preview(
         let cells = dates
             .iter()
             .map(|date| {
-                let editable = date.closed && student.is_some();
-                let status = if !date.closed {
-                    Sf2PreviewCellStatus::Open
-                } else if present_by_day
+                let editable = student.is_some();
+                let is_present = present_by_day
                     .get(&date.date)
-                    .is_some_and(|present| present.contains(&mapping.student_id))
-                {
+                    .is_some_and(|present| present.contains(&mapping.student_id));
+                
+                let status = if is_present {
                     row_present_count += 1;
                     present_count += 1;
                     Sf2PreviewCellStatus::Present
@@ -214,23 +200,11 @@ pub(super) fn export_preview(
                 .iter()
                 .map(|date| Sf2PreviewCell {
                     date: date.date.clone(),
-                    status: Sf2PreviewCellStatus::Open,
+                    status: Sf2PreviewCellStatus::Absent,
                     editable: false,
                 })
                 .collect(),
         });
-    }
-
-    let unmapped_closed_days = readiness
-        .closed_days
-        .iter()
-        .filter(|day| !mapped_day_set.contains(day.as_str()))
-        .cloned()
-        .collect::<Vec<_>>();
-    for day in &unmapped_closed_days {
-        warnings.push(format!(
-            "{day} is closed for attendance but is not mapped to an SF2 date column."
-        ));
     }
 
     if student_mappings.is_empty() {
@@ -245,13 +219,11 @@ pub(super) fn export_preview(
         dates,
         students,
         absent_list,
-        closed_days: readiness.closed_days,
         mapped_students: readiness.mapped_students,
         mapped_dates: readiness.mapped_dates,
         present_count,
         absence_count,
         unmapped_student_count,
-        unmapped_closed_day_count: unmapped_closed_days.len(),
         can_export: readiness.issues.is_empty(),
         issues: readiness.issues,
         warnings,

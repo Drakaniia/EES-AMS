@@ -27,10 +27,9 @@ use crate::sf2::logic::{
 #[cfg(test)]
 use crate::sf2::models::Sf2PreviewCellStatus;
 use crate::sf2::models::{
-    Sf2CloseDaySummary, Sf2DateMappingRecord, Sf2ExportPreview, Sf2ExportReadiness,
-    Sf2ExportResult, Sf2ImportSummary, Sf2ImportValidation, Sf2StudentMappingRecord,
-    Sf2TemplateDraft, Sf2TemplateRecord, Sf2WorkbookAnalysis, Sf2WorkbookLearner,
-    Sf2WorkbookMetadata, Sf2WorkbookSettings,
+    Sf2DateMappingRecord, Sf2ExportPreview, Sf2ExportReadiness, Sf2ExportResult, Sf2ImportSummary,
+    Sf2ImportValidation, Sf2StudentMappingRecord, Sf2TemplateDraft, Sf2TemplateRecord,
+    Sf2WorkbookAnalysis, Sf2WorkbookLearner, Sf2WorkbookMetadata, Sf2WorkbookSettings,
 };
 use crate::sf2::naming::class_name;
 use crate::sf2::preview;
@@ -159,11 +158,15 @@ fn import_workbook_with_analysis(
         imported_at: chrono::Utc::now().timestamp(),
     };
 
-    let closed_days = sf2_repo.closed_days_for_class(&class.id)?;
+    let report_dates = sf2_date_mappings_for_report_month(&template, &date_mappings)
+        .iter()
+        .map(|m| m.date.clone())
+        .collect::<Vec<_>>();
+
     write_template_marks_for_mappings(
         pool,
         &template,
-        &closed_days,
+        &report_dates,
         &student_mappings,
         &date_mappings,
     )?;
@@ -300,8 +303,12 @@ fn create_workbook_from_template_in_dir(
     };
 
     sf2_repo.upsert_template_with_mappings(&template, &student_mappings, &date_mappings)?;
-    let closed_days = sf2_repo.closed_days_for_class(&class.id)?;
-    if let Err(error) = write_template_marks_for_days(pool, &template, &closed_days) {
+    let report_dates = sf2_date_mappings_for_report_month(&template, &date_mappings)
+        .iter()
+        .map(|m| m.date.clone())
+        .collect::<Vec<_>>();
+
+    if let Err(error) = write_template_marks_for_days(pool, &template, &report_dates) {
         log::warn!("failed to backfill created SF2 workbook marks: {error}");
     }
 
@@ -491,8 +498,12 @@ pub fn update_workbook_settings(pool: DbPool, draft: Sf2TemplateDraft) -> Result
     };
 
     sf2_repo.update_template_with_mappings(&template, &student_mappings, &date_mappings)?;
-    let closed_days = sf2_repo.closed_days_for_class(&class.id)?;
-    if let Err(error) = write_template_marks_for_days(pool, &template, &closed_days) {
+    let report_dates = sf2_date_mappings_for_report_month(&template, &date_mappings)
+        .iter()
+        .map(|m| m.date.clone())
+        .collect::<Vec<_>>();
+
+    if let Err(error) = write_template_marks_for_days(pool, &template, &report_dates) {
         log::warn!("failed to backfill updated SF2 workbook marks: {error}");
     }
 
@@ -508,36 +519,6 @@ pub fn update_workbook_settings(pool: DbPool, draft: Sf2TemplateDraft) -> Result
         students_created,
         students_reused,
         dates_mapped: date_mappings.len(),
-    })
-}
-
-pub fn close_day(
-    pool: DbPool,
-    class_id: String,
-    date: Option<String>,
-) -> Result<Sf2CloseDaySummary> {
-    let date = date.unwrap_or_else(today_string);
-    parse_date(&date)?;
-
-    let sf2_repo = Sf2Repository::new(pool.clone());
-    sf2_repo.close_day(&class_id, &date, chrono::Utc::now().timestamp())?;
-
-    let student_repo = StudentRepository::new(pool.clone());
-    let event_repo = EventRepository::new(pool.clone());
-    let students = student_repo.list_by_class(Some(&class_id))?;
-    let present = present_student_ids(&event_repo.list()?, &students, &class_id, &date);
-
-    if let Some(template) = sf2_repo.latest_template_for_class(&class_id)? {
-        let template = refresh_template_calendar_from_saved_month(pool.clone(), &template)?;
-        let closed_days = sf2_repo.closed_days_for_class(&class_id)?;
-        let _ = write_template_marks_for_days(pool, &template, &closed_days)?;
-    }
-
-    Ok(Sf2CloseDaySummary {
-        class_id,
-        date,
-        present_count: present.len(),
-        absent_count: students.len().saturating_sub(present.len()),
     })
 }
 
@@ -562,6 +543,10 @@ fn sync_template_roster_from_class(
     pool: DbPool,
     template: &Sf2TemplateRecord,
 ) -> Result<Sf2TemplateRecord> {
+    if !template_owns_roster(template) {
+        return Ok(template.clone());
+    }
+
     let workbook_path = PathBuf::from(&template.source_path);
     if !workbook_path.exists() {
         return Err(AppError::InvalidInput(
@@ -641,7 +626,6 @@ pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2Exp
     let Some(template) = template else {
         return Ok(Sf2ExportReadiness {
             template: None,
-            closed_days: Vec::new(),
             mapped_students: 0,
             mapped_dates: 0,
             can_export: false,
@@ -661,10 +645,6 @@ pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2Exp
         );
     }
 
-    let closed_days = sf2_closed_days_for_report_month(
-        &template,
-        &sf2_repo.closed_days_for_class(&template.active_class_id)?,
-    );
     let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
     let mapped_students = student_mappings.len();
     let unmapped_students = unmapped_roster_student_names(pool, &template, &student_mappings)?;
@@ -680,7 +660,6 @@ pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2Exp
 
     Ok(Sf2ExportReadiness {
         template: Some(template_summary(template)),
-        closed_days,
         mapped_students,
         mapped_dates,
         can_export: issues.is_empty(),
@@ -721,13 +700,7 @@ pub fn set_preview_attendance(
         )));
     }
 
-    let closed_days =
-        sf2_closed_days_for_report_month(&template, &sf2_repo.closed_days_for_class(&class_id)?);
-    if !closed_days.iter().any(|day| day == &date) {
-        return Err(AppError::InvalidInput(format!(
-            "{date} is not a closed SF2 attendance day"
-        )));
-    }
+    let report_dates = date_mappings.iter().map(|m| m.date.clone()).collect::<Vec<_>>();
 
     let class = ClassRepository::new(pool.clone())
         .get(&class_id)?
@@ -747,7 +720,7 @@ pub fn set_preview_attendance(
         present,
     )?;
     let template = refresh_template_calendar_from_saved_month(pool.clone(), &template)?;
-    write_template_marks_for_days(pool.clone(), &template, &closed_days)?;
+    write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
 
     export_preview(pool, Some(class_id))
 }
@@ -774,8 +747,6 @@ pub fn export_workbook(
         ));
     }
 
-    let closed_days =
-        sf2_closed_days_for_report_month(&template, &sf2_repo.closed_days_for_class(&class_id)?);
     let mapped_dates = sf2_date_mappings_for_report_month(
         &template,
         &sf2_repo.date_mappings_for_template(&template.id)?,
@@ -785,6 +756,8 @@ pub fn export_workbook(
             "No attendance dates are mapped to this SF2 report month.".to_string(),
         ));
     }
+    let report_dates = mapped_dates.iter().map(|m| m.date.clone()).collect::<Vec<_>>();
+
     let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
     let unmapped_students =
         unmapped_roster_student_names(pool.clone(), &template, &student_mappings)?;
@@ -802,7 +775,7 @@ pub fn export_workbook(
         ));
     }
 
-    let marks_written = write_template_marks_for_days(pool.clone(), &template, &closed_days)?;
+    let marks_written = write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
 
     let metadata = template_metadata(&template);
     excel::write_metadata(&working_copy_path, &metadata)?;
@@ -814,7 +787,6 @@ pub fn export_workbook(
     Ok(Sf2ExportResult {
         output_path: output_path.to_string_lossy().to_string(),
         marks_written,
-        closed_days: closed_days.len(),
     })
 }
 
@@ -1822,6 +1794,35 @@ mod tests {
     }
 
     #[test]
+    fn sf2_import_validation_allows_initial_import_into_empty_roster() {
+        let learners = vec![
+            Sf2WorkbookLearner {
+                row_index: 8,
+                name: "Dela Cruz, Juan".to_string(),
+                gender_block: Some("MALE".to_string()),
+            },
+            Sf2WorkbookLearner {
+                row_index: 30,
+                name: "Santos, Maria".to_string(),
+                gender_block: Some("FEMALE".to_string()),
+            },
+        ];
+
+        let validation = validate_student_list(
+            "C:/official-sf2.xls",
+            Some("class-1"),
+            "Grade 4 - Rizal",
+            &[],
+            &learners,
+        );
+
+        assert!(!validation.has_discrepancies);
+        assert_eq!(validation.current_student_count, 0);
+        assert_eq!(validation.sf2_learner_count, 2);
+        assert!(validation.missing_from_current.is_empty());
+    }
+
+    #[test]
     fn sf2_import_validation_blocks_unconfirmed_mismatch_imports() {
         let current_students = vec![student_with_gender(
             "Currentonly, Student",
@@ -2286,6 +2287,23 @@ mod tests {
         }));
         assert!(!marks.iter().any(|mark| mark.cell_address == "F29"));
         assert!(!marks.iter().any(|mark| mark.cell_address == "F49"));
+    }
+
+    #[test]
+    fn roster_sync_leaves_imported_workbooks_unchanged() {
+        let temp_db = tempfile::NamedTempFile::new().expect("test database should be created");
+        let pool = crate::infrastructure::init_db(temp_db.path()).expect("database should init");
+        let template = Sf2TemplateRecord {
+            source_path: "C:/missing-imported-sf2.xls".to_string(),
+            ..template_record("JUNE")
+        };
+
+        let synced =
+            sync_template_roster_from_class(pool, &template).expect("imported sync should skip");
+
+        assert_eq!(synced.source_path, template.source_path);
+        assert_eq!(synced.source_hash, template.source_hash);
+        assert_eq!(synced.layout_fingerprint, template.layout_fingerprint);
     }
 
     #[test]
