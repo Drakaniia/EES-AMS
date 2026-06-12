@@ -52,7 +52,7 @@ pub fn is_learner_name(value: &str) -> bool {
         return false;
     }
 
-    normalized.contains(',')
+    normalized.contains(',') && normalized.chars().any(|c| c.is_alphabetic())
 }
 
 pub fn attendance_marks_for_closed_day(
@@ -121,5 +121,12 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn is_learner_name_rejects_empty_formula_placeholders() {
+        assert!(!is_learner_name(", "));
+        assert!(!is_learner_name(" , "));
+        assert!(is_learner_name("Dela Cruz, Juan"));
     }
 }
