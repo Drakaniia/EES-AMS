@@ -19,7 +19,6 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
-	import TaskProgress from '$lib/components/ui/TaskProgress.svelte';
 	import {
 		listStudents,
 		listClasses,
@@ -28,7 +27,6 @@
 		addEvent,
 		addEvents,
 		deleteEvent,
-		closeSf2AttendanceDay,
 		type AttendanceEvent,
 		type AttendanceType,
 		type CreateEventRequest,
@@ -48,18 +46,7 @@
 	};
 
 	type ManualViewMode = 'boxes' | 'list';
-	type OverrideTarget = {
-		student: Student;
-		type: AttendanceType;
-		timestamp: number;
-		classId?: string;
-		className: string;
-		sessionKey: string;
-		message: string;
-		isLate: boolean;
-	};
 	type LogOptions = {
-		overrideReason?: string;
 		timestamp?: number;
 	};
 
@@ -93,13 +80,9 @@
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 	let isProcessing = $state(false);
 	let isPresentingAll = $state(false);
-	let isClosingDay = $state(false);
 	let lastEventId = $state<string | null>(null);
 	let undoTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastScan = $state<{ serial: string; timestamp: number } | null>(null);
-	let overrideTarget = $state<OverrideTarget | null>(null);
-	let overrideReason = $state('');
-	let isOverrideSaving = $state(false);
 	let selectedDate = $state(fmtDate(Date.now()));
 	let midnightTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -117,7 +100,6 @@
 			isCardReaderMode &&
 			!pickerOpen &&
 			!datePickerOpen &&
-			!overrideTarget &&
 			cardInputElement &&
 			!loading &&
 			!loadError
@@ -346,10 +328,6 @@
 			typeof minuteValue === 'number' && Number.isFinite(minuteValue) ? minuteValue : 0;
 
 		return new Date(parts.year, parts.monthIndex, parts.day, hour, minute, 0, 0).getTime();
-	}
-
-	function shouldRequireScheduleOverride(classObj: Class | undefined, timestamp: number) {
-		return selectedDateIsToday && !isWithinClassHours(classObj, timestamp);
 	}
 
 	function studentName(studentId: string) {
@@ -592,76 +570,44 @@
 		}
 	}
 
-	function openOverride(student: Student, type: AttendanceType, message: string) {
-		const timestamp = attendanceTimestampForSelectedDate(getAttendanceClass(student));
-		const draft = getAttendanceDraft(student, timestamp);
-		overrideTarget = {
-			student,
-			type,
-			timestamp,
-			classId: draft.classId,
-			className: draft.className,
-			sessionKey: draft.sessionKey,
-			message,
-			isLate: draft.isLate
-		};
-		overrideReason = '';
-		pickerOpen = false;
-	}
-
-	async function submitOverride() {
-		if (!overrideTarget || isOverrideSaving) return;
-
-		const reason = overrideReason.trim();
-		if (reason.length < 3) {
-			toast('Override reason is required', false);
-			return;
-		}
-
-		isOverrideSaving = true;
-		isProcessing = true;
-		try {
-			await logForStudent(overrideTarget.student, overrideTarget.type, {
-				overrideReason: reason,
-				timestamp: overrideTarget.timestamp
-			});
-			overrideTarget = null;
-			overrideReason = '';
-		} finally {
-			isOverrideSaving = false;
-			isProcessing = false;
-		}
-	}
-
 	async function logForStudent(
 		student: Student,
 		forcedType?: AttendanceType,
 		options: LogOptions = {}
 	) {
-		const type = forcedType ?? getNextAttendanceType(student);
-		if (!type) {
-			openOverride(student, 'in', `${student.name} is already recorded for this session.`);
-			return;
+		const last = getLastEventForSession(student);
+		const type = forcedType ?? (last ? null : 'in');
+
+		if (type === null && last) {
+			try {
+				await deleteEvent(last.id, 'Toggled off by user');
+				events = events.filter((e) => e.id !== last.id);
+				log = log.filter((l) => l.id !== last.id);
+				toast(`${student.name} - Attendance removed`, true);
+
+				if (undoTimer) clearTimeout(undoTimer);
+				lastResult = null;
+				lastEventId = null;
+				return;
+			} catch (err: unknown) {
+				handleAttendanceError(err, student);
+				return;
+			}
 		}
 
 		const ts = options.timestamp ?? attendanceTimestampForSelectedDate(getAttendanceClass(student));
 		const draft = getAttendanceDraft(student, ts);
 
-		if (!options.overrideReason && shouldRequireScheduleOverride(draft.classObj, ts)) {
-			openOverride(student, type, 'This attendance is outside the selected class session.');
-			return;
-		}
-
-		const isLate = type === 'in' && draft.isLate;
+		const finalType = type ?? 'in';
+		const isLate = finalType === 'in' && draft.isLate;
 
 		try {
 			const createdEvent = await addEvent({
 				studentId: student.id,
 				classId: draft.classId,
-				type,
+				type: finalType,
 				note: isLate ? 'Late' : undefined,
 				sessionKey: draft.sessionKey,
-				overrideReason: options.overrideReason,
 				timestamp: new Date(ts).toISOString()
 			});
 
@@ -670,7 +616,7 @@
 			lastResult = {
 				ok: true,
 				name: student.name,
-				type,
+				type: finalType,
 				time: ts,
 				isLate,
 				eventId: createdEvent.id
@@ -679,7 +625,7 @@
 				{
 					id: createdEvent.id,
 					studentName: student.name,
-					type,
+					type: finalType,
 					isLate,
 					message: isLate ? 'Recorded late' : 'Recorded',
 					timestamp: ts
@@ -701,10 +647,6 @@
 	function handleAttendanceError(err: unknown, student?: Student) {
 		const message = err instanceof Error ? err.message : String(err);
 		if (message.includes('duplicate attendance') || message.includes('already recorded')) {
-			if (student) {
-				openOverride(student, 'in', `${student.name} is already recorded for this session.`);
-				return;
-			}
 			toast('Already recorded for this session', false);
 			return;
 		}
@@ -712,11 +654,6 @@
 	}
 
 	async function markStudent(student: Student, action: AttendanceType | null, closePicker = false) {
-		if (!action) {
-			openOverride(student, 'in', `${student.name} is already recorded for this session.`);
-			return;
-		}
-
 		if (isProcessing || dateLoading) {
 			toast('Please wait - processing previous request', false);
 			return;
@@ -740,19 +677,6 @@
 		const studentsToMark = pendingManualStudents;
 		if (studentsToMark.length === 0) {
 			toast('All visible students are already recorded');
-			return;
-		}
-
-		const blockedStudent = studentsToMark.find((student) => {
-			const timestamp = attendanceTimestampForSelectedDate(getAttendanceClass(student));
-			const draft = getAttendanceDraft(student, timestamp);
-			return shouldRequireScheduleOverride(draft.classObj, timestamp);
-		});
-
-		if (blockedStudent) {
-			const timestamp = attendanceTimestampForSelectedDate(getAttendanceClass(blockedStudent));
-			const draft = getAttendanceDraft(blockedStudent, timestamp);
-			toast(`Present all is only available during ${draft.className} class hours`, false);
 			return;
 		}
 
@@ -824,48 +748,6 @@
 			isProcessing = false;
 		}
 	}
-
-	async function endSession() {
-		const classObj = sessionClass;
-		if (!classObj) {
-			goto(resolve('/'));
-			return;
-		}
-
-		if (
-			!confirm(
-				`Close attendance for ${classObj.name} on ${selectedDateLabel}? Missing learners will be treated as absences in the SF2 export.`
-			)
-		) {
-			return;
-		}
-
-		isClosingDay = true;
-		let closeSummary: string;
-		try {
-			const summary = await closeSf2AttendanceDay(classObj.id, selectedDate);
-			closeSummary = `; SF2 day closed with ${summary.absentCount} absent`;
-		} catch (error) {
-			const msg = error instanceof Error ? error.message : 'Failed to close SF2 day';
-			toast(`Failed to close SF2 day: ${msg}`, false);
-			isClosingDay = false;
-			return;
-		}
-
-		const classStudents = students.filter(
-			(student) => student.classId === classObj.id || (classes.length <= 1 && !student.classId)
-		);
-		const presentCount = classStudents.filter(
-			(student) => getLastEventForSession(student)?.type === 'in'
-		).length;
-		const summary = `${presentCount}/${classStudents.length} students present${closeSummary}`;
-
-		goto(
-			resolve(
-				`/?sessionEnd=true&summary=${encodeURIComponent(summary)}&className=${encodeURIComponent(classObj.name)}`
-			)
-		);
-	}
 </script>
 
 <svelte:head>
@@ -879,7 +761,7 @@
 			<button
 				type="button"
 				onclick={() => (datePickerOpen = true)}
-				disabled={dateLoading || isProcessing || isClosingDay}
+				disabled={dateLoading || isProcessing}
 				aria-haspopup="dialog"
 				aria-expanded={datePickerOpen}
 				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
@@ -904,30 +786,9 @@
 					Manual log
 				</button>
 			{/if}
-
-			<button
-				onclick={endSession}
-				disabled={isClosingDay || !sessionClass}
-				class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-			>
-				{#if isClosingDay}
-					<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-				{/if}
-				{isClosingDay ? 'Closing...' : 'End Session'}
-			</button>
 		</div>
 	{/snippet}
 </PageHeader>
-
-{#if isClosingDay}
-	<div class="px-6 pt-4 md:px-12">
-		<TaskProgress
-			active={isClosingDay}
-			title="Closing attendance session"
-			description={`Writing ${selectedDateLabel} absences to the SF2 workbook and preparing the session summary.`}
-		/>
-	</div>
-{/if}
 
 {#if loading || settingsPending}
 	<div class="px-4 py-5 md:px-8 lg:px-10">
@@ -1210,7 +1071,7 @@
 											? 'text-primary'
 											: 'text-muted-foreground'}"
 									>
-										{action === 'in' ? 'IN' : 'OVR'}
+										{action === 'in' ? 'IN' : 'RECORDED'}
 									</span>
 								</span>
 							</button>
@@ -1252,7 +1113,7 @@
 											? 'bg-primary text-primary-foreground hover:bg-accent'
 											: 'border border-border bg-surface text-muted-foreground'}"
 									>
-										{action === 'in' ? 'Record' : 'Override'}
+										{action === 'in' ? 'Record' : 'Recorded'}
 									</button>
 								</li>
 							{/each}
@@ -1385,7 +1246,7 @@
 							</span>
 						</span>
 						<span class="label-mono text-xs font-bold text-primary">
-							{action === 'in' ? 'RECORD' : 'OVERRIDE'}
+							{action === 'in' ? 'RECORD' : 'RECORDED'}
 						</span>
 					</button>
 				</li>
@@ -1401,85 +1262,6 @@
 			Close
 		</button>
 	</div>
-</Dialog>
-
-<Dialog
-	open={!!overrideTarget}
-	title="Admin override"
-	description="Save an exception with a reason for audit history."
-	onClose={() => {
-		if (!isOverrideSaving) {
-			overrideTarget = null;
-			overrideReason = '';
-		}
-	}}
->
-	{#if overrideTarget}
-		<div class="rounded-xl border border-primary/20 bg-primary/10 p-4 text-sm">
-			<div class="flex items-start gap-3">
-				<div
-					class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"
-				>
-					<ShieldAlert class="size-5" aria-hidden="true" />
-				</div>
-				<div class="min-w-0 flex-1">
-					<div class="font-semibold">{overrideTarget.student.name}</div>
-					<p class="mt-1 text-muted-foreground">{overrideTarget.message}</p>
-					<div class="mt-3 flex flex-wrap gap-2 font-mono text-[11px]">
-						<span class="rounded-pill border border-border bg-background px-2 py-1">
-							{overrideTarget.className}
-						</span>
-						<span class="rounded-pill border border-border bg-background px-2 py-1">
-							{selectedDate}
-						</span>
-						<span class="rounded-pill border border-border bg-background px-2 py-1">
-							{fmtTime(overrideTarget.timestamp)}
-						</span>
-						{#if overrideTarget.isLate}
-							<span
-								class="rounded-pill border border-destructive/20 bg-destructive/10 px-2 py-1 text-destructive"
-							>
-								LATE
-							</span>
-						{/if}
-					</div>
-				</div>
-			</div>
-		</div>
-
-		<div class="space-y-2">
-			<label for="override-reason" class="label-mono">Reason</label>
-			<textarea
-				id="override-reason"
-				bind:value={overrideReason}
-				rows="4"
-				placeholder="Example: substitute class, late arrival, mistaken earlier tap..."
-				class="min-h-28 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-			></textarea>
-		</div>
-
-		<div class="flex justify-end gap-2 pt-2">
-			<button
-				type="button"
-				disabled={isOverrideSaving}
-				onclick={() => {
-					overrideTarget = null;
-					overrideReason = '';
-				}}
-				class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-			>
-				Cancel
-			</button>
-			<button
-				type="button"
-				disabled={isOverrideSaving || overrideReason.trim().length < 3}
-				onclick={submitOverride}
-				class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-			>
-				{isOverrideSaving ? 'Saving...' : 'Save override'}
-			</button>
-		</div>
-	{/if}
 </Dialog>
 
 <FeedbackToast
