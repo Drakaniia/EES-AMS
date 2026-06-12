@@ -171,7 +171,6 @@ pub async fn export_sf2_workbook(
         "classId": class_id.as_str(),
         "outputPath": result.output_path.as_str(),
         "marksWritten": result.marks_written,
-        "closedDays": result.closed_days,
     }))?;
     record_command_audit(
         pool.inner(),
