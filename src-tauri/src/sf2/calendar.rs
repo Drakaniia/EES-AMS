@@ -360,17 +360,6 @@ pub(super) fn sf2_date_mappings_for_report_month(
         .collect()
 }
 
-pub(super) fn sf2_is_report_month_date(template: &Sf2TemplateRecord, date: &str) -> bool {
-    let Some(month) = sf2_month_number(&template.report_month) else {
-        return false;
-    };
-    let year = sf2_report_year(&template.school_year, month);
-
-    parse_date(date).is_ok_and(|date| {
-        date.year() == year && date.month() == month && date.weekday().number_from_monday() <= 5
-    })
-}
-
 pub(super) fn parse_date(date: &str) -> Result<NaiveDate> {
     NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .map_err(|_| AppError::InvalidInput(format!("invalid date: {date}")))

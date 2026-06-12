@@ -7,11 +7,11 @@ use crate::infrastructure::database::{
     record_audit_event, AuditEventInput, ClassRepository, DbPool, EventRepository,
     SettingsRepository, StudentRepository,
 };
-use crate::sf2::attendance::{present_events_for_day, present_student_ids};
+use crate::sf2::attendance::present_events_for_day;
 use crate::sf2::calendar::{
     date_mappings_are_current_for_report_month, date_mappings_from_analysis,
     first_school_day_for_report_month, first_school_day_from_mappings, metadata_from_draft,
-    metadata_from_import_analysis, parse_date, sf2_closed_days_for_report_month,
+    metadata_from_import_analysis, parse_date,
     sf2_date_mappings_for_report_month, sf2_metadata_warnings, sf2_month_number, template_metadata,
     validate_configured_calendar,
 };
@@ -579,16 +579,17 @@ fn sync_template_roster_from_class(
     let sf2_repo = Sf2Repository::new(pool.clone());
     sf2_repo.update_template_with_mappings(&synced_template, &student_mappings, &date_mappings)?;
 
-    let closed_days = sf2_closed_days_for_report_month(
-        &synced_template,
-        &sf2_repo.closed_days_for_class(&class.id)?,
-    );
+    let report_dates = sf2_date_mappings_for_report_month(&synced_template, &date_mappings)
+        .iter()
+        .map(|m| m.date.clone())
+        .collect::<Vec<_>>();
+
     if let Err(error) = write_template_marks_for_mappings(
         pool,
         &synced_template,
-        &closed_days,
+        &report_dates,
         &student_mappings,
-        &sf2_date_mappings_for_report_month(&synced_template, &date_mappings),
+        &date_mappings,
     ) {
         log::warn!("failed to backfill synced SF2 workbook marks: {error}");
     }
@@ -1368,7 +1369,7 @@ fn unmapped_roster_issue(student_names: &[String]) -> String {
 fn roster_name_marks(
     analysis: &Sf2WorkbookAnalysis,
     assignments: &[TemplateRosterAssignment],
-    row_slots: &[TemplateRosterSlot],
+    _row_slots: &[TemplateRosterSlot],
 ) -> Vec<Sf2CellMark> {
     let sheet_names = analysis
         .sheets
@@ -1377,22 +1378,15 @@ fn roster_name_marks(
         .map(|sheet| sheet.name.clone())
         .collect::<Vec<_>>();
 
-    let names_by_row = assignments
-        .iter()
-        .map(|assignment| (assignment.slot.row_index, assignment.student.name.as_str()))
-        .collect::<HashMap<_, _>>();
-    let mut marks = Vec::with_capacity(sheet_names.len() * row_slots.len());
+    // Only write marks for rows that have actual student assignments
+    // This prevents adding empty rows beyond the actual student roster
+    let mut marks = Vec::with_capacity(sheet_names.len() * assignments.len());
     for sheet_name in sheet_names {
-        for slot in row_slots {
-            let value = names_by_row
-                .get(&slot.row_index)
-                .copied()
-                .unwrap_or_default()
-                .trim()
-                .to_string();
+        for assignment in assignments {
+            let value = assignment.student.name.trim().to_string();
             marks.push(Sf2CellMark {
                 sheet_name: sheet_name.clone(),
-                cell_address: format!("{SF2_NAME_COLUMN}{}", slot.row_index),
+                cell_address: format!("{SF2_NAME_COLUMN}{}", assignment.slot.row_index),
                 value,
             });
         }
@@ -1591,10 +1585,6 @@ fn parse_clock(value: &str) -> Option<(u32, u32)> {
     } else {
         None
     }
-}
-
-fn today_string() -> String {
-    Local::now().date_naive().format("%Y-%m-%d").to_string()
 }
 
 #[cfg(test)]
