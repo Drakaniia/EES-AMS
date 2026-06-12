@@ -102,8 +102,6 @@
 		selectedClassId || preview?.classId || preview?.template?.classId || ''
 	);
 	const selectedClass = $derived(classes.find((item) => item.id === activeClassId));
-	const closedDateCount = $derived(preview?.closedDays.length ?? 0);
-	const mappedClosedDateCount = $derived(preview?.dates.filter((date) => date.closed).length ?? 0);
 	const exportDisabled = $derived(
 		!preview?.canExport || exporting || savingDetails || !activeClassId
 	);
@@ -162,20 +160,6 @@
 		} catch {
 			workbookSettings = null;
 			clearDraft();
-		}
-	}
-
-	async function onClassChange() {
-		loading = true;
-		loadError = null;
-		try {
-			await loadReport(selectedClassId || undefined);
-		} catch (error) {
-			const msg = errorMessage(error, 'Failed to load SF2 preview');
-			loadError = msg;
-			toast(`SF2 preview failed: ${msg}`, false);
-		} finally {
-			loading = false;
 		}
 	}
 
@@ -513,7 +497,7 @@
 
 	function cellLabel(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
 		const state =
-			cell.status === 'present' ? 'present' : cell.status === 'absent' ? 'absent' : 'not closed';
+			cell.status === 'present' ? 'present' : 'absent';
 		return `${row.studentName}, ${matrixDateLabel(cell.date)}: ${state}`;
 	}
 
@@ -562,25 +546,6 @@
 	>
 		{#snippet actions()}
 			<div class="flex flex-wrap items-center gap-2">
-				{#if classes.length <= 1}
-					<span
-						class="inline-flex h-10 min-w-56 items-center rounded-pill border border-border bg-background px-4 text-sm font-medium"
-					>
-						{classes[0]?.name ?? preview?.className ?? 'Latest SF2 template'}
-					</span>
-				{:else}
-					<select
-						aria-label="Class"
-						bind:value={selectedClassId}
-						onchange={onClassChange}
-						class="h-10 min-w-56 rounded-pill border border-border bg-background px-4 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					>
-						<option value="">Latest SF2 template</option>
-						{#each classes as item (item.id)}
-							<option value={item.id}>{item.name}</option>
-						{/each}
-					</select>
-				{/if}
 				<button
 					type="button"
 					onclick={loadInitial}
@@ -670,16 +635,9 @@
 						preview.canExport ? 'ready' : 'warning'
 					)}
 					{@render summaryTile(
-						'Closed Days',
-						String(closedDateCount),
-						`${mappedClosedDateCount} mapped to workbook`,
-						CalendarDays,
-						'neutral'
-					)}
-					{@render summaryTile(
 						'Absences',
 						String(preview.absenceCount),
-						`${preview.presentCount} present marks`,
+						`${preview.presentCount} present marks recorded`,
 						UserX,
 						preview.absenceCount > 0 ? 'alert' : 'ready'
 					)}
@@ -736,7 +694,7 @@
 						</div>
 					{:else}
 						<p class="mt-4 text-sm leading-6 text-muted-foreground">
-							No absences are currently marked on closed SF2 days.
+							No absences are currently marked for this report month.
 						</p>
 					{/if}
 				</div>
@@ -803,9 +761,8 @@
 	maxWidth="2xl"
 	onClose={() => (exportDialogOpen = false)}
 >
-	<div class="grid gap-3 sm:grid-cols-3">
+	<div class="grid gap-3 sm:grid-cols-2">
 		{@render confirmStat('Mapped learners', preview?.mappedStudents ?? 0)}
-		{@render confirmStat('Closed days', closedDateCount)}
 		{@render confirmStat('Absences', preview?.absenceCount ?? 0)}
 	</div>
 
@@ -979,7 +936,7 @@
 						{preview.template.gradeLevel} - {preview.template.section}
 					</h2>
 					<p class="mt-1 text-sm text-muted-foreground">
-						Click a closed-day cell to toggle the learner between present and absent.
+						Click a cell to toggle the learner between present and absent.
 					</p>
 				</div>
 				<div class="flex flex-wrap gap-2 text-xs">

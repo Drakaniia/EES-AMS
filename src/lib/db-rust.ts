@@ -416,13 +416,6 @@ export async function updateSf2WorkbookSettings(
 	return await invoke('update_sf2_workbook_settings', { draft });
 }
 
-export async function closeSf2AttendanceDay(
-	classId: string,
-	date?: string
-): Promise<Sf2CloseDaySummary> {
-	return await invoke('close_sf2_attendance_day', { classId, date });
-}
-
 export async function getSf2ExportReadiness(classId?: string): Promise<Sf2ExportReadiness> {
 	return await invoke('get_sf2_export_readiness', { classId: classId || null });
 }
