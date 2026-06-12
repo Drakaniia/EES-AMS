@@ -233,11 +233,13 @@ fn workbook_learners(sheet: &ComObject) -> Result<Vec<Sf2WorkbookLearner>> {
             continue;
         }
 
-        learners.push(Sf2WorkbookLearner {
-            row_index: row as u32,
-            name,
-            gender_block: gender_block.clone(),
-        });
+        if is_learner_name(&name) {
+            learners.push(Sf2WorkbookLearner {
+                row_index: row as u32,
+                name,
+                gender_block: gender_block.clone(),
+            });
+        }
     }
 
     Ok(learners)
