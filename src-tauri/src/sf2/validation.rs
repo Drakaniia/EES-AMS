@@ -65,11 +65,15 @@ pub(super) fn validate_student_list(
         .filter(|student| !sf2_names.contains(student.normalized_name.as_str()))
         .cloned()
         .collect::<Vec<_>>();
-    let missing_from_current = valid_learners
-        .iter()
-        .filter(|learner| !current_names.contains(learner.normalized_name.as_str()))
-        .cloned()
-        .collect::<Vec<_>>();
+    let missing_from_current = if current.is_empty() {
+        Vec::new()
+    } else {
+        valid_learners
+            .iter()
+            .filter(|learner| !current_names.contains(learner.normalized_name.as_str()))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
     let possible_name_mismatches =
         possible_name_mismatches(&missing_from_sf2, &missing_from_current);
     let duplicate_current_students = duplicate_current_students(&current);
