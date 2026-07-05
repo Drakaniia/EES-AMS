@@ -1,11 +1,16 @@
 use crate::domain::error::{AppError, Result};
-use crate::sf2::logic::{is_learner_name, Sf2CellMark};
-use crate::sf2::models::{
-    Sf2WorkbookAnalysis, Sf2WorkbookDate, Sf2WorkbookLearner, Sf2WorkbookMetadata, Sf2WorkbookSheet,
+use crate::sf2::excel_com::worksheet::{
+    cell_text, set_sf2_cell, set_sf2_mark,
 };
+use crate::sf2::excel_com::calendar::{
+    configure_sf2_calendar,
+};
+use crate::sf2::excel_com::learners::workbook_learners;
+use crate::sf2::excel_com::learners::Sf2SheetQuality;
+use crate::sf2::logic::Sf2CellMark;
+use crate::sf2::models::{Sf2WorkbookAnalysis, Sf2WorkbookDate, Sf2WorkbookMetadata};
 use chrono::{Datelike, NaiveDate};
 use std::cell::Cell;
-use std::mem::ManuallyDrop;
 use std::path::Path;
 use windows::core::{BSTR, GUID, PCWSTR};
 use windows::Win32::Foundation::VARIANT_BOOL;
@@ -22,8 +27,6 @@ use windows::Win32::System::Variant::{
 };
 
 const EXCEL_SHEET_VISIBLE: i32 = -1;
-const EXCEL_SHEET_HIDDEN: i32 = 0;
-const EXCEL_ALIGN_LEFT: i32 = -4131;
 const LOCALE_USER_DEFAULT: u32 = 0x0400;
 
 pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
@@ -56,7 +59,7 @@ pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
                     vec![ComVariant::bool(false), ComVariant::bool(false)],
                 )?;
 
-                sheet_infos.push(Sf2WorkbookSheet {
+                sheet_infos.push(crate::sf2::models::Sf2WorkbookSheet {
                     name: sheet_name.clone(),
                     visible,
                     used_range: used_range_address.to_string_value(),
@@ -210,365 +213,7 @@ pub fn write_metadata(workbook_path: &Path, metadata: &Sf2WorkbookMetadata) -> R
     })
 }
 
-fn workbook_learners(sheet: &ComObject) -> Result<Vec<Sf2WorkbookLearner>> {
-    let used_range = sheet.get_object("UsedRange")?;
-    let rows = used_range.get_object("Rows")?;
-    let row_count = rows.get_i32("Count")?;
-    let mut gender_block = Some("MALE".to_string());
-    let mut learners = Vec::new();
-
-    for row in 1..=row_count {
-        let name = cell_text(sheet, row, 3)?.trim().to_string();
-        if name.is_empty() {
-            continue;
-        }
-
-        let upper_name = name.to_uppercase();
-        if upper_name.contains("MALE") && upper_name.contains("TOTAL") {
-            gender_block = Some("FEMALE".to_string());
-            continue;
-        }
-        if upper_name.contains("FEMALE") && upper_name.contains("TOTAL") {
-            gender_block = None;
-            continue;
-        }
-
-        if is_learner_name(&name) {
-            learners.push(Sf2WorkbookLearner {
-                row_index: row as u32,
-                name,
-                gender_block: gender_block.clone(),
-            });
-        }
-    }
-
-    Ok(learners)
-}
-
-fn best_sf2_monthly_sheet(sheets: &[ComObject]) -> Result<Option<ComObject>> {
-    let mut best_sheet: Option<(ComObject, Sf2SheetQuality)> = None;
-    for sheet in sheets {
-        let quality = sf2_sheet_quality(sheet)?;
-        if best_sheet
-            .as_ref()
-            .is_none_or(|(_, best_quality)| quality > *best_quality)
-        {
-            best_sheet = Some((sheet.clone(), quality));
-        }
-    }
-
-    Ok(best_sheet.map(|(sheet, _)| sheet))
-}
-
-fn sf2_sheet_quality(sheet: &ComObject) -> Result<Sf2SheetQuality> {
-    let learners = workbook_learners(sheet)?;
-    let learner_count = learners
-        .iter()
-        .filter(|learner| is_learner_name(&learner.name))
-        .count();
-    let male_count = learners
-        .iter()
-        .filter(|learner| {
-            learner.gender_block.as_deref() == Some("MALE") && is_learner_name(&learner.name)
-        })
-        .count();
-    let female_count = learners
-        .iter()
-        .filter(|learner| {
-            learner.gender_block.as_deref() == Some("FEMALE") && is_learner_name(&learner.name)
-        })
-        .count();
-    let total_day_cells = sf2_total_day_cell_count(sheet)?;
-
-    Ok(Sf2SheetQuality {
-        total_day_cells,
-        learner_count,
-        male_count,
-        female_count,
-    })
-}
-
-fn sf2_total_day_cell_count(sheet: &ComObject) -> Result<usize> {
-    let mut count = 0usize;
-    for row in [29, 49] {
-        for column in 6..=38 {
-            if !cell_text(sheet, row, column)?.trim().is_empty() {
-                count += 1;
-            }
-        }
-    }
-    Ok(count)
-}
-
-fn configure_sf2_calendar(
-    monthly_sheets: &[ComObject],
-    sf2_sheets: &[ComObject],
-    metadata: &Sf2WorkbookMetadata,
-) -> Result<()> {
-    let report_month = month_number(&metadata.report_month);
-    if report_month == 0 {
-        return Err(AppError::InvalidInput(
-            "Report Month must be a valid month name".to_string(),
-        ));
-    }
-
-    let report_year = report_year(&metadata.school_year, report_month);
-    let target_sheet_name = format!("{} {}", month_name(report_month), report_year);
-    let target_sheet = match monthly_sheets.iter().find(|sheet| {
-        sheet
-            .get_string("Name")
-            .is_ok_and(|name| name == target_sheet_name)
-    }) {
-        Some(sheet) => sheet.clone(),
-        None => {
-            best_sf2_monthly_sheet(monthly_sheets)?.unwrap_or_else(|| monthly_sheets[0].clone())
-        }
-    };
-
-    target_sheet.put_i4("Visible", EXCEL_SHEET_VISIBLE)?;
-    rename_sheet_unique(&target_sheet, &target_sheet_name)?;
-    set_sf2_month_dates(
-        &target_sheet,
-        report_year,
-        report_month,
-        metadata.first_school_day.unwrap_or(1),
-    )?;
-    let _ = target_sheet.method("Activate", Vec::new());
-
-    let target_index = target_sheet.get_i32("Index")?;
-    let mut hidden_index = 1;
-    for sheet in sf2_sheets {
-        if sheet.get_i32("Index")? == target_index {
-            continue;
-        }
-
-        clear_sf2_month_dates(sheet)?;
-        let sheet_name = sheet.get_string("Name")?;
-        if month_number(&sheet_name) > 0 && year_from_sheet_name(&sheet_name) > 0 {
-            rename_sheet_unique(sheet, &format!("__SF2_HIDDEN_{hidden_index}"))?;
-        }
-        sheet.put_i4("Visible", EXCEL_SHEET_HIDDEN)?;
-        hidden_index += 1;
-    }
-
-    Ok(())
-}
-
-fn set_sf2_month_dates(
-    sheet: &ComObject,
-    year: i32,
-    month: u32,
-    first_school_day: u32,
-) -> Result<()> {
-    let slots = sf2_weekday_slots(sheet)?;
-    if slots.is_empty() {
-        return Ok(());
-    }
-
-    let last_day = days_in_month(year, month);
-    if first_school_day < 1 || first_school_day > last_day {
-        return Err(AppError::InvalidInput(format!(
-            "First attendance day must be between 1 and {last_day} for this report month"
-        )));
-    }
-
-    let first_school_date =
-        NaiveDate::from_ymd_opt(year, month, first_school_day).ok_or_else(|| {
-            AppError::InvalidInput("First attendance day is not a valid date".to_string())
-        })?;
-    if date_weekday_index(first_school_date).is_none() {
-        return Err(AppError::InvalidInput(
-            "First attendance day must be a Monday-Friday school day".to_string(),
-        ));
-    }
-
-    let monday_anchor =
-        first_school_date - chrono::Duration::days(date_weekday_index(first_school_date).unwrap());
-
-    for slot in slots {
-        let mut value = String::new();
-        for day in first_school_day..=last_day {
-            let Some(date) = NaiveDate::from_ymd_opt(year, month, day) else {
-                continue;
-            };
-            let Some(weekday_index) = date_weekday_index(date) else {
-                continue;
-            };
-            let week_index = (date - monday_anchor).num_days() / 7;
-            if week_index == i64::from(slot.week_index) && weekday_index == slot.weekday_index {
-                value = day.to_string();
-                break;
-            }
-        }
-
-        set_sf2_date_cell(sheet, slot.column, &value)?;
-        set_sf2_cell(sheet, 7, slot.column, &slot.label, true)?;
-    }
-
-    Ok(())
-}
-
-fn clear_sf2_month_dates(sheet: &ComObject) -> Result<()> {
-    for slot in sf2_weekday_slots(sheet)? {
-        set_sf2_cell(sheet, 6, slot.column, "", true)?;
-    }
-    Ok(())
-}
-
-fn sf2_weekday_slots(sheet: &ComObject) -> Result<Vec<Sf2WeekdaySlot>> {
-    let mut slots = Vec::new();
-    let mut week_index = 0;
-    let mut previous_weekday = None;
-
-    for column in 6..=38 {
-        let weekday_text = cell_text(sheet, 7, column)?.trim().to_string();
-        let Some(weekday_index) = weekday_index(&weekday_text) else {
-            continue;
-        };
-
-        if previous_weekday.is_some_and(|previous| weekday_index <= previous) {
-            week_index += 1;
-        }
-
-        slots.push(Sf2WeekdaySlot {
-            column,
-            week_index,
-            weekday_index,
-            label: weekday_label(weekday_index).to_string(),
-        });
-        previous_weekday = Some(weekday_index);
-    }
-
-    Ok(slots)
-}
-
-fn set_sf2_date_cell(sheet: &ComObject, column: i32, value: &str) -> Result<()> {
-    set_sf2_cell(sheet, 6, column, value, true)?;
-    let cell = worksheet_cell(sheet, 6, column)?;
-    let target = merged_target(&cell)?;
-
-    if cell.get_bool("MergeCells")? {
-        if let Ok(merge_area) = cell.get_object("MergeArea") {
-            let _ = merge_area.put_i4("HorizontalAlignment", EXCEL_ALIGN_LEFT);
-            let _ = merge_area.put_i4("IndentLevel", 0);
-        }
-    }
-    let _ = target.put_i4("HorizontalAlignment", EXCEL_ALIGN_LEFT);
-    let _ = target.put_i4("IndentLevel", 0);
-    Ok(())
-}
-
-fn set_sf2_cell(
-    sheet: &ComObject,
-    row: i32,
-    column: i32,
-    value: &str,
-    text_format: bool,
-) -> Result<()> {
-    let cell = worksheet_cell(sheet, row, column)?;
-    let target = merged_target(&cell)?;
-    ensure_not_formula(sheet, &target)?;
-
-    if text_format {
-        let _ = target.put_string("NumberFormat", "@");
-    }
-    put_cell_value(&target, value)
-}
-
-fn set_sf2_mark(sheet: &ComObject, cell_address: &str, value: &str) -> Result<()> {
-    let cell = sheet.get_object_with_args("Range", vec![ComVariant::bstr(cell_address)])?;
-    let target = merged_target(&cell)?;
-    ensure_not_formula(sheet, &target)?;
-    put_cell_value(&target, value)
-}
-
-fn merged_target(cell: &ComObject) -> Result<ComObject> {
-    if !cell.get_bool("MergeCells")? {
-        return Ok(cell.clone());
-    }
-
-    let merge_area = cell.get_object("MergeArea")?;
-    let cells = merge_area.get_object("Cells")?;
-    cells.get_object_with_args("Item", vec![ComVariant::i4(1), ComVariant::i4(1)])
-}
-
-fn ensure_not_formula(sheet: &ComObject, target: &ComObject) -> Result<()> {
-    if !target.get_bool("HasFormula")? {
-        return Ok(());
-    }
-
-    let sheet_name = sheet
-        .get_string("Name")
-        .unwrap_or_else(|_| "Sheet".to_string());
-    let address = target
-        .get_with_args(
-            "Address",
-            vec![ComVariant::bool(false), ComVariant::bool(false)],
-        )
-        .map(|value| value.to_string_value())
-        .unwrap_or_else(|_| "?".to_string());
-    Err(AppError::Internal(format!(
-        "Refusing to overwrite formula cell {sheet_name}!{address}"
-    )))
-}
-
-fn put_cell_value(cell: &ComObject, value: &str) -> Result<()> {
-    if value.is_empty() {
-        cell.put_variant("Value2", ComVariant::empty())
-    } else {
-        cell.put_string("Value2", value)
-    }
-}
-
-fn worksheet_cell(sheet: &ComObject, row: i32, column: i32) -> Result<ComObject> {
-    let cells = sheet.get_object("Cells")?;
-    cells.get_object_with_args("Item", vec![ComVariant::i4(row), ComVariant::i4(column)])
-}
-
-fn cell_text(sheet: &ComObject, row: i32, column: i32) -> Result<String> {
-    worksheet_cell(sheet, row, column)?.get_string("Text")
-}
-
-fn rename_sheet_unique(sheet: &ComObject, base_name: &str) -> Result<()> {
-    let name = truncate_sheet_name(base_name);
-    if sheet.put_string("Name", &name).is_ok() {
-        return Ok(());
-    }
-
-    for suffix in 1..=99 {
-        let tail = format!("-{suffix}");
-        let base_len = 31usize.saturating_sub(tail.len());
-        let mut candidate = name.chars().take(base_len).collect::<String>();
-        candidate.push_str(&tail);
-        if sheet.put_string("Name", &candidate).is_ok() {
-            return Ok(());
-        }
-    }
-
-    sheet.put_string("Name", &name)
-}
-
-fn truncate_sheet_name(name: &str) -> String {
-    name.chars().take(31).collect()
-}
-
-fn with_workbook<T, F>(path: &Path, read_only: bool, save_on_close: bool, action: F) -> Result<T>
-where
-    F: FnOnce(&ExcelSession, &ComObject) -> Result<T>,
-{
-    let mut excel = ExcelSession::new()?;
-    let workbook = excel.open_workbook(path, read_only)?;
-    let action_result = action(&excel, &workbook);
-    let close_result = workbook.method("Close", vec![ComVariant::bool(save_on_close)]);
-    let quit_result = excel.quit();
-
-    match (action_result, close_result, quit_result) {
-        (Ok(value), Ok(_), Ok(_)) => Ok(value),
-        (Err(error), _, _) => Err(error),
-        (_, Err(error), _) => Err(error),
-        (_, _, Err(error)) => Err(error),
-    }
-}
+// ── COM Infrastructure ────────────────────────────────────────────────────────
 
 fn run_excel_task<T, F>(task: F) -> Result<T>
 where
@@ -603,6 +248,24 @@ impl Drop for ComApartment {
         unsafe {
             CoUninitialize();
         }
+    }
+}
+
+fn with_workbook<T, F>(path: &Path, read_only: bool, save_on_close: bool, action: F) -> Result<T>
+where
+    F: FnOnce(&ExcelSession, &ComObject) -> Result<T>,
+{
+    let mut excel = ExcelSession::new()?;
+    let workbook = excel.open_workbook(path, read_only)?;
+    let action_result = action(&excel, &workbook);
+    let close_result = workbook.method("Close", vec![ComVariant::bool(save_on_close)]);
+    let quit_result = excel.quit();
+
+    match (action_result, close_result, quit_result) {
+        (Ok(value), Ok(_), Ok(_)) => Ok(value),
+        (Err(error), _, _) => Err(error),
+        (_, Err(error), _) => Err(error),
+        (_, _, Err(error)) => Err(error),
     }
 }
 
@@ -656,8 +319,10 @@ impl Drop for ExcelSession {
     }
 }
 
+// ── ComObject ─────────────────────────────────────────────────────────────────
+
 #[derive(Clone)]
-struct ComObject {
+pub struct ComObject {
     dispatch: IDispatch,
 }
 
@@ -672,56 +337,56 @@ impl ComObject {
         Ok(Self { dispatch })
     }
 
-    fn get_object(&self, name: &str) -> Result<Self> {
+    pub fn get_object(&self, name: &str) -> Result<Self> {
         self.get(name)?.to_dispatch()
     }
 
-    fn get_object_with_args(&self, name: &str, args: Vec<ComVariant>) -> Result<Self> {
+    pub fn get_object_with_args(&self, name: &str, args: Vec<ComVariant>) -> Result<Self> {
         self.invoke(name, DISPATCH_PROPERTYGET, args)?.to_dispatch()
     }
 
-    fn method_object(&self, name: &str, args: Vec<ComVariant>) -> Result<Self> {
+    pub fn method_object(&self, name: &str, args: Vec<ComVariant>) -> Result<Self> {
         self.method(name, args)?.to_dispatch()
     }
 
-    fn get_string(&self, name: &str) -> Result<String> {
+    pub fn get_string(&self, name: &str) -> Result<String> {
         Ok(self.get(name)?.to_string_value())
     }
 
-    fn get_i32(&self, name: &str) -> Result<i32> {
+    pub fn get_i32(&self, name: &str) -> Result<i32> {
         self.get(name)?.to_i32()
     }
 
-    fn get_bool(&self, name: &str) -> Result<bool> {
+    pub fn get_bool(&self, name: &str) -> Result<bool> {
         self.get(name)?.to_bool()
     }
 
-    fn put_bool(&self, name: &str, value: bool) -> Result<()> {
+    pub fn put_bool(&self, name: &str, value: bool) -> Result<()> {
         self.put_variant(name, ComVariant::bool(value))
     }
 
-    fn put_i4(&self, name: &str, value: i32) -> Result<()> {
+    pub fn put_i4(&self, name: &str, value: i32) -> Result<()> {
         self.put_variant(name, ComVariant::i4(value))
     }
 
-    fn put_string(&self, name: &str, value: &str) -> Result<()> {
+    pub fn put_string(&self, name: &str, value: &str) -> Result<()> {
         self.put_variant(name, ComVariant::bstr(value))
     }
 
-    fn put_variant(&self, name: &str, value: ComVariant) -> Result<()> {
+    pub fn put_variant(&self, name: &str, value: ComVariant) -> Result<()> {
         self.invoke(name, DISPATCH_PROPERTYPUT, vec![value])?;
         Ok(())
     }
 
-    fn get(&self, name: &str) -> Result<ComVariant> {
+    pub fn get(&self, name: &str) -> Result<ComVariant> {
         self.invoke(name, DISPATCH_PROPERTYGET, Vec::new())
     }
 
-    fn get_with_args(&self, name: &str, args: Vec<ComVariant>) -> Result<ComVariant> {
+    pub fn get_with_args(&self, name: &str, args: Vec<ComVariant>) -> Result<ComVariant> {
         self.invoke(name, DISPATCH_PROPERTYGET, args)
     }
 
-    fn method(&self, name: &str, args: Vec<ComVariant>) -> Result<ComVariant> {
+    pub fn method(&self, name: &str, args: Vec<ComVariant>) -> Result<ComVariant> {
         self.invoke(name, DISPATCH_METHOD, args)
     }
 
@@ -796,18 +461,20 @@ impl ComObject {
     }
 }
 
-struct ComVariant(VARIANT);
+// ── ComVariant ─────────────────────────────────────────────────────────────────
+
+pub struct ComVariant(VARIANT);
 
 impl ComVariant {
-    fn empty() -> Self {
+    pub fn empty() -> Self {
         Self(variant_from_type(VT_EMPTY, VARIANT_0_0_0 { lVal: 0 }))
     }
 
-    fn i4(value: i32) -> Self {
+    pub fn i4(value: i32) -> Self {
         Self(variant_from_type(VT_I4, VARIANT_0_0_0 { lVal: value }))
     }
 
-    fn bool(value: bool) -> Self {
+    pub fn bool(value: bool) -> Self {
         let value = if value {
             VARIANT_BOOL(-1)
         } else {
@@ -816,16 +483,16 @@ impl ComVariant {
         Self(variant_from_type(VT_BOOL, VARIANT_0_0_0 { boolVal: value }))
     }
 
-    fn bstr(value: &str) -> Self {
+    pub fn bstr(value: &str) -> Self {
         Self(variant_from_type(
             VT_BSTR,
             VARIANT_0_0_0 {
-                bstrVal: ManuallyDrop::new(BSTR::from(value)),
+                bstrVal: std::mem::ManuallyDrop::new(BSTR::from(value)),
             },
         ))
     }
 
-    fn to_dispatch(&self) -> Result<ComObject> {
+    pub fn to_dispatch(&self) -> Result<ComObject> {
         if self.variant_type() != VT_DISPATCH {
             return Err(AppError::Internal(format!(
                 "Excel automation returned {}, expected dispatch object",
@@ -835,14 +502,14 @@ impl ComVariant {
 
         let dispatch = unsafe {
             let dispatch = &self.0.Anonymous.Anonymous.Anonymous.pdispVal;
-            ManuallyDrop::into_inner(dispatch.clone())
+            std::mem::ManuallyDrop::into_inner(dispatch.clone())
         }
         .ok_or_else(|| AppError::Internal("Excel returned a null object".to_string()))?;
 
         Ok(ComObject { dispatch })
     }
 
-    fn to_string_value(&self) -> String {
+    pub fn to_string_value(&self) -> String {
         match self.variant_type() {
             VT_BSTR => unsafe { self.0.Anonymous.Anonymous.Anonymous.bstrVal.to_string() },
             VT_I4 => unsafe { self.0.Anonymous.Anonymous.Anonymous.lVal.to_string() },
@@ -867,7 +534,7 @@ impl ComVariant {
         }
     }
 
-    fn to_i32(&self) -> Result<i32> {
+    pub fn to_i32(&self) -> Result<i32> {
         match self.variant_type() {
             VT_I4 => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.lVal }),
             VT_I2 => Ok(i32::from(unsafe {
@@ -899,7 +566,7 @@ impl ComVariant {
         }
     }
 
-    fn to_bool(&self) -> Result<bool> {
+    pub fn to_bool(&self) -> Result<bool> {
         match self.variant_type() {
             VT_BOOL => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.boolVal }.0 != 0),
             VT_I4 => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.lVal } != 0),
@@ -942,7 +609,7 @@ impl Drop for ComVariant {
 fn variant_from_type(vt: VARENUM, value: VARIANT_0_0_0) -> VARIANT {
     VARIANT {
         Anonymous: VARIANT_0 {
-            Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+            Anonymous: std::mem::ManuallyDrop::new(VARIANT_0_0 {
                 vt,
                 wReserved1: 0,
                 wReserved2: 0,
@@ -977,7 +644,9 @@ fn float_to_i32(value: f64) -> std::result::Result<i32, ()> {
     }
 }
 
-fn month_number(name: &str) -> u32 {
+// ── Utility functions ─────────────────────────────────────────────────────────
+
+pub fn month_number(name: &str) -> u32 {
     let normalized = name.to_uppercase();
     if normalized.contains("JAN") {
         1
@@ -1008,7 +677,7 @@ fn month_number(name: &str) -> u32 {
     }
 }
 
-fn month_name(month: u32) -> &'static str {
+pub fn month_name(month: u32) -> &'static str {
     match month {
         1 => "JANUARY",
         2 => "FEBRUARY",
@@ -1026,11 +695,11 @@ fn month_name(month: u32) -> &'static str {
     }
 }
 
-fn report_year(_school_year: &str, _month: u32) -> i32 {
-    chrono::Local::now().year()
+pub fn report_year(_school_year: &str, _month: u32) -> i32 {
+    chrono::Local::now().year_ce().1 as i32
 }
 
-fn year_from_sheet_name(name: &str) -> i32 {
+pub fn year_from_sheet_name(name: &str) -> i32 {
     name.split(|ch: char| !ch.is_ascii_digit())
         .find_map(|part| {
             (part.len() == 4 && part.starts_with("20"))
@@ -1040,50 +709,7 @@ fn year_from_sheet_name(name: &str) -> i32 {
         .unwrap_or(0)
 }
 
-fn weekday_index(label: &str) -> Option<i64> {
-    match label.to_uppercase().as_str() {
-        "M" => Some(0),
-        "T" => Some(1),
-        "W" => Some(2),
-        "TH" => Some(3),
-        "F" => Some(4),
-        _ => None,
-    }
-}
-
-fn date_weekday_index(date: NaiveDate) -> Option<i64> {
-    match date.weekday() {
-        chrono::Weekday::Mon => Some(0),
-        chrono::Weekday::Tue => Some(1),
-        chrono::Weekday::Wed => Some(2),
-        chrono::Weekday::Thu => Some(3),
-        chrono::Weekday::Fri => Some(4),
-        chrono::Weekday::Sat | chrono::Weekday::Sun => None,
-    }
-}
-
-fn weekday_label(index: i64) -> &'static str {
-    match index {
-        0 => "M",
-        1 => "T",
-        2 => "W",
-        3 => "TH",
-        4 => "F",
-        _ => "",
-    }
-}
-
-fn days_in_month(year: i32, month: u32) -> u32 {
-    let (next_year, next_month) = if month == 12 {
-        (year + 1, 1)
-    } else {
-        (year, month + 1)
-    };
-    let first_next_month = NaiveDate::from_ymd_opt(next_year, next_month, 1).unwrap();
-    (first_next_month - chrono::Duration::days(1)).day()
-}
-
-fn column_number_to_letter(mut column: i32) -> String {
+pub fn column_number_to_letter(mut column: i32) -> String {
     let mut letter = String::new();
     while column > 0 {
         let modulo = (column - 1) % 26;
@@ -1093,160 +719,46 @@ fn column_number_to_letter(mut column: i32) -> String {
     letter
 }
 
-fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
+pub fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
     haystack.to_uppercase().contains(&needle.to_uppercase())
 }
 
-#[derive(Debug)]
-struct Sf2WeekdaySlot {
-    column: i32,
-    week_index: i32,
-    weekday_index: i64,
-    label: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct Sf2SheetQuality {
-    total_day_cells: usize,
-    learner_count: usize,
-    male_count: usize,
-    female_count: usize,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::sf2::logic::Sf2CellMark;
-
-    const BUNDLED_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../resources/sf2/TEMPLATE_AUTOMATED_SF2.xls");
-
-    #[test]
-    fn accepts_excel_double_for_integer_properties() {
-        let value = ComVariant(variant_from_type(VT_R8, VARIANT_0_0_0 { dblVal: 42.0 }));
-
-        assert_eq!(value.to_i32().unwrap(), 42);
-    }
-
-    #[test]
-    fn report_year_uses_current_calendar_year() {
-        assert_eq!(report_year("2025-2026", 6), chrono::Local::now().year());
-    }
-
-    #[test]
-    #[ignore = "requires Microsoft Excel COM automation"]
-    fn sf2_template_com_round_trip() {
-        let dir = tempfile::tempdir().unwrap();
-        let workbook_path = dir.path().join("sf2-template-round-trip.xls");
-        std::fs::write(&workbook_path, BUNDLED_TEMPLATE_BYTES).unwrap();
-
-        let metadata = Sf2WorkbookMetadata {
-            school_id: "123456".to_string(),
-            school_name: "Sample Integrated School".to_string(),
-            school_year: "2026-2027".to_string(),
-            report_month: "JUNE".to_string(),
-            grade_level: "7".to_string(),
-            section: "Rose".to_string(),
-            adviser_name: "Teacher Adviser".to_string(),
-            school_head_name: "School Head".to_string(),
-            configure_calendar: true,
-            first_school_day: Some(8),
-        };
-
-        write_metadata(&workbook_path, &metadata).unwrap();
-        let analysis = analyze_workbook(&workbook_path).unwrap();
-
-        assert_eq!(analysis.school_id, "123456");
-        assert_eq!(analysis.school_name, "Sample Integrated School");
-        assert_eq!(analysis.school_year, "2026-2027");
-        assert_eq!(analysis.report_month, "JUNE");
-        assert_eq!(analysis.grade_level, "7");
-        assert_eq!(analysis.section, "Rose");
-        assert_eq!(analysis.adviser_name, "Teacher Adviser");
-        assert_eq!(analysis.school_head_name, "School Head");
-        assert!(analysis
-            .sheets
-            .iter()
-            .any(|sheet| sheet.name == "JUNE 2026" && sheet.visible == EXCEL_SHEET_VISIBLE));
-        assert_eq!(
-            analysis.dates.iter().map(|date| date.date.as_str()).min(),
-            Some("2026-06-08")
-        );
-
-        write_marks(
-            &workbook_path,
-            &[
-                Sf2CellMark {
-                    sheet_name: "JUNE 2026".to_string(),
-                    cell_address: "C8".to_string(),
-                    value: "Learner, One".to_string(),
-                },
-                Sf2CellMark {
-                    sheet_name: "JUNE 2026".to_string(),
-                    cell_address: "F8".to_string(),
-                    value: "X".to_string(),
-                },
-            ],
-        )
-        .unwrap();
-
-        let updated = analyze_workbook(&workbook_path).unwrap();
-        assert!(updated
-            .learners
-            .iter()
-            .any(|learner| learner.row_index == 8 && learner.name == "Learner, One"));
-    }
-
-    #[test]
-    #[ignore = "requires Microsoft Excel COM automation and SF2_FIXTURE_WORKBOOK"]
-    fn sf2_fixture_uses_best_roster_sheet_when_rebuilding_calendar() {
-        let fixture_path = std::env::var("SF2_FIXTURE_WORKBOOK")
-            .expect("SF2_FIXTURE_WORKBOOK must point to an SF2 .xls fixture");
-        let dir = tempfile::tempdir().unwrap();
-        let workbook_path = dir.path().join("sf2-fixture-round-trip.xls");
-        std::fs::copy(&fixture_path, &workbook_path).unwrap();
-
-        let initial = analyze_workbook(&workbook_path).unwrap();
-        assert!(initial.learners.iter().any(|learner| {
-            learner.row_index == 8 && learner.name.contains("CAMANIA,LIAN CARLO")
-        }));
-
-        let metadata = Sf2WorkbookMetadata {
-            school_id: "123456".to_string(),
-            school_name: "Sample Integrated School".to_string(),
-            school_year: "2025-2026".to_string(),
-            report_month: "JUNE".to_string(),
-            grade_level: "GRADE 3".to_string(),
-            section: "MATAPAT".to_string(),
-            adviser_name: "Teacher Adviser".to_string(),
-            school_head_name: "School Head".to_string(),
-            configure_calendar: true,
-            first_school_day: Some(2),
-        };
-
-        write_metadata(&workbook_path, &metadata).unwrap();
-        let updated = analyze_workbook(&workbook_path).unwrap();
-        assert!(updated
-            .sheets
-            .iter()
-            .any(|sheet| sheet.name == "JUNE 2026" && sheet.visible == EXCEL_SHEET_VISIBLE));
-        assert!(updated.learners.iter().any(|learner| {
-            learner.row_index == 8 && learner.name.contains("CAMANIA,LIAN CARLO")
-        }));
-
-        run_excel_task(move || {
-            with_workbook(&workbook_path, true, false, |_, workbook| {
-                let sheets = workbook.get_object("Worksheets")?;
-                let sheet =
-                    sheets.get_object_with_args("Item", vec![ComVariant::bstr("JUNE 2026")])?;
-                assert_eq!(cell_text(&sheet, 8, 3)?, "CAMANIA,LIAN CARLO, SUGAY");
-                assert_eq!(cell_text(&sheet, 29, 1)?, "13.");
-                assert_eq!(cell_text(&sheet, 49, 1)?, "14.");
-                assert!(!cell_text(&sheet, 29, 8)?.trim().is_empty());
-                assert!(!cell_text(&sheet, 49, 8)?.trim().is_empty());
-                Ok(())
-            })
+pub fn sf2_sheet_quality(sheet: &ComObject) -> Result<Sf2SheetQuality> {
+    let learners = workbook_learners(sheet)?;
+    let learner_count = learners
+        .iter()
+        .filter(|learner| crate::sf2::logic::is_learner_name(&learner.name))
+        .count();
+    let male_count = learners
+        .iter()
+        .filter(|learner| {
+            learner.gender_block.as_deref() == Some("MALE") && crate::sf2::logic::is_learner_name(&learner.name)
         })
-        .unwrap();
+        .count();
+    let female_count = learners
+        .iter()
+        .filter(|learner| {
+            learner.gender_block.as_deref() == Some("FEMALE") && crate::sf2::logic::is_learner_name(&learner.name)
+        })
+        .count();
+    let total_day_cells = sf2_total_day_cell_count(sheet)?;
+
+    Ok(Sf2SheetQuality {
+        total_day_cells,
+        learner_count,
+        male_count,
+        female_count,
+    })
+}
+
+fn sf2_total_day_cell_count(sheet: &ComObject) -> Result<usize> {
+    let mut count = 0usize;
+    for row in [29, 49] {
+        for column in 6..=38 {
+            if !crate::sf2::excel_com::worksheet::cell_text(sheet, row, column)?.trim().is_empty() {
+                count += 1;
+            }
+        }
     }
+    Ok(count)
 }

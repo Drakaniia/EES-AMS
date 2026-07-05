@@ -1,8 +1,14 @@
 mod attendance;
+pub(crate) mod attendance_service;
 mod calendar;
+pub(crate) mod calendar_service;
+pub(crate) mod roster;
+pub(crate) mod roster_sync;
+pub(crate) mod template_ops;
 pub mod excel;
 #[cfg(target_os = "windows")]
 mod excel_com;
+pub(crate) mod excel_service;
 pub mod logic;
 pub mod models;
 mod naming;
@@ -10,4 +16,5 @@ mod preview;
 pub mod repository;
 pub mod service;
 mod validation;
+pub(crate) mod validation_service;
 mod workbook_files;
