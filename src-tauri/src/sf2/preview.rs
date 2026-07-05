@@ -12,6 +12,7 @@ use crate::sf2::models::{
 };
 use crate::sf2::naming::class_name;
 use crate::sf2::repository::{template_summary, Sf2Repository};
+use chrono::{Local, NaiveDate};
 use std::collections::{HashMap, HashSet};
 
 pub(super) fn export_preview(
@@ -95,6 +96,7 @@ pub(super) fn export_preview(
     let mut present_count = 0;
     let mut absence_count = 0;
     let mut mapped_student_ids = HashSet::new();
+    let today = Local::now().date_naive();
 
     for mapping in &student_mappings {
         mapped_student_ids.insert(mapping.student_id.clone());
@@ -124,11 +126,17 @@ pub(super) fn export_preview(
                 let is_present = present_by_day
                     .get(&date.date)
                     .is_some_and(|present| present.contains(&mapping.student_id));
+
+                let is_future = NaiveDate::parse_from_str(&date.date, "%Y-%m-%d")
+                    .map(|d| d > today)
+                    .unwrap_or(false);
                 
                 let status = if is_present {
                     row_present_count += 1;
                     present_count += 1;
                     Sf2PreviewCellStatus::Present
+                } else if is_future {
+                    Sf2PreviewCellStatus::Open
                 } else {
                     row_absent_count += 1;
                     absence_count += 1;
