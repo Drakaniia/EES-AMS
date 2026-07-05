@@ -15,7 +15,7 @@
 	<div
 		class="loading-screen fixed inset-0 z-50 flex flex-col items-center justify-center bg-background"
 	>
-		<div class="loading-content flex flex-col items-center gap-6">
+		<div		class="flex flex-col items-center gap-6">
 			<!-- App Logo/Branding -->
 			<div class="branding text-center">
 				<h1 class="mb-2 text-3xl font-bold text-foreground">EES</h1>
@@ -36,21 +36,6 @@
 		.loading-screen {
 			background-color: var(--color-background);
 			color: var(--color-foreground);
-		}
-
-		.loading-content {
-			animation: fadeIn 0.3s ease-in-out;
-		}
-
-		@keyframes fadeIn {
-			from {
-				opacity: 0;
-				transform: translateY(10px);
-			}
-			to {
-				opacity: 1;
-				transform: translateY(0);
-			}
 		}
 	</style>
 {/if}

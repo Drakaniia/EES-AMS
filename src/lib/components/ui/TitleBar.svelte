@@ -129,13 +129,7 @@
 		justify-content: space-between;
 		align-items: center;
 		height: 32px;
-		background:
-			linear-gradient(
-				180deg,
-				color-mix(in oklab, var(--color-background) 94%, white),
-				color-mix(in oklab, var(--color-background) 96%, var(--color-surface))
-			),
-			var(--color-background);
+		background: var(--color-background);
 		border-bottom: 1px solid var(--color-border);
 		user-select: none;
 		-webkit-app-region: drag;
@@ -176,8 +170,8 @@
 		cursor: pointer;
 		color: var(--color-muted-foreground);
 		transition:
-			background-color 0.15s var(--ease-ui),
-			color 0.15s var(--ease-ui);
+			background-color 0.15s ease,
+			color 0.15s ease;
 	}
 
 	.window-control:hover {
