@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
-	import { fade, fly } from 'svelte/transition';
+
 	import { X } from 'lucide-svelte';
 
 	type Props = {
@@ -120,23 +120,22 @@
 
 {#if open}
 	<div
-		class="fixed inset-0 z-40 bg-foreground/45 backdrop-blur-sm"
+		class="fixed inset-0 z-40 bg-foreground/45"
 		role="presentation"
 		onclick={handleBackdropClick}
-		transition:fade={{ duration: 120 }}
 	></div>
 
 	<div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
 		<div
 			bind:this={panel}
-			class="surface-panel {widthClass} max-h-[min(86vh,760px)] w-full overflow-hidden shadow-2xl"
+			class="surface-panel {widthClass} max-h-[min(86vh,760px)] w-full overflow-hidden"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby={titleId}
 			aria-describedby={description ? descriptionId : undefined}
 			tabindex="-1"
 			onkeydown={handleKeydown}
-			transition:fly={{ duration: 160, y: -10 }}
+
 		>
 			<div class="panel-header">
 				<div class="min-w-0 flex-1">

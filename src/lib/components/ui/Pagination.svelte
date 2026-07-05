@@ -62,7 +62,7 @@
 {#if totalPages > 1}
 	<nav aria-label="Pagination" class="flex justify-center">
 		<div
-			class="inline-flex max-w-[calc(100vw-2rem)] items-center gap-1 overflow-x-auto rounded-xl border border-border bg-background/95 p-1 shadow-lg backdrop-blur"
+			class="inline-flex max-w-[calc(100vw-2rem)] items-center gap-1 overflow-x-auto rounded-xl border border-border bg-background p-1"
 		>
 			<button
 				onclick={prevPage}

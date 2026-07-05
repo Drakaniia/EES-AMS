@@ -90,11 +90,11 @@
 
 {#if show}
 	<div
-		class="fixed top-4 right-4 z-50 w-full max-w-sm animate-in duration-300 slide-in-from-top-full"
+		class="fixed top-4 right-4 z-50 w-full max-w-sm"
 		role="alert"
 		aria-live="polite"
 	>
-		<div class="flex items-start rounded-lg border p-4 shadow-lg {colorClass}">
+		<div class="flex items-start rounded-lg border p-4 {colorClass}">
 			<div class="shrink-0">
 				{#if actionDisabled && type === 'update'}
 					<span class="mt-2 block size-2 rounded-full bg-orange-600" aria-hidden="true"></span>
@@ -137,17 +137,3 @@
 	</div>
 {/if}
 
-<style>
-	@keyframes toast-fade-in {
-		from {
-			opacity: 0;
-		}
-		to {
-			opacity: 1;
-		}
-	}
-
-	.animate-in {
-		animation: toast-fade-in 0.18s ease-out;
-	}
-</style>
