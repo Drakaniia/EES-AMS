@@ -32,7 +32,7 @@ bun run build
 - **Feature Modules**: Put feature-specific workflow logic under `src/lib/features/<feature>/`. Settings workflows live in `src/lib/features/settings/`.
 - **Naming**: kebab-case for files, PascalCase for components
 - **TypeScript**: Strict typing enabled, use interfaces for data models
-- **Styling**: TailwindCSS utility classes, follow DESIGN.md tokens
+- **Styling**: TailwindCSS utility classes, follow docs/DESIGN.md tokens
 - **Tauri Integration**: Route code should call feature native adapters such as `$lib/features/settings/native`; low-level command wrappers stay in `src/lib/db-rust.ts` unless a component has a narrow native concern.
 
 Examples with actual file paths:
@@ -66,7 +66,7 @@ Examples with actual file paths:
 ## Common Gotchas
 
 - Prefer feature native adapters from route code; keep direct `@tauri-apps/api` imports inside low-level wrappers or narrowly scoped native UI components.
-- Use TailwindCSS classes from DESIGN.md tokens for consistent styling
+- Use TailwindCSS classes from docs/DESIGN.md tokens for consistent styling
 - SvelteKit routes use `+page.svelte` for pages, `+layout.svelte` for layouts
 - Tauri commands are async, always await the result
 
