@@ -4,7 +4,6 @@
 	import logo from '$lib/assets/logo-seal.png';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { onMount } from 'svelte';
-	import { fade } from 'svelte/transition';
 	import {
 		FileSpreadsheet,
 		FileText,
@@ -88,7 +87,7 @@
 	</a>
 
 	<aside
-		class="flex shrink-0 flex-col border-b border-border bg-background/82 shadow-sm backdrop-blur-xl md:min-h-0 md:w-72 md:border-r md:border-b-0"
+		class="flex shrink-0 flex-col border-b border-border bg-background md:min-h-0 md:w-72 md:border-r md:border-b-0"
 		aria-label="Primary navigation"
 	>
 		<div class="flex items-center gap-3 px-4 py-3 md:px-5 md:pt-6 md:pb-5">
@@ -185,10 +184,6 @@
 		class="min-h-0 min-w-0 flex-1 overflow-auto focus:outline-none"
 		tabindex="-1"
 	>
-		{#key page.url.pathname}
-			<div class="h-full min-h-0" in:fade={{ duration: 180 }} out:fade={{ duration: 140 }}>
-				{@render children()}
-			</div>
-		{/key}
+		{@render children()}
 	</main>
 </div>
