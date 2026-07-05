@@ -411,6 +411,90 @@ impl EventRepository {
         Ok(())
     }
 
+    /// Delete multiple events in a single transaction.
+    /// Returns the list of event IDs that were successfully deleted.
+    pub fn delete_many(&self, ids: &[EventId], reason: Option<String>) -> Result<Vec<EventId>> {
+        let mut conn = self.pool.get()?;
+        let transaction = conn.transaction()?;
+        let mut deleted = Vec::new();
+        let audit_reason = normalize_optional_text(reason);
+
+        for &id in ids {
+            let before = match Self::get_event_inner(&transaction, id) {
+                Ok(event) => event,
+                Err(_) => continue,
+            };
+
+            let rows = transaction.execute(
+                "DELETE FROM events WHERE id = ?1",
+                params![id.0.to_string()],
+            )?;
+            if rows == 0 {
+                continue;
+            }
+
+            deleted.push(id);
+
+            if let Some(ref reason) = audit_reason {
+                let before_json = serialize_audit_event(&before)?;
+                transaction.execute(
+                    "INSERT INTO attendance_event_audit (id, event_id, student_id, class_id, session_key, action, reason, before_json, after_json, created_at, actor)
+                     VALUES (?1, ?2, ?3, ?4, ?5, 'delete', ?6, ?7, NULL, ?8, 'admin')",
+                    params![
+                        uuid::Uuid::new_v4().to_string(),
+                        before.id.0.to_string(),
+                        before.student_id.0.to_string(),
+                        before.class_id.as_deref(),
+                        before.session_key.as_deref(),
+                        reason,
+                        before_json,
+                        Utc::now().timestamp(),
+                    ],
+                )?;
+            }
+
+            let before_json = serialize_audit_payload("attendance event audit payload", &before)?;
+            let metadata_json = audit_metadata(serde_json::json!({
+                "reason": audit_reason.as_deref(),
+            }))?;
+            insert_audit_event(
+                &transaction,
+                AuditEventDraft::new(
+                    "attendance_event",
+                    Some(before.id.0.to_string()),
+                    "delete",
+                    format!(
+                        "Deleted attendance record for student {}",
+                        before.student_id
+                    ),
+                )
+                .before_json(before_json)
+                .metadata_json(metadata_json),
+            )?;
+        }
+
+        transaction.commit()?;
+        Ok(deleted)
+    }
+
+    /// Get an event within an existing transaction (no commit).
+    fn get_event_inner(
+        transaction: &rusqlite::Transaction<'_>,
+        id: EventId,
+    ) -> Result<AttendanceEvent> {
+        let event = transaction
+            .query_row(
+                "SELECT id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at
+                 FROM events
+                 WHERE id = ?1",
+                params![id.0.to_string()],
+                attendance_event_from_row,
+            )
+            .optional()?
+            .ok_or_else(|| AppError::EventNotFound(id.0.to_string()))?;
+        Ok(event)
+    }
+
     /// List attendance audit entries
     pub fn list_audit(
         &self,
