@@ -26,6 +26,12 @@
 		ScanLine,
 		UsersRound
 	} from 'lucide-svelte';
+	import {
+		getActiveClass,
+		eventTime,
+		initials,
+		attendanceHref,
+	} from './dashboard-state.svelte';
 
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
@@ -79,7 +85,7 @@
 	const today = $derived(todayKey);
 	const todayEvents = $derived(events.filter((event) => fmtDate(event.timestamp) === today));
 	const studentMap = $derived(new SvelteMap(students.map((student) => [student.id, student])));
-	const activeClass = $derived(getActiveClass());
+	const activeClass = $derived(getActiveClass(classes));
 	const assignedClass = $derived(classes[0] ?? null);
 	const isCardReaderMode = $derived(settingsStore.settings?.attendanceMode === 'card_reader');
 	const attendanceActionLabel = $derived(
@@ -134,51 +140,7 @@
 		return 'No class is configured yet. Add the class schedule and student list to begin tracking attendance.';
 	});
 
-	function getActiveClass(): Class | null {
-		const now = new Date();
-		const currentTime = now.getHours() * 60 + now.getMinutes();
-		const currentDay = now.getDay();
 
-		for (const classItem of classes) {
-			if (classItem.days && !classItem.days.includes(currentDay)) continue;
-
-			const [startHour, startMin] = classItem.dayStart.split(':').map(Number);
-			const [endHour, endMin] = classItem.dayEnd.split(':').map(Number);
-			const startTime = startHour * 60 + startMin;
-			const endTime = endHour * 60 + endMin;
-
-			if (currentTime >= startTime && currentTime <= endTime) return classItem;
-		}
-		return null;
-	}
-
-	function eventTime(event: AttendanceEvent) {
-		return typeof event.timestamp === 'string'
-			? new Date(event.timestamp).getTime()
-			: event.timestamp;
-	}
-
-	function attendanceHref(
-		classId?: string,
-		manualFallback = false
-	): '/attendance' | `/attendance?${string}` {
-		const params: string[] = [];
-		if (classId) params.push(`classId=${encodeURIComponent(classId)}`);
-		if (manualFallback && isCardReaderMode) params.push('manual=true');
-		const query = params.join('&');
-		return query ? (`/attendance?${query}` as `/attendance?${string}`) : '/attendance';
-	}
-
-	function initials(name: string) {
-		return (
-			name
-				.split(/\s+/)
-				.filter(Boolean)
-				.slice(0, 2)
-				.map((part) => part[0]?.toUpperCase())
-				.join('') || 'ST'
-		);
-	}
 
 	function scheduleMidnightRefresh() {
 		if (midnightTimer) clearTimeout(midnightTimer);
@@ -210,7 +172,7 @@
 			<UsersRound class="size-4" aria-hidden="true" />
 			Manage students
 		</a>
-		<a href={resolve(attendanceHref(assignedClass?.id))} class="btn btn-primary control-ring">
+		<a href={resolve(attendanceHref(isCardReaderMode, assignedClass?.id))} class="btn btn-primary control-ring">
 			{#if activeClass}
 				<span class="relative flex h-2 w-2" aria-hidden="true">
 					<span
