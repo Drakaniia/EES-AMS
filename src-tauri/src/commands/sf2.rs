@@ -147,6 +147,20 @@ pub fn get_sf2_export_preview(
     service::export_preview(pool.inner().clone(), class_id).map_err(|e| e.to_string())
 }
 
+/// Lightweight toggle — only persists the DB event, no Excel I/O or preview rebuild.
+/// Call this from the pre-export review grid. Click the Refresh button to reload the full preview.
+#[tauri::command]
+pub fn toggle_sf2_preview_attendance(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: String,
+    student_id: String,
+    date: String,
+    present: bool,
+) -> std::result::Result<(), String> {
+    service::set_preview_attendance_lightweight(pool.inner().clone(), class_id, student_id, date, present)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn set_sf2_preview_attendance(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
