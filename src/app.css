@@ -1,6 +1,4 @@
 @import 'tailwindcss';
-@import 'tw-animate-css';
-
 /* Plus Jakarta Sans — variable font, self-hosted */
 @font-face {
 	font-family: 'Plus Jakarta Sans';
@@ -147,7 +145,6 @@
 	--shadow-soft: 0 18px 45px color-mix(in oklab, var(--color-foreground) 11%, transparent);
 	--shadow-quiet: 0 1px 2px color-mix(in oklab, var(--color-foreground) 9%, transparent);
 	--shadow-focus: 0 0 0 3px color-mix(in oklab, var(--color-ring) 28%, transparent);
-	--ease-ui: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .dark {
@@ -291,6 +288,12 @@
 	}
 }
 
+@keyframes skeleton-sweep {
+	100% {
+		transform: translateX(100%);
+	}
+}
+
 .font-mono {
 	font-family: var(--font-mono);
 }
@@ -313,32 +316,14 @@
 }
 
 .app-surface {
-	background:
-		radial-gradient(
-			circle at 10% 0%,
-			color-mix(in oklab, var(--color-primary) 12%, transparent) 0,
-			transparent 28rem
-		),
-		radial-gradient(
-			circle at 95% 10%,
-			color-mix(in oklab, var(--color-accent) 9%, transparent) 0,
-			transparent 24rem
-		),
-		linear-gradient(
-			180deg,
-			color-mix(in oklab, var(--color-background) 92%, white) 0%,
-			var(--color-background) 45%
-		),
-		var(--color-background);
+	background: var(--color-background);
 }
 
 .control-ring {
 	transition:
-		border-color 150ms var(--ease-ui),
-		background-color 150ms var(--ease-ui),
-		box-shadow 150ms var(--ease-ui),
-		color 150ms var(--ease-ui),
-		transform 150ms var(--ease-ui);
+		border-color 150ms ease,
+		background-color 150ms ease,
+		color 150ms ease;
 }
 
 .control-ring:hover {
@@ -372,32 +357,10 @@
 }
 
 .surface-panel {
-	position: relative;
-	overflow: hidden;
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius-2xl);
-	background:
-		linear-gradient(
-			180deg,
-			color-mix(in oklab, var(--surface-raised) 94%, white) 0%,
-			var(--color-card) 100%
-		),
-		var(--color-card);
+	background: var(--color-card);
 	box-shadow: var(--shadow-quiet);
-}
-
-.surface-panel::before {
-	position: absolute;
-	inset: 0;
-	pointer-events: none;
-	content: '';
-	background: linear-gradient(135deg, color-mix(in oklab, white 32%, transparent), transparent 34%);
-	opacity: 0.5;
-}
-
-.surface-panel > * {
-	position: relative;
-	z-index: 1;
 }
 
 .panel-header {
@@ -428,50 +391,31 @@
 	text-decoration: none;
 	white-space: nowrap;
 	transition:
-		transform 150ms var(--ease-ui),
-		background-color 150ms var(--ease-ui),
-		border-color 150ms var(--ease-ui),
-		box-shadow 150ms var(--ease-ui),
-		color 150ms var(--ease-ui);
-}
-
-.btn:hover {
-	transform: translateY(-1px);
-}
-
-.btn:active {
-	transform: translateY(0);
+		background-color 150ms ease,
+		border-color 150ms ease,
+		color 150ms ease;
 }
 
 .btn:disabled,
 .btn[aria-disabled='true'] {
 	cursor: not-allowed;
 	opacity: 0.55;
-	transform: none;
 }
 
 .btn-primary {
 	border-color: color-mix(in oklab, var(--color-primary) 78%, var(--color-border));
-	background: linear-gradient(180deg, var(--color-primary), var(--color-accent));
+	background: var(--color-primary);
 	color: var(--color-primary-foreground);
-	box-shadow:
-		0 10px 22px color-mix(in oklab, var(--color-primary) 22%, transparent),
-		inset 0 1px 0 color-mix(in oklab, white 28%, transparent);
 }
 
 .btn-primary:hover {
-	background: linear-gradient(
-		180deg,
-		color-mix(in oklab, var(--color-primary) 90%, white),
-		var(--color-accent)
-	);
+	background: var(--color-accent);
 }
 
 .btn-secondary {
 	border-color: var(--color-border);
 	background: color-mix(in oklab, var(--color-background) 90%, white);
 	color: var(--color-foreground);
-	box-shadow: var(--shadow-quiet);
 }
 
 .btn-secondary:hover {
@@ -500,9 +444,8 @@
 	color: var(--color-foreground);
 	font-size: 0.875rem;
 	transition:
-		border-color 150ms var(--ease-ui),
-		background-color 150ms var(--ease-ui),
-		box-shadow 150ms var(--ease-ui);
+		border-color 150ms ease,
+		background-color 150ms ease;
 }
 
 .field {
@@ -556,40 +499,19 @@
 }
 
 .metric-card {
-	position: relative;
-	overflow: hidden;
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius-2xl);
-	background:
-		linear-gradient(
-			145deg,
-			color-mix(in oklab, var(--surface-raised) 96%, white),
-			var(--color-card)
-		),
-		var(--color-card);
+	background: var(--color-card);
 	padding: 1.25rem;
-	box-shadow: var(--shadow-quiet);
-	transition:
-		transform 150ms var(--ease-ui),
-		border-color 150ms var(--ease-ui),
-		box-shadow 150ms var(--ease-ui);
 }
 
 .metric-card:hover {
-	transform: translateY(-2px);
 	border-color: color-mix(in oklab, var(--color-primary) 28%, var(--color-border));
-	box-shadow: var(--shadow-soft);
 }
 
 .metric-card-accent {
 	border-color: color-mix(in oklab, var(--color-primary) 74%, var(--color-border));
-	background:
-		linear-gradient(
-			145deg,
-			color-mix(in oklab, var(--color-primary) 92%, white),
-			var(--color-accent)
-		),
-		var(--color-primary);
+	background: var(--color-primary);
 	color: var(--color-primary-foreground);
 }
 
@@ -615,8 +537,8 @@
 .progress-fill {
 	height: 100%;
 	border-radius: inherit;
-	background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
-	transition: width 260ms var(--ease-ui);
+	background: var(--color-primary);
+	transition: width 260ms ease;
 }
 
 .list-row {
@@ -624,13 +546,11 @@
 	border-radius: var(--radius-xl);
 	background: color-mix(in oklab, var(--color-background) 92%, white);
 	transition:
-		border-color 150ms var(--ease-ui),
-		background-color 150ms var(--ease-ui),
-		transform 150ms var(--ease-ui);
+		border-color 150ms ease,
+		background-color 150ms ease;
 }
 
 .list-row:hover {
-	transform: translateY(-1px);
 	border-color: color-mix(in oklab, var(--color-primary) 30%, var(--color-border));
 	background: color-mix(in oklab, var(--color-background) 82%, var(--color-primary) 5%);
 }
@@ -638,14 +558,7 @@
 .notice-banner {
 	border: 1px solid color-mix(in oklab, var(--color-primary) 28%, var(--color-border));
 	border-radius: var(--radius-2xl);
-	background:
-		linear-gradient(
-			135deg,
-			color-mix(in oklab, var(--color-primary) 14%, var(--color-background)),
-			color-mix(in oklab, var(--color-background) 96%, white)
-		),
-		var(--color-background);
-	box-shadow: var(--shadow-quiet);
+	background: var(--color-background);
 }
 
 .table-wrap {
@@ -684,40 +597,14 @@
 	inset: 0;
 	content: '';
 	transform: translateX(-100%);
-	background: linear-gradient(
-		90deg,
-		transparent,
-		color-mix(in oklab, var(--color-background) 76%, transparent),
-		transparent
-	);
+	background: color-mix(in oklab, var(--color-background) 76%, transparent);
 	animation: skeleton-sweep 1.4s ease-in-out infinite;
-}
-
-@keyframes skeleton-sweep {
-	100% {
-		transform: translateX(100%);
-	}
 }
 
 /* Loading Screen Styles */
 .loading-overlay {
 	background-color: var(--color-background);
 	color: var(--color-foreground);
-}
-
-.loading-content {
-	animation: fadeIn 0.3s ease-in-out;
-}
-
-@keyframes fadeIn {
-	from {
-		opacity: 0;
-		transform: translateY(10px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
 }
 
 @media (prefers-reduced-motion: reduce) {
