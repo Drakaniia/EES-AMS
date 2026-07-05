@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
-	import Pagination from '$lib/components/ui/Pagination.svelte';
 	import StudentAttendanceModal from '$lib/components/students/StudentAttendanceModal.svelte';
+	import StudentList from './student-list.svelte';
+	import StudentForm from './student-form.svelte';
 	import {
 		listStudents,
 		saveStudent,
@@ -20,28 +22,11 @@
 		type Sf2ExportReadiness
 	} from '$lib/db-rust';
 	import { resolve } from '$app/paths';
-
-	type GenderOption = {
-		value: StudentGender;
-		label: string;
-	};
-
-	type EntryMode = 'single' | 'bulk';
-
-	type EntryModeTab = {
-		value: EntryMode;
-		label: string;
-	};
-
-	const genderOptions: GenderOption[] = [
-		{ value: 'male', label: 'Male' },
-		{ value: 'female', label: 'Female' }
-	];
-
-	const entryModeTabs: EntryModeTab[] = [
-		{ value: 'single', label: 'Individual' },
-		{ value: 'bulk', label: 'Bulk paste' }
-	];
+	import {
+		parseStudentNames,
+		genderLabel,
+		type EntryMode,
+	} from './student-state.svelte';
 
 	// ── State ────────────────────────────────────────────────────────────────
 	let students = $state<Student[]>([]);
@@ -82,12 +67,9 @@
 	let availableHeight = $state(0);
 	const itemsPerPage = $derived.by(() => {
 		if (availableHeight === 0) return 10;
-		// availableHeight is bound to the <section> which has pb-20 (80px).
-		// The table container has mt-8 (32px).
-		// We need a conservative buffer to ensure no row is partially covered.
-		const rowHeight = 60; // Safer estimate for row height including borders
-		const headerHeight = 48; // Table header height
-		const verticalBuffer = 120; // Accounts for mt-8 (32px), pb-20 (80px), and extra safety
+		const rowHeight = 60;
+		const headerHeight = 48;
+		const verticalBuffer = 120;
 		const calculated = Math.floor((availableHeight - headerHeight - verticalBuffer) / rowHeight);
 		return Math.max(1, calculated);
 	});
@@ -105,19 +87,6 @@
 		toastTimer = setTimeout(() => (toastMessage = null), 3000);
 	}
 
-	function parseStudentNames(value: string) {
-		return value
-			.split(/\r?\n/)
-			.map((name) => name.trim())
-			.filter(Boolean);
-	}
-
-	function genderLabel(gender?: StudentGender) {
-		if (gender === 'male') return 'Male';
-		if (gender === 'female') return 'Female';
-		return 'Not set';
-	}
-
 	function setEntryMode(mode: EntryMode) {
 		if (entryMode === mode) return;
 		entryModeDirection = mode === 'bulk' ? 1 : -1;
@@ -128,13 +97,11 @@
 	const filteredStudents = $derived.by(() => {
 		let result = students;
 
-		// Search
 		if (searchTerms.trim()) {
 			const term = searchTerms.toLowerCase();
 			result = result.filter((s) => s.name.toLowerCase().includes(term));
 		}
 
-		// Sort
 		result = [...result].sort((a, b) => {
 			let valA: string | number = '';
 			let valB: string | number = '';
@@ -155,7 +122,6 @@
 		return result;
 	});
 
-	// Computed pagination values
 	const totalPages = $derived(Math.ceil(filteredStudents.length / itemsPerPage));
 	const paginatedStudents = $derived.by(() => {
 		const start = (currentPage - 1) * itemsPerPage;
@@ -281,6 +247,10 @@
 		editing = null;
 	}
 
+	function openScan(s: Student) {
+		scanFor = s;
+	}
+
 	function createStudent(
 		name: string,
 		gender: StudentGender,
@@ -386,12 +356,11 @@
 		deleteTarget = null;
 	}
 
-	async function onDelete(event: MouseEvent, student: Student) {
+	function onDelete(event: MouseEvent, student: Student) {
 		if (event.shiftKey) {
-			await confirmDelete(student);
+			void confirmDelete(student);
 			return;
 		}
-
 		deleteTarget = student;
 	}
 
@@ -410,11 +379,6 @@
 			const msg = error instanceof Error ? error.message : 'Failed to pair card';
 			toast(`Card pairing failed: ${msg}`);
 		}
-	}
-
-	function getClassName(id?: string) {
-		if (!id) return '—';
-		return classes.find((c) => c.id === id)?.name ?? 'Unknown';
 	}
 </script>
 
@@ -496,238 +460,28 @@
 			</EmptyState>
 		</div>
 	{:else}
-		<!-- Tools Bar -->
-		<section class="grid gap-4 px-4 pt-5 md:grid-cols-2 md:px-8 lg:grid-cols-3 lg:px-10">
-			<!-- Search -->
-			<div class="space-y-2">
-				<div class="label-mono">Search Students</div>
-				<div class="relative">
-					<svg
-						class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<circle cx="11" cy="11" r="8" />
-						<path d="m21 21-4.3-4.3" />
-					</svg>
-					<input
-						type="text"
-						bind:value={searchTerms}
-						placeholder="Search by name..."
-						class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					/>
-				</div>
-			</div>
-
-			<!-- Assigned class -->
-			<div class="space-y-2">
-				<div class="label-mono">Class / Section</div>
-				<div
-					class="flex h-10 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium"
-				>
-					{assignedClassLabel}
-				</div>
-			</div>
-
-			<!-- Stats -->
-			<div class="space-y-2">
-				<div class="label-mono">Total Students</div>
-				<div class="flex h-10 items-center justify-between gap-3">
-					<div class="font-mono text-lg font-bold">
-						{filteredStudents.length}
-						<span class="ml-2 text-xs font-normal text-muted-foreground">
-							(out of {students.length})
-						</span>
-					</div>
-					<div class="flex shrink-0 items-center gap-2 font-mono text-xs">
-						<span class="rounded-pill border border-border bg-surface px-2 py-1">
-							M {maleStudentCount}
-						</span>
-						<span class="rounded-pill border border-border bg-surface px-2 py-1">
-							F {femaleStudentCount}
-						</span>
-					</div>
-				</div>
-			</div>
-		</section>
-
-		<!-- Class List -->
-		<section class="min-h-0 flex-1 px-4 pb-20 md:px-8 lg:px-10" bind:clientHeight={availableHeight}>
-			{#if students.length === 0}
-				{@render emptyState()}
-			{:else}
-				<div class="table-wrap mt-6">
-					<table class="w-full min-w-[760px] text-sm">
-						<thead class="bg-surface text-left">
-							<tr>
-								<th class="label-mono px-4 py-3">
-									<button
-										onclick={() => toggleSort('name')}
-										class="inline-flex items-center gap-1 transition-colors hover:text-primary"
-									>
-										Name
-										{#if sortBy === 'name'}
-											<svg
-												class="size-3"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-											>
-												<path d={sortOrder === 'asc' ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'} />
-											</svg>
-										{/if}
-									</button>
-								</th>
-								<th class="label-mono px-4 py-3">Gender</th>
-								<th class="label-mono px-4 py-3">Class</th>
-								<th class="label-mono px-4 py-3">Card</th>
-								<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
-							</tr>
-						</thead>
-						<tbody class="divide-y divide-border">
-							{#each paginatedStudents as s (s.id)}
-								<tr>
-									<td class="px-4 py-3">
-										<button
-											onclick={() => openAttendance(s)}
-											class="group flex min-w-0 items-center gap-2 text-left font-medium transition-colors hover:text-primary"
-										>
-											<span class="text-balance-safe">{s.name}</span>
-											<svg
-												class="size-3 opacity-0 transition-opacity group-hover:opacity-100"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-											>
-												<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-												<polyline points="15 3 21 3 21 9" />
-												<line x1="10" y1="14" x2="21" y2="3" />
-											</svg>
-										</button>
-									</td>
-									<td class="px-4 py-3">
-										<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs">
-											{genderLabel(s.gender)}
-										</span>
-									</td>
-									<td class="px-4 py-3">
-										<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-xs">
-											{getClassName(s.classId)}
-										</span>
-									</td>
-									<td class="px-4 py-3 font-mono text-xs">
-										{#if s.cardSerial}
-											<span class="rounded-pill border border-border bg-surface px-2 py-1"
-												>{s.cardSerial}</span
-											>
-										{:else}
-											<span class="text-muted-foreground">—</span>
-										{/if}
-									</td>
-									<td class="px-4 py-3 text-right">
-										<div class="inline-flex gap-1">
-											<!-- View Records -->
-											<a
-												href={resolve(`/records?studentId=${s.id}`)}
-												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
-												title="View attendance records"
-											>
-												<svg
-													class="size-3.5"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-												>
-													<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-													<polyline points="14 2 14 8 20 8" />
-													<line x1="16" y1="13" x2="8" y2="13" />
-													<line x1="16" y1="17" x2="8" y2="17" />
-													<polyline points="10 9 9 9 8 9" />
-												</svg>
-											</a>
-											<!-- Pair card -->
-											<button
-												onclick={() => (scanFor = s)}
-												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
-												title="Pair card"
-											>
-												<svg
-													class="size-3.5"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-												>
-													<rect x="2" y="5" width="20" height="14" rx="2" />
-													<path d="M2 10h20" />
-												</svg>
-											</button>
-											<!-- Edit -->
-											<button
-												onclick={() => openEdit(s)}
-												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
-												title="Edit student"
-											>
-												<svg
-													class="size-3.5"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-												>
-													<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-													<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-												</svg>
-											</button>
-											<!-- Delete -->
-											<button
-												onclick={(event) => onDelete(event, s)}
-												class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
-												title="Delete student"
-											>
-												<svg
-													class="size-3.5"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-												>
-													<polyline points="3 6 5 6 21 6" />
-													<path
-														d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
-													/>
-												</svg>
-											</button>
-										</div>
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			{/if}
-		</section>
-
-		<div class="fixed bottom-6 left-1/2 z-10 -translate-x-1/2">
-			<Pagination {currentPage} {totalPages} onPageChange={handlePageChange} />
-		</div>
+		<StudentList
+			{students}
+			{paginatedStudents}
+			{searchTerms}
+			{sortBy}
+			{sortOrder}
+			currentPage={currentPage}
+			{totalPages}
+			{maleStudentCount}
+			{femaleStudentCount}
+			{filteredStudents}
+			{assignedClassLabel}
+			{canCreateStudents}
+			{studentCreationBlockedMessage}
+			onSearchChange={(value) => (searchTerms = value)}
+			onToggleSort={toggleSort}
+			onPageChange={handlePageChange}
+			onOpenAttendance={openAttendance}
+			onOpenEdit={openEdit}
+			onOpenScan={openScan}
+			onDelete={onDelete}
+		/>
 	{/if}
 </div>
 
@@ -737,210 +491,35 @@
 	onClose={() => (attendanceModalOpen = false)}
 />
 
-<!-- ── Add / Edit dialog ──────────────────────────────────────────────────── -->
-{#if dialogOpen}
-	<div
-		class="fixed inset-0 z-40 bg-black/50"
-		role="presentation"
-		onclick={closeDialog}
-		onkeydown={(e) => e.key === 'Escape' && closeDialog()}
-	></div>
-
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="dialog-title"
-	>
-		<div class="w-full max-w-3xl rounded-2xl border border-border bg-background shadow-xl">
-			<div class="border-b border-border px-6 pt-6 pb-5">
-				<h2 id="dialog-title" class="text-lg font-semibold">
-					{editing ? 'Edit student' : 'Add student'}
-				</h2>
-				<p class="mt-1 text-sm text-muted-foreground">
-					{editing
-						? 'Update the student profile and class assignment.'
-						: 'Add one student manually or paste a class list in one pass.'}
-				</p>
-			</div>
-
-			<form onsubmit={onSubmit} class="space-y-5 p-6">
-				{#if !editing}
-					<div
-						class="add-student-entry-tabs relative grid overflow-hidden rounded-lg border border-border bg-surface p-1 sm:grid-cols-2"
-						data-mode={entryMode}
-						role="tablist"
-						aria-label="Student entry mode"
-					>
-						<span class="add-student-tab-indicator" aria-hidden="true"></span>
-						{#each entryModeTabs as tab (tab.value)}
-							<button
-								id={`add-student-${tab.value}-tab`}
-								type="button"
-								role="tab"
-								aria-selected={entryMode === tab.value}
-								aria-controls={`add-student-${tab.value}-panel`}
-								onclick={() => setEntryMode(tab.value)}
-								class="relative z-10 rounded-md px-4 py-2 text-sm font-medium transition-colors {entryMode ===
-								tab.value
-									? 'text-foreground'
-									: 'text-muted-foreground hover:text-foreground'}"
-							>
-								{tab.label}
-							</button>
-						{/each}
-					</div>
-				{/if}
-
-				<div class="space-y-1.5">
-					<label for="field-class" class="label-mono">Class / Section</label>
-					<div
-						id="field-class"
-						class="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium"
-					>
-						{assignedClassLabel}
-					</div>
-					{#if !sf2Template}
-						<p class="mt-1 text-xs text-muted-foreground">
-							Create an SF2 workbook in Settings before adding students.
-						</p>
-					{:else if !assignedClass}
-						<p class="mt-1 text-xs text-muted-foreground">
-							The SF2 workbook class is unavailable. Recreate or import the SF2 workbook before
-							adding students.
-						</p>
-					{/if}
-				</div>
-
-				{#key entryMode}
-					<div
-						id={!editing ? `add-student-${entryMode}-panel` : undefined}
-						role={!editing ? 'tabpanel' : undefined}
-						aria-labelledby={!editing ? `add-student-${entryMode}-tab` : undefined}
-						class="tab-panel-morph"
-						class:tab-panel-morph-reverse={entryModeDirection < 0}
-					>
-						{#if !editing && entryMode === 'bulk'}
-							<div class="space-y-2">
-								<div class="flex items-center justify-between gap-3">
-									<div class="label-mono">Student names</div>
-									<span class="font-mono text-xs text-muted-foreground">
-										{bulkStudentCount}
-										{bulkStudentCount === 1 ? 'student' : 'students'}
-									</span>
-								</div>
-								<div class="grid gap-4 sm:grid-cols-2">
-									<div class="space-y-2">
-										<div class="flex items-center justify-between gap-2">
-											<label for="bulk-male-students" class="label-mono">Male</label>
-											<span class="font-mono text-xs text-muted-foreground"
-												>{bulkMaleNames.length}</span
-											>
-										</div>
-										<textarea
-											id="bulk-male-students"
-											bind:value={bulkMaleStudentNames}
-											rows="10"
-											placeholder="Cruz, Juan&#10;Reyes, Marco"
-											class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
-										></textarea>
-									</div>
-									<div class="space-y-2">
-										<div class="flex items-center justify-between gap-2">
-											<label for="bulk-female-students" class="label-mono">Female</label>
-											<span class="font-mono text-xs text-muted-foreground"
-												>{bulkFemaleNames.length}</span
-											>
-										</div>
-										<textarea
-											id="bulk-female-students"
-											bind:value={bulkFemaleStudentNames}
-											rows="10"
-											placeholder="Dela Cruz, Maria&#10;Santos, Ana"
-											class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
-										></textarea>
-									</div>
-								</div>
-								<p class="text-xs text-muted-foreground">
-									Each new line creates one student in the matching SF2 roster block.
-								</p>
-							</div>
-						{:else}
-							<div class="space-y-2">
-								<div class="label-mono">Gender</div>
-								<div class="grid rounded-lg border border-border bg-surface p-1 sm:grid-cols-2">
-									{#each genderOptions as option (option.value)}
-										<button
-											type="button"
-											onclick={() => (formGender = option.value)}
-											aria-pressed={formGender === option.value}
-											class="rounded-md px-4 py-2 text-sm font-medium transition-colors {formGender ===
-											option.value
-												? 'bg-background text-foreground shadow-sm'
-												: 'text-muted-foreground hover:text-foreground'}"
-										>
-											{option.label}
-										</button>
-									{/each}
-								</div>
-							</div>
-							<div class="grid gap-4 sm:grid-cols-2">
-								<div class="space-y-1.5">
-									<label for="field-name" class="label-mono">Full name</label>
-									<input
-										id="field-name"
-										bind:value={formName}
-										required
-										placeholder="Student full name"
-										class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-									/>
-								</div>
-								<div class="space-y-1.5">
-									<label for="field-card" class="label-mono">Card serial (optional)</label>
-									<input
-										id="field-card"
-										bind:value={formCardSerial}
-										placeholder="Pair later"
-										class="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-									/>
-								</div>
-							</div>
-						{/if}
-					</div>
-				{/key}
-
-				<div
-					class="flex flex-col-reverse gap-2 border-t border-border pt-5 sm:flex-row sm:justify-end"
-				>
-					<button
-						type="button"
-						onclick={closeDialog}
-						class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
-					>
-						Cancel
-					</button>
-					<button
-						type="submit"
-						disabled={savingStudent ||
-							(!editing &&
-								(!canCreateStudents || (entryMode === 'bulk' && bulkStudentCount === 0)))}
-						class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						{#if savingStudent}
-							Saving...
-						{:else if editing}
-							Save Changes
-						{:else if entryMode === 'bulk'}
-							Add {bulkStudentCount || ''} Students
-						{:else}
-							Add Student
-						{/if}
-					</button>
-				</div>
-			</form>
-		</div>
-	</div>
-{/if}
+<StudentForm
+	open={dialogOpen}
+	{editing}
+	{entryMode}
+	{entryModeDirection}
+	{formName}
+	{formGender}
+	{formCardSerial}
+	{formClassId}
+	{bulkMaleStudentNames}
+	{bulkFemaleStudentNames}
+	{assignedClassLabel}
+	{sf2Template}
+	{assignedClass}
+	{canCreateStudents}
+	{studentCreationBlockedMessage}
+	{savingStudent}
+	{bulkMaleNames}
+	{bulkFemaleNames}
+	{bulkStudentCount}
+	onClose={closeDialog}
+	{onSubmit}
+	onSetEntryMode={setEntryMode}
+	onFormNameChange={(value) => (formName = value)}
+	onFormGenderChange={(value) => (formGender = value)}
+	onFormCardSerialChange={(value) => (formCardSerial = value)}
+	onBulkMaleChange={(value) => (bulkMaleStudentNames = value)}
+	onBulkFemaleChange={(value) => (bulkFemaleStudentNames = value)}
+/>
 
 <!-- ── Register card dialog ───────────────────────────────────────────────── -->
 {#if scanFor}
@@ -958,7 +537,7 @@
 		aria-labelledby="card-dialog-title"
 	>
 		<div
-			class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
+			class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6"
 		>
 			<div>
 				<h2 id="card-dialog-title" class="text-lg font-semibold">Pair card</h2>
@@ -1015,7 +594,7 @@
 		aria-labelledby="delete-dialog-title"
 	>
 		<div
-			class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6 shadow-xl"
+			class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6"
 		>
 			<div class="flex flex-col items-center gap-3 text-center">
 				<div class="flex size-12 items-center justify-center rounded-full bg-destructive/10">
@@ -1068,78 +647,3 @@
 {/if}
 
 <FeedbackToast message={toastMessage} onClose={() => (toastMessage = null)} />
-
-{#snippet emptyState()}
-	<div class="mt-8 rounded-2xl border border-dashed border-border bg-surface/50 p-12 text-center">
-		<p class="text-muted-foreground">
-			{canCreateStudents
-				? 'No students yet. Add your first student to begin.'
-				: studentCreationBlockedMessage}
-		</p>
-	</div>
-{/snippet}
-
-<style>
-	.add-student-tab-indicator {
-		position: absolute;
-		inset: 0.25rem auto 0.25rem 0.25rem;
-		width: calc(50% - 0.25rem);
-		border-radius: 0.375rem;
-		background: var(--color-background);
-		box-shadow:
-			0 1px 2px color-mix(in oklab, var(--color-foreground) 10%, transparent),
-			0 8px 22px color-mix(in oklab, var(--color-primary) 12%, transparent);
-		transition:
-			transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-			box-shadow 220ms ease;
-	}
-
-	.add-student-entry-tabs[data-mode='bulk'] .add-student-tab-indicator {
-		transform: translateX(100%);
-	}
-
-	.tab-panel-morph {
-		transform-origin: top center;
-		animation: tab-panel-morph 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-	}
-
-	.tab-panel-morph-reverse {
-		animation-name: tab-panel-morph-reverse;
-	}
-
-	@keyframes tab-panel-morph {
-		from {
-			opacity: 0.68;
-			filter: blur(2px);
-			transform: translateX(18px) scale(0.985);
-		}
-		to {
-			opacity: 1;
-			filter: blur(0);
-			transform: translateX(0) scale(1);
-		}
-	}
-
-	@keyframes tab-panel-morph-reverse {
-		from {
-			opacity: 0.68;
-			filter: blur(2px);
-			transform: translateX(-18px) scale(0.985);
-		}
-		to {
-			opacity: 1;
-			filter: blur(0);
-			transform: translateX(0) scale(1);
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.add-student-tab-indicator,
-		.tab-panel-morph,
-		.tab-panel-morph-reverse {
-			animation: none;
-			filter: none;
-			transition: none;
-		}
-	}
-</style>
