@@ -3,15 +3,7 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import {
 		CalendarDays,
-		CheckCheck,
-		Grid2X2,
-		List,
-		Search,
-		ScanLine,
-		ShieldAlert
 	} from 'lucide-svelte';
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import DatePickerDialog from '$lib/components/ui/DatePickerDialog.svelte';
@@ -19,6 +11,8 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
+	import AttendanceGrid from './attendance-grid.svelte';
+	import AttendanceControls from './attendance-controls.svelte';
 	import {
 		listStudents,
 		listClasses,
@@ -27,6 +21,7 @@
 		addEvent,
 		addEvents,
 		deleteEvent,
+		deleteEvents,
 		type AttendanceEvent,
 		type AttendanceType,
 		type CreateEventRequest,
@@ -35,20 +30,29 @@
 	} from '$lib/db-rust';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { settingsStore } from '$lib/stores/settings.svelte';
-
-	type LogLine = {
-		id: string;
-		studentName: string;
-		type: AttendanceType | 'error';
-		isLate?: boolean;
-		message: string;
-		timestamp: number | string;
-	};
-
-	type ManualViewMode = 'boxes' | 'list';
-	type LogOptions = {
-		timestamp?: number;
-	};
+	import {
+		getTimeOfDay,
+		getActiveClass,
+		eventTime,
+		parseDateKey,
+		formatAttendanceDate,
+		firstClassTime,
+		attendanceTimestampForSelectedDate,
+		studentName,
+		getStudentClass,
+		getAttendanceClass,
+		getSessionSegment,
+		getSessionKey,
+		checkLate,
+		isWithinClassHours,
+		getStudentInitials,
+		getStudentClassName,
+		isScheduledDay,
+		type LogLine,
+		type ManualViewMode,
+		type LogOptions,
+		type LastResult
+	} from './attendance-state.svelte';
 
 	let log = $state<LogLine[]>([]);
 	let students = $state<Student[]>([]);
@@ -64,17 +68,10 @@
 	let pickerOpen = $state(false);
 	let pickerQuery = $state('');
 	let rosterQuery = $state('');
-	let lastResult = $state<{
-		ok: boolean;
-		name: string;
-		type: AttendanceType;
-		time: number;
-		isLate?: boolean;
-		eventId?: string;
-	} | null>(null);
+	let lastResult = $state<LastResult | null>(null);
 
 	let cardInput = $state('');
-	let cardInputElement = $state<HTMLInputElement | null>(null);
+	let cardInputElement: HTMLInputElement | null = $state(null);
 	let toastMessage = $state<string | null>(null);
 	let toastOk = $state(true);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -118,7 +115,7 @@
 			if (requestedClassId && classes.some((c) => c.id === requestedClassId)) {
 				selectedClassId = requestedClassId;
 			} else {
-				const active = getActiveClass();
+				const active = getActiveClass(classes);
 				selectedClassId = active?.id ?? classes[0]?.id ?? '';
 			}
 
@@ -148,6 +145,7 @@
 	const attendanceMode = $derived(settingsStore.settings?.attendanceMode ?? 'manual');
 	const isCardReaderMode = $derived(attendanceMode === 'card_reader');
 	const currentClass = $derived(classes.find((c) => c.id === selectedClassId));
+	const isScheduledDayValue = $derived(isScheduledDay(selectedDate, currentClass));
 	const selectedDateEvents = $derived(
 		events.filter((event) => fmtDate(event.timestamp) === selectedDate)
 	);
@@ -221,7 +219,7 @@
 	const recordedCount = $derived(manualStudents.length - pendingManualStudents.length);
 	const pendingCount = $derived(pendingManualStudents.length);
 
-	const activeClass = $derived(getActiveClass());
+	const activeClass = $derived(getActiveClass(classes));
 	const sessionClass = $derived.by(() => {
 		if (currentClass) return currentClass;
 		if (isCardReaderMode) return activeClass ?? undefined;
@@ -256,117 +254,21 @@
 		return `Choose names from the class list and record attendance for ${selectedDateLabel}.`;
 	});
 
-	function getTimeOfDay(): 'Morning' | 'Afternoon' {
-		return new Date().getHours() < 12 ? 'Morning' : 'Afternoon';
-	}
-
-	function getActiveClass(): Class | null {
-		const now = new Date();
-		const currentTime = now.getHours() * 60 + now.getMinutes();
-		const currentDay = now.getDay();
-
-		for (const cls of classes) {
-			if (cls.days && !cls.days.includes(currentDay)) continue;
-
-			const [startHour, startMin] = cls.dayStart.split(':').map(Number);
-			const [endHour, endMin] = cls.dayEnd.split(':').map(Number);
-			const startTime = startHour * 60 + startMin;
-			const endTime = endHour * 60 + endMin;
-
-			if (currentTime >= startTime && currentTime <= endTime) return cls;
-		}
+	function getNextAttendanceType(student: Student): AttendanceType | null {
+		const last = lastEventByStudentForSession.get(student.id);
+		if (!last) return 'in';
 		return null;
 	}
 
-	function eventTime(event: AttendanceEvent) {
-		return typeof event.timestamp === 'string'
-			? new Date(event.timestamp).getTime()
-			: event.timestamp;
-	}
-
-	function parseDateKey(dateKey: string) {
-		const [year, month, day] = dateKey.split('-').map(Number);
-		if (
-			typeof year !== 'number' ||
-			typeof month !== 'number' ||
-			typeof day !== 'number' ||
-			!Number.isFinite(year) ||
-			!Number.isFinite(month) ||
-			!Number.isFinite(day)
-		) {
-			return null;
-		}
-
-		return { year, monthIndex: month - 1, day };
-	}
-
-	function formatAttendanceDate(dateKey: string) {
-		const parts = parseDateKey(dateKey);
-		if (!parts) return dateKey;
-
-		return new Date(parts.year, parts.monthIndex, parts.day).toLocaleDateString(undefined, {
-			weekday: 'short',
-			month: 'short',
-			day: 'numeric',
-			year: 'numeric'
-		});
-	}
-
-	function firstClassTime(classObj: Class | undefined) {
-		return classObj?.sessions?.[0]?.startTime ?? classObj?.dayStart ?? '08:00';
-	}
-
-	function attendanceTimestampForSelectedDate(classObj: Class | undefined) {
-		if (selectedDateIsToday) return Date.now();
-
-		const parts = parseDateKey(selectedDate);
-		if (!parts) return Date.now();
-
-		const [hourValue, minuteValue] = firstClassTime(classObj).split(':').map(Number);
-		const hour = typeof hourValue === 'number' && Number.isFinite(hourValue) ? hourValue : 8;
-		const minute =
-			typeof minuteValue === 'number' && Number.isFinite(minuteValue) ? minuteValue : 0;
-
-		return new Date(parts.year, parts.monthIndex, parts.day, hour, minute, 0, 0).getTime();
-	}
-
-	function studentName(studentId: string) {
-		return studentById.get(studentId)?.name ?? 'Unknown student';
-	}
-
-	function getStudentClass(student: Student) {
-		return student.classId ? classById.get(student.classId) : undefined;
-	}
-
-	function getAttendanceClass(student: Student) {
-		return currentClass ?? (isCardReaderMode ? activeClass : undefined) ?? getStudentClass(student);
-	}
-
-	function getSessionSegment(classObj: Class | undefined, timestamp: number) {
-		if (!classObj?.sessions || classObj.sessions.length <= 1) return 'day';
-
-		const now = new Date(timestamp);
-		const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-		const session = classObj.sessions.find(
-			(item) => timeStr >= item.startTime && timeStr <= item.endTime
-		);
-
-		return (session?.name || 'off-schedule')
-			.trim()
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-|-$/g, '');
-	}
-
-	function getSessionKey(classObj: Class | undefined, timestamp: number) {
-		const classKey = classObj?.id || 'unassigned';
-		const segment = getSessionSegment(classObj, timestamp) || 'day';
-		return `${fmtDate(timestamp)}|${classKey}|${segment}`;
+	function getStudentStatus(student: Student) {
+		const last = lastEventByStudentForSession.get(student.id);
+		if (!last) return { label: 'Not recorded', tone: 'idle' };
+		return { label: `Recorded ${fmtTime(last.timestamp)}`, tone: 'in' };
 	}
 
 	function getAttendanceDraft(student: Student, timestamp?: number) {
-		const classObj = getAttendanceClass(student);
-		const resolvedTimestamp = timestamp ?? attendanceTimestampForSelectedDate(classObj);
+		const classObj = getAttendanceClass(student, currentClass, isCardReaderMode, activeClass, classById);
+		const resolvedTimestamp = timestamp ?? attendanceTimestampForSelectedDate(selectedDate, selectedDateIsToday, classObj);
 		const classId = classObj?.id || selectedClassId || student.classId || undefined;
 		const sessionKey = getSessionKey(classObj, resolvedTimestamp);
 
@@ -381,7 +283,7 @@
 
 	function matchesCurrentSession(event: AttendanceEvent, student: Student, timestamp?: number) {
 		const resolvedTimestamp =
-			timestamp ?? attendanceTimestampForSelectedDate(getAttendanceClass(student));
+			timestamp ?? attendanceTimestampForSelectedDate(selectedDate, selectedDateIsToday, getAttendanceClass(student, currentClass, isCardReaderMode, activeClass, classById));
 		const draft = getAttendanceDraft(student, resolvedTimestamp);
 		if (event.sessionKey) return event.sessionKey === draft.sessionKey;
 		const eventClassId = event.classId || student.classId || 'unassigned';
@@ -393,33 +295,6 @@
 
 	function getLastEventForSession(student: Student) {
 		return lastEventByStudentForSession.get(student.id);
-	}
-
-	function getNextAttendanceType(student: Student): AttendanceType | null {
-		const last = getLastEventForSession(student);
-		if (!last) return 'in';
-		return null;
-	}
-
-	function getStudentStatus(student: Student) {
-		const last = getLastEventForSession(student);
-		if (!last) return { label: 'Not recorded', tone: 'idle' };
-		return { label: `Recorded ${fmtTime(last.timestamp)}`, tone: 'in' };
-	}
-
-	function getStudentInitials(name: string) {
-		const initials = name
-			.split(/\s+/)
-			.filter(Boolean)
-			.slice(0, 2)
-			.map((part) => part[0]?.toUpperCase())
-			.join('');
-
-		return initials || 'ST';
-	}
-
-	function getStudentClassName(student: Student) {
-		return getStudentClass(student)?.name ?? 'No class';
 	}
 
 	function scheduleMidnightRefresh() {
@@ -496,44 +371,6 @@
 		}
 	}
 
-	function checkLate(classObj: Class | undefined, timestamp: number): boolean {
-		if (!classObj) return false;
-
-		const now = new Date(timestamp);
-		const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-		let lateAfter = classObj.lateAfter;
-
-		if (classObj.sessions && classObj.sessions.length > 0) {
-			for (const session of classObj.sessions) {
-				if (timeStr >= session.startTime && timeStr <= session.endTime) {
-					lateAfter = session.lateAfter;
-					break;
-				}
-			}
-		}
-
-		if (!lateAfter) return false;
-		const [h, m] = lateAfter.split(':').map(Number);
-		const lateTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
-		return now > lateTime;
-	}
-
-	function isWithinClassHours(classObj: Class | undefined, timestamp: number): boolean {
-		if (!classObj) return false;
-
-		const now = new Date(timestamp);
-		const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-		if (classObj.sessions && classObj.sessions.length > 0) {
-			for (const session of classObj.sessions) {
-				if (timeStr >= session.startTime && timeStr <= session.endTime) return true;
-			}
-			return false;
-		}
-
-		return timeStr >= classObj.dayStart && timeStr <= classObj.dayEnd;
-	}
-
 	async function handleCardSubmit(serial: string) {
 		const trimmed = serial.trim();
 		if (!trimmed) return;
@@ -572,7 +409,7 @@
 
 	async function logForStudent(
 		student: Student,
-		forcedType?: AttendanceType,
+		forcedType?: AttendanceType | null,
 		options: LogOptions = {}
 	) {
 		const last = getLastEventForSession(student);
@@ -595,7 +432,7 @@
 			}
 		}
 
-		const ts = options.timestamp ?? attendanceTimestampForSelectedDate(getAttendanceClass(student));
+		const ts = options.timestamp ?? attendanceTimestampForSelectedDate(selectedDate, selectedDateIsToday, getAttendanceClass(student, currentClass, isCardReaderMode, activeClass, classById));
 		const draft = getAttendanceDraft(student, ts);
 
 		const finalType = type ?? 'in';
@@ -694,7 +531,7 @@
 
 		try {
 			for (const student of studentsToMark) {
-				const timestamp = attendanceTimestampForSelectedDate(getAttendanceClass(student));
+				const timestamp = attendanceTimestampForSelectedDate(selectedDate, selectedDateIsToday, getAttendanceClass(student, currentClass, isCardReaderMode, activeClass, classById));
 				const draft = getAttendanceDraft(student, timestamp);
 				const isLate = draft.isLate;
 
@@ -747,6 +584,45 @@
 			isPresentingAll = false;
 			isProcessing = false;
 		}
+	}
+
+	async function clearAllAttendance() {
+		if (isProcessing || dateLoading) {
+			toast('Please wait - processing previous request', false);
+			return;
+		}
+
+		const eventIdsToRemove: string[] = [];
+		for (const [, event] of lastEventByStudentForSession) {
+			const student = studentById.get(event.studentId);
+			if (student && matchesCurrentSession(event, student)) {
+				eventIdsToRemove.push(event.id);
+			}
+		}
+
+		if (eventIdsToRemove.length === 0) {
+			toast('No recorded attendance to clear');
+			return;
+		}
+
+		isProcessing = true;
+		resetRecentActionState();
+
+		try {
+			await deleteEvents(eventIdsToRemove, 'Cleared all by user');
+			events = events.filter((e) => !eventIdsToRemove.includes(e.id));
+			log = [];
+			toast(`Cleared attendance for ${eventIdsToRemove.length} ${eventIdsToRemove.length === 1 ? 'student' : 'students'}`);
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err);
+			toast(`Clear all failed: ${message}`, false);
+		} finally {
+			isProcessing = false;
+		}
+	}
+
+	function handleCardInputChange(value: string) {
+		cardInput = value;
 	}
 </script>
 
@@ -812,359 +688,56 @@
 	<section
 		class="grid gap-5 px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
 	>
-		<div
-			class="relative flex min-h-[30rem] items-center justify-center overflow-hidden rounded-2xl border border-border bg-surface p-6 md:p-8"
-		>
-			<div
-				aria-hidden="true"
-				class="pointer-events-none absolute inset-0 opacity-50"
-				style="background: radial-gradient(60% 60% at 50% 40%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 70%)"
-			></div>
-
-			{#if classes.length === 0}
-				<div class="relative w-full max-w-md text-center">
-					<h3 class="display-lg mb-2">No Classes</h3>
-					<p class="mb-8 text-muted-foreground">
-						Add a class in Settings before starting a live session.
-					</p>
-				</div>
-			{:else if !sessionClass}
-				<div class="relative w-full max-w-md text-center">
-					<h3 class="display-lg mb-2">No active class</h3>
-					<p class="mb-8 text-muted-foreground">
-						Check the assigned class schedule in Settings before starting a live session.
-					</p>
-				</div>
-			{:else}
-				<div class="relative w-full max-w-md text-center" role="status" aria-live="polite">
-					<div class="label-mono mb-4 text-primary">
-						<span class="inline-block size-2 rounded-full bg-primary align-middle"></span> Ready for card
-						taps
-					</div>
-
-					<div
-						class="mx-auto grid size-36 place-items-center rounded-full border-2 border-primary bg-background shadow-[0_0_30px_-8px_var(--primary)]"
-					>
-						<ScanLine class="size-16 text-primary" strokeWidth={1.5} />
-					</div>
-
-					<h3 class="mt-8 text-4xl font-semibold tracking-normal">Tap a card</h3>
-					<p class="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-						The reader field stays focused for card serials and typed fallback entries.
-					</p>
-					{#if isProcessing}
-						<p class="mt-3 text-sm font-medium text-primary" aria-live="assertive">
-							Processing card tap...
-						</p>
-					{/if}
-
-					<form
-						onsubmit={(e) => {
-							e.preventDefault();
-							handleCardSubmit(cardInput);
-						}}
-						class="mx-auto mt-6 max-w-sm"
-					>
-						<label for="card-reader-serial" class="sr-only">Card serial</label>
-						<input
-							id="card-reader-serial"
-							bind:this={cardInputElement}
-							type="text"
-							bind:value={cardInput}
-							placeholder="Tap card or enter serial..."
-							autocomplete="off"
-							spellcheck="false"
-							aria-describedby="card-reader-help"
-							disabled={isProcessing || dateLoading}
-							class="control-ring h-12 w-full rounded-md border border-border bg-background px-4 text-center font-mono text-sm disabled:cursor-wait disabled:opacity-70"
-						/>
-						<p id="card-reader-help" class="mt-2 text-xs text-muted-foreground">
-							Press Enter after typing a serial manually.
-						</p>
-					</form>
-				</div>
-			{/if}
-		</div>
-
-		<div class="flex min-h-[30rem] flex-col rounded-2xl border border-border bg-card p-5">
-			<div class="mb-4 flex shrink-0 items-start justify-between gap-3">
-				<div class="flex flex-col">
-					<h3 class="text-lg font-medium">Session log</h3>
-					<span class="label-mono text-xs opacity-60">Latest card or manual actions</span>
-				</div>
-				<span class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]">
-					{log.length} entries
-				</span>
-			</div>
-
-			<div class="min-h-0 flex-1 overflow-y-auto">
-				{#if log.length === 0}
-					<div
-						class="flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground"
-					>
-						No activity recorded in this session.
-					</div>
-				{:else}
-					<ul class="divide-y divide-border">
-						{#each log as line (line.id)}
-							<li class="flex items-center justify-between gap-3 py-3">
-								<div class="min-w-0 flex-1">
-									<div class="leading-snug font-medium break-words">{line.studentName}</div>
-									<div class="label-mono">{fmtTime(line.timestamp)}</div>
-								</div>
-								<div class="flex items-center gap-2">
-									{#if line.isLate}
-										<span
-											class="rounded-pill border border-destructive/20 bg-destructive/10 px-2 py-0.5 font-mono text-[10px] font-bold text-destructive"
-										>
-											LATE
-										</span>
-									{/if}
-									{@render pill(line.type)}
-								</div>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-		</div>
+		<AttendanceControls
+			{classes}
+			{sessionClass}
+			{isProcessing}
+			{dateLoading}
+			{cardInput}
+			bind:cardInputElement
+			{log}
+			{pickerOpen}
+			onCardInputChange={handleCardInputChange}
+			onCardSubmit={handleCardSubmit}
+			onPickerOpen={() => {
+				pickerQuery = '';
+				pickerOpen = true;
+			}}
+		/>
 	</section>
 {:else}
-	<section class="grid gap-5 px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_340px]">
-		<div
-			class="flex min-h-[34rem] flex-col overflow-hidden rounded-2xl border border-border bg-card"
-		>
-			<div class="shrink-0 border-b border-border p-5">
-				<div class="flex flex-wrap items-start justify-between gap-4">
-					<div>
-						<h3 class="text-xl font-semibold">Student boxes</h3>
-						<p class="mt-1 max-w-xl text-sm text-muted-foreground">
-							One click per learner. Boxes show whether attendance has been recorded for
-							{selectedDateLabel}.
-						</p>
-					</div>
-					<div class="grid grid-cols-3 overflow-hidden rounded-xl border border-border bg-surface">
-						{@render manualStat('Names', manualStudents.length)}
-						{@render manualStat('Recorded', recordedCount)}
-						{@render manualStat('Pending', pendingCount)}
-					</div>
-				</div>
-			</div>
-
-			<div class="flex shrink-0 flex-wrap items-center gap-3 border-b border-border p-4">
-				<div class="relative min-w-64 flex-1">
-					<Search
-						class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-					/>
-					<label for="name-search" class="sr-only">Find name</label>
-					<input
-						id="name-search"
-						bind:value={rosterQuery}
-						placeholder="Search by name..."
-						class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-					/>
-				</div>
-
-				<button
-					type="button"
-					disabled={isProcessing ||
-						dateLoading ||
-						pendingManualStudents.length === 0 ||
-						manualStudents.length === 0}
-					onclick={presentAllStudents}
-					title={rosterQuery.trim()
-						? 'Marks every pending student currently shown by the search as present'
-						: 'Marks every pending student in this roster as present'}
-					class="inline-flex h-10 shrink-0 items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-				>
-					{#if isPresentingAll}
-						<span class="size-2 rounded-full bg-primary-foreground" aria-hidden="true"></span>
-					{:else}
-						<CheckCheck class="size-4" aria-hidden="true" />
-					{/if}
-					{isPresentingAll
-						? 'Recording...'
-						: pendingManualStudents.length > 0
-							? `Present all (${pendingManualStudents.length})`
-							: 'Present all'}
-				</button>
-
-				<div
-					class="flex shrink-0 overflow-hidden rounded-pill border border-border bg-surface p-1"
-					role="group"
-					aria-label="Attendance roster view"
-				>
-					<button
-						type="button"
-						aria-pressed={manualViewMode === 'boxes'}
-						onclick={() => (manualViewMode = 'boxes')}
-						class="inline-flex h-9 items-center gap-2 rounded-pill px-3 text-sm font-medium transition-colors {manualViewMode ===
-						'boxes'
-							? 'bg-background text-foreground shadow-sm'
-							: 'text-muted-foreground hover:text-foreground'}"
-					>
-						<Grid2X2 class="size-4" />
-						Boxes
-					</button>
-					<button
-						type="button"
-						aria-pressed={manualViewMode === 'list'}
-						onclick={() => (manualViewMode = 'list')}
-						class="inline-flex h-9 items-center gap-2 rounded-pill px-3 text-sm font-medium transition-colors {manualViewMode ===
-						'list'
-							? 'bg-background text-foreground shadow-sm'
-							: 'text-muted-foreground hover:text-foreground'}"
-					>
-						<List class="size-4" />
-						List
-					</button>
-				</div>
-			</div>
-
-			<div class="min-h-0 flex-1 p-4">
-				{#if manualStudents.length === 0}
-					<div
-						class="flex h-full min-h-72 items-center justify-center rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
-					>
-						No names match this class or search.
-					</div>
-				{:else if manualViewMode === 'boxes'}
-					<div
-						class="grid h-full auto-rows-[116px] grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3 overflow-y-auto pr-1"
-					>
-						{#each manualStudents as student (student.id)}
-							{@const action = getNextAttendanceType(student)}
-							{@const status = getStudentStatus(student)}
-							<button
-								type="button"
-								title={`${student.name} - ${status.label}`}
-								disabled={isProcessing || dateLoading}
-								onclick={() => markStudent(student, action)}
-								class="group flex h-[116px] min-w-0 flex-col justify-between overflow-hidden rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-65 {action ===
-								'in'
-									? 'border-border bg-background hover:border-primary hover:bg-primary/10'
-									: 'border-border bg-surface/80 text-muted-foreground'}"
-							>
-								<span class="flex min-w-0 items-start gap-2">
-									<span
-										class="grid size-9 shrink-0 place-items-center rounded-lg border text-[11px] font-bold {status.tone ===
-										'in'
-											? 'border-primary/30 bg-primary text-primary-foreground'
-											: 'border-border bg-surface text-foreground'}"
-									>
-										{getStudentInitials(student.name)}
-									</span>
-									<span class="min-w-0 flex-1">
-										<span
-											class="student-card-name text-sm leading-snug font-semibold break-words whitespace-normal"
-										>
-											{student.name}
-										</span>
-									</span>
-								</span>
-								<span class="flex items-center justify-between gap-2">
-									<span class="min-w-0 truncate text-[10px] leading-snug text-muted-foreground">
-										{selectedClassId ? status.label : getStudentClassName(student)}
-									</span>
-									<span
-										class="label-mono shrink-0 text-[10px] font-bold {action === 'in'
-											? 'text-primary'
-											: 'text-muted-foreground'}"
-									>
-										{action === 'in' ? 'IN' : 'RECORDED'}
-									</span>
-								</span>
-							</button>
-						{/each}
-					</div>
-				{:else}
-					<div class="h-full overflow-y-auto rounded-xl border border-border">
-						<ul class="divide-y divide-border">
-							{#each manualStudents as student (student.id)}
-								{@const action = getNextAttendanceType(student)}
-								{@const status = getStudentStatus(student)}
-								<li
-									class="flex flex-col gap-3 px-4 py-3 hover:bg-surface/50 sm:flex-row sm:items-center sm:justify-between"
-								>
-									<div class="flex min-w-0 items-center gap-3">
-										<div
-											class="grid size-10 shrink-0 place-items-center rounded-lg border border-border bg-surface text-xs font-bold"
-										>
-											{getStudentInitials(student.name)}
-										</div>
-										<div class="min-w-0 flex-1">
-											<div class="text-base leading-snug font-semibold break-words">
-												{student.name}
-											</div>
-											<div
-												class="mt-1 text-xs {status.tone === 'in'
-													? 'text-primary'
-													: 'text-muted-foreground'}"
-											>
-												{status.label}
-											</div>
-										</div>
-									</div>
-									<button
-										disabled={isProcessing || dateLoading}
-										onclick={() => markStudent(student, action)}
-										class="w-fit min-w-28 rounded-pill px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
-										'in'
-											? 'bg-primary text-primary-foreground hover:bg-accent'
-											: 'border border-border bg-surface text-muted-foreground'}"
-									>
-										{action === 'in' ? 'Record' : 'Recorded'}
-									</button>
-								</li>
-							{/each}
-						</ul>
-					</div>
-				{/if}
-			</div>
-		</div>
-
-		<div class="flex min-h-[34rem] flex-col rounded-2xl border border-border bg-card p-5">
-			<div class="mb-4 flex shrink-0 items-start justify-between gap-3">
-				<div>
-					<h3 class="text-lg font-medium">Recent activity</h3>
-					<span class="label-mono text-xs opacity-60">{selectedDate}</span>
-				</div>
-				<span class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]">
-					{recentActivity.length} events
-				</span>
-			</div>
-
-			<div class="min-h-0 flex-1 overflow-y-auto">
-				{#if recentActivity.length === 0}
-					<div
-						class="flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
-					>
-						No attendance has been recorded for {selectedDateLabel}.
-					</div>
-				{:else}
-					<ul class="divide-y divide-border">
-						{#each recentActivity as event (event.id)}
-							<li class="flex items-center justify-between gap-3 py-3">
-								<div class="min-w-0 flex-1">
-									<div class="leading-snug font-medium break-words">
-										{studentName(event.studentId)}
-									</div>
-									<div class="label-mono">{fmtTime(event.timestamp)}</div>
-								</div>
-								{@render pill(event.type)}
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-		</div>
-	</section>
+	<div class="flex min-h-0 flex-1 flex-col px-4 py-5 md:px-8 lg:px-10">
+		<AttendanceGrid
+			{manualStudents}
+			bind:manualViewMode
+			{isProcessing}
+			{dateLoading}
+			{selectedClassId}
+			{selectedDateLabel}
+			{selectedDate}
+			{recentActivity}
+			{studentById}
+			{classById}
+			{recordedCount}
+			{pendingCount}
+			{pendingManualStudents}
+			{rosterQuery}
+			{isScheduledDayValue}
+			{isPresentingAll}
+			onMarkStudent={markStudent}
+			onPresentAllStudents={presentAllStudents}
+			onClearAllAttendance={clearAllAttendance}
+			onRosterQueryChange={(value) => (rosterQuery = value)}
+			onGetNextAttendanceType={getNextAttendanceType}
+			onGetStudentStatus={getStudentStatus}
+		/>
+	</div>
 {/if}
 
 {#if lastResult}
 	<div class="pointer-events-none fixed inset-x-0 bottom-10 z-50 flex justify-center px-4">
 		<div
-			class="pointer-events-auto flex max-w-[min(34rem,calc(100vw-2rem))] items-center gap-4 rounded-2xl border px-5 py-4 shadow-2xl md:px-8 md:py-5
+			class="pointer-events-auto flex max-w-[min(34rem,calc(100vw-2rem))] items-center gap-4 rounded-2xl border px-5 py-4 md:px-8 md:py-5
 				{lastResult.ok
 				? 'border-border bg-background text-foreground'
 				: 'border-destructive bg-destructive text-destructive-foreground'}"
@@ -1271,31 +844,3 @@
 	onAction={undoLast}
 	onClose={() => (toastMessage = null)}
 />
-
-{#snippet pill(type: AttendanceType | 'error')}
-	<span
-		class="shrink-0 rounded-pill px-2 py-1 font-mono text-[10px] font-bold
-			{type === 'in'
-			? 'bg-primary text-primary-foreground'
-			: 'bg-destructive text-destructive-foreground'}"
-	>
-		{type === 'in' ? 'IN' : 'ERROR'}
-	</span>
-{/snippet}
-
-{#snippet manualStat(label: string, value: number)}
-	<div class="min-w-20 px-4 py-3 text-center">
-		<div class="label-mono text-[10px]">{label}</div>
-		<div class="mt-1 text-2xl font-semibold">{value}</div>
-	</div>
-{/snippet}
-
-<style>
-	.student-card-name {
-		display: -webkit-box;
-		overflow: hidden;
-		-webkit-box-orient: vertical;
-		-webkit-line-clamp: 3;
-		line-clamp: 3;
-	}
-</style>
