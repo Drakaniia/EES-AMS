@@ -25,6 +25,6 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
-.codex/config.toml
+.codex/config.tobuml
 .opencode/plugins/emdash-notifications.js
 .antigravitycli/
