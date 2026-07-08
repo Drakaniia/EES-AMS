@@ -1,20 +1,9 @@
 <script lang="ts">
-	import {
-		Search,
-		CheckCheck,
-		Grid2X2,
-		List
-	} from 'lucide-svelte';
+	import { Search, CheckCheck, Grid2X2, List } from 'lucide-svelte';
 	import { fmtTime } from '$lib/csv';
 	import type { Student, AttendanceType } from '$lib/db-rust';
 	import type { ManualViewMode } from './attendance-state.svelte';
-	import {
-		getStudentInitials,
-		getStudentClassName,
-		studentName,
-		formatAttendanceDate,
-		type LogLine
-	} from './attendance-state.svelte';
+	import { getStudentInitials, getStudentClassName, studentName } from './attendance-state.svelte';
 
 	let {
 		manualStudents,
@@ -65,7 +54,9 @@
 	} = $props();
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-5 xl:grid xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+<div
+	class="flex min-h-0 flex-1 flex-col gap-5 xl:grid xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
+>
 	<div class="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
 		<div class="shrink-0 border-b border-border p-5">
 			<div class="flex flex-wrap items-start justify-between gap-4">
@@ -108,9 +99,9 @@
 					manualStudents.length === 0}
 				onclick={onPresentAllStudents}
 				title={isScheduledDayValue
-					? (rosterQuery.trim()
+					? rosterQuery.trim()
 						? 'Marks every pending student currently shown by the search as present'
-						: 'Marks every pending student in this roster as present')
+						: 'Marks every pending student in this roster as present'
 					: 'Attendance can only be recorded on scheduled class days'}
 				class="inline-flex h-10 shrink-0 items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 			>
@@ -134,7 +125,16 @@
 					title="Remove all recorded attendance for this session"
 					class="inline-flex h-10 shrink-0 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
 				>
-					<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<svg
+						class="size-4"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
 						<path d="M3 6h18" />
 						<path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
 						<path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
@@ -151,9 +151,9 @@
 				<button
 					type="button"
 					aria-pressed={manualViewMode === 'boxes'}
-					onclick={() => manualViewMode = 'boxes'}
+					onclick={() => (manualViewMode = 'boxes')}
 					class="inline-flex h-9 items-center gap-2 rounded-pill px-3 text-sm font-medium transition-colors {manualViewMode ===
-						'boxes'
+					'boxes'
 						? 'bg-background text-foreground shadow-sm'
 						: 'text-muted-foreground hover:text-foreground'}"
 				>
@@ -163,9 +163,9 @@
 				<button
 					type="button"
 					aria-pressed={manualViewMode === 'list'}
-					onclick={() => manualViewMode = 'list'}
+					onclick={() => (manualViewMode = 'list')}
 					class="inline-flex h-9 items-center gap-2 rounded-pill px-3 text-sm font-medium transition-colors {manualViewMode ===
-						'list'
+					'list'
 						? 'bg-background text-foreground shadow-sm'
 						: 'text-muted-foreground hover:text-foreground'}"
 				>
@@ -177,19 +177,32 @@
 
 		<div class="min-h-0 flex-1 overflow-y-auto p-4">
 			{#if !isScheduledDayValue}
-				<div class="flex h-full min-h-72 flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
-					<div class="grid size-12 place-items-center rounded-full border border-border bg-surface text-muted-foreground mb-4">
-						<svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-							<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-							<line x1="16" y1="2" x2="16" y2="6"/>
-							<line x1="8" y1="2" x2="8" y2="6"/>
-							<line x1="3" y1="10" x2="21" y2="10"/>
+				<div
+					class="flex h-full min-h-72 flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center"
+				>
+					<div
+						class="mb-4 grid size-12 place-items-center rounded-full border border-border bg-surface text-muted-foreground"
+					>
+						<svg
+							class="size-6"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+							<line x1="16" y1="2" x2="16" y2="6" />
+							<line x1="8" y1="2" x2="8" y2="6" />
+							<line x1="3" y1="10" x2="21" y2="10" />
 						</svg>
 					</div>
 					<p class="font-medium text-foreground">Not a scheduled class day</p>
 					<p class="mt-1 text-sm text-muted-foreground">
-						Attendance can only be recorded on class days configured in Settings. View or edit the schedule for
-						this class on the Configuration page.
+						Attendance can only be recorded on class days configured in Settings. View or edit the
+						schedule for this class on the Configuration page.
 					</p>
 				</div>
 			{:else if manualStudents.length === 0}
@@ -204,20 +217,21 @@
 				>
 					{#each manualStudents as student (student.id)}
 						{@const action = onGetNextAttendanceType(student)}
-						{@const status = onGetStudentStatus(student)}						<button
-								type="button"
-								title={`${student.name} - ${status.label}`}
-								disabled={isProcessing || dateLoading}
-								onclick={() => onMarkStudent(student, action)}
-								class="group flex h-[116px] min-w-0 flex-col justify-between overflow-hidden rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
-									'in'
-									? 'border-border bg-background hover:border-primary hover:bg-primary/10'
-									: 'border-border bg-surface/80 text-muted-foreground'}"
-							>
+						{@const status = onGetStudentStatus(student)}
+						<button
+							type="button"
+							title={`${student.name} - ${status.label}`}
+							disabled={isProcessing || dateLoading}
+							onclick={() => onMarkStudent(student, action)}
+							class="group flex h-[116px] min-w-0 flex-col justify-between overflow-hidden rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
+							'in'
+								? 'border-border bg-background hover:border-primary hover:bg-primary/10'
+								: 'border-border bg-surface/80 text-muted-foreground'}"
+						>
 							<span class="flex min-w-0 items-start gap-2">
 								<span
 									class="grid size-9 shrink-0 place-items-center rounded-lg border text-[11px] font-bold {status.tone ===
-										'in'
+									'in'
 										? 'border-primary/30 bg-primary text-primary-foreground'
 										: 'border-border bg-surface text-foreground'}"
 								>
@@ -278,7 +292,7 @@
 									disabled={isProcessing || dateLoading || !isScheduledDayValue}
 									onclick={() => onMarkStudent(student, action)}
 									class="w-fit min-w-28 rounded-pill px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
-										'in'
+									'in'
 										? 'bg-primary text-primary-foreground hover:bg-accent'
 										: 'border border-border bg-surface text-muted-foreground'}"
 								>

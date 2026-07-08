@@ -32,19 +32,11 @@
 		getTimeOfDay,
 		getActiveClass,
 		eventTime,
-		parseDateKey,
 		formatAttendanceDate,
-		firstClassTime,
 		attendanceTimestampForSelectedDate,
-		studentName,
-		getStudentClass,
 		getAttendanceClass,
-		getSessionSegment,
 		getSessionKey,
 		checkLate,
-		isWithinClassHours,
-		getStudentInitials,
-		getStudentClassName,
 		isScheduledDay,
 		type LogLine,
 		type ManualViewMode,
@@ -417,7 +409,7 @@
 				attendanceLog?.showToast(`${student.name} - Attendance removed`);
 				attendanceLog?.resetUndo();
 				return;
-			} catch (err: unknown) {
+			} catch {
 				attendanceLog?.showToast('Failed to remove attendance', false);
 				return;
 			}

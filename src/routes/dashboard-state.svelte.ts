@@ -1,9 +1,8 @@
-import { SvelteMap } from 'svelte/reactivity';
-import { fmtDate } from '$lib/csv';
+import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { AttendanceEvent, Student, Class } from '$lib/db-rust';
 
 export function getActiveClass(classes: Class[]): Class | null {
-	const now = new Date();
+	const now = new SvelteDate();
 	const currentTime = now.getHours() * 60 + now.getMinutes();
 	const currentDay = now.getDay();
 
@@ -22,7 +21,7 @@ export function getActiveClass(classes: Class[]): Class | null {
 
 export function eventTime(event: AttendanceEvent): number {
 	return typeof event.timestamp === 'string'
-		? new Date(event.timestamp).getTime()
+		? new SvelteDate(event.timestamp).getTime()
 		: event.timestamp;
 }
 
@@ -37,9 +36,7 @@ export function initials(name: string) {
 	);
 }
 
-export function getCheckedInEvents(
-	relevantTodayEvents: AttendanceEvent[]
-): AttendanceEvent[] {
+export function getCheckedInEvents(relevantTodayEvents: AttendanceEvent[]): AttendanceEvent[] {
 	const lastByStudent = new SvelteMap<string, AttendanceEvent>();
 	for (const event of [...relevantTodayEvents].sort((a, b) => eventTime(a) - eventTime(b))) {
 		lastByStudent.set(event.studentId, event);
@@ -54,7 +51,7 @@ export function getRelevantTodayEvents(
 	classStudents: Student[]
 ): AttendanceEvent[] {
 	if (!assignedClass) return todayEvents;
-	const classStudentIds = new Set(classStudents.map((student) => student.id));
+	const classStudentIds = new SvelteSet(classStudents.map((student) => student.id));
 	return todayEvents.filter((event) => {
 		const student = studentMap.get(event.studentId);
 		return (

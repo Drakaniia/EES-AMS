@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { ScanLine, ShieldAlert } from 'lucide-svelte';
+	import { ScanLine } from 'lucide-svelte';
+
 	import { fmtTime } from '$lib/csv';
 	import type { AttendanceType } from '$lib/db-rust';
-	import type { LogLine, ManualViewMode } from './attendance-state.svelte';
+	import type { LogLine } from './attendance-state.svelte';
 
 	let {
 		classes,
@@ -12,10 +13,10 @@
 		cardInput,
 		cardInputElement = $bindable(),
 		log,
-		pickerOpen,
 		onCardInputChange,
 		onCardSubmit,
-		onPickerOpen,
+		pickerOpen,
+		onPickerOpen
 	}: {
 		classes: { id: string; name: string }[];
 		sessionClass: { id: string; name: string; dayStart: string; dayEnd: string } | undefined;
@@ -24,9 +25,9 @@
 		cardInput: string;
 		cardInputElement: HTMLInputElement | null;
 		log: LogLine[];
-		pickerOpen: boolean;
 		onCardInputChange: (value: string) => void;
 		onCardSubmit: (serial: string) => void;
+		pickerOpen: boolean;
 		onPickerOpen: () => void;
 	} = $props();
 </script>

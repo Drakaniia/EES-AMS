@@ -1,22 +1,6 @@
-import { SvelteMap } from 'svelte/reactivity';
-import {
-	fmtDate,
-	fmtTime
-} from '$lib/csv';
-import {
-	listStudents,
-	listClasses,
-	listEventsForDate,
-	findStudentByCard,
-	addEvent,
-	addEvents,
-	deleteEvent,
-	type AttendanceEvent,
-	type AttendanceType,
-	type CreateEventRequest,
-	type Student,
-	type Class
-} from '$lib/db-rust';
+import { SvelteDate } from 'svelte/reactivity';
+import { fmtDate } from '$lib/csv';
+import type { AttendanceEvent, AttendanceType, Student, Class } from '$lib/db-rust';
 
 export type LogLine = {
 	id: string;
@@ -45,11 +29,11 @@ export type LastResult = {
 // ── Pure utility functions ──────────────────────────────────────────────────────
 
 export function getTimeOfDay(): 'Morning' | 'Afternoon' {
-	return new Date().getHours() < 12 ? 'Morning' : 'Afternoon';
+	return new SvelteDate().getHours() < 12 ? 'Morning' : 'Afternoon';
 }
 
 export function getActiveClass(classes: Class[]): Class | null {
-	const now = new Date();
+	const now = new SvelteDate();
 	const currentTime = now.getHours() * 60 + now.getMinutes();
 	const currentDay = now.getDay();
 
@@ -68,7 +52,7 @@ export function getActiveClass(classes: Class[]): Class | null {
 
 export function eventTime(event: AttendanceEvent) {
 	return typeof event.timestamp === 'string'
-		? new Date(event.timestamp).getTime()
+		? new SvelteDate(event.timestamp).getTime()
 		: event.timestamp;
 }
 
@@ -92,7 +76,7 @@ export function formatAttendanceDate(dateKey: string) {
 	const parts = parseDateKey(dateKey);
 	if (!parts) return dateKey;
 
-	return new Date(parts.year, parts.monthIndex, parts.day).toLocaleDateString(undefined, {
+	return new SvelteDate(parts.year, parts.monthIndex, parts.day).toLocaleDateString(undefined, {
 		weekday: 'short',
 		month: 'short',
 		day: 'numeric',
@@ -116,10 +100,9 @@ export function attendanceTimestampForSelectedDate(
 
 	const [hourValue, minuteValue] = firstClassTime(classObj).split(':').map(Number);
 	const hour = typeof hourValue === 'number' && Number.isFinite(hourValue) ? hourValue : 8;
-	const minute =
-		typeof minuteValue === 'number' && Number.isFinite(minuteValue) ? minuteValue : 0;
+	const minute = typeof minuteValue === 'number' && Number.isFinite(minuteValue) ? minuteValue : 0;
 
-	return new Date(parts.year, parts.monthIndex, parts.day, hour, minute, 0, 0).getTime();
+	return new SvelteDate(parts.year, parts.monthIndex, parts.day, hour, minute, 0, 0).getTime();
 }
 
 export function studentName(studentId: string, studentById: Map<string, Student>) {
@@ -137,13 +120,17 @@ export function getAttendanceClass(
 	activeClass: Class | null,
 	classById: Map<string, Class>
 ) {
-	return currentClass ?? (isCardReaderMode ? activeClass : undefined) ?? getStudentClass(student, classById);
+	return (
+		currentClass ??
+		(isCardReaderMode ? activeClass : undefined) ??
+		getStudentClass(student, classById)
+	);
 }
 
 export function getSessionSegment(classObj: Class | undefined, timestamp: number) {
 	if (!classObj?.sessions || classObj.sessions.length <= 1) return 'day';
 
-	const now = new Date(timestamp);
+	const now = new SvelteDate(timestamp);
 	const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 	const session = classObj.sessions.find(
 		(item) => timeStr >= item.startTime && timeStr <= item.endTime
@@ -165,7 +152,7 @@ export function getSessionKey(classObj: Class | undefined, timestamp: number) {
 export function checkLate(classObj: Class | undefined, timestamp: number): boolean {
 	if (!classObj) return false;
 
-	const now = new Date(timestamp);
+	const now = new SvelteDate(timestamp);
 	const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 	let lateAfter = classObj.lateAfter;
 
@@ -180,14 +167,14 @@ export function checkLate(classObj: Class | undefined, timestamp: number): boole
 
 	if (!lateAfter) return false;
 	const [h, m] = lateAfter.split(':').map(Number);
-	const lateTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+	const lateTime = new SvelteDate(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
 	return now > lateTime;
 }
 
 export function isWithinClassHours(classObj: Class | undefined, timestamp: number): boolean {
 	if (!classObj) return false;
 
-	const now = new Date(timestamp);
+	const now = new SvelteDate(timestamp);
 	const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
 	if (classObj.sessions && classObj.sessions.length > 0) {
@@ -221,6 +208,6 @@ export function isScheduledDay(selectedDate: string, classObj: Class | undefined
 	const parts = parseDateKey(selectedDate);
 	if (!parts) return true;
 
-	const dayOfWeek = new Date(parts.year, parts.monthIndex, parts.day).getDay();
+	const dayOfWeek = new SvelteDate(parts.year, parts.monthIndex, parts.day).getDay();
 	return classObj.days.includes(dayOfWeek);
 }

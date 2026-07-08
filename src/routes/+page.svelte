@@ -26,12 +26,7 @@
 		ScanLine,
 		UsersRound
 	} from 'lucide-svelte';
-	import {
-		getActiveClass,
-		eventTime,
-		initials,
-		attendanceHref,
-	} from './dashboard-state.svelte';
+	import { getActiveClass, eventTime, initials, attendanceHref } from './dashboard-state.svelte';
 
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
@@ -140,8 +135,6 @@
 		return 'No class is configured yet. Add the class schedule and student list to begin tracking attendance.';
 	});
 
-
-
 	function scheduleMidnightRefresh() {
 		if (midnightTimer) clearTimeout(midnightTimer);
 		const now = new Date();
@@ -172,7 +165,10 @@
 			<UsersRound class="size-4" aria-hidden="true" />
 			Manage students
 		</a>
-		<a href={resolve(attendanceHref(isCardReaderMode, assignedClass?.id))} class="btn btn-primary control-ring">
+		<a
+			href={resolve(attendanceHref(isCardReaderMode, assignedClass?.id))}
+			class="btn btn-primary control-ring"
+		>
 			{#if activeClass}
 				<span class="relative flex h-2 w-2" aria-hidden="true">
 					<span
