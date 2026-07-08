@@ -24,33 +24,33 @@ ees_ams/
 
 ## WHERE TO LOOK
 
-| Task | Location | Notes |
-|------|----------|-------|
-| Frontend pages | `src/routes/` | SvelteKit file-based routing per feature |
-| Shared UI primitives | `src/lib/components/ui/` | Dialog, Toast, Pagination, etc. |
-| Tauri command wrappers | `src/lib/db-rust/` | Frontend→Rust invoke bridge |
-| Feature business logic | `src/lib/features/` | Per-feature TS workflows |
-| Types | `src/lib/types.ts` | Shared TS interfaces |
-| Rust Tauri commands | `src-tauri/src/commands/` | `#[tauri::command]` handlers |
-| Domain models + schema | `src-tauri/src/domain/` | Business logic, DB schema, migrations |
-| Database repos | `src-tauri/src/infrastructure/database/` | Pool + repository pattern |
-| SF2 Excel automation | `src-tauri/src/sf2/` | COM-based Excel workbook I/O |
-| Backup system | `src-tauri/src/backup/` | Local + Google Drive sync |
-| Shared Rust utilities | `src-tauri/src/shared/` | Cross-cutting helpers |
-| Docs | `docs/` | DESIGN.md, AGENTS.md, README.md |
+| Task                   | Location                                 | Notes                                    |
+| ---------------------- | ---------------------------------------- | ---------------------------------------- |
+| Frontend pages         | `src/routes/`                            | SvelteKit file-based routing per feature |
+| Shared UI primitives   | `src/lib/components/ui/`                 | Dialog, Toast, Pagination, etc.          |
+| Tauri command wrappers | `src/lib/db-rust/`                       | Frontend→Rust invoke bridge              |
+| Feature business logic | `src/lib/features/`                      | Per-feature TS workflows                 |
+| Types                  | `src/lib/types.ts`                       | Shared TS interfaces                     |
+| Rust Tauri commands    | `src-tauri/src/commands/`                | `#[tauri::command]` handlers             |
+| Domain models + schema | `src-tauri/src/domain/`                  | Business logic, DB schema, migrations    |
+| Database repos         | `src-tauri/src/infrastructure/database/` | Pool + repository pattern                |
+| SF2 Excel automation   | `src-tauri/src/sf2/`                     | COM-based Excel workbook I/O             |
+| Backup system          | `src-tauri/src/backup/`                  | Local + Google Drive sync                |
+| Shared Rust utilities  | `src-tauri/src/shared/`                  | Cross-cutting helpers                    |
+| Docs                   | `docs/`                                  | DESIGN.md, AGENTS.md, README.md          |
 
 ## CODE MAP
 
-| Symbol | Type | Location | Role |
-|--------|------|----------|------|
-| `app_lib::run` | fn | `src-tauri/src/lib.rs` | Tauri app bootstrap |
-| `commands::*` | fns | `src-tauri/src/commands/` | All Tauri command handlers |
-| `domain::models` | types | `src-tauri/src/domain/models.rs` | Core domain types (StudentId, EventId, models) |
-| `infrastructure::database` | module | `src-tauri/src/infrastructure/database/` | Pool managers + repos |
-| `sf2::*` | module | `src-tauri/src/sf2/` | Excel import/export |
-| `backup::*` | module | `src-tauri/src/backup/` | Backup + restore logic |
-| `db-rust/*` | TS modules | `src/lib/db-rust/` | Frontend→Rust API layer |
-| `features/settings/*` | TS modules | `src/lib/features/settings/` | Settings workflow logic |
+| Symbol                     | Type       | Location                                 | Role                                           |
+| -------------------------- | ---------- | ---------------------------------------- | ---------------------------------------------- |
+| `app_lib::run`             | fn         | `src-tauri/src/lib.rs`                   | Tauri app bootstrap                            |
+| `commands::*`              | fns        | `src-tauri/src/commands/`                | All Tauri command handlers                     |
+| `domain::models`           | types      | `src-tauri/src/domain/models.rs`         | Core domain types (StudentId, EventId, models) |
+| `infrastructure::database` | module     | `src-tauri/src/infrastructure/database/` | Pool managers + repos                          |
+| `sf2::*`                   | module     | `src-tauri/src/sf2/`                     | Excel import/export                            |
+| `backup::*`                | module     | `src-tauri/src/backup/`                  | Backup + restore logic                         |
+| `db-rust/*`                | TS modules | `src/lib/db-rust/`                       | Frontend→Rust API layer                        |
+| `features/settings/*`      | TS modules | `src/lib/features/settings/`             | Settings workflow logic                        |
 
 ## CONVENTIONS (PROJECT-SPECIFIC)
 
