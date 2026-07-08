@@ -1,6 +1,7 @@
 use crate::domain::error::{AppError, Result};
 use crate::sf2::logic::Sf2CellMark;
 use crate::sf2::models::{Sf2WorkbookAnalysis, Sf2WorkbookMetadata};
+use std::collections::HashSet;
 use std::path::Path;
 
 pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
@@ -15,12 +16,56 @@ pub fn write_workbook(source_path: &Path, output_path: &Path, marks: &[Sf2CellMa
     Ok(())
 }
 
+pub fn write_formulas(workbook_path: &Path, formula_marks: &[Sf2CellMark]) -> Result<()> {
+    if formula_marks.is_empty() {
+        return Ok(());
+    }
+    write_formulas_impl(workbook_path, formula_marks)
+}
+
 pub fn write_marks(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
     if marks.is_empty() {
         return Ok(());
     }
 
     write_marks_impl(workbook_path, marks)
+}
+
+pub fn write_marks_force(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
+    if marks.is_empty() {
+        return Ok(());
+    }
+
+    write_marks_force_impl(workbook_path, marks)
+}
+
+#[cfg(target_os = "windows")]
+fn write_marks_force_impl(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
+    super::excel_com::write_marks_force(workbook_path, marks)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn write_marks_force_impl(_workbook_path: &Path, _marks: &[Sf2CellMark]) -> Result<()> {
+    Err(unsupported_excel_automation())
+}
+
+pub fn hide_empty_learner_rows(
+    workbook_path: &Path,
+    male_total_row: u32,
+    female_total_row: u32,
+    occupied_rows: &HashSet<u32>,
+) -> Result<()> {
+    hide_empty_learner_rows_impl(workbook_path, male_total_row, female_total_row, occupied_rows)
+}
+
+pub fn expand_roster_rows(
+    workbook_path: &Path,
+    extra_male_rows: u32,
+    extra_female_rows: u32,
+    male_total_row: Option<u32>,
+    female_total_row: Option<u32>,
+) -> Result<()> {
+    expand_roster_rows_impl(workbook_path, extra_male_rows, extra_female_rows, male_total_row, female_total_row)
 }
 
 pub fn write_metadata(workbook_path: &Path, metadata: &Sf2WorkbookMetadata) -> Result<()> {
@@ -38,12 +83,42 @@ fn analyze_workbook_impl(_path: &Path) -> Result<Sf2WorkbookAnalysis> {
 }
 
 #[cfg(target_os = "windows")]
+fn write_formulas_impl(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
+    super::excel_com::write_formulas(workbook_path, marks)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn write_formulas_impl(_workbook_path: &Path, _marks: &[Sf2CellMark]) -> Result<()> {
+    Err(unsupported_excel_automation())
+}
+
+#[cfg(target_os = "windows")]
 fn write_marks_impl(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
     super::excel_com::write_marks(workbook_path, marks)
 }
 
 #[cfg(not(target_os = "windows"))]
 fn write_marks_impl(_workbook_path: &Path, _marks: &[Sf2CellMark]) -> Result<()> {
+    Err(unsupported_excel_automation())
+}
+
+#[cfg(target_os = "windows")]
+fn hide_empty_learner_rows_impl(workbook_path: &Path, male_total_row: u32, female_total_row: u32, occupied_rows: &HashSet<u32>) -> Result<()> {
+    super::excel_com::hide_empty_learner_rows(workbook_path, male_total_row, female_total_row, occupied_rows)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn hide_empty_learner_rows_impl(_workbook_path: &Path, _male_total_row: u32, _female_total_row: u32, _occupied_rows: &HashSet<u32>) -> Result<()> {
+    Err(unsupported_excel_automation())
+}
+
+#[cfg(target_os = "windows")]
+fn expand_roster_rows_impl(workbook_path: &Path, extra_male_rows: u32, extra_female_rows: u32, male_total_row: Option<u32>, female_total_row: Option<u32>) -> Result<()> {
+    super::excel_com::expand_roster_rows(workbook_path, extra_male_rows, extra_female_rows, male_total_row, female_total_row)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn expand_roster_rows_impl(_workbook_path: &Path, _extra_male_rows: u32, _extra_female_rows: u32, _male_total_row: Option<u32>, _female_total_row: Option<u32>) -> Result<()> {
     Err(unsupported_excel_automation())
 }
 

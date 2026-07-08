@@ -10,6 +10,7 @@ use crate::sf2::models::{
 };
 use crate::sf2::naming::class_name;
 use crate::sf2::repository::Sf2Repository;
+use crate::sf2::roster::clear_unused_learner_marks;
 use crate::sf2::validation::{ensure_import_validation_allows, import_validation_from_analysis};
 use crate::sf2::workbook_files::{
     copy_workbook_to_app_data, file_hash, layout_fingerprint, pick_workbook_path,
@@ -77,13 +78,43 @@ fn import_workbook_with_analysis(
     validate_configured_calendar(&analysis, &metadata)?;
     let layout_fingerprint = layout_fingerprint(&analysis);
 
+    // Fetch old template student mappings for name-update-on-reimport
+    let old_mappings = sf2_repo
+        .latest_template_for_class(&class.id)?
+        .map(|old_template| {
+            sf2_repo.student_mappings_for_template(&old_template.id)
+        })
+        .transpose()?
+        .unwrap_or_default();
+
     let learner_sync =
-        super::calendar_service::sync_workbook_learner_mappings(
-            &student_repo, &class.id, &template_id, &analysis.learners,
+        super::roster::sync_workbook_learner_mappings_with_old(
+            &student_repo, &class.id, &template_id, &analysis.learners, &old_mappings,
         )?;
     let student_mappings = learner_sync.student_mappings;
     let students_created = learner_sync.students_created;
     let students_reused = learner_sync.students_reused;
+    let students_updated = learner_sync.students_updated;
+
+    // Clear unused learner rows (columns A, B, C) in the imported workbook
+    let mapped_rows: Vec<u32> = student_mappings.iter().map(|m| m.row_index).collect();
+    let clear_marks = clear_unused_learner_marks(&analysis, &mapped_rows, None, None);
+    if !clear_marks.is_empty() {
+        excel::write_marks(&working_copy_path, &clear_marks)?;
+    }
+
+    // Hide empty learner rows — only rows with students should be visible.
+    // Standard DepEd SF2: MALE TOTAL at row 29, FEMALE TOTAL at row 49.
+    {
+        let occupied: std::collections::HashSet<u32> =
+            student_mappings.iter().map(|m| m.row_index).collect();
+        excel::hide_empty_learner_rows(
+            &working_copy_path,
+            29u32,
+            49u32,
+            &occupied,
+        )?;
+    }
 
     let date_mappings = date_mappings_from_analysis(&template_id, &analysis);
 
@@ -130,6 +161,7 @@ fn import_workbook_with_analysis(
         learners_found: student_mappings.len(),
         students_created,
         students_reused,
+        students_updated,
         dates_mapped: date_mappings.len(),
     })
 }

@@ -30,7 +30,21 @@ pub fn set_sf2_cell(
     put_cell_value(&target, value)
 }
 
-/// Set a cell value by address (e.g., "B2").
+/// Set a cell value by address (e.g., "B2"), allowing overwriting formula cells.
+pub fn set_sf2_mark_force(sheet: &ComObject, cell_address: &str, value: &str) -> Result<()> {
+    let cell = sheet.get_object_with_args("Range", vec![crate::sf2::excel_com::workbook::ComVariant::bstr(cell_address)])?;
+    let target = merged_target(&cell)?;
+    put_cell_value_numeric(&target, value)
+}
+
+/// Set an Excel formula on a cell by address (e.g., "F29"), overwriting any existing value.
+pub fn set_sf2_formula(sheet: &ComObject, cell_address: &str, formula: &str) -> Result<()> {
+    let cell = sheet.get_object_with_args("Range", vec![crate::sf2::excel_com::workbook::ComVariant::bstr(cell_address)])?;
+    let target = merged_target(&cell)?;
+    target.put_string("Formula", formula)
+}
+
+/// Set a cell value by address (e.g., "B2"), refusing to overwrite formula cells.
 pub fn set_sf2_mark(sheet: &ComObject, cell_address: &str, value: &str) -> Result<()> {
     let cell = sheet.get_object_with_args("Range", vec![crate::sf2::excel_com::workbook::ComVariant::bstr(cell_address)])?;
     let target = merged_target(&cell)?;
@@ -74,6 +88,19 @@ fn ensure_not_formula(sheet: &ComObject, target: &ComObject) -> Result<()> {
 fn put_cell_value(cell: &ComObject, value: &str) -> Result<()> {
     if value.is_empty() {
         cell.put_variant("Value2", crate::sf2::excel_com::workbook::ComVariant::empty())
+    } else {
+        cell.put_string("Value2", value)
+    }
+}
+
+/// Write a value to a cell as a number if it parses as an integer, otherwise fall back to string.
+/// Used by `set_sf2_mark_force` so that TOTAL Per Day counts (e.g., "13") are stored as numbers
+/// that Excel formulas (e.g., Combined TOTAL = F29+F49) can calculate correctly.
+fn put_cell_value_numeric(cell: &ComObject, value: &str) -> Result<()> {
+    if value.is_empty() {
+        cell.put_variant("Value2", crate::sf2::excel_com::workbook::ComVariant::empty())
+    } else if let Ok(num) = value.parse::<i32>() {
+        cell.put_variant("Value2", crate::sf2::excel_com::workbook::ComVariant::i4(num))
     } else {
         cell.put_string("Value2", value)
     }

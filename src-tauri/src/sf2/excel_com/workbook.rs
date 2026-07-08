@@ -1,6 +1,6 @@
 use crate::domain::error::{AppError, Result};
 use crate::sf2::excel_com::worksheet::{
-    cell_text, set_sf2_cell, set_sf2_mark,
+    cell_text, set_sf2_cell, set_sf2_formula, set_sf2_mark, set_sf2_mark_force,
 };
 use crate::sf2::excel_com::calendar::{
     configure_sf2_calendar,
@@ -11,6 +11,7 @@ use crate::sf2::logic::Sf2CellMark;
 use crate::sf2::models::{Sf2WorkbookAnalysis, Sf2WorkbookDate, Sf2WorkbookMetadata};
 use chrono::{Datelike, NaiveDate};
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::path::Path;
 use windows::core::{BSTR, GUID, PCWSTR};
 use windows::Win32::Foundation::VARIANT_BOOL;
@@ -145,6 +146,171 @@ pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
     })
 }
 
+/// Expand the roster area in an SF2 bundled workbook by inserting extra rows
+/// before the MALE TOTAL and FEMALE TOTAL rows as needed.
+///
+/// `male_total_row` — the current row of the MALE TOTAL cell. Defaults to 29 for a fresh template.
+/// `female_total_row` — the current row of the FEMALE TOTAL cell. Defaults to 49 for a fresh template.
+///
+/// For incremental expansions (sync/update of an already-expanded workbook),
+/// pass the ACTUAL current positions of the TOTAL rows (e.g., from existing student mappings).
+pub fn expand_roster_rows(
+    workbook_path: &Path,
+    extra_male_rows: u32,
+    extra_female_rows: u32,
+    male_total_row: Option<u32>,
+    female_total_row: Option<u32>,
+) -> Result<()> {
+    if extra_male_rows == 0 && extra_female_rows == 0 {
+        return Ok(());
+    }
+
+    let male_base = male_total_row.unwrap_or(29);
+    let workbook_path = workbook_path.to_path_buf();
+    run_excel_task(move || {
+        with_workbook(&workbook_path, false, true, |_excel, workbook| {
+            let sheets = workbook.get_object("Worksheets")?;
+            let sheet_count = sheets.get_i32("Count")?;
+
+            for sheet_index in 1..=sheet_count {
+                let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
+                let visible = sheet.get_i32("Visible")?;
+                if visible != EXCEL_SHEET_VISIBLE {
+                    continue;
+                }
+
+                // Only modify SF2 monthly sheets
+                let sheet_name = sheet.get_string("Name")?;
+                if month_number(&sheet_name) == 0 || year_from_sheet_name(&sheet_name) == 0 {
+                    continue;
+                }
+
+                // Insert extra male rows before the MALE TOTAL row.
+                if extra_male_rows > 0 {
+                    let insert_start = male_base as i32;
+                    let range = sheet.get_object_with_args(
+                        "Range",
+                        vec![ComVariant::bstr(&format!("{insert_start}:{insert_start}"))],
+                    )?;
+                    let entire_row = range.get_object("EntireRow")?;
+                    for _ in 0..extra_male_rows {
+                        // xlShiftDown = -4121, xlFormatFromLeftOrAbove = 0
+                        entire_row.method(
+                            "Insert",
+                            vec![ComVariant::i4(-4121), ComVariant::i4(0)],
+                        )?;
+                    }
+                }
+
+                // Insert extra female rows before FEMALE TOTAL row.
+                // After male expansion, the FEMALE TOTAL has shifted down by extra_male_rows.
+                if extra_female_rows > 0 {
+                    let female_base = female_total_row.unwrap_or(49) + extra_male_rows;
+                    let range = sheet.get_object_with_args(
+                        "Range",
+                        vec![ComVariant::bstr(&format!("{female_base}:{female_base}"))],
+                    )?;
+                    let entire_row = range.get_object("EntireRow")?;
+                    for _ in 0..extra_female_rows {
+                        entire_row.method(
+                            "Insert",
+                            vec![ComVariant::i4(-4121), ComVariant::i4(0)],
+                        )?;
+                    }
+                }
+            }
+
+            workbook.method("Save", Vec::new())?;
+            Ok(())
+        })
+    })
+}
+
+/// Hide empty learner rows on all monthly sheets in an SF2 workbook.
+///
+/// Rows within the standard learner ranges that are NOT in `occupied_rows` are
+/// hidden (`.Hidden = true` in Excel), so only rows with actual students are visible.
+///
+/// `male_total_row` — the Excel row of the MALE TOTAL Per Day cell.
+/// `female_total_row` — the Excel row of the FEMALE TOTAL Per Day cell.
+pub fn hide_empty_learner_rows(
+    workbook_path: &Path,
+    male_total_row: u32,
+    female_total_row: u32,
+    occupied_rows: &HashSet<u32>,
+) -> Result<()> {
+    let workbook_path = workbook_path.to_path_buf();
+    let occupied_rows = occupied_rows.clone();
+    run_excel_task(move || {
+        with_workbook(&workbook_path, false, true, |_excel, workbook| {
+            let sheets = workbook.get_object("Worksheets")?;
+            let sheet_count = sheets.get_i32("Count")?;
+
+            for sheet_index in 1..=sheet_count {
+                let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
+                let visible = sheet.get_i32("Visible")?;
+                if visible != EXCEL_SHEET_VISIBLE {
+                    continue;
+                }
+
+                let sheet_name = sheet.get_string("Name")?;
+                if month_number(&sheet_name) == 0 || year_from_sheet_name(&sheet_name) == 0 {
+                    continue;
+                }
+
+                // Male learner rows: row 8 to row (male_total_row - 1)
+                if male_total_row > 8 {
+                    for row in 8..male_total_row {
+                        let range = sheet.get_object_with_args(
+                            "Range",
+                            vec![ComVariant::bstr(&format!("{row}:{row}"))],
+                        )?;
+                        let entire_row = range.get_object("EntireRow")?;
+                        let hidden = !occupied_rows.contains(&row);
+                        entire_row.put_bool("Hidden", hidden)?;
+                    }
+                }
+
+                // Female learner rows: (male_total_row + 1) to row (female_total_row - 1)
+                let female_start = male_total_row + 1;
+                if female_total_row > female_start {
+                    for row in female_start..female_total_row {
+                        let range = sheet.get_object_with_args(
+                            "Range",
+                            vec![ComVariant::bstr(&format!("{row}:{row}"))],
+                        )?;
+                        let entire_row = range.get_object("EntireRow")?;
+                        let hidden = !occupied_rows.contains(&row);
+                        entire_row.put_bool("Hidden", hidden)?;
+                    }
+                }
+            }
+
+            workbook.method("Save", Vec::new())?;
+            Ok(())
+        })
+    })
+}
+
+pub fn write_formulas(workbook_path: &Path, formula_marks: &[Sf2CellMark]) -> Result<()> {
+    let workbook_path = workbook_path.to_path_buf();
+    let formula_marks = formula_marks.to_vec();
+    run_excel_task(move || {
+        with_workbook(&workbook_path, false, true, |excel, workbook| {
+            let sheets = workbook.get_object("Worksheets")?;
+            for mark in &formula_marks {
+                let sheet = sheets
+                    .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
+                set_sf2_formula(&sheet, &mark.cell_address, &mark.value)?;
+            }
+
+            excel.calculate_full_rebuild()?;
+            workbook.method("Save", Vec::new())?;
+            Ok(())
+        })
+    })
+}
+
 pub fn write_marks(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
     let workbook_path = workbook_path.to_path_buf();
     let marks = marks.to_vec();
@@ -155,6 +321,28 @@ pub fn write_marks(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
                 let sheet = sheets
                     .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
                 set_sf2_mark(&sheet, &mark.cell_address, &mark.value)?;
+            }
+
+            excel.calculate_full_rebuild()?;
+            workbook.method("Save", Vec::new())?;
+            Ok(())
+        })
+    })
+}
+
+/// Write marks to a workbook, overwriting formula cells.
+/// Used specifically for TOTAL Per Day cells that may contain SUM formulas
+/// that need to be replaced with computed numeric values.
+pub fn write_marks_force(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
+    let workbook_path = workbook_path.to_path_buf();
+    let marks = marks.to_vec();
+    run_excel_task(move || {
+        with_workbook(&workbook_path, false, true, |excel, workbook| {
+            let sheets = workbook.get_object("Worksheets")?;
+            for mark in &marks {
+                let sheet = sheets
+                    .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
+                set_sf2_mark_force(&sheet, &mark.cell_address, &mark.value)?;
             }
 
             excel.calculate_full_rebuild()?;

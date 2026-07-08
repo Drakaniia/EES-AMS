@@ -219,7 +219,19 @@ pub(super) fn write_template_marks_for_mappings(
         .cloned()
         .collect::<Vec<_>>();
 
-    let mut marks = clear_attendance_marks_for_records(template, date_mappings, student_mappings);
+    // Fetch ALL date mappings from the DB to clear marks from every column,
+    // including those outside the report month (e.g. Monday/Tuesday columns
+    // for dates in the previous month) that may have stale marks.
+    // For new templates not yet persisted, fall back to the caller-supplied set.
+    let sf2_repo = Sf2Repository::new(pool.clone());
+    let all_date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
+    let clear_date_mappings: &[Sf2DateMappingRecord] = if all_date_mappings.is_empty() {
+        date_mappings
+    } else {
+        &all_date_mappings
+    };
+
+    let mut marks = clear_attendance_marks_for_records(template, clear_date_mappings, student_mappings);
     let attendance_marks = if export_days.is_empty() || student_mappings.is_empty() {
         Vec::new()
     } else {
@@ -235,6 +247,7 @@ pub(super) fn write_template_marks_for_mappings(
 
     marks.extend(attendance_marks);
     excel::write_marks(&workbook_path, &marks)?;
+
     Ok(attendance_mark_count)
 }
 
@@ -305,17 +318,52 @@ fn clear_attendance_marks_for_records(
         mapped_attendance_rows(student_mappings.iter().map(|mapping| mapping.row_index))
     };
 
-    let mut marks = Vec::with_capacity(date_mappings.len() * row_indices.len());
-    for date_mapping in date_mappings {
-        for row_index in &row_indices {
-            marks.push(Sf2CellMark {
-                sheet_name: date_mapping.sheet_name.clone(),
-                cell_address: format!("{}{}", date_mapping.column_letter, row_index),
-                value: String::new(),
-            });
+    // Get the unique set of visible sheet names from the date mappings.
+    let sheet_names: Vec<&str> = date_mappings
+        .iter()
+        .map(|m| m.sheet_name.as_str())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if sheet_names.is_empty() {
+        return Vec::new();
+    }
+
+    // Generate column letters for ALL standard DepEd SF2 weekday columns (F through AL).
+    // This ensures stale marks are cleared even from weekday columns that have no
+    // valid date in the report month (e.g. Monday/Tuesday in the first week when
+    // the month starts mid-week).
+    let all_column_letters: Vec<String> = (6..=38)
+        .map(|col| column_number_to_letter(col))
+        .collect();
+
+    let mut marks = Vec::with_capacity(
+        sheet_names.len() * all_column_letters.len() * row_indices.len(),
+    );
+    for sheet_name in &sheet_names {
+        for col_letter in &all_column_letters {
+            for row_index in &row_indices {
+                marks.push(Sf2CellMark {
+                    sheet_name: sheet_name.to_string(),
+                    cell_address: format!("{col_letter}{row_index}"),
+                    value: String::new(),
+                });
+            }
         }
     }
     marks
+}
+
+/// Convert a 1-based column index to an Excel column letter (e.g., 1 -> A, 26 -> Z, 27 -> AA).
+fn column_number_to_letter(mut column: i32) -> String {
+    let mut letter = String::new();
+    while column > 0 {
+        let modulo = (column - 1) % 26;
+        letter.insert(0, (b'A' + modulo as u8) as char);
+        column = (column - modulo) / 26;
+    }
+    letter
 }
 
 fn set_attendance_event_for_day(
@@ -439,6 +487,67 @@ fn parse_clock(value: &str) -> Option<(u32, u32)> {
     } else {
         None
     }
+}
+
+/// Generate Excel formulas for the MALE TOTAL, FEMALE TOTAL, and Combined TOTAL rows.
+///
+/// Writes formulas that dynamically calculate present student count per day:
+///   MALE TOTAL:     ={male_count}-COUNTIF({col}{first_male_row}:{col}{last_male_row},"X")
+///   FEMALE TOTAL:   ={female_count}-COUNTIF({col}{first_female_row}:{col}{last_female_row},"X")
+///   Combined TOTAL: ={col}{male_total}+{col}{female_total}
+///
+/// The formulas use "X" marks (absent) to compute PRESENT count per day.
+/// Empty template rows (no student assigned) never have X marks, so they don't affect the count.
+pub(super) fn total_formula_marks(
+    male_count: usize,
+    female_count: usize,
+    male_total_row: u32,
+    female_total_row: u32,
+    combined_total_row: u32,
+    date_mappings: &[Sf2DateMappingRecord],
+) -> Vec<Sf2CellMark> {
+    // Male range: first male slot (8) to last male slot before TOTAL
+    let first_male_row = 8u32;
+    let last_male_row = male_total_row.saturating_sub(1);
+    // Female range: first female slot (after MALE TOTAL) to last female slot before FEMALE TOTAL
+    let first_female_row = male_total_row + 1;
+    let last_female_row = female_total_row.saturating_sub(1);
+
+    let mut formula_marks = Vec::new();
+    for date_mapping in date_mappings {
+        if date_mapping.date.trim().is_empty() {
+            continue;
+        }
+        let col = &date_mapping.column_letter;
+
+        // MALE TOTAL: ={male_count}-COUNTIF({col}{first}:{col}{last},"X")
+        formula_marks.push(Sf2CellMark {
+            sheet_name: date_mapping.sheet_name.clone(),
+            cell_address: format!("{col}{male_total_row}"),
+            value: format!(
+                "={}-COUNTIF({}{}:{}{},\"X\")",
+                male_count, col, first_male_row, col, last_male_row,
+            ),
+        });
+
+        // FEMALE TOTAL: ={female_count}-COUNTIF({col}{first}:{col}{last},"X")
+        formula_marks.push(Sf2CellMark {
+            sheet_name: date_mapping.sheet_name.clone(),
+            cell_address: format!("{col}{female_total_row}"),
+            value: format!(
+                "={}-COUNTIF({}{}:{}{},\"X\")",
+                female_count, col, first_female_row, col, last_female_row,
+            ),
+        });
+
+        // Combined TOTAL: ={col}{male_total}+{col}{female_total}
+        formula_marks.push(Sf2CellMark {
+            sheet_name: date_mapping.sheet_name.clone(),
+            cell_address: format!("{col}{combined_total_row}"),
+            value: format!("={}{}+{}{}", col, male_total_row, col, female_total_row),
+        });
+    }
+    formula_marks
 }
 
 fn attendance_grid_rows<I>(row_slots: &[super::calendar_service::TemplateRosterSlot], extra_rows: I) -> Vec<u32>
@@ -631,5 +740,423 @@ mod tests {
         ];
         let result = attendance_grid_rows(&slots, vec![].into_iter());
         assert_eq!(result, vec![8, 9]);
+    }
+
+    // ── clear_attendance_marks_for_records ──────────────────────────────────────
+
+    #[test]
+    fn clear_attendance_marks_for_records_clears_all_weekday_columns() {
+        use crate::sf2::models::Sf2TemplateRecord;
+
+        let template = Sf2TemplateRecord {
+            id: "test-template".to_string(),
+            source_path: "/fake/path.xls".to_string(),
+            source_hash: "bundled-test".to_string(),
+            school_id: String::new(),
+            school_name: String::new(),
+            school_year: "2025-2026".to_string(),
+            report_month: "JULY".to_string(),
+            grade_level: "Grade 1".to_string(),
+            section: "Section A".to_string(),
+            adviser_name: String::new(),
+            school_head_name: String::new(),
+            layout_fingerprint: String::new(),
+            active_class_id: "class-1".to_string(),
+            imported_at: 0,
+        };
+
+        // Only 3 date mappings for July 1-3 in columns F, G, H (columns 6, 7, 8)
+        // This simulates a scenario where the month starts mid-week, so earlier
+        // weekday columns (e.g. Monday/Tuesday) have no dates but may have stale X marks.
+        let date_mappings = vec![
+            Sf2DateMappingRecord {
+                template_id: "test-template".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-01".to_string(),
+                column_letter: "F".to_string(),
+                column_index: 6,
+            },
+            Sf2DateMappingRecord {
+                template_id: "test-template".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-02".to_string(),
+                column_letter: "G".to_string(),
+                column_index: 7,
+            },
+            Sf2DateMappingRecord {
+                template_id: "test-template".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-03".to_string(),
+                column_letter: "H".to_string(),
+                column_index: 8,
+            },
+        ];
+
+        let student_mappings: Vec<Sf2StudentMappingRecord> = vec![];
+
+        let marks = clear_attendance_marks_for_records(&template, &date_mappings, &student_mappings);
+
+        // Standard DepEd SF2 roster rows (bundled template):
+        //   Male rows 8-28 (21 rows) + Female rows 30-48 (19 rows + total rows 29, 49 skipped) = 40 rows
+        // Standard weekday columns: 6-38 (F through AL) = 33 columns
+
+        // Extract unique column letters from the generated marks
+        let col_letters: HashSet<String> = marks.iter().map(|m| {
+            m.cell_address
+                .trim_end_matches(|c: char| c.is_ascii_digit())
+                .to_string()
+        }).collect();
+
+        // Build expected column letters for columns 6-38
+        let expected_cols: Vec<String> = (6..=38).map(|col| {
+            let mut s = String::new();
+            let mut n = col;
+            while n > 0 {
+                let m = (n - 1) % 26;
+                s.insert(0, (b'A' + m as u8) as char);
+                n = (n - m) / 26;
+            }
+            s
+        }).collect();
+
+        assert_eq!(
+            col_letters.len(),
+            33,
+            "should have 33 unique weekday column letters (F through AL)"
+        );
+        for expected in &expected_cols {
+            assert!(
+                col_letters.contains(expected),
+                "should include column letter {expected}"
+            );
+        }
+
+        // 33 columns × 40 roster rows = 1320 clear marks
+        assert_eq!(marks.len(), 33 * 40, "should clear marks in all 33 weekday columns across all 40 roster rows");
+
+        // All marks should be clearing (empty value)
+        for mark in &marks {
+            assert!(
+                mark.value.is_empty(),
+                "all clear marks should have an empty value"
+            );
+        }
+    }
+
+    // ── total_formula_marks ─────────────────────────────────────────────────
+
+    #[test]
+    fn total_formula_marks_standard_roster_uses_fixed_template_rows() {
+        // Standard bundled template: 21 male slots (8-28), MALE TOTAL always at row 29
+        //                           19 female slots (30-48), FEMALE TOTAL always at row 49
+        // Combined TOTAL at row 50 (female_total_row + 1)
+        let date_mappings = vec![
+            Sf2DateMappingRecord {
+                template_id: "test".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-01".to_string(),
+                column_letter: "F".to_string(),
+                column_index: 6,
+            },
+            Sf2DateMappingRecord {
+                template_id: "test".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-02".to_string(),
+                column_letter: "G".to_string(),
+                column_index: 7,
+            },
+        ];
+
+        let marks = total_formula_marks(
+            3,   // male_count
+            2,   // female_count
+            29,  // male_total_row
+            49,  // female_total_row
+            50,  // combined_total_row
+            &date_mappings,
+        );
+
+        // 2 dates × 3 marks each (M, F, Combined) = 6 marks
+        assert_eq!(marks.len(), 6, "should have 6 formula marks (2 dates × 3 rows)");
+
+        // Check F29 (MALE TOTAL formula)
+        let male_f = marks.iter().find(|m| m.cell_address == "F29").unwrap();
+        assert_eq!(male_f.value, "=3-COUNTIF(F8:F28,\"X\")");
+        assert_eq!(male_f.sheet_name, "JULY 2026");
+
+        // Check F49 (FEMALE TOTAL formula)
+        let female_f = marks.iter().find(|m| m.cell_address == "F49").unwrap();
+        assert_eq!(female_f.value, "=2-COUNTIF(F30:F48,\"X\")");
+        assert_eq!(female_f.sheet_name, "JULY 2026");
+
+        // Check F50 (Combined TOTAL formula)
+        let combined_f = marks.iter().find(|m| m.cell_address == "F50").unwrap();
+        assert_eq!(combined_f.value, "=F29+F49");
+        assert_eq!(combined_f.sheet_name, "JULY 2026");
+
+        // Check G29 (MALE TOTAL formula for second date)
+        let male_g = marks.iter().find(|m| m.cell_address == "G29").unwrap();
+        assert_eq!(male_g.value, "=3-COUNTIF(G8:G28,\"X\")");
+        assert_eq!(male_g.sheet_name, "JULY 2026");
+
+        // Check G49 (FEMALE TOTAL formula for second date)
+        let female_g = marks.iter().find(|m| m.cell_address == "G49").unwrap();
+        assert_eq!(female_g.value, "=2-COUNTIF(G30:G48,\"X\")");
+        assert_eq!(female_g.sheet_name, "JULY 2026");
+
+        // Check G50 (Combined TOTAL formula for second date)
+        let combined_g = marks.iter().find(|m| m.cell_address == "G50").unwrap();
+        assert_eq!(combined_g.value, "=G29+G49");
+        assert_eq!(combined_g.sheet_name, "JULY 2026");
+    }
+
+    #[test]
+    fn total_formula_marks_expanded_roster_uses_correct_total_rows() {
+        // Expanded bundled template: 25 male students → MALE TOTAL at 33
+        //                            22 female students → FEMALE TOTAL at 56
+        //                            Combined at 57
+        let date_mappings = vec![
+            Sf2DateMappingRecord {
+                template_id: "test".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-15".to_string(),
+                column_letter: "P".to_string(),
+                column_index: 16,
+            },
+        ];
+
+        let marks = total_formula_marks(
+            25,  // male_count
+            22,  // female_count
+            33,  // male_total_row (28 + 5 extra male)
+            56,  // female_total_row (49 + 5 extra male + 2 extra female)
+            57,  // combined_total_row
+            &date_mappings,
+        );
+
+        // 1 date × 3 marks = 3 marks
+        assert_eq!(marks.len(), 3, "should have 3 formula marks (1 date × 3 rows)");
+
+        // MALE TOTAL formula uses range F8:F32 (33-1)
+        let male_mark = marks.iter().find(|m| m.cell_address == "P33").unwrap();
+        assert_eq!(male_mark.value, "=25-COUNTIF(P8:P32,\"X\")");
+
+        // FEMALE TOTAL formula uses range F34:F55 (33+1 to 56-1)
+        let female_mark = marks.iter().find(|m| m.cell_address == "P56").unwrap();
+        assert_eq!(female_mark.value, "=22-COUNTIF(P34:P55,\"X\")");
+
+        // Combined TOTAL
+        let combined_mark = marks.iter().find(|m| m.cell_address == "P57").unwrap();
+        assert_eq!(combined_mark.value, "=P33+P56");
+    }
+
+    #[test]
+    fn total_formula_marks_empty_date_mappings_returns_empty() {
+        let date_mappings: Vec<Sf2DateMappingRecord> = vec![];
+        let marks = total_formula_marks(
+            1,
+            0,
+            29,
+            49,
+            50,
+            &date_mappings,
+        );
+        assert!(marks.is_empty(), "should return no marks when date_mappings is empty");
+    }
+
+    #[test]
+    fn total_formula_marks_zero_counts_produce_correct_formulas() {
+        // Even with zero students, formulas should still be correct:
+        //   =0-COUNTIF(F8:F28,"X") for MALE TOTAL (will always evaluate to 0 or negative)
+        //   =0-COUNTIF(F30:F48,"X") for FEMALE TOTAL
+        let date_mappings = vec![
+            Sf2DateMappingRecord {
+                template_id: "test".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-01".to_string(),
+                column_letter: "F".to_string(),
+                column_index: 6,
+            },
+        ];
+
+        let marks = total_formula_marks(
+            0,
+            0,
+            29,
+            49,
+            50,
+            &date_mappings,
+        );
+
+        assert_eq!(marks.len(), 3, "should have 3 formula marks even with zero counts");
+
+        let male_mark = marks.iter().find(|m| m.cell_address == "F29").unwrap();
+        assert_eq!(male_mark.value, "=0-COUNTIF(F8:F28,\"X\")");
+
+        let female_mark = marks.iter().find(|m| m.cell_address == "F49").unwrap();
+        assert_eq!(female_mark.value, "=0-COUNTIF(F30:F48,\"X\")");
+
+        let combined_mark = marks.iter().find(|m| m.cell_address == "F50").unwrap();
+        assert_eq!(combined_mark.value, "=F29+F49");
+    }
+
+    #[test]
+    fn total_formula_marks_with_only_one_gender() {
+        // Only male students, zero female
+        let date_mappings = vec![
+            Sf2DateMappingRecord {
+                template_id: "test".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-01".to_string(),
+                column_letter: "F".to_string(),
+                column_index: 6,
+            },
+        ];
+
+        let marks = total_formula_marks(
+            2,
+            0,
+            29,
+            49,
+            50,
+            &date_mappings,
+        );
+
+        assert_eq!(marks.len(), 3, "should have 3 marks");
+
+        let male_mark = marks.iter().find(|m| m.cell_address == "F29").unwrap();
+        assert_eq!(male_mark.value, "=2-COUNTIF(F8:F28,\"X\")");
+
+        let female_mark = marks.iter().find(|m| m.cell_address == "F49").unwrap();
+        assert_eq!(female_mark.value, "=0-COUNTIF(F30:F48,\"X\")");
+    }
+
+    #[test]
+    fn total_formula_marks_multiple_sheets_generates_marks_for_each() {
+        let date_mappings = vec![
+            Sf2DateMappingRecord {
+                template_id: "test".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-01".to_string(),
+                column_letter: "F".to_string(),
+                column_index: 6,
+            },
+            Sf2DateMappingRecord {
+                template_id: "test".to_string(),
+                sheet_name: "AUGUST 2026".to_string(),
+                date: "2026-08-01".to_string(),
+                column_letter: "F".to_string(),
+                column_index: 6,
+            },
+        ];
+
+        let marks = total_formula_marks(
+            1,
+            1,
+            29,
+            49,
+            50,
+            &date_mappings,
+        );
+
+        // 2 sheets × 3 marks each = 6 marks
+        assert_eq!(marks.len(), 6, "should have 6 marks (2 sheets × 3 rows)");
+
+        let july_marks: Vec<&Sf2CellMark> = marks.iter().filter(|m| m.sheet_name == "JULY 2026").collect();
+        let august_marks: Vec<&Sf2CellMark> = marks.iter().filter(|m| m.sheet_name == "AUGUST 2026").collect();
+        assert_eq!(july_marks.len(), 3, "JULY sheet should have 3 marks");
+        assert_eq!(august_marks.len(), 3, "AUGUST sheet should have 3 marks");
+
+        // Check both sheets have correct formulas at F29, F49, F50
+        for sheet_marks in [july_marks.as_slice(), august_marks.as_slice()] {
+            let male = sheet_marks.iter().find(|m| m.cell_address == "F29").unwrap();
+            assert_eq!(male.value, "=1-COUNTIF(F8:F28,\"X\")");
+            let female = sheet_marks.iter().find(|m| m.cell_address == "F49").unwrap();
+            assert_eq!(female.value, "=1-COUNTIF(F30:F48,\"X\")");
+            let combined = sheet_marks.iter().find(|m| m.cell_address == "F50").unwrap();
+            assert_eq!(combined.value, "=F29+F49");
+        }
+    }
+
+    #[test]
+    fn total_formula_marks_skips_date_mappings_with_invalid_dates() {
+        // Column F has INVALID/empty date, column G has a valid date
+        let date_mappings = vec![
+            Sf2DateMappingRecord {
+                template_id: "test".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: String::new(),  // empty date = skip
+                column_letter: "F".to_string(),
+                column_index: 6,
+            },
+            Sf2DateMappingRecord {
+                template_id: "test".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-01".to_string(),  // valid date
+                column_letter: "G".to_string(),
+                column_index: 7,
+            },
+        ];
+
+        let marks = total_formula_marks(
+            1,
+            0,
+            29,
+            49,
+            50,
+            &date_mappings,
+        );
+
+        // Should only produce marks for column G (valid date), NOT column F (empty date)
+        assert_eq!(marks.len(), 3, "should only produce marks for valid date columns");
+
+        // Column F marks should NOT exist
+        let has_f_col = marks.iter().any(|m| m.cell_address.starts_with('F'));
+        assert!(!has_f_col, "should NOT write formulas for column F (invalid date)");
+
+        // Column G marks SHOULD exist
+        let male_g = marks.iter().find(|m| m.cell_address == "G29").unwrap();
+        assert_eq!(male_g.value, "=1-COUNTIF(G8:G28,\"X\")");
+
+        let female_g = marks.iter().find(|m| m.cell_address == "G49").unwrap();
+        assert_eq!(female_g.value, "=0-COUNTIF(G30:G48,\"X\")");
+
+        let combined_g = marks.iter().find(|m| m.cell_address == "G50").unwrap();
+        assert_eq!(combined_g.value, "=G29+G49");
+    }
+
+    #[test]
+    fn total_formula_marks_correct_range_for_imported_workbooks() {
+        // Imported workbooks also use DepEd fixed positions, but the function
+        // receives row positions from the caller — it doesn't derive them itself.
+        // Test that it correctly uses the passed-in rows regardless.
+        let date_mappings = vec![
+            Sf2DateMappingRecord {
+                template_id: "test".to_string(),
+                sheet_name: "JULY 2026".to_string(),
+                date: "2026-07-01".to_string(),
+                column_letter: "F".to_string(),
+                column_index: 6,
+            },
+        ];
+
+        // Imported workbook: students at rows 10, 12, 14 (male) and 25, 27 (female)
+        // TOTAL rows at 29/49 (fixed DepEd standard)
+        let marks = total_formula_marks(
+            3,
+            2,
+            29,
+            49,
+            50,
+            &date_mappings,
+        );
+
+        assert_eq!(marks.len(), 3, "should have 3 formula marks");
+
+        let male_mark = marks.iter().find(|m| m.cell_address == "F29").unwrap();
+        assert_eq!(male_mark.value, "=3-COUNTIF(F8:F28,\"X\")");
+
+        let female_mark = marks.iter().find(|m| m.cell_address == "F49").unwrap();
+        assert_eq!(female_mark.value, "=2-COUNTIF(F30:F48,\"X\")");
     }
 }
