@@ -8,6 +8,7 @@
 	import StudentAttendanceModal from '$lib/components/students/StudentAttendanceModal.svelte';
 	import StudentList from './student-list.svelte';
 	import StudentForm from './student-form.svelte';
+	import StudentDeleteDialog from './student-delete-dialog.svelte';
 	import {
 		listStudents,
 		saveStudent,
@@ -33,6 +34,7 @@
 	let classes = $state<Class[]>([]);
 	let sf2Readiness = $state<Sf2ExportReadiness | null>(null);
 	let searchTerms = $state('');
+	let genderFilter = $state<'all' | 'male' | 'female'>('all');
 	let sortBy = $state<'name' | 'date'>('name');
 	let sortOrder = $state<'asc' | 'desc'>('asc');
 	let loading = $state(true);
@@ -80,6 +82,12 @@
 		}
 	});
 
+	$effect(() => {
+		// Reset to first page when gender filter changes (results may be fewer)
+		void genderFilter;
+		currentPage = 1;
+	});
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toast(msg: string) {
 		toastMessage = msg;
@@ -100,6 +108,10 @@
 		if (searchTerms.trim()) {
 			const term = searchTerms.toLowerCase();
 			result = result.filter((s) => s.name.toLowerCase().includes(term));
+		}
+
+		if (genderFilter !== 'all') {
+			result = result.filter((s) => s.gender === genderFilter);
 		}
 
 		result = [...result].sort((a, b) => {
@@ -464,6 +476,7 @@
 			{students}
 			{paginatedStudents}
 			{searchTerms}
+			{genderFilter}
 			{sortBy}
 			{sortOrder}
 			currentPage={currentPage}
@@ -475,6 +488,7 @@
 			{canCreateStudents}
 			{studentCreationBlockedMessage}
 			onSearchChange={(value) => (searchTerms = value)}
+			onGenderFilterChange={(value) => (genderFilter = value)}
 			onToggleSort={toggleSort}
 			onPageChange={handlePageChange}
 			onOpenAttendance={openAttendance}
@@ -578,72 +592,6 @@
 	</div>
 {/if}
 
-<!-- ── Delete confirmation dialog ────────────────────────────────────────── -->
-{#if deleteTarget}
-	<div
-		class="fixed inset-0 z-40 bg-black/50"
-		role="presentation"
-		onclick={() => (deleteTarget = null)}
-		onkeydown={(e) => e.key === 'Escape' && (deleteTarget = null)}
-	></div>
-
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="delete-dialog-title"
-	>
-		<div
-			class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6"
-		>
-			<div class="flex flex-col items-center gap-3 text-center">
-				<div class="flex size-12 items-center justify-center rounded-full bg-destructive/10">
-					<svg
-						class="size-6 text-destructive"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<polyline points="3 6 5 6 21 6" />
-						<path
-							d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
-						/>
-					</svg>
-				</div>
-				<div class="w-full text-left">
-					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete student?</h2>
-					<p class="mt-1 text-sm text-muted-foreground">
-						<span class="font-medium text-foreground">{deleteTarget.name}</span> will be permanently removed.
-					</p>
-					<p class="mt-4 text-xs leading-relaxed text-muted-foreground">
-						<strong class="font-semibold text-accent">PROTIP:</strong>
-						<span class="block">
-							You can hold down <strong class="font-semibold">Shift</strong> when clicking the delete
-							button to bypass this confirmation entirely.
-						</span>
-					</p>
-				</div>
-			</div>
-
-			<div class="flex gap-2">
-				<button
-					onclick={() => (deleteTarget = null)}
-					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
-				>
-					Cancel
-				</button>
-				<button
-					onclick={() => confirmDelete()}
-					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-				>
-					Delete
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<StudentDeleteDialog deleteTarget={deleteTarget} onConfirm={() => confirmDelete()} onCancel={() => (deleteTarget = null)} />
 
 <FeedbackToast message={toastMessage} onClose={() => (toastMessage = null)} />

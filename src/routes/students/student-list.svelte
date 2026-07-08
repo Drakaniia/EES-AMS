@@ -8,6 +8,7 @@
 		students,
 		paginatedStudents,
 		searchTerms,
+		genderFilter,
 		sortBy,
 		sortOrder,
 		currentPage,
@@ -19,6 +20,7 @@
 		canCreateStudents,
 		studentCreationBlockedMessage,
 		onSearchChange,
+		onGenderFilterChange,
 		onToggleSort,
 		onPageChange,
 		onOpenAttendance,
@@ -29,6 +31,7 @@
 		students: Student[];
 		paginatedStudents: Student[];
 		searchTerms: string;
+		genderFilter: 'all' | 'male' | 'female';
 		sortBy: 'name' | 'date';
 		sortOrder: 'asc' | 'desc';
 		currentPage: number;
@@ -40,6 +43,7 @@
 		canCreateStudents: boolean;
 		studentCreationBlockedMessage: string;
 		onSearchChange: (value: string) => void;
+		onGenderFilterChange: (value: 'all' | 'male' | 'female') => void;
 		onToggleSort: (field: 'name' | 'date') => void;
 		onPageChange: (page: number) => void;
 		onOpenAttendance: (student: Student) => void;
@@ -52,7 +56,7 @@
 </script>
 
 <!-- Tools Bar -->
-<section class="grid gap-4 px-4 pt-5 md:grid-cols-2 md:px-8 lg:grid-cols-3 lg:px-10">
+<section class="grid gap-4 px-4 pt-5 md:grid-cols-2 md:px-8 lg:grid-cols-4 lg:px-10">
 	<div class="space-y-2">
 		<div class="label-mono">Search Students</div>
 		<div class="relative">
@@ -75,6 +79,36 @@
 				placeholder="Search by name..."
 				class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 			/>
+		</div>
+	</div>
+
+	<div class="space-y-2">
+		<div class="label-mono">Gender</div>
+		<div class="flex overflow-hidden rounded-md border border-border bg-surface" role="group" aria-label="Gender filter">
+			<button
+				type="button"
+				aria-pressed={genderFilter === 'all'}
+				onclick={() => onGenderFilterChange('all')}
+				class="flex-1 px-3 py-2 text-sm font-medium transition-colors {genderFilter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+			>
+				All
+			</button>
+			<button
+				type="button"
+				aria-pressed={genderFilter === 'male'}
+				onclick={() => onGenderFilterChange('male')}
+				class="flex-1 px-3 py-2 text-sm font-medium transition-colors {genderFilter === 'male' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+			>
+				Male
+			</button>
+			<button
+				type="button"
+				aria-pressed={genderFilter === 'female'}
+				onclick={() => onGenderFilterChange('female')}
+				class="flex-1 px-3 py-2 text-sm font-medium transition-colors {genderFilter === 'female' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+			>
+				Female
+			</button>
 		</div>
 	</div>
 
