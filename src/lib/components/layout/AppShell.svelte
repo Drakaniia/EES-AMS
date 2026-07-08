@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
+	import { base } from '$app/paths';
 	import logo from '$lib/assets/logo-seal.png';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { onMount } from 'svelte';
@@ -16,28 +16,15 @@
 	let { children } = $props();
 	let isOnline = $state(true);
 
-	const navGroups = [
-		{
-			title: 'Main',
-			items: [
-				{ href: '/', label: 'Overview', icon: LayoutDashboard },
-				{ href: '/attendance', label: 'Attendance', icon: ScanLine }
-			]
-		},
-		{
-			title: 'Management',
-			items: [
-				{ href: '/students', label: 'Class List', icon: UsersRound },
-				{ href: '/records', label: 'Attendance Logs', icon: FileText }
-			]
-		},
-		{
-			title: 'System',
-			items: [
-				{ href: '/reports', label: 'SF2 Reports', icon: FileSpreadsheet },
-				{ href: '/settings', label: 'Configuration', icon: Settings }
-			]
-		}
+	const navItems = [
+		{ href: '/', label: 'Overview', icon: LayoutDashboard },
+		{ href: '/attendance', label: 'Attendance', icon: ScanLine },
+		{ type: 'divider' as const },
+		{ href: '/students', label: 'Class List', icon: UsersRound },
+		{ href: '/records', label: 'Attendance Logs', icon: FileText },
+		{ type: 'divider' as const },
+		{ href: '/reports', label: 'SF2 Reports', icon: FileSpreadsheet },
+		{ href: '/settings', label: 'Configuration', icon: Settings }
 	] as const;
 
 	const attendanceNavLabel = $derived(
@@ -69,13 +56,6 @@
 	function isActive(href: string, pathname: string) {
 		return href === '/' ? pathname === '/' : pathname.startsWith(href);
 	}
-
-	function getSchoolYear() {
-		const now = new Date();
-		const year = now.getFullYear();
-		const month = now.getMonth();
-		return month < 7 ? `${year - 1}-${year}` : `${year}-${year + 1}`;
-	}
 </script>
 
 <div class="app-surface flex h-full min-h-0 flex-col overflow-hidden text-foreground md:flex-row">
@@ -87,94 +67,81 @@
 	</a>
 
 	<aside
-		class="flex shrink-0 flex-col border-b border-border bg-background md:min-h-0 md:w-72 md:border-r md:border-b-0"
+		class="sidebar flex shrink-0 flex-col border-b border-border bg-background md:min-h-0 md:w-64 md:border-r md:border-b-0"
 		aria-label="Primary navigation"
 	>
-		<div class="flex items-center gap-3 px-4 py-3 md:px-5 md:pt-6 md:pb-5">
+		<!-- Header -->
+		<div class="flex items-center gap-3 px-4 py-3 md:px-4 md:pt-5 md:pb-4">
 			<img
 				src={logo}
 				alt="Espiritu Elementary School seal"
-				class="size-12 shrink-0 rounded-xl object-contain ring-1 ring-border md:size-14"
+				class="size-10 shrink-0 rounded-xl object-contain ring-1 ring-border md:size-11"
 			/>
 			<div class="min-w-0">
-				<div class="truncate text-lg leading-none font-black tracking-normal uppercase md:text-2xl">
+				<div class="truncate text-base leading-tight font-bold tracking-tight md:text-lg">
 					EES AMS
 				</div>
-				<div
-					class="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs font-medium text-muted-foreground"
-				>
-					<span>{getSchoolYear()}</span>
-					<span aria-hidden="true">/</span>
-					<span>{settingsStore.settings?.quarter ?? '1st Quarter'}</span>
+				<div class="mt-0.5 text-[11px] font-medium text-muted-foreground">
+					{settingsStore.settings?.quarter ?? '1st Quarter'}
 				</div>
-			</div>
-			<div class="ml-auto md:hidden">
-				<span class="chip">
-					<span class="status-dot {isOnline ? '' : 'status-dot-muted'}" aria-hidden="true"></span>
-					{isOnline ? 'Local' : 'Offline'}
-				</span>
 			</div>
 		</div>
 
+		<!-- Navigation -->
 		<nav
-			class="min-w-0 touch-pan-x overflow-x-auto px-2 pb-2 md:flex-1 md:overflow-y-auto md:px-3 md:pb-5"
+			class="min-w-0 flex-1 touch-pan-x overflow-x-auto px-2 pb-2 md:overflow-y-auto md:px-2 md:pb-4"
 		>
-			<div class="flex gap-2 md:flex-col md:gap-5">
-				{#each navGroups as group (group.title)}
-					<section class="flex shrink-0 md:block" aria-labelledby={`nav-${group.title}`}>
-						<h2 id={`nav-${group.title}`} class="label-mono hidden px-3 pb-2 text-[10px] md:block">
-							{group.title}
-						</h2>
-						<div class="flex gap-1 md:flex-col">
-							{#each group.items as item (item.href)}
-								{@const active = isActive(item.href, page.url.pathname)}
-								{@const Icon = item.icon}
-								<a
-									href={resolve(item.href)}
-									aria-current={active ? 'page' : undefined}
-									class="control-ring group relative flex h-10 min-w-max items-center gap-2 rounded-xl border px-3 text-sm font-semibold whitespace-nowrap md:h-11 md:min-w-0 md:gap-3 md:px-3.5
-										{active
-										? 'border-primary/35 bg-primary/10 text-foreground shadow-sm'
-										: 'border-transparent text-muted-foreground hover:bg-surface/80 hover:text-foreground'}"
-								>
-									{#if active}
-										<span
-											class="absolute top-1/2 left-1 hidden h-6 w-1 -translate-y-1/2 rounded-pill bg-primary md:block"
-											aria-hidden="true"
-										></span>
-									{/if}
-									<span
-										class="grid size-7 shrink-0 place-items-center rounded-lg transition-colors {active
-											? 'bg-primary text-primary-foreground'
-											: 'bg-surface text-muted-foreground group-hover:text-foreground'}"
-									>
-										<Icon class="size-4" aria-hidden="true" />
-									</span>
-									<span class="truncate">
-										{item.href === '/attendance' ? attendanceNavLabel : item.label}
-									</span>
-								</a>
-							{/each}
-						</div>
-					</section>
+			<div class="flex gap-1 md:flex-col">
+				{#each navItems as item}
+					{#if 'type' in item && item.type === 'divider'}
+						<div
+							class="mx-3 my-1 hidden h-px bg-border md:block"
+							role="separator"
+							aria-hidden="true"
+						></div>
+						<div class="mx-1 w-px bg-border md:hidden" role="separator" aria-hidden="true"></div>
+					{:else}
+						{@const navItem = item as { href: string; label: string; icon: any }}
+						{@const active = isActive(navItem.href, page.url.pathname)}
+						{@const Icon = navItem.icon}
+						<a
+							href={`${base}${navItem.href}`}
+							aria-current={active ? 'page' : undefined}
+							class="nav-link group relative flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium whitespace-nowrap transition-all md:h-10
+								{active
+									? 'bg-primary/10 text-foreground'
+									: 'text-muted-foreground hover:bg-surface/70 hover:text-foreground'}"
+						>
+							<span
+								class="grid size-7 shrink-0 place-items-center rounded-lg transition-all
+									{active
+										? 'bg-primary text-primary-foreground shadow-sm'
+										: 'text-muted-foreground group-hover:text-foreground'}"
+							>
+								<Icon class="size-4" aria-hidden="true" />
+							</span>
+							<span class="truncate">
+								{navItem.href === '/attendance' ? attendanceNavLabel : navItem.label}
+							</span>
+						</a>
+					{/if}
 				{/each}
 			</div>
 		</nav>
 
-		<div class="hidden border-t border-border px-5 py-4 md:block">
-			<div class="surface-panel p-3">
-				<div class="flex items-center justify-between gap-3">
-					<div class="min-w-0">
-						<div class="truncate text-sm font-semibold">{todayLabel}</div>
-						<div class="mt-1 text-xs text-muted-foreground">
-							{settingsStore.loading ? 'Syncing settings' : 'Local attendance database'}
-						</div>
-					</div>
-					<span class="chip shrink-0">
-						<span class="status-dot {isOnline ? '' : 'status-dot-muted'}" aria-hidden="true"></span>
-						{isOnline ? 'Online' : 'Offline'}
-					</span>
+		<!-- Footer -->
+		<div class="hidden border-t border-border px-4 py-3 md:block">
+			<div class="flex items-center justify-between gap-2">
+				<div class="min-w-0">
+					<div class="truncate text-xs font-semibold text-muted-foreground">{todayLabel}</div>
 				</div>
+				<span class="status-indicator" title={isOnline ? 'Online' : 'Offline'}>
+					<span
+						class="status-dot {isOnline ? '' : 'status-dot-muted'}"
+						aria-hidden="true"
+					></span>
+					<span class="sr-only">{isOnline ? 'Online' : 'Offline'}</span>
+				</span>
 			</div>
 		</div>
 	</aside>
