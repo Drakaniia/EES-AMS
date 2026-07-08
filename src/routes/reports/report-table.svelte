@@ -1,9 +1,5 @@
 <script lang="ts">
-	import {
-		AlertTriangle,
-		Check,
-		X
-	} from 'lucide-svelte';
+	import { AlertTriangle, Check, X } from 'lucide-svelte';
 	import type { Sf2PreviewStudentRow, Sf2PreviewCell } from '$lib/db-rust';
 	import type { MatrixWeekGroup, MatrixStudentRow } from './report-state.svelte';
 	import {
@@ -26,7 +22,7 @@
 		correctingCellKey,
 		fullReview,
 		onToggleAttendance,
-		onGenderFilterChange,
+		onGenderFilterChange
 	}: {
 		previewTemplateGradeLevel: string;
 		previewTemplateSection: string;
@@ -44,7 +40,8 @@
 	class="border border-border bg-card shadow-sm {fullReview
 		? 'flex min-h-0 flex-1 flex-col rounded-xl'
 		: 'rounded-2xl'}"
->		<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
+>
+	<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
 		<div>
 			<div class="label-mono text-primary">SF2 attendance grid</div>
 			<h2 class="mt-1 text-xl font-semibold">
@@ -56,12 +53,18 @@
 		</div>
 		<div class="flex flex-wrap items-center gap-2 text-xs">
 			{#if onGenderFilterChange}
-				<div class="flex overflow-hidden rounded-md border border-border bg-surface" role="group" aria-label="Gender filter">
+				<div
+					class="flex overflow-hidden rounded-md border border-border bg-surface"
+					role="group"
+					aria-label="Gender filter"
+				>
 					<button
 						type="button"
 						aria-pressed={genderFilter === 'all'}
 						onclick={() => onGenderFilterChange('all')}
-						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'all'
+							? 'bg-background text-foreground shadow-sm'
+							: 'text-muted-foreground hover:text-foreground'}"
 					>
 						All
 					</button>
@@ -69,7 +72,9 @@
 						type="button"
 						aria-pressed={genderFilter === 'male'}
 						onclick={() => onGenderFilterChange('male')}
-						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'male' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'male'
+							? 'bg-background text-foreground shadow-sm'
+							: 'text-muted-foreground hover:text-foreground'}"
 					>
 						Male
 					</button>
@@ -77,7 +82,9 @@
 						type="button"
 						aria-pressed={genderFilter === 'female'}
 						onclick={() => onGenderFilterChange('female')}
-						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'female' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'female'
+							? 'bg-background text-foreground shadow-sm'
+							: 'text-muted-foreground hover:text-foreground'}"
 					>
 						Female
 					</button>
@@ -127,7 +134,7 @@
 						{#each week.slots as slot, dateIndex (slot.key)}
 							<th
 								class="sticky top-[43px] z-10 min-w-14 border-b border-border bg-card px-2 py-2 text-center {dateIndex ===
-									0
+								0
 									? 'border-l-2 border-l-primary/45'
 									: 'border-l border-l-border/60'}"
 								title={slot.date

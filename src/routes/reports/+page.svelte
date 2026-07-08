@@ -4,7 +4,7 @@
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
-import Spinner from '$lib/components/ui/Spinner.svelte';
+	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import ReportFilters from './report-filters.svelte';
 	import ReportTable from './report-table.svelte';
 	import ReportExportDialogs from './report-export-dialogs.svelte';
@@ -27,7 +27,7 @@ import Spinner from '$lib/components/ui/Spinner.svelte';
 	} from '$lib/db-rust';
 	import {
 		normalizedSf2FirstSchoolDay,
-		SF2_SCHOOL_MONTHS,
+		SF2_SCHOOL_MONTHS
 	} from '$lib/features/settings/sf2-workbook';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import {
@@ -39,7 +39,7 @@ import Spinner from '$lib/components/ui/Spinner.svelte';
 		Save,
 		Settings2,
 		TriangleAlert,
-		UserX,
+		UserX
 	} from 'lucide-svelte';
 	import {
 		buildMatrixWeekGroups,
@@ -47,7 +47,7 @@ import Spinner from '$lib/components/ui/Spinner.svelte';
 		errorMessage,
 		formatImportedAt,
 		reportMonthLabel,
-		type MatrixStudentRow,
+		type MatrixStudentRow
 	} from './report-state.svelte';
 
 	let classes = $state<Class[]>([]);
@@ -279,12 +279,7 @@ import Spinner from '$lib/components/ui/Spinner.svelte';
 		try {
 			// Lightweight DB-only toggle — no Excel I/O.
 			// Open SF2 will sync attendance before opening the workbook.
-			await toggleSf2PreviewAttendance(
-				preview.classId,
-				row.studentId,
-				cell.date,
-				markPresent
-			);
+			await toggleSf2PreviewAttendance(preview.classId, row.studentId, cell.date, markPresent);
 			reportDialogs?.showToast(
 				`${row.studentName} marked ${markPresent ? 'present' : 'absent'} for ${formatDate(cell.date)}`
 			);
@@ -341,7 +336,11 @@ import Spinner from '$lib/components/ui/Spinner.svelte';
 			section: draftSection,
 			adviserName: draftAdviserName,
 			schoolHeadName: draftSchoolHeadName,
-			firstSchoolDay: normalizedSf2FirstSchoolDay(draftReportMonth, draftSchoolYear, workbookSettings.firstSchoolDay),
+			firstSchoolDay: normalizedSf2FirstSchoolDay(
+				draftReportMonth,
+				draftSchoolYear,
+				workbookSettings.firstSchoolDay
+			),
 			learnerNames: []
 		};
 	}
@@ -408,7 +407,10 @@ import Spinner from '$lib/components/ui/Spinner.svelte';
 					aria-label="Sync class roster to SF2 workbook"
 				>
 					{#if syncingRoster}
-						<span class="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true"></span>
+						<span
+							class="size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+							aria-hidden="true"
+						></span>
 					{:else}
 						<RefreshCw class="size-4" aria-hidden="true" />
 					{/if}
@@ -517,17 +519,39 @@ import Spinner from '$lib/components/ui/Spinner.svelte';
 					<dl class="mt-4 space-y-3 text-sm">
 						{@render metaRow('Class', preview.className || selectedClass?.name || 'Unlinked')}
 						{@render metaRow('School ID', draftSchoolId || preview.template.schoolId || 'Blank')}
-						{@render metaRow('School Year', draftSchoolYear || preview.template.schoolYear || 'Blank')}
-						{@render metaRow('Report Month', reportMonthLabel(draftReportMonth || preview.template.reportMonth))}
-						{@render metaRow('Grade Level', draftGradeLevel || preview.template.gradeLevel || 'Blank')}
+						{@render metaRow(
+							'School Year',
+							draftSchoolYear || preview.template.schoolYear || 'Blank'
+						)}
+						{@render metaRow(
+							'Report Month',
+							reportMonthLabel(draftReportMonth || preview.template.reportMonth)
+						)}
+						{@render metaRow(
+							'Grade Level',
+							draftGradeLevel || preview.template.gradeLevel || 'Blank'
+						)}
 						{@render metaRow('Section', draftSection || preview.template.section || 'Blank')}
-						{@render metaRow('Adviser', draftAdviserName || preview.template.adviserName || 'Blank')}
-						{@render metaRow('School Head', draftSchoolHeadName || preview.template.schoolHeadName || 'Blank')}
+						{@render metaRow(
+							'Adviser',
+							draftAdviserName || preview.template.adviserName || 'Blank'
+						)}
+						{@render metaRow(
+							'School Head',
+							draftSchoolHeadName || preview.template.schoolHeadName || 'Blank'
+						)}
 						{@render metaRow('Imported', formatImportedAt(preview.template.importedAt))}
 					</dl>
 					{#if preview.canExport !== undefined}
-						<div class="mt-4 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs">
-							<div class="size-2 shrink-0 rounded-full {preview.canExport ? 'bg-emerald-500' : 'bg-amber-500'}" aria-hidden="true"></div>
+						<div
+							class="mt-4 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs"
+						>
+							<div
+								class="size-2 shrink-0 rounded-full {preview.canExport
+									? 'bg-emerald-500'
+									: 'bg-amber-500'}"
+								aria-hidden="true"
+							></div>
 							<span class="text-muted-foreground">
 								{preview.canExport ? 'Ready for export' : 'Needs attention'}
 							</span>
@@ -607,24 +631,24 @@ import Spinner from '$lib/components/ui/Spinner.svelte';
 			<div class="min-h-0 flex-1 overflow-hidden px-4 py-4 md:px-6">
 				<div class="flex h-full min-h-0 flex-col gap-4">
 					{#if fullReviewHeaderVisible}
-					<ReportFilters
-						{preview}
-						fullReview={true}
-						{fullReviewHeaderVisible}
-						{workbookSettings}
-						{savingDetails}
-						{draftSchoolId}
-						{draftSchoolName}
-						{draftSchoolYear}
-						{draftReportMonth}
-						{draftGradeLevel}
-						{draftSection}
-						{draftAdviserName}
-						{draftSchoolHeadName}
-						onSaveWorkbookDetails={saveWorkbookDetails}
-						{onReportMonthChange}
-						{onDraftChange}
-					/>
+						<ReportFilters
+							{preview}
+							fullReview={true}
+							{fullReviewHeaderVisible}
+							{workbookSettings}
+							{savingDetails}
+							{draftSchoolId}
+							{draftSchoolName}
+							{draftSchoolYear}
+							{draftReportMonth}
+							{draftGradeLevel}
+							{draftSection}
+							{draftAdviserName}
+							{draftSchoolHeadName}
+							onSaveWorkbookDetails={saveWorkbookDetails}
+							{onReportMonthChange}
+							{onDraftChange}
+						/>
 					{/if}
 					<ReportTable
 						previewTemplateGradeLevel={preview.template.gradeLevel}
@@ -643,7 +667,14 @@ import Spinner from '$lib/components/ui/Spinner.svelte';
 	</div>
 {/if}
 
-<ReportExportDialogs bind:this={reportDialogs} bind:exportDialogOpen bind:exportLoadingOpen {preview} {exporting} onConfirmExport={confirmExport} />
+<ReportExportDialogs
+	bind:this={reportDialogs}
+	bind:exportDialogOpen
+	bind:exportLoadingOpen
+	{preview}
+	{exporting}
+	onConfirmExport={confirmExport}
+/>
 
 <Dialog
 	open={workbookDetailsOpen}
@@ -731,40 +762,40 @@ import Spinner from '$lib/components/ui/Spinner.svelte';
 	<div
 		role="dialog"
 		aria-modal="true"
-		aria-label="{syncError ? 'Sync failed' : 'Syncing SF2 workbook'}"
+		aria-label={syncError ? 'Sync failed' : 'Syncing SF2 workbook'}
 		class="fixed inset-0 z-[70] flex items-center justify-center bg-background/40"
 	>
 		{#if syncError}
 			<div
-			class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
-		>
-			<div class="flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600">
-				<TriangleAlert class="size-6" aria-hidden="true" />
+				class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
+			>
+				<div class="flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+					<TriangleAlert class="size-6" aria-hidden="true" />
+				</div>
+				<div class="space-y-2">
+					<h3 class="text-base font-semibold text-foreground">Unable to sync workbook</h3>
+					<p class="text-sm leading-relaxed text-muted-foreground">{syncError}</p>
+				</div>
+				<div class="flex gap-3">
+					<button
+						type="button"
+						onclick={() => {
+							syncError = null;
+							syncingOpen = false;
+						}}
+						class="control-ring rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+					>
+						Close
+					</button>
+					<button
+						type="button"
+						onclick={retrySync}
+						class="control-ring rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent"
+					>
+						Try again
+					</button>
+				</div>
 			</div>
-			<div class="space-y-2">
-				<h3 class="text-base font-semibold text-foreground">Unable to sync workbook</h3>
-				<p class="text-sm leading-relaxed text-muted-foreground">{syncError}</p>
-			</div>
-			<div class="flex gap-3">
-				<button
-					type="button"
-					onclick={() => {
-						syncError = null;
-						syncingOpen = false;
-					}}
-					class="control-ring rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
-				>
-					Close
-				</button>
-				<button
-					type="button"
-					onclick={retrySync}
-					class="control-ring rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent"
-				>
-					Try again
-				</button>
-			</div>
-		</div>
 		{:else}
 			<div
 				class="flex flex-col items-center gap-4 rounded-2xl border border-border bg-surface p-8 shadow-2xl"

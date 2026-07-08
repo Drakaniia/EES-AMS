@@ -1,13 +1,7 @@
+import { SvelteDate } from 'svelte/reactivity';
 import type { Sf2PreviewDate } from '$lib/types';
-import {
-	sf2MonthByValue,
-	sf2ReportMonthLabel
-} from '$lib/features/settings/sf2-workbook';
-import type {
-	Sf2ExportPreview,
-	Sf2PreviewCell,
-	Sf2PreviewStudentRow
-} from '$lib/db-rust';
+import { sf2MonthByValue, sf2ReportMonthLabel } from '$lib/features/settings/sf2-workbook';
+import type { Sf2PreviewCell, Sf2PreviewStudentRow } from '$lib/db-rust';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -41,17 +35,17 @@ export function errorMessage(error: unknown, fallback: string) {
 }
 
 export function formatDate(date: string) {
-	const value = new Date(`${date}T00:00:00`);
+	const value = new SvelteDate(`${date}T00:00:00`);
 	return value.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 export function formatWeekday(date: string) {
-	const value = new Date(`${date}T00:00:00`);
+	const value = new SvelteDate(`${date}T00:00:00`);
 	return value.toLocaleDateString(undefined, { weekday: 'short' });
 }
 
 export function formatDayNumber(date: string) {
-	const value = new Date(`${date}T00:00:00`);
+	const value = new SvelteDate(`${date}T00:00:00`);
 	return String(value.getDate());
 }
 
@@ -61,7 +55,7 @@ export function matrixDateLabel(date: string) {
 
 export function formatImportedAt(value?: number) {
 	if (!value) return 'Not imported';
-	return new Date(value * 1000).toLocaleDateString(undefined, {
+	return new SvelteDate(value * 1000).toLocaleDateString(undefined, {
 		month: 'short',
 		day: 'numeric',
 		year: 'numeric'
@@ -111,14 +105,14 @@ export function createMatrixWeekGroup(key: string): MatrixWeekGroup {
 
 export function mondayDateKey(date: string) {
 	const [year, month, day] = date.split('-').map(Number);
-	const value = new Date(year, month - 1, day);
+	const value = new SvelteDate(year, month - 1, day);
 	const weekday = value.getDay();
 	const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
-	return localDateKey(new Date(year, month - 1, day + mondayOffset));
+	return localDateKey(new SvelteDate(year, month - 1, day + mondayOffset));
 }
 
 export function weekdayIndexForDate(date: string) {
-	const value = new Date(`${date}T00:00:00`);
+	const value = new SvelteDate(`${date}T00:00:00`);
 	const weekday = value.getDay();
 	if (weekday === 0 || weekday === 6) return -1;
 	return weekday - 1;
@@ -131,16 +125,19 @@ export function localDateKey(date: Date) {
 	return `${year}-${month}-${day}`;
 }
 
-export function buildMatrixWeekGroups(dates: Sf2PreviewDate[], reportMonth: string): MatrixWeekGroup[] {
+export function buildMatrixWeekGroups(
+	dates: Sf2PreviewDate[],
+	reportMonth: string
+): MatrixWeekGroup[] {
 	const groups: MatrixWeekGroup[] = [];
 	const month = sf2MonthByValue(reportMonth);
 
 	if (month) {
-		const year = new Date().getFullYear();
-		const dayCount = new Date(year, month.monthIndex + 1, 0).getDate();
+		const year = new SvelteDate().getFullYear();
+		const dayCount = new SvelteDate(year, month.monthIndex + 1, 0).getDate();
 
 		for (let day = 1; day <= dayCount; day += 1) {
-			const dateKey = localDateKey(new Date(year, month.monthIndex, day));
+			const dateKey = localDateKey(new SvelteDate(year, month.monthIndex, day));
 			const weekdayIndexVal = weekdayIndexForDate(dateKey);
 			if (weekdayIndexVal < 0 || weekdayIndexVal > 4) continue;
 
@@ -191,9 +188,7 @@ export function buildMatrixWeekGroups(dates: Sf2PreviewDate[], reportMonth: stri
 }
 
 export function weekRangeLabel(group: MatrixWeekGroup) {
-	const dates = group.slots
-		.map((slot) => slot.dateKey)
-		.filter((d): d is string => d !== null);
+	const dates = group.slots.map((slot) => slot.dateKey).filter((d): d is string => d !== null);
 	const first = dates[0];
 	const last = dates.at(-1);
 	if (!first || !last) return 'Mon-Fri';
@@ -204,7 +199,11 @@ export function weekRangeLabel(group: MatrixWeekGroup) {
 	)}-${formatDayNumber(last)}`;
 }
 
-export function headerReviewValue(draftValue: string, templateValue: string, workbookSettings: unknown) {
+export function headerReviewValue(
+	draftValue: string,
+	templateValue: string,
+	workbookSettings: unknown
+) {
 	const value = workbookSettings ? draftValue : draftValue || templateValue;
 	return value.trim() || 'Blank';
 }

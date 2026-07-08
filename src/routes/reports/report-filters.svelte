@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { SF2_SCHOOL_MONTHS } from '$lib/features/settings/sf2-workbook';
 	import type { Sf2ExportPreview, Sf2WorkbookSettings } from '$lib/db-rust';
 	import { headerReviewValue, headerReviewMonthValue } from './report-state.svelte';
 
@@ -19,7 +18,7 @@
 		draftSchoolHeadName,
 		onSaveWorkbookDetails,
 		onReportMonthChange,
-		onDraftChange,
+		onDraftChange
 	}: {
 		preview: Sf2ExportPreview | null;
 		fullReview: boolean;
@@ -41,7 +40,7 @@
 </script>
 
 {#if fullReview && fullReviewHeaderVisible && preview?.template}
-	<div class="border border-border bg-card p-5 shadow-sm rounded-xl">
+	<div class="rounded-xl border border-border bg-card p-5 shadow-sm">
 		<div class="flex flex-wrap items-start justify-between gap-3">
 			<div>
 				<div class="label-mono text-primary">SF2 workbook details</div>
@@ -51,17 +50,41 @@
 			</div>
 		</div>
 		<dl class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-			{@render headerReviewField('School ID', headerReviewValue(draftSchoolId, preview.template.schoolId, workbookSettings))}
-			{@render headerReviewField('School Year', headerReviewValue(draftSchoolYear, preview.template.schoolYear, workbookSettings))}
-			{@render headerReviewField('Report Month', headerReviewMonthValue(draftReportMonth, preview.template.reportMonth, workbookSettings))}
-			{@render headerReviewField('Grade Level', headerReviewValue(draftGradeLevel, preview.template.gradeLevel, workbookSettings))}
+			{@render headerReviewField(
+				'School ID',
+				headerReviewValue(draftSchoolId, preview.template.schoolId, workbookSettings)
+			)}
+			{@render headerReviewField(
+				'School Year',
+				headerReviewValue(draftSchoolYear, preview.template.schoolYear, workbookSettings)
+			)}
+			{@render headerReviewField(
+				'Report Month',
+				headerReviewMonthValue(draftReportMonth, preview.template.reportMonth, workbookSettings)
+			)}
+			{@render headerReviewField(
+				'Grade Level',
+				headerReviewValue(draftGradeLevel, preview.template.gradeLevel, workbookSettings)
+			)}
 			<div class="md:col-span-2">
-				{@render headerReviewField('Name of School', headerReviewValue(draftSchoolName, preview.template.schoolName, workbookSettings))}
+				{@render headerReviewField(
+					'Name of School',
+					headerReviewValue(draftSchoolName, preview.template.schoolName, workbookSettings)
+				)}
 			</div>
-			{@render headerReviewField('Section', headerReviewValue(draftSection, preview.template.section, workbookSettings))}
-			{@render headerReviewField('Adviser / LIS Name', headerReviewValue(draftAdviserName, preview.template.adviserName, workbookSettings))}
+			{@render headerReviewField(
+				'Section',
+				headerReviewValue(draftSection, preview.template.section, workbookSettings)
+			)}
+			{@render headerReviewField(
+				'Adviser / LIS Name',
+				headerReviewValue(draftAdviserName, preview.template.adviserName, workbookSettings)
+			)}
 			<div class="md:col-span-2">
-				{@render headerReviewField('School Head Name', headerReviewValue(draftSchoolHeadName, preview.template.schoolHeadName, workbookSettings))}
+				{@render headerReviewField(
+					'School Head Name',
+					headerReviewValue(draftSchoolHeadName, preview.template.schoolHeadName, workbookSettings)
+				)}
 			</div>
 		</dl>
 	</div>
@@ -73,4 +96,3 @@
 		<dd class="mt-1 truncate text-sm font-semibold">{value}</dd>
 	</div>
 {/snippet}
-
