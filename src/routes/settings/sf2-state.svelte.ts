@@ -1,10 +1,7 @@
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
+import { sf2ValidationReportText } from '$lib/features/settings/sf2-validation';
 import {
-	defaultSf2FirstSchoolDay,
-	defaultSf2SchoolYear,
-	isSf2SchoolDay,
-	normalizedSf2FirstSchoolDay,
 	newSf2WorkbookDraftFields,
 	sf2DraftFromWorkbookSettings,
 	sf2ImportedSettingsDraftDefaults,
@@ -14,7 +11,6 @@ import {
 	type Sf2DraftDefaults,
 	type Sf2WorkbookDraftFields
 } from '$lib/features/settings/sf2-workbook';
-import { sf2ValidationReportText } from '$lib/features/settings/sf2-validation';
 import {
 	createSf2WorkbookFromTemplate,
 	getSf2WorkbookSettings,

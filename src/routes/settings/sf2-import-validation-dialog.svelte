@@ -4,7 +4,6 @@
 	import {
 		sf2ValidationDuplicateLabel,
 		sf2ValidationLearnerLabel,
-		sf2ValidationReportText,
 		sf2ValidationStudentLabel
 	} from '$lib/features/settings/sf2-validation';
 	import type { Sf2ImportValidation } from '$lib/features/settings/native';

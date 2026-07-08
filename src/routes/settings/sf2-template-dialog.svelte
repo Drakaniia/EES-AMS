@@ -4,7 +4,6 @@
 	import {
 		SF2_CALENDAR_WEEKDAYS,
 		SF2_SCHOOL_MONTHS,
-		isSf2SchoolDay,
 		sf2CalendarCells,
 		sf2SelectedFirstAttendanceLabel
 	} from '$lib/features/settings/sf2-workbook';
