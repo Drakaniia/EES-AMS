@@ -2,19 +2,20 @@
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
-	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
-	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
-	import TaskProgress from '$lib/components/ui/TaskProgress.svelte';
+import Spinner from '$lib/components/ui/Spinner.svelte';
 	import ReportFilters from './report-filters.svelte';
 	import ReportTable from './report-table.svelte';
+	import ReportExportDialogs from './report-export-dialogs.svelte';
 	import {
 		exportSf2Workbook,
 		getSf2ExportPreview,
 		getSf2WorkbookSettings,
 		listClasses,
 		openSf2Workbook,
+		syncSf2Attendance,
+		syncSf2Roster,
 		toggleSf2PreviewAttendance,
 		updateSf2WorkbookSettings,
 		type Class,
@@ -25,15 +26,19 @@
 		type Sf2WorkbookSettings
 	} from '$lib/db-rust';
 	import {
-		defaultSf2FirstSchoolDay,
+		normalizedSf2FirstSchoolDay,
+		SF2_SCHOOL_MONTHS,
 	} from '$lib/features/settings/sf2-workbook';
+	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import {
 		ArrowLeft,
 		ExternalLink,
 		Maximize2,
+		Pencil,
 		RefreshCw,
 		Save,
 		Settings2,
+		TriangleAlert,
 		UserX,
 	} from 'lucide-svelte';
 	import {
@@ -51,17 +56,22 @@
 	let workbookSettings = $state<Sf2WorkbookSettings | null>(null);
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
+	let genderFilter = $state<'all' | 'male' | 'female'>('all');
 	let exporting = $state(false);
 	let opening = $state(false);
+	let syncingOpen = $state(false);
+	let syncError = $state<string | null>(null);
+	let syncingRoster = $state(false);
+	let rosterSyncError = $state<string | null>(null);
 	let savingDetails = $state(false);
 	let correctingCellKey = $state<string | null>(null);
 	let exportDialogOpen = $state(false);
 	let exportLoadingOpen = $state(false);
 	let fullReviewOpen = $state(false);
 	let fullReviewHeaderVisible = $state(false);
-	let toastMessage = $state<string | null>(null);
-	let toastOk = $state(true);
-	let toastTimer: ReturnType<typeof setTimeout> | null = null;
+	let workbookDetailsOpen = $state(false);
+	let modalSaving = $state(false);
+	let reportDialogs: ReportExportDialogs;
 
 	let draftSchoolId = $state('');
 	let draftSchoolName = $state('');
@@ -83,15 +93,15 @@
 	const exportDisabled = $derived(
 		!preview?.canExport || exporting || savingDetails || !activeClassId
 	);
-	const issueCount = $derived(preview?.issues.length ?? 0);
-	const warningCount = $derived(preview?.warnings.length ?? 0);
 	const activeReportMonth = $derived(draftReportMonth || preview?.template?.reportMonth || '');
 	const matrixWeekGroups = $derived(buildMatrixWeekGroups(preview?.dates ?? [], activeReportMonth));
 	const matrixStudents = $derived.by((): MatrixStudentRow[] =>
-		(preview?.students ?? []).map((row) => ({
-			...row,
-			cellsByDate: new Map(row.cells.map((cell) => [cell.date, cell]))
-		}))
+		(preview?.students ?? [])
+			.filter((row) => genderFilter === 'all' || row.gender?.toLowerCase() === genderFilter)
+			.map((row) => ({
+				...row,
+				cellsByDate: new Map(row.cells.map((cell) => [cell.date, cell]))
+			}))
 	);
 
 	async function loadInitial() {
@@ -111,7 +121,7 @@
 		} catch (error) {
 			const msg = errorMessage(error, 'Failed to load reports');
 			loadError = msg;
-			toast(`Reports failed: ${msg}`, false);
+			reportDialogs?.showToast(`Reports failed: ${msg}`, false);
 		} finally {
 			loading = false;
 		}
@@ -142,16 +152,50 @@
 	}
 
 	async function onOpenSf2() {
-		if (!activeClassId || !preview?.template || opening) return;
-		opening = true;
+		if (!activeClassId || !preview?.template || opening || syncingOpen) return;
+		syncError = null;
+		syncingOpen = true;
 		try {
+			await syncSf2Attendance(activeClassId);
+			opening = true;
 			const path = await openSf2Workbook(activeClassId);
-			toast(`Opened SF2 working copy: ${path}`);
+			reportDialogs?.showToast(`Opened SF2 working copy: ${path}`);
+			syncingOpen = false;
 		} catch (error) {
-			const msg = errorMessage(error, 'Failed to open SF2');
-			toast(`Open SF2 failed: ${msg}`, false);
+			const msg = errorMessage(error, 'Failed to update SF2 workbook');
+			// Detect if the error is from Excel COM (file locked while open in Excel)
+			if (msg.toLowerCase().includes('excel')) {
+				syncError =
+					'The SF2 working copy is currently open in Microsoft Excel. ' +
+					'Close the workbook in Excel first, then click Open SF2 again.';
+			} else {
+				syncError = `Could not sync attendance to the SF2 workbook: ${msg}`;
+			}
 		} finally {
 			opening = false;
+		}
+	}
+
+	async function retrySync() {
+		syncError = null;
+		syncingOpen = false;
+		await onOpenSf2();
+	}
+
+	async function onSyncRoster() {
+		if (!activeClassId || !preview?.template || syncingRoster) return;
+		rosterSyncError = null;
+		syncingRoster = true;
+		try {
+			await syncSf2Roster(activeClassId);
+			reportDialogs?.showToast('Roster synced! All students mapped to SF2 workbook.');
+			await loadReport(activeClassId);
+		} catch (error) {
+			const msg = errorMessage(error, 'Roster sync failed');
+			rosterSyncError = msg;
+			reportDialogs?.showToast(`Could not sync roster: ${msg}`, false);
+		} finally {
+			syncingRoster = false;
 		}
 	}
 
@@ -160,14 +204,14 @@
 
 		const missingFields = blankSf2HeaderFields();
 		if (missingFields.length > 0) {
-			toast(
+			reportDialogs?.showToast(
 				`Fill required SF2 header fields before exporting: ${missingFields.join(', ')}.`,
 				false
 			);
 			return;
 		}
 
-		if (hasWorkbookDraftChanges()) {
+		if (hasModalDraftChanges) {
 			const saved = await saveWorkbookDetails(null);
 			if (!saved) return;
 		}
@@ -182,11 +226,11 @@
 		exportLoadingOpen = true;
 		try {
 			const result = await exportSf2Workbook(activeClassId);
-			toast(`SF2 exported and opened: ${result.outputPath}`);
+			reportDialogs?.showToast(`SF2 exported and opened: ${result.outputPath}`);
 			await loadReport(activeClassId);
 		} catch (error) {
 			const msg = errorMessage(error, 'SF2 export failed');
-			toast(`SF2 export failed: ${msg}`, false);
+			reportDialogs?.showToast(`SF2 export failed: ${msg}`, false);
 		} finally {
 			exporting = false;
 			exportLoadingOpen = false;
@@ -194,21 +238,23 @@
 	}
 
 	async function saveWorkbookDetails(successMessage: string | null = 'SF2 workbook details saved') {
+		if (!activeClassId || savingDetails || modalSaving) return false;
 		const draft = workbookDraftPayload();
 		if (!draft || savingDetails) return false;
-
 		savingDetails = true;
+		modalSaving = true;
 		try {
 			await updateSf2WorkbookSettings(draft);
-			if (successMessage) toast(successMessage);
+			if (successMessage) reportDialogs?.showToast(successMessage);
 			await loadReport(draft.classId);
 			return true;
 		} catch (error) {
 			const msg = errorMessage(error, 'SF2 workbook update failed');
-			toast(`SF2 workbook update failed: ${msg}`, false);
+			reportDialogs?.showToast(`SF2 workbook update failed: ${msg}`, false);
 			return false;
 		} finally {
 			savingDetails = false;
+			modalSaving = false;
 		}
 	}
 
@@ -231,20 +277,20 @@
 		const markPresent = cell.status !== 'present';
 		correctingCellKey = key;
 		try {
-			// Lightweight DB-only toggle — no Excel I/O, no preview rebuild.
-			// Click the Refresh button above to reload the full preview.
+			// Lightweight DB-only toggle — no Excel I/O.
+			// Open SF2 will sync attendance before opening the workbook.
 			await toggleSf2PreviewAttendance(
 				preview.classId,
 				row.studentId,
 				cell.date,
 				markPresent
 			);
-			toast(
+			reportDialogs?.showToast(
 				`${row.studentName} marked ${markPresent ? 'present' : 'absent'} for ${formatDate(cell.date)}`
 			);
 		} catch (error) {
 			const msg = errorMessage(error, 'Attendance correction failed');
-			toast(`Attendance correction failed: ${msg}`, false);
+			reportDialogs?.showToast(`Attendance correction failed: ${msg}`, false);
 		} finally {
 			correctingCellKey = null;
 		}
@@ -269,7 +315,7 @@
 		];
 	}
 
-	function hasWorkbookDraftChanges() {
+	let hasModalDraftChanges = $derived.by(() => {
 		if (!workbookSettings) return false;
 		return (
 			draftSchoolId !== workbookSettings.schoolId ||
@@ -281,7 +327,7 @@
 			draftAdviserName !== workbookSettings.adviserName ||
 			draftSchoolHeadName !== workbookSettings.schoolHeadName
 		);
-	}
+	});
 
 	function workbookDraftPayload(): Sf2TemplateDraft | null {
 		if (!workbookSettings || !activeClassId) return null;
@@ -295,8 +341,8 @@
 			section: draftSection,
 			adviserName: draftAdviserName,
 			schoolHeadName: draftSchoolHeadName,
-			firstSchoolDay: defaultSf2FirstSchoolDay(draftReportMonth, draftSchoolYear),
-			learnerNames: workbookSettings.learnerNames
+			firstSchoolDay: normalizedSf2FirstSchoolDay(draftReportMonth, draftSchoolYear, workbookSettings.firstSchoolDay),
+			learnerNames: []
 		};
 	}
 
@@ -320,13 +366,6 @@
 		draftSection = '';
 		draftAdviserName = '';
 		draftSchoolHeadName = '';
-	}
-
-	function toast(msg: string, ok = true) {
-		toastMessage = msg;
-		toastOk = ok;
-		if (toastTimer) clearTimeout(toastTimer);
-		toastTimer = setTimeout(() => (toastMessage = null), 4000);
 	}
 
 	function formatDate(date: string) {
@@ -363,20 +402,26 @@
 			<div class="flex flex-wrap items-center gap-2">
 				<button
 					type="button"
-					onclick={loadInitial}
-					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface"
+					onclick={onSyncRoster}
+					disabled={!preview?.template || syncingRoster || !activeClassId}
+					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+					aria-label="Sync class roster to SF2 workbook"
 				>
-					<RefreshCw class="size-4" aria-hidden="true" />
-					Refresh
+					{#if syncingRoster}
+						<span class="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true"></span>
+					{:else}
+						<RefreshCw class="size-4" aria-hidden="true" />
+					{/if}
+					{syncingRoster ? 'Syncing...' : 'Sync Roster'}
 				</button>
 				<button
 					type="button"
 					onclick={onOpenSf2}
-					disabled={!preview?.template || opening || !activeClassId}
+					disabled={!preview?.template || opening || syncingOpen || !activeClassId}
 					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					<ExternalLink class="size-4" aria-hidden="true" />
-					{opening ? 'Opening...' : 'Open SF2'}
+					{syncingOpen ? 'Syncing...' : opening ? 'Opening...' : 'Open SF2'}
 				</button>
 				<button
 					type="button"
@@ -441,51 +486,53 @@
 			class="grid min-h-0 flex-1 gap-5 overflow-hidden px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px]"
 		>
 			<div class="min-h-0 space-y-5 overflow-auto pr-0 xl:pr-1">
-				<ReportFilters
-					{preview}
-					{selectedClass}
-					{issueCount}
-					{warningCount}
-					fullReview={false}
-					{fullReviewHeaderVisible}
-					{workbookSettings}
-					{savingDetails}
-					{draftSchoolId}
-					{draftSchoolName}
-					{draftSchoolYear}
-					{draftReportMonth}
-					{draftGradeLevel}
-					{draftSection}
-					{draftAdviserName}
-					{draftSchoolHeadName}
-					onSaveWorkbookDetails={saveWorkbookDetails}
-					{onReportMonthChange}
-					{onDraftChange}
-				/>
-
 				<ReportTable
 					previewTemplateGradeLevel={preview.template.gradeLevel}
 					previewTemplateSection={preview.template.section}
+					{genderFilter}
 					{matrixWeekGroups}
 					{matrixStudents}
 					{correctingCellKey}
 					fullReview={false}
 					onToggleAttendance={toggleAttendance}
+					onGenderFilterChange={(value) => (genderFilter = value)}
 				/>
 			</div>
 
 			<aside class="min-h-0 space-y-5 overflow-auto">
 				<div class="rounded-2xl border border-border bg-surface p-5">
-					<div class="label-mono text-primary">Workbook identity</div>
+					<div class="flex items-start justify-between gap-3">
+						<div class="label-mono text-primary">Workbook identity</div>
+						<button
+							type="button"
+							onclick={() => (workbookDetailsOpen = true)}
+							disabled={!workbookSettings || savingDetails || !activeClassId}
+							class="control-ring inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+							title="Edit workbook details"
+						>
+							<Pencil class="size-3.5" aria-hidden="true" />
+							Edit
+						</button>
+					</div>
 					<dl class="mt-4 space-y-3 text-sm">
 						{@render metaRow('Class', preview.className || selectedClass?.name || 'Unlinked')}
-						{@render metaRow('Report Month', reportMonthLabel(preview.template.reportMonth))}
-						{@render metaRow('School ID', preview.template.schoolId || 'Blank')}
-						{@render metaRow('School Year', preview.template.schoolYear || 'Blank')}
-						{@render metaRow('Adviser', preview.template.adviserName || 'Blank')}
-						{@render metaRow('School Head', preview.template.schoolHeadName || 'Blank')}
+						{@render metaRow('School ID', draftSchoolId || preview.template.schoolId || 'Blank')}
+						{@render metaRow('School Year', draftSchoolYear || preview.template.schoolYear || 'Blank')}
+						{@render metaRow('Report Month', reportMonthLabel(draftReportMonth || preview.template.reportMonth))}
+						{@render metaRow('Grade Level', draftGradeLevel || preview.template.gradeLevel || 'Blank')}
+						{@render metaRow('Section', draftSection || preview.template.section || 'Blank')}
+						{@render metaRow('Adviser', draftAdviserName || preview.template.adviserName || 'Blank')}
+						{@render metaRow('School Head', draftSchoolHeadName || preview.template.schoolHeadName || 'Blank')}
 						{@render metaRow('Imported', formatImportedAt(preview.template.importedAt))}
 					</dl>
+					{#if preview.canExport !== undefined}
+						<div class="mt-4 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs">
+							<div class="size-2 shrink-0 rounded-full {preview.canExport ? 'bg-emerald-500' : 'bg-amber-500'}" aria-hidden="true"></div>
+							<span class="text-muted-foreground">
+								{preview.canExport ? 'Ready for export' : 'Needs attention'}
+							</span>
+						</div>
+					{/if}
 				</div>
 
 				<div class="rounded-2xl border border-border bg-card p-5">
@@ -560,36 +607,35 @@
 			<div class="min-h-0 flex-1 overflow-hidden px-4 py-4 md:px-6">
 				<div class="flex h-full min-h-0 flex-col gap-4">
 					{#if fullReviewHeaderVisible}
-						<ReportFilters
-							{preview}
-							{selectedClass}
-							{issueCount}
-							{warningCount}
-							fullReview={true}
-							{fullReviewHeaderVisible}
-							{workbookSettings}
-							{savingDetails}
-							{draftSchoolId}
-							{draftSchoolName}
-							{draftSchoolYear}
-							{draftReportMonth}
-							{draftGradeLevel}
-							{draftSection}
-							{draftAdviserName}
-							{draftSchoolHeadName}
-							onSaveWorkbookDetails={saveWorkbookDetails}
-							{onReportMonthChange}
-							{onDraftChange}
-						/>
+					<ReportFilters
+						{preview}
+						fullReview={true}
+						{fullReviewHeaderVisible}
+						{workbookSettings}
+						{savingDetails}
+						{draftSchoolId}
+						{draftSchoolName}
+						{draftSchoolYear}
+						{draftReportMonth}
+						{draftGradeLevel}
+						{draftSection}
+						{draftAdviserName}
+						{draftSchoolHeadName}
+						onSaveWorkbookDetails={saveWorkbookDetails}
+						{onReportMonthChange}
+						{onDraftChange}
+					/>
 					{/if}
 					<ReportTable
 						previewTemplateGradeLevel={preview.template.gradeLevel}
 						previewTemplateSection={preview.template.section}
+						{genderFilter}
 						{matrixWeekGroups}
 						{matrixStudents}
 						{correctingCellKey}
 						fullReview={true}
 						onToggleAttendance={toggleAttendance}
+						onGenderFilterChange={(value) => (genderFilter = value)}
 					/>
 				</div>
 			</div>
@@ -597,76 +643,138 @@
 	</div>
 {/if}
 
+<ReportExportDialogs bind:this={reportDialogs} bind:exportDialogOpen bind:exportLoadingOpen {preview} {exporting} onConfirmExport={confirmExport} />
+
 <Dialog
-	open={exportDialogOpen}
-	title="Confirm SF2 Export"
-	description="Export copies the reviewed SF2 working workbook to your chosen file path."
+	open={workbookDetailsOpen}
+	title="SF2 Workbook Details"
+	description="Edit the header fields that are written into the SF2 workbook before export."
 	maxWidth="2xl"
-	onClose={() => (exportDialogOpen = false)}
+	onClose={() => (workbookDetailsOpen = false)}
 >
-	<div class="grid gap-3 sm:grid-cols-2">
-		{@render confirmStat('Mapped learners', preview?.mappedStudents ?? 0)}
-		{@render confirmStat('Absences', preview?.absenceCount ?? 0)}
-	</div>
-
-	{#if preview && preview.warnings.length > 0}
-		<div class="rounded-md border border-amber-500/30 bg-amber-50 p-4 text-sm text-amber-900">
-			<div class="font-semibold">Review these warnings before exporting.</div>
-			<ul class="mt-3 max-h-48 space-y-2 overflow-auto">
-				{#each preview.warnings as warning, index (`confirm-warning-${index}-${warning}`)}
-					<li>{warning}</li>
+	<div class="grid gap-4 md:grid-cols-2">
+		{@render modalTextField('School ID', draftSchoolId, 'draftSchoolId')}
+		{@render modalTextField('School Year', draftSchoolYear, 'draftSchoolYear')}
+		<label class="space-y-1.5">
+			<span class="label-mono">Report Month</span>
+			<select
+				value={draftReportMonth}
+				onchange={(e) => {
+					onDraftChange('draftReportMonth', (e.currentTarget as HTMLSelectElement).value);
+					onReportMonthChange();
+				}}
+				disabled={!workbookSettings || modalSaving}
+				class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none disabled:opacity-60"
+			>
+				<option value="">Select month</option>
+				{#each SF2_SCHOOL_MONTHS as month (month.value)}
+					<option value={month.value}>{month.label}</option>
 				{/each}
-			</ul>
+			</select>
+		</label>
+		{@render modalTextField('Grade Level', draftGradeLevel, 'draftGradeLevel')}
+		<div class="md:col-span-2">
+			{@render modalTextField('Name of School', draftSchoolName, 'draftSchoolName')}
 		</div>
-	{:else}
-		<div class="rounded-md border border-emerald-500/30 bg-emerald-50 p-4 text-sm text-emerald-800">
-			The workbook details, date mappings, and learner mappings have no detected warnings.
+		{@render modalTextField('Section', draftSection, 'draftSection')}
+		{@render modalTextField('Adviser / LIS Name', draftAdviserName, 'draftAdviserName')}
+		<div class="md:col-span-2">
+			{@render modalTextField('School Head Name', draftSchoolHeadName, 'draftSchoolHeadName')}
 		</div>
-	{/if}
+	</div>
 
-	<div class="flex flex-wrap justify-end gap-2">
-		<button
-			type="button"
-			onclick={() => (exportDialogOpen = false)}
-			class="control-ring h-10 rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-surface"
-		>
-			Cancel
-		</button>
-		<button
-			type="button"
-			onclick={confirmExport}
-			disabled={exporting || !preview?.canExport}
-			class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-		>
-			<Save class="size-4" aria-hidden="true" />
-			{exporting ? 'Exporting...' : 'Export Workbook'}
-		</button>
+	<div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+		{#if hasModalDraftChanges}
+			<p class="text-xs text-amber-600">You have unsaved changes.</p>
+		{:else}
+			<p class="text-xs text-muted-foreground">No changes detected.</p>
+		{/if}
+		<div class="flex gap-2">
+			<button
+				type="button"
+				onclick={() => (workbookDetailsOpen = false)}
+				class="control-ring h-10 rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-surface"
+			>
+				Cancel
+			</button>
+			<button
+				type="button"
+				onclick={async () => {
+					const saved = await saveWorkbookDetails('SF2 workbook details saved');
+					if (saved) workbookDetailsOpen = false;
+				}}
+				disabled={!hasModalDraftChanges || modalSaving || savingDetails}
+				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+			>
+				<Save class="size-4" aria-hidden="true" />
+				{modalSaving ? 'Saving...' : 'Save Details'}
+			</button>
+		</div>
 	</div>
 </Dialog>
 
-<Dialog
-	open={exportLoadingOpen}
-	title="Exporting SF2 Workbook"
-	description="Saving the reviewed workbook and opening the exported file."
-	maxWidth="lg"
-	showCloseButton={false}
->
-	<TaskProgress
-		active={exportLoadingOpen}
-		title="Exporting SF2 workbook"
-		description="Writing attendance marks, copying the workbook, and opening the generated file."
-		simple
-	/>
-</Dialog>
-
-<FeedbackToast message={toastMessage} ok={toastOk} onClose={() => (toastMessage = null)} />
-
-{#snippet confirmStat(label: string, value: number)}
-	<div class="rounded-md border border-border bg-surface p-3">
-		<div class="label-mono">{label}</div>
-		<div class="mt-2 text-2xl font-semibold">{value}</div>
-	</div>
+{#snippet modalTextField(label: string, value: string, field: string)}
+	<label class="space-y-1.5">
+		<span class="label-mono">{label}</span>
+		<input
+			{value}
+			oninput={(event) => {
+				onDraftChange(field, (event.currentTarget as HTMLInputElement).value);
+			}}
+			disabled={!workbookSettings || modalSaving}
+			class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none disabled:opacity-60"
+		/>
+	</label>
 {/snippet}
+
+{#if syncingOpen || syncError}
+	<div
+		role="dialog"
+		aria-modal="true"
+		aria-label="{syncError ? 'Sync failed' : 'Syncing SF2 workbook'}"
+		class="fixed inset-0 z-[70] flex items-center justify-center bg-background/40"
+	>
+		{#if syncError}
+			<div
+			class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
+		>
+			<div class="flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+				<TriangleAlert class="size-6" aria-hidden="true" />
+			</div>
+			<div class="space-y-2">
+				<h3 class="text-base font-semibold text-foreground">Unable to sync workbook</h3>
+				<p class="text-sm leading-relaxed text-muted-foreground">{syncError}</p>
+			</div>
+			<div class="flex gap-3">
+				<button
+					type="button"
+					onclick={() => {
+						syncError = null;
+						syncingOpen = false;
+					}}
+					class="control-ring rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+				>
+					Close
+				</button>
+				<button
+					type="button"
+					onclick={retrySync}
+					class="control-ring rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent"
+				>
+					Try again
+				</button>
+			</div>
+		</div>
+		{:else}
+			<div
+				class="flex flex-col items-center gap-4 rounded-2xl border border-border bg-surface p-8 shadow-2xl"
+			>
+				<Spinner class="size-8 text-primary" />
+				<p class="text-sm font-medium text-foreground">Syncing attendance to SF2 workbook…</p>
+			</div>
+		{/if}
+	</div>
+{/if}
 
 {#snippet metaRow(label: string, value: string)}
 	<div class="flex items-center justify-between gap-3">

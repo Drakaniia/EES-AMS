@@ -20,19 +20,23 @@
 	let {
 		previewTemplateGradeLevel,
 		previewTemplateSection,
+		genderFilter,
 		matrixWeekGroups,
 		matrixStudents,
 		correctingCellKey,
 		fullReview,
 		onToggleAttendance,
+		onGenderFilterChange,
 	}: {
 		previewTemplateGradeLevel: string;
 		previewTemplateSection: string;
+		genderFilter: 'all' | 'male' | 'female';
 		matrixWeekGroups: MatrixWeekGroup[];
 		matrixStudents: MatrixStudentRow[];
 		correctingCellKey: string | null;
 		fullReview: boolean;
 		onToggleAttendance: (row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) => void;
+		onGenderFilterChange?: (value: 'all' | 'male' | 'female') => void;
 	} = $props();
 </script>
 
@@ -40,10 +44,7 @@
 	class="border border-border bg-card shadow-sm {fullReview
 		? 'flex min-h-0 flex-1 flex-col rounded-xl'
 		: 'rounded-2xl'}"
->
-	<div
-		class="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4"
-	>
+>		<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
 		<div>
 			<div class="label-mono text-primary">SF2 attendance grid</div>
 			<h2 class="mt-1 text-xl font-semibold">
@@ -53,7 +54,35 @@
 				Click a cell to toggle the learner between present and absent.
 			</p>
 		</div>
-		<div class="flex flex-wrap gap-2 text-xs">
+		<div class="flex flex-wrap items-center gap-2 text-xs">
+			{#if onGenderFilterChange}
+				<div class="flex overflow-hidden rounded-md border border-border bg-surface" role="group" aria-label="Gender filter">
+					<button
+						type="button"
+						aria-pressed={genderFilter === 'all'}
+						onclick={() => onGenderFilterChange('all')}
+						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+					>
+						All
+					</button>
+					<button
+						type="button"
+						aria-pressed={genderFilter === 'male'}
+						onclick={() => onGenderFilterChange('male')}
+						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'male' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+					>
+						Male
+					</button>
+					<button
+						type="button"
+						aria-pressed={genderFilter === 'female'}
+						onclick={() => onGenderFilterChange('female')}
+						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'female' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+					>
+						Female
+					</button>
+				</div>
+			{/if}
 			<span
 				class="rounded-pill border border-emerald-500/30 bg-emerald-50 px-2.5 py-1 text-emerald-700"
 			>
