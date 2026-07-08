@@ -21,11 +21,7 @@
 	import { page } from '$app/stores';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { CalendarDays, Download, FileSpreadsheet } from 'lucide-svelte';
-	import {
-		type StudentAttendance,
-		getEventClassName,
-		checkIsLate,
-	} from './records-state.svelte';
+	import { type StudentAttendance, getEventClassName, checkIsLate } from './records-state.svelte';
 
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);

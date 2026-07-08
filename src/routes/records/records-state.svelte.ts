@@ -1,5 +1,6 @@
+import { SvelteDate } from 'svelte/reactivity';
 import type { AttendanceEvent, Class } from '$lib/db-rust';
-import { fmtDate, fmtTime } from '$lib/csv';
+import { fmtDate } from '$lib/csv';
 
 export type StudentAttendance = {
 	studentId: string;
@@ -14,7 +15,7 @@ export type StudentAttendance = {
 };
 
 export function eventTime(event: AttendanceEvent) {
-	return new Date(event.timestamp).getTime();
+	return new SvelteDate(event.timestamp).getTime();
 }
 
 export function primaryEvent(record: StudentAttendance) {
@@ -45,17 +46,25 @@ export function sessionKeyFor(classId: string, timestamp: Date, classMap: Map<st
 	return `${fmtDate(timestamp.getTime())}|${classKey}|${segment}`;
 }
 
-export function getEventClassName(e: AttendanceEvent, classMap: Map<string, Class>, studentMap: Map<string, { id: string; name: string; classId?: string }>) {
+export function getEventClassName(
+	e: AttendanceEvent,
+	classMap: Map<string, Class>,
+	studentMap: Map<string, { id: string; name: string; classId?: string }>
+) {
 	const id = e.classId || studentMap.get(e.studentId)?.classId;
 	if (!id) return '—';
 	return classMap.get(id)?.name ?? 'Unknown';
 }
 
-export function checkIsLate(event: AttendanceEvent, student: { classId?: string }, classes: Class[]): boolean {
+export function checkIsLate(
+	event: AttendanceEvent,
+	student: { classId?: string },
+	classes: Class[]
+): boolean {
 	const studentClass = classes.find((c) => c.id === student.classId);
 	if (!studentClass) return false;
 
-	const eventTime = new Date(event.timestamp);
+	const eventTime = new SvelteDate(event.timestamp);
 	const timeStr = `${String(eventTime.getHours()).padStart(2, '0')}:${String(eventTime.getMinutes()).padStart(2, '0')}`;
 
 	let lateAfter = studentClass.lateAfter;
@@ -70,7 +79,7 @@ export function checkIsLate(event: AttendanceEvent, student: { classId?: string 
 
 	if (lateAfter) {
 		const [h, m] = lateAfter.split(':').map(Number);
-		const lateTime = new Date(
+		const lateTime = new SvelteDate(
 			eventTime.getFullYear(),
 			eventTime.getMonth(),
 			eventTime.getDate(),

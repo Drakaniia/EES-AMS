@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import { SvelteMap } from 'svelte/reactivity';
+
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import { fmtDate, fmtTime } from '$lib/csv';
@@ -12,13 +12,7 @@
 		type AttendanceAuditEntry,
 		type Class
 	} from '$lib/db-rust';
-	import {
-		type StudentAttendance,
-		eventTime,
-		primaryEvent,
-		sessionKeyFor,
-		checkIsLate
-	} from './records-state.svelte';
+	import { type StudentAttendance, primaryEvent, sessionKeyFor } from './records-state.svelte';
 
 	let {
 		classes,
@@ -35,7 +29,11 @@
 	let editReason = $state('');
 	let isSavingEdit = $state(false);
 
-	let deleteTarget = $state<{ studentName: string; date: string; events: AttendanceEvent[] } | null>(null);
+	let deleteTarget = $state<{
+		studentName: string;
+		date: string;
+		events: AttendanceEvent[];
+	} | null>(null);
 	let auditTarget = $state<StudentAttendance | null>(null);
 	let auditEntries = $state<AttendanceAuditEntry[]>([]);
 	let auditLoading = $state(false);
@@ -74,7 +72,9 @@
 			showToast('Delete reason is required', false);
 			return;
 		}
-		await Promise.all(deleteTarget.events.map((event: AttendanceEvent) => deleteEvent(event.id, reason)));
+		await Promise.all(
+			deleteTarget.events.map((event: AttendanceEvent) => deleteEvent(event.id, reason))
+		);
 		showToast('Deleted');
 		deleteTarget = null;
 		deleteReason = '';
@@ -319,7 +319,8 @@
 						Delete attendance records?
 					</h2>
 					<p class="mt-1 text-sm text-muted-foreground">
-						<span class="font-medium text-foreground">{deleteTarget.studentName}</span> attendance on
+						<span class="font-medium text-foreground">{deleteTarget.studentName}</span> attendance
+						on
 						<span class="font-medium text-foreground"> {deleteTarget.date}</span> will be permanently
 						removed.
 					</p>

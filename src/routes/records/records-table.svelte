@@ -12,7 +12,7 @@
 		onEdit,
 		onAudit,
 		onDelete,
-		onPageChange,
+		onPageChange
 	}: {
 		paginatedRecords: StudentAttendance[];
 		groupedAttendance: StudentAttendance[];
@@ -52,9 +52,7 @@
 								<div class="text-balance-safe font-medium">{record.studentName}</div>
 							</td>
 							<td class="px-4 py-3 align-top">
-								<span
-									class="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10px]"
-								>
+								<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10px]">
 									{record.className}
 								</span>
 							</td>
@@ -111,7 +109,7 @@
 </section>
 
 <div class="fixed bottom-6 left-1/2 z-30 -translate-x-1/2">
-	<Pagination {currentPage} {totalPages} onPageChange={onPageChange} />
+	<Pagination {currentPage} {totalPages} {onPageChange} />
 </div>
 
 {#snippet checkInPill(time: string, isLate?: boolean)}

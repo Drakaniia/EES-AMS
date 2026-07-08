@@ -16,7 +16,7 @@
 		onClassChange,
 		onStudentChange,
 		onDateRangePickerOpen,
-		onDateRangePickerClose,
+		onDateRangePickerClose
 	}: {
 		from: string;
 		to: string;
@@ -115,7 +115,7 @@
 		<StudentPicker
 			{students}
 			selectedId={studentId}
-			classId={classId}
+			{classId}
 			placeholder="All students"
 			onSelect={({ id }) => onStudentChange(id)}
 		/>
