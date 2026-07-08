@@ -26,7 +26,7 @@
 		onOpenAttendance,
 		onOpenEdit,
 		onOpenScan,
-		onDelete,
+		onDelete
 	}: {
 		students: Student[];
 		paginatedStudents: Student[];
@@ -84,12 +84,18 @@
 
 	<div class="space-y-2">
 		<div class="label-mono">Gender</div>
-		<div class="flex overflow-hidden rounded-md border border-border bg-surface" role="group" aria-label="Gender filter">
+		<div
+			class="flex overflow-hidden rounded-md border border-border bg-surface"
+			role="group"
+			aria-label="Gender filter"
+		>
 			<button
 				type="button"
 				aria-pressed={genderFilter === 'all'}
 				onclick={() => onGenderFilterChange('all')}
-				class="flex-1 px-3 py-2 text-sm font-medium transition-colors {genderFilter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+				class="flex-1 px-3 py-2 text-sm font-medium transition-colors {genderFilter === 'all'
+					? 'bg-background text-foreground shadow-sm'
+					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				All
 			</button>
@@ -97,7 +103,9 @@
 				type="button"
 				aria-pressed={genderFilter === 'male'}
 				onclick={() => onGenderFilterChange('male')}
-				class="flex-1 px-3 py-2 text-sm font-medium transition-colors {genderFilter === 'male' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+				class="flex-1 px-3 py-2 text-sm font-medium transition-colors {genderFilter === 'male'
+					? 'bg-background text-foreground shadow-sm'
+					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				Male
 			</button>
@@ -105,7 +113,9 @@
 				type="button"
 				aria-pressed={genderFilter === 'female'}
 				onclick={() => onGenderFilterChange('female')}
-				class="flex-1 px-3 py-2 text-sm font-medium transition-colors {genderFilter === 'female' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+				class="flex-1 px-3 py-2 text-sm font-medium transition-colors {genderFilter === 'female'
+					? 'bg-background text-foreground shadow-sm'
+					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				Female
 			</button>
@@ -147,7 +157,9 @@
 	{#if students.length === 0}
 		<div class="mt-8 rounded-2xl border border-dashed border-border bg-surface/50 p-12 text-center">
 			<p class="text-muted-foreground">
-				{canCreateStudents ? 'No students yet. Add your first student to begin.' : studentCreationBlockedMessage}
+				{canCreateStudents
+					? 'No students yet. Add your first student to begin.'
+					: studentCreationBlockedMessage}
 			</p>
 		</div>
 	{:else}
@@ -313,5 +325,5 @@
 </section>
 
 <div class="fixed bottom-6 left-1/2 z-10 -translate-x-1/2">
-	<Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
+	<Pagination {currentPage} {totalPages} {onPageChange} />
 </div>

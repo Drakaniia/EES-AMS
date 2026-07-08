@@ -1,11 +1,6 @@
 <script lang="ts">
 	import type { Student, StudentGender } from '$lib/db-rust';
-	import {
-		genderOptions,
-		entryModeTabs,
-		parseStudentNames,
-		type EntryMode,
-	} from './student-state.svelte';
+	import { genderOptions, entryModeTabs, type EntryMode } from './student-state.svelte';
 
 	let {
 		open,
@@ -13,16 +8,16 @@
 		entryMode,
 		entryModeDirection,
 		formName,
+		formClassId,
+		sf2Template,
+		assignedClass,
+		studentCreationBlockedMessage,
 		formGender,
 		formCardSerial,
-		formClassId,
 		bulkMaleStudentNames,
 		bulkFemaleStudentNames,
 		assignedClassLabel,
-		sf2Template,
-		assignedClass,
 		canCreateStudents,
-		studentCreationBlockedMessage,
 		savingStudent,
 		bulkMaleNames,
 		bulkFemaleNames,
@@ -34,7 +29,7 @@
 		onFormGenderChange,
 		onFormCardSerialChange,
 		onBulkMaleChange,
-		onBulkFemaleChange,
+		onBulkFemaleChange
 	}: {
 		open: boolean;
 		editing: Student | null;
@@ -44,13 +39,13 @@
 		formGender: StudentGender;
 		formCardSerial: string;
 		formClassId: string;
+		sf2Template: unknown;
+		assignedClass: { id: string } | null;
+		studentCreationBlockedMessage: string;
 		bulkMaleStudentNames: string;
 		bulkFemaleStudentNames: string;
 		assignedClassLabel: string;
-		sf2Template: unknown;
-		assignedClass: { id: string } | null;
 		canCreateStudents: boolean;
-		studentCreationBlockedMessage: string;
 		savingStudent: boolean;
 		bulkMaleNames: string[];
 		bulkFemaleNames: string[];
@@ -110,7 +105,7 @@
 								aria-controls={`add-student-${tab.value}-panel`}
 								onclick={() => onSetEntryMode(tab.value)}
 								class="relative z-10 rounded-md px-4 py-2 text-sm font-medium transition-colors {entryMode ===
-									tab.value
+								tab.value
 									? 'text-foreground'
 									: 'text-muted-foreground hover:text-foreground'}"
 							>
@@ -156,7 +151,8 @@
 										<textarea
 											id="bulk-male-students"
 											value={bulkMaleStudentNames}
-											oninput={(e) => onBulkMaleChange((e.currentTarget as HTMLTextAreaElement).value)}
+											oninput={(e) =>
+												onBulkMaleChange((e.currentTarget as HTMLTextAreaElement).value)}
 											rows="10"
 											placeholder="Cruz, Juan&#10;Reyes, Marco"
 											class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
@@ -172,7 +168,8 @@
 										<textarea
 											id="bulk-female-students"
 											value={bulkFemaleStudentNames}
-											oninput={(e) => onBulkFemaleChange((e.currentTarget as HTMLTextAreaElement).value)}
+											oninput={(e) =>
+												onBulkFemaleChange((e.currentTarget as HTMLTextAreaElement).value)}
 											rows="10"
 											placeholder="Dela Cruz, Maria&#10;Santos, Ana"
 											class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
@@ -193,7 +190,7 @@
 											onclick={() => onFormGenderChange(option.value)}
 											aria-pressed={formGender === option.value}
 											class="rounded-md px-4 py-2 text-sm font-medium transition-colors {formGender ===
-												option.value
+											option.value
 												? 'bg-background text-foreground shadow-sm'
 												: 'text-muted-foreground hover:text-foreground'}"
 										>
@@ -219,7 +216,8 @@
 									<input
 										id="field-card"
 										value={formCardSerial}
-										oninput={(e) => onFormCardSerialChange((e.currentTarget as HTMLInputElement).value)}
+										oninput={(e) =>
+											onFormCardSerialChange((e.currentTarget as HTMLInputElement).value)}
 										placeholder="Pair later"
 										class="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 									/>

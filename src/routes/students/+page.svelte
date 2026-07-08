@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { SvelteMap } from 'svelte/reactivity';
+
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
@@ -23,11 +23,7 @@
 		type Sf2ExportReadiness
 	} from '$lib/db-rust';
 	import { resolve } from '$app/paths';
-	import {
-		parseStudentNames,
-		genderLabel,
-		type EntryMode,
-	} from './student-state.svelte';
+	import { parseStudentNames, type EntryMode } from './student-state.svelte';
 
 	// ── State ────────────────────────────────────────────────────────────────
 	let students = $state<Student[]>([]);
@@ -479,7 +475,7 @@
 			{genderFilter}
 			{sortBy}
 			{sortOrder}
-			currentPage={currentPage}
+			{currentPage}
 			{totalPages}
 			{maleStudentCount}
 			{femaleStudentCount}
@@ -494,7 +490,7 @@
 			onOpenAttendance={openAttendance}
 			onOpenEdit={openEdit}
 			onOpenScan={openScan}
-			onDelete={onDelete}
+			{onDelete}
 		/>
 	{/if}
 </div>
@@ -550,9 +546,7 @@
 		aria-modal="true"
 		aria-labelledby="card-dialog-title"
 	>
-		<div
-			class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6"
-		>
+		<div class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6">
 			<div>
 				<h2 id="card-dialog-title" class="text-lg font-semibold">Pair card</h2>
 				<p class="mt-1 text-sm text-muted-foreground">Enter the card serial for {scanFor.name}.</p>
@@ -592,6 +586,10 @@
 	</div>
 {/if}
 
-<StudentDeleteDialog deleteTarget={deleteTarget} onConfirm={() => confirmDelete()} onCancel={() => (deleteTarget = null)} />
+<StudentDeleteDialog
+	{deleteTarget}
+	onConfirm={() => confirmDelete()}
+	onCancel={() => (deleteTarget = null)}
+/>
 
 <FeedbackToast message={toastMessage} onClose={() => (toastMessage = null)} />

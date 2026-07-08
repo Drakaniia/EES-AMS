@@ -47,8 +47,7 @@
 				<div class="w-full text-left">
 					<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete student?</h2>
 					<p class="mt-1 text-sm text-muted-foreground">
-						<span class="font-medium text-foreground">{deleteTarget.name}</span> will be permanently
-						removed.
+						<span class="font-medium text-foreground">{deleteTarget.name}</span> will be permanently removed.
 					</p>
 					<p class="mt-4 text-xs leading-relaxed text-muted-foreground">
 						<strong class="font-semibold text-accent">PROTIP:</strong>
