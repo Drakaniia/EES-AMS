@@ -37,8 +37,11 @@ export default defineConfig(
 		}
 	},
 	{
-		// Override or add rule settings here, such as:
-		// 'svelte/button-has-type': 'error'
-		rules: {}
+		// Override or add rule settings here
+		rules: {
+			// Allow navigation via `${base}path` — `resolve()` has overly strict route types
+			// that conflict with how this app constructs SvelteKit route paths.
+			'svelte/no-navigation-without-resolve': 'off'
+		}
 	}
 );
