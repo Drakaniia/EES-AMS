@@ -6,7 +6,7 @@ import type {
 	Sf2WorkbookSettings,
 	Sf2ExportPreview,
 	Sf2ExportReadiness,
-	Sf2ExportResult,
+	Sf2ExportResult
 } from '../types';
 export type {
 	Sf2ImportSummary,
@@ -21,7 +21,7 @@ export type {
 	Sf2ValidationDuplicate,
 	Sf2ValidationLearner,
 	Sf2ValidationStudent,
-	Sf2CloseDaySummary,
+	Sf2CloseDaySummary
 } from '../types';
 
 export async function validateSf2WorkbookImport(): Promise<Sf2ImportValidation> {
@@ -35,7 +35,9 @@ export async function importSf2Workbook(
 	return await invoke('import_sf2_workbook', { sourcePath, proceedAnyway });
 }
 
-export async function createSf2WorkbookFromTemplate(draft: Sf2TemplateDraft): Promise<Sf2ImportSummary> {
+export async function createSf2WorkbookFromTemplate(
+	draft: Sf2TemplateDraft
+): Promise<Sf2ImportSummary> {
 	return await invoke('create_sf2_workbook_from_template', { draft });
 }
 
@@ -43,7 +45,9 @@ export async function getSf2WorkbookSettings(classId?: string): Promise<Sf2Workb
 	return await invoke('get_sf2_workbook_settings', { classId: classId || null });
 }
 
-export async function updateSf2WorkbookSettings(draft: Sf2TemplateDraft): Promise<Sf2ImportSummary> {
+export async function updateSf2WorkbookSettings(
+	draft: Sf2TemplateDraft
+): Promise<Sf2ImportSummary> {
 	return await invoke('update_sf2_workbook_settings', { draft });
 }
 

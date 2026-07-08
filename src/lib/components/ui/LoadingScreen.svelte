@@ -15,7 +15,7 @@
 	<div
 		class="loading-screen fixed inset-0 z-50 flex flex-col items-center justify-center bg-background"
 	>
-		<div		class="flex flex-col items-center gap-6">
+		<div class="flex flex-col items-center gap-6">
 			<!-- App Logo/Branding -->
 			<div class="branding text-center">
 				<h1 class="mb-2 text-3xl font-bold text-foreground">EES</h1>

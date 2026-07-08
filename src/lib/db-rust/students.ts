@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Student, StudentGender, CreateStudentRequest } from '../types';
+import type { Student, CreateStudentRequest } from '../types';
 export type { Student, StudentGender, CreateStudentRequest } from '../types';
 
 export async function listStudents(classId?: string): Promise<Student[]> {

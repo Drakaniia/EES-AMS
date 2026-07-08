@@ -1,6 +1,21 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { ExportData, BackupSummary, BackupStatus, BackupPreview, RestoreResult, AttendanceEvent, Student, Class } from '../types';
-export type { ExportData, BackupSummary, BackupStatus, BackupPreview, RestoreResult } from '../types';
+import type {
+	ExportData,
+	BackupSummary,
+	BackupStatus,
+	BackupPreview,
+	RestoreResult,
+	AttendanceEvent,
+	Student,
+	Class
+} from '../types';
+export type {
+	ExportData,
+	BackupSummary,
+	BackupStatus,
+	BackupPreview,
+	RestoreResult
+} from '../types';
 
 export async function exportAll(): Promise<ExportData> {
 	return await invoke('export_all');
@@ -14,13 +29,13 @@ export async function exportJsonWithFolder(): Promise<string> {
 	return await invoke('export_json_with_folder');
 }
 
-export async function	exportCsvWithFolder(
-		events: AttendanceEvent[],
-		students: Student[],
-		classes: Class[],
-		globalLateAfter: string
-	): Promise<string> {
-		return await invoke('export_csv_with_folder', { events, students, classes, globalLateAfter });
+export async function exportCsvWithFolder(
+	events: AttendanceEvent[],
+	students: Student[],
+	classes: Class[],
+	globalLateAfter: string
+): Promise<string> {
+	return await invoke('export_csv_with_folder', { events, students, classes, globalLateAfter });
 }
 
 export async function importAll(payload: ExportData): Promise<void> {

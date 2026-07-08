@@ -92,7 +92,7 @@
 			class="min-w-0 flex-1 touch-pan-x overflow-x-auto px-2 pb-2 md:overflow-y-auto md:px-2 md:pb-4"
 		>
 			<div class="flex gap-1 md:flex-col">
-				{#each navItems as item}
+				{#each navItems as item ('type' in item && item.type === 'divider' ? 'div' : (item as { href: string }).href)}
 					{#if 'type' in item && item.type === 'divider'}
 						<div
 							class="mx-3 my-1 hidden h-px bg-border md:block"
@@ -101,7 +101,7 @@
 						></div>
 						<div class="mx-1 w-px bg-border md:hidden" role="separator" aria-hidden="true"></div>
 					{:else}
-						{@const navItem = item as { href: string; label: string; icon: any }}
+						{@const navItem = item as { href: string; label: string; icon: typeof LayoutDashboard }}
 						{@const active = isActive(navItem.href, page.url.pathname)}
 						{@const Icon = navItem.icon}
 						<a
@@ -109,14 +109,14 @@
 							aria-current={active ? 'page' : undefined}
 							class="nav-link group relative flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium whitespace-nowrap transition-all md:h-10
 								{active
-									? 'bg-primary/10 text-foreground'
-									: 'text-muted-foreground hover:bg-surface/70 hover:text-foreground'}"
+								? 'bg-primary/10 text-foreground'
+								: 'text-muted-foreground hover:bg-surface/70 hover:text-foreground'}"
 						>
 							<span
 								class="grid size-7 shrink-0 place-items-center rounded-lg transition-all
 									{active
-										? 'bg-primary text-primary-foreground shadow-sm'
-										: 'text-muted-foreground group-hover:text-foreground'}"
+									? 'bg-primary text-primary-foreground shadow-sm'
+									: 'text-muted-foreground group-hover:text-foreground'}"
 							>
 								<Icon class="size-4" aria-hidden="true" />
 							</span>
@@ -136,10 +136,7 @@
 					<div class="truncate text-xs font-semibold text-muted-foreground">{todayLabel}</div>
 				</div>
 				<span class="status-indicator" title={isOnline ? 'Online' : 'Offline'}>
-					<span
-						class="status-dot {isOnline ? '' : 'status-dot-muted'}"
-						aria-hidden="true"
-					></span>
+					<span class="status-dot {isOnline ? '' : 'status-dot-muted'}" aria-hidden="true"></span>
 					<span class="sr-only">{isOnline ? 'Online' : 'Offline'}</span>
 				</span>
 			</div>

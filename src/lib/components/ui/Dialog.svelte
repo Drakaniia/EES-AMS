@@ -135,7 +135,6 @@
 			aria-describedby={description ? descriptionId : undefined}
 			tabindex="-1"
 			onkeydown={handleKeydown}
-
 		>
 			<div class="panel-header">
 				<div class="min-w-0 flex-1">

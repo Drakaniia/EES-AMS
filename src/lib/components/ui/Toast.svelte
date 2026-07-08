@@ -89,11 +89,7 @@
 </script>
 
 {#if show}
-	<div
-		class="fixed top-4 right-4 z-50 w-full max-w-sm"
-		role="alert"
-		aria-live="polite"
-	>
+	<div class="fixed top-4 right-4 z-50 w-full max-w-sm" role="alert" aria-live="polite">
 		<div class="flex items-start rounded-lg border p-4 {colorClass}">
 			<div class="shrink-0">
 				{#if actionDisabled && type === 'update'}
@@ -136,4 +132,3 @@
 		</div>
 	</div>
 {/if}
-

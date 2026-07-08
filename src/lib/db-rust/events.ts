@@ -1,6 +1,16 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AttendanceEvent, CreateEventRequest, UpdateEventRequest, AttendanceAuditEntry } from '../types';
-export type { AttendanceEvent, CreateEventRequest, UpdateEventRequest, AttendanceAuditEntry } from '../types';
+import type {
+	AttendanceEvent,
+	CreateEventRequest,
+	UpdateEventRequest,
+	AttendanceAuditEntry
+} from '../types';
+export type {
+	AttendanceEvent,
+	CreateEventRequest,
+	UpdateEventRequest,
+	AttendanceAuditEntry
+} from '../types';
 
 export async function listEvents(): Promise<AttendanceEvent[]> {
 	return await invoke('list_events');
