@@ -22,9 +22,7 @@
 		aria-modal="true"
 		aria-labelledby="wipe-dialog-title"
 	>
-		<div
-			class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6"
-		>
+		<div class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6">
 			<div class="flex flex-col items-center gap-3 text-center">
 				<div class="flex size-12 items-center justify-center rounded-full bg-destructive/10">
 					<svg

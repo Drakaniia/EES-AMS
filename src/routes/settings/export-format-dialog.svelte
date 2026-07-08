@@ -26,9 +26,7 @@
 		aria-modal="true"
 		aria-labelledby="export-dialog-title"
 	>
-		<div
-			class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6"
-		>
+		<div class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6">
 			<div>
 				<h2 id="export-dialog-title" class="text-lg font-semibold">Export Data</h2>
 				<p class="mt-1 text-sm text-muted-foreground">

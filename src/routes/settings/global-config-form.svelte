@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { settingsState } from './settings-state.svelte.ts';
+	import { settingsState, quarterState } from './settings-state.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import QuarterDialog from './quarter-dialog.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
@@ -26,7 +26,7 @@
 					aria-pressed={settingsState.attendanceMode === 'manual'}
 					onclick={() => (settingsState.attendanceMode = 'manual')}
 					class="rounded-lg border px-3 py-3 text-left transition-colors {settingsState.attendanceMode ===
-						'manual'
+					'manual'
 						? 'border-primary bg-background shadow-sm'
 						: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
 				>
@@ -40,7 +40,7 @@
 					aria-pressed={settingsState.attendanceMode === 'card_reader'}
 					onclick={() => (settingsState.attendanceMode = 'card_reader')}
 					class="rounded-lg border px-3 py-3 text-left transition-colors {settingsState.attendanceMode ===
-						'card_reader'
+					'card_reader'
 						? 'border-primary bg-background shadow-sm'
 						: 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}"
 				>
@@ -83,10 +83,10 @@
 			<label for="defQuarter" class="label-mono">Current Quarter</label>
 			<button
 				type="button"
-				onclick={() => (settingsState.quarterDialogOpen = true)}
+				onclick={() => (quarterState.quarterDialogOpen = true)}
 				class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-sm transition-colors hover:bg-accent/50 focus:ring-2 focus:ring-primary focus:outline-none"
 			>
-				<span>{settingsState.defaultQuarter}</span>
+				<span>{quarterState.defaultQuarter}</span>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					width="16"
@@ -118,14 +118,14 @@
 </form>
 
 <QuarterDialog
-	bind:open={settingsState.quarterDialogOpen}
-	bind:quarter={settingsState.defaultQuarter}
-	bind:q1Start={settingsState.q1Start}
-	bind:q1End={settingsState.q1End}
-	bind:q2Start={settingsState.q2Start}
-	bind:q2End={settingsState.q2End}
-	bind:q3Start={settingsState.q3Start}
-	bind:q3End={settingsState.q3End}
+	bind:open={quarterState.quarterDialogOpen}
+	bind:quarter={quarterState.defaultQuarter}
+	bind:q1Start={quarterState.q1Start}
+	bind:q1End={quarterState.q1End}
+	bind:q2Start={quarterState.q2Start}
+	bind:q2End={quarterState.q2End}
+	bind:q3Start={quarterState.q3Start}
+	bind:q3End={quarterState.q3End}
 />
 
 <!-- ── Unsaved Global Settings Dialog ── -->

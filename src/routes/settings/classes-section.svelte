@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { settingsState } from './settings-state.svelte.ts';
+	import { classState, settingsState } from './settings-state.svelte';
 	import { classDaysLabel as getDaysLabel } from '$lib/features/settings/class-schedule';
 	import ClassDialog from './class-dialog.svelte';
 	import DeleteConfirmDialog from './delete-confirm-dialog.svelte';
@@ -9,9 +9,14 @@
 	<div class="flex items-center justify-between p-6 pb-4">
 		<h3 class="text-lg font-medium">Classes & Schedule</h3>
 		<button
-			onclick={() => settingsState.openAddClass()}
-			disabled={settingsState.classes.length > 0}
-			title={settingsState.classes.length > 0
+			onclick={() =>
+				classState.openAddClass(
+					settingsState.defaultDayStart,
+					settingsState.defaultDayEnd,
+					settingsState.defaultLateAfter
+				)}
+			disabled={classState.classes.length > 0}
+			title={classState.classes.length > 0
 				? 'Only one class is supported for this teacher'
 				: 'Add class'}
 			class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
@@ -27,20 +32,18 @@
 			>
 				<path d="M12 5v14M5 12h14" />
 			</svg>
-			{settingsState.classes.length > 0 ? 'One Class Only' : 'Add Class'}
+			{classState.classes.length > 0 ? 'One Class Only' : 'Add Class'}
 		</button>
 	</div>
 
 	<div class="divide-y divide-border border-t border-border pt-5">
-		{#if settingsState.classes.length === 0}
+		{#if classState.classes.length === 0}
 			<div class="p-12 text-center text-sm text-muted-foreground">
 				No classes configured. Add a class to start tracking attendance.
 			</div>
 		{:else}
-			{#each settingsState.classes as c (c.id)}
-				<div
-					class="flex items-center justify-between p-6 transition-colors hover:bg-surface"
-				>
+			{#each classState.classes as c (c.id)}
+				<div class="flex items-center justify-between p-6 transition-colors hover:bg-surface">
 					<div class="space-y-1">
 						<div class="flex items-center gap-3">
 							<div class="font-medium">{c.name}</div>
@@ -52,9 +55,7 @@
 								</span>
 							{/if}
 						</div>
-						<div
-							class="label-mono flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
-						>
+						<div class="label-mono flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
 							{#if c.room}
 								<span>Room {c.room}</span>
 							{/if}
@@ -73,7 +74,7 @@
 					</div>
 					<div class="flex gap-2">
 						<button
-							onclick={() => settingsState.openEditClass(c)}
+							onclick={() => classState.openEditClass(c)}
 							class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
 							title="Edit class"
 						>
@@ -91,7 +92,7 @@
 							</svg>
 						</button>
 						<button
-							onclick={(event) => settingsState.onDeleteClass(event, c.id)}
+							onclick={(event) => classState.onDeleteClass(event, c.id)}
 							class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
 							title="Delete class"
 						>
@@ -118,21 +119,21 @@
 </section>
 
 <ClassDialog
-	bind:open={settingsState.classDialogOpen}
-	bind:editingClass={settingsState.editingClass}
-	bind:formClassName={settingsState.formClassName}
-	bind:formRoom={settingsState.formRoom}
-	bind:formDayStart={settingsState.formDayStart}
-	bind:formDayEnd={settingsState.formDayEnd}
-	bind:formLateAfter={settingsState.formLateAfter}
-	bind:formSessions={settingsState.formSessions}
-	bind:formDays={settingsState.formDays}
-	bind:sessionMode={settingsState.sessionMode}
-	onsave={(e) => settingsState.onSaveClass(e)}
+	bind:open={classState.classDialogOpen}
+	bind:editingClass={classState.editingClass}
+	bind:formClassName={classState.formClassName}
+	bind:formRoom={classState.formRoom}
+	bind:formDayStart={classState.formDayStart}
+	bind:formDayEnd={classState.formDayEnd}
+	bind:formLateAfter={classState.formLateAfter}
+	bind:formSessions={classState.formSessions}
+	bind:formDays={classState.formDays}
+	bind:sessionMode={classState.sessionMode}
+	onsave={(e) => classState.onSaveClass(e)}
 />
 
 <DeleteConfirmDialog
-	open={settingsState.deleteTarget !== null}
-	bind:target={settingsState.deleteTarget}
-	onconfirm={() => settingsState.confirmDeleteClass()}
+	open={classState.deleteTarget !== null}
+	bind:target={classState.deleteTarget}
+	onconfirm={() => classState.confirmDeleteClass()}
 />

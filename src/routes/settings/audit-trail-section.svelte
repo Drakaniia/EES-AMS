@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { settingsState } from './settings-state.svelte.ts';
+	import { settingsState } from './settings-state.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import { Trash2, History } from 'lucide-svelte';
 	import {
@@ -19,7 +19,9 @@
 			<button
 				type="button"
 				onclick={() => (settingsState.auditClearTarget = true)}
-				disabled={settingsState.auditLoading || settingsState.auditClearing || settingsState.auditEvents.length === 0}
+				disabled={settingsState.auditLoading ||
+					settingsState.auditClearing ||
+					settingsState.auditEvents.length === 0}
 				class="inline-flex h-9 items-center gap-2 rounded-md border border-destructive/40 bg-background px-3 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
 				title="Clear audit trail"
 			>
@@ -47,15 +49,11 @@
 	</div>
 
 	{#if settingsState.auditLoading && settingsState.auditEvents.length === 0}
-		<div
-			class="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground"
-		>
+		<div class="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground">
 			Loading audit trail...
 		</div>
 	{:else if settingsState.auditEvents.length === 0}
-		<div
-			class="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground"
-		>
+		<div class="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground">
 			No audit events recorded.
 		</div>
 	{:else}
@@ -94,7 +92,10 @@
 		onclick={() => {
 			if (!settingsState.auditClearing) settingsState.auditClearTarget = false;
 		}}
-		onkeydown={(e) => e.key === 'Escape' && !settingsState.auditClearing && (settingsState.auditClearTarget = false)}
+		onkeydown={(e) =>
+			e.key === 'Escape' &&
+			!settingsState.auditClearing &&
+			(settingsState.auditClearTarget = false)}
 	></div>
 
 	<div
@@ -103,9 +104,7 @@
 		aria-modal="true"
 		aria-labelledby="audit-clear-dialog-title"
 	>
-		<div
-			class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6"
-		>
+		<div class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6">
 			<div class="flex flex-col items-center gap-3 text-center">
 				<div class="flex size-12 items-center justify-center rounded-full bg-destructive/10">
 					<Trash2 class="size-6 text-destructive" aria-hidden="true" />

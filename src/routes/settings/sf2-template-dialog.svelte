@@ -81,7 +81,7 @@
 	showCloseButton={!(creating || saving)}
 	onClose={() => onclose?.()}
 >
-	<form onsubmit={onsubmit} class="space-y-5">
+	<form {onsubmit} class="space-y-5">
 		{#if notice}
 			<div class="rounded-md border border-primary/30 bg-primary/10 p-4 text-sm text-foreground">
 				<div class="label-mono text-primary">Month Review</div>

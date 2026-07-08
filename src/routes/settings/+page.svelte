@@ -3,7 +3,7 @@
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
-	import { settingsState } from './settings-state.svelte.ts';
+	import { settingsState } from './settings-state.svelte';
 
 	import ClassesSection from './classes-section.svelte';
 	import BackupSection from './backup-section.svelte';

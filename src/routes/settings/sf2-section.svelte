@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { settingsState } from './settings-state.svelte.ts';
+	import { sf2State, classState } from './settings-state.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import Sf2ImportValidationDialog from './sf2-import-validation-dialog.svelte';
 	import Sf2TemplateDialog from './sf2-template-dialog.svelte';
@@ -16,17 +16,17 @@
 		<div>
 			<h3 class="text-lg font-medium">SF2 Workbook</h3>
 			<p class="mt-1 text-sm text-muted-foreground">
-				Import the official SF2 .xls form, or create a first-month working copy from the
-				bundled template.
+				Import the official SF2 .xls form, or create a first-month working copy from the bundled
+				template.
 			</p>
 		</div>
 		<div class="flex flex-wrap gap-2">
 			<button
-				onclick={() => settingsState.openSf2TemplateDialog()}
-				disabled={settingsState.sf2TemplateCreating || settingsState.sf2SettingsSaving}
+				onclick={() => sf2State.openSf2TemplateDialog(classState.classes)}
+				disabled={sf2State.sf2TemplateCreating || sf2State.sf2SettingsSaving}
 				class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 			>
-				{#if settingsState.sf2TemplateCreating || settingsState.sf2SettingsSaving}
+				{#if sf2State.sf2TemplateCreating || sf2State.sf2SettingsSaving}
 					<Spinner />
 				{:else}
 					<svg
@@ -44,18 +44,18 @@
 						<path d="M9 14h6" />
 					</svg>
 				{/if}
-				{settingsState.sf2TemplateCreating
+				{sf2State.sf2TemplateCreating
 					? 'Creating...'
-					: settingsState.sf2SettingsSaving
+					: sf2State.sf2SettingsSaving
 						? 'Saving...'
 						: 'Create From Template'}
 			</button>
 			<button
-				onclick={() => settingsState.onImportSf2()}
-				disabled={settingsState.sf2Importing}
+				onclick={() => sf2State.onImportSf2()}
+				disabled={sf2State.sf2Importing}
 				class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 			>
-				{#if settingsState.sf2Importing}
+				{#if sf2State.sf2Importing}
 					<Spinner />
 				{:else}
 					<svg
@@ -73,36 +73,36 @@
 						<path d="m9 15 3 3 3-3" />
 					</svg>
 				{/if}
-				{settingsState.sf2Importing ? 'Importing...' : 'Import SF2'}
+				{sf2State.sf2Importing ? 'Importing...' : 'Import SF2'}
 			</button>
 		</div>
 	</div>
 
-	{#if settingsState.sf2ImportSummary}
+	{#if sf2State.sf2ImportSummary}
 		<div class="space-y-4 border-t border-border pt-5">
 			<div class="grid gap-3 sm:grid-cols-4">
 				<div class="rounded-xl border border-border bg-surface p-4">
 					<div class="label-mono">Class</div>
-					<div class="mt-2 text-sm font-semibold">{settingsState.sf2ImportSummary.className}</div>
+					<div class="mt-2 text-sm font-semibold">{sf2State.sf2ImportSummary.className}</div>
 				</div>
 				<div class="rounded-xl border border-border bg-surface p-4">
 					<div class="label-mono">Learners</div>
-					<div class="mt-2 text-2xl font-semibold">{settingsState.sf2ImportSummary.learnersFound}</div>
+					<div class="mt-2 text-2xl font-semibold">{sf2State.sf2ImportSummary.learnersFound}</div>
 				</div>
 				<div class="rounded-xl border border-border bg-surface p-4">
 					<div class="label-mono">Created</div>
 					<div class="mt-2 text-2xl font-semibold">
-						{settingsState.sf2ImportSummary.studentsCreated}
+						{sf2State.sf2ImportSummary.studentsCreated}
 					</div>
 				</div>
 				<div class="rounded-xl border border-border bg-surface p-4">
 					<div class="label-mono">Dates</div>
-					<div class="mt-2 text-2xl font-semibold">{settingsState.sf2ImportSummary.datesMapped}</div>
+					<div class="mt-2 text-2xl font-semibold">{sf2State.sf2ImportSummary.datesMapped}</div>
 				</div>
 			</div>
 			<div class="flex justify-end">
 				<button
-					onclick={() => settingsState.startSf2Attendance()}
+					onclick={() => sf2State.startSf2Attendance()}
 					class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
 				>
 					Start Attendance
@@ -113,50 +113,50 @@
 </section>
 
 <Sf2ImportValidationDialog
-	bind:open={settingsState.sf2ValidationDialogOpen}
-	bind:validation={settingsState.sf2Validation}
-	bind:importing={settingsState.sf2Importing}
-	bind:detailsOpen={settingsState.sf2ValidationDetailsOpen}
-	onproceed={() => settingsState.proceedWithSf2MismatchImport()}
-	oncancel={() => settingsState.cancelSf2ValidationImport()}
-	ondownloadreport={() => settingsState.downloadSf2ValidationReport()}
+	bind:open={sf2State.sf2ValidationDialogOpen}
+	bind:validation={sf2State.sf2Validation}
+	bind:importing={sf2State.sf2Importing}
+	bind:detailsOpen={sf2State.sf2ValidationDetailsOpen}
+	onproceed={() => sf2State.proceedWithSf2MismatchImport()}
+	oncancel={() => sf2State.cancelSf2ValidationImport()}
+	ondownloadreport={() => sf2State.downloadSf2ValidationReport()}
 />
 
 <Sf2TemplateDialog
-	bind:open={settingsState.sf2TemplateDialogOpen}
-	bind:mode={settingsState.sf2TemplateDialogMode}
-	bind:notice={settingsState.sf2TemplateDialogNotice}
-	bind:creating={settingsState.sf2TemplateCreating}
-	bind:saving={settingsState.sf2SettingsSaving}
-	bind:classId={settingsState.sf2TemplateClassId}
-	bind:schoolId={settingsState.sf2DraftSchoolId}
-	bind:schoolName={settingsState.sf2DraftSchoolName}
-	bind:schoolYear={settingsState.sf2DraftSchoolYear}
-	bind:reportMonth={settingsState.sf2DraftReportMonth}
-	bind:gradeLevel={settingsState.sf2DraftGradeLevel}
-	bind:section={settingsState.sf2DraftSection}
-	bind:adviserName={settingsState.sf2DraftAdviserName}
-	bind:schoolHeadName={settingsState.sf2DraftSchoolHeadName}
-	bind:firstSchoolDay={settingsState.sf2DraftFirstSchoolDay}
+	bind:open={sf2State.sf2TemplateDialogOpen}
+	bind:mode={sf2State.sf2TemplateDialogMode}
+	bind:notice={sf2State.sf2TemplateDialogNotice}
+	bind:creating={sf2State.sf2TemplateCreating}
+	bind:saving={sf2State.sf2SettingsSaving}
+	bind:classId={sf2State.sf2TemplateClassId}
+	bind:schoolId={sf2State.sf2DraftSchoolId}
+	bind:schoolName={sf2State.sf2DraftSchoolName}
+	bind:schoolYear={sf2State.sf2DraftSchoolYear}
+	bind:reportMonth={sf2State.sf2DraftReportMonth}
+	bind:gradeLevel={sf2State.sf2DraftGradeLevel}
+	bind:section={sf2State.sf2DraftSection}
+	bind:adviserName={sf2State.sf2DraftAdviserName}
+	bind:schoolHeadName={sf2State.sf2DraftSchoolHeadName}
+	bind:firstSchoolDay={sf2State.sf2DraftFirstSchoolDay}
 	onselectReportMonth={(monthValue) => {
-		const schoolYear = settingsState.sf2DraftSchoolYear.trim() || defaultSf2SchoolYear();
-		settingsState.sf2DraftReportMonth = monthValue;
-		settingsState.sf2DraftSchoolYear = schoolYear;
-		settingsState.sf2DraftFirstSchoolDay = defaultSf2FirstSchoolDay(monthValue, schoolYear);
+		const schoolYear = sf2State.sf2DraftSchoolYear.trim() || defaultSf2SchoolYear();
+		sf2State.sf2DraftReportMonth = monthValue;
+		sf2State.sf2DraftSchoolYear = schoolYear;
+		sf2State.sf2DraftFirstSchoolDay = defaultSf2FirstSchoolDay(monthValue, schoolYear);
 	}}
 	onupdateSchoolYear={(value) => {
-		settingsState.sf2DraftSchoolYear = value;
-		settingsState.sf2DraftFirstSchoolDay = normalizedSf2FirstSchoolDay(
-			settingsState.sf2DraftReportMonth,
+		sf2State.sf2DraftSchoolYear = value;
+		sf2State.sf2DraftFirstSchoolDay = normalizedSf2FirstSchoolDay(
+			sf2State.sf2DraftReportMonth,
 			value,
-			settingsState.sf2DraftFirstSchoolDay
+			sf2State.sf2DraftFirstSchoolDay
 		);
 	}}
 	onselectFirstSchoolDay={(day) => {
 		if (day === null) return;
-		if (!isSf2SchoolDay(settingsState.sf2DraftReportMonth, settingsState.sf2DraftSchoolYear, day)) return;
-		settingsState.sf2DraftFirstSchoolDay = day;
+		if (!isSf2SchoolDay(sf2State.sf2DraftReportMonth, sf2State.sf2DraftSchoolYear, day)) return;
+		sf2State.sf2DraftFirstSchoolDay = day;
 	}}
-	onsubmit={(e) => settingsState.onCreateSf2FromTemplate(e)}
-	onclose={(force) => settingsState.closeSf2TemplateDialog(force)}
+	onsubmit={(e) => sf2State.onCreateSf2FromTemplate(e)}
+	onclose={(force) => sf2State.closeSf2TemplateDialog(force)}
 />
