@@ -26,7 +26,8 @@
 		onOpenAttendance,
 		onOpenEdit,
 		onOpenScan,
-		onDelete
+		onDelete,
+		availableHeight = $bindable(0)
 	}: {
 		students: Student[];
 		paginatedStudents: Student[];
@@ -50,9 +51,8 @@
 		onOpenEdit: (student: Student) => void;
 		onOpenScan: (student: Student) => void;
 		onDelete: (event: MouseEvent, student: Student) => void;
+		availableHeight?: number;
 	} = $props();
-
-	let availableHeight = $state(0);
 </script>
 
 <!-- Tools Bar -->
@@ -153,7 +153,10 @@
 </section>
 
 <!-- Class List -->
-<section class="min-h-0 flex-1 px-4 pb-20 md:px-8 lg:px-10" bind:clientHeight={availableHeight}>
+<section
+	class="flex min-h-0 flex-1 flex-col px-4 pb-20 md:px-8 lg:px-10"
+	bind:clientHeight={availableHeight}
+>
 	{#if students.length === 0}
 		<div class="mt-8 rounded-2xl border border-dashed border-border bg-surface/50 p-12 text-center">
 			<p class="text-muted-foreground">
@@ -163,7 +166,7 @@
 			</p>
 		</div>
 	{:else}
-		<div class="table-wrap mt-6">
+		<div class="table-wrap mt-6 min-h-0 flex-1">
 			<table class="w-full min-w-[760px] text-sm">
 				<thead class="bg-surface text-left">
 					<tr>

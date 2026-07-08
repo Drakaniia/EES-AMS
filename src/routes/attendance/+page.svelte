@@ -667,7 +667,7 @@
 	</div>
 {:else if isCardReaderMode}
 	<section
-		class="grid gap-5 px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
+		class="flex min-h-0 flex-1 flex-col gap-5 px-4 py-5 md:px-8 lg:px-10 xl:grid xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
 	>
 		<AttendanceControls
 			{classes}
@@ -677,13 +677,8 @@
 			{cardInput}
 			bind:cardInputElement
 			{log}
-			{pickerOpen}
 			onCardInputChange={handleCardInputChange}
 			onCardSubmit={handleCardSubmit}
-			onPickerOpen={() => {
-				pickerQuery = '';
-				pickerOpen = true;
-			}}
 		/>
 	</section>
 {:else}

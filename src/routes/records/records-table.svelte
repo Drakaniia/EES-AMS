@@ -12,7 +12,8 @@
 		onEdit,
 		onAudit,
 		onDelete,
-		onPageChange
+		onPageChange,
+		availableHeight = $bindable(0)
 	}: {
 		paginatedRecords: StudentAttendance[];
 		groupedAttendance: StudentAttendance[];
@@ -22,11 +23,15 @@
 		onAudit: (record: StudentAttendance) => void;
 		onDelete: (event: MouseEvent, record: StudentAttendance) => void;
 		onPageChange: (page: number) => void;
+		availableHeight?: number;
 	} = $props();
 </script>
 
-<section class="min-h-0 flex-1 px-4 pb-20 md:px-8 lg:px-10">
-	<div class="table-wrap">
+<section
+	class="flex min-h-0 flex-1 flex-col px-4 pb-20 md:px-8 lg:px-10"
+	bind:clientHeight={availableHeight}
+>
+	<div class="table-wrap min-h-0 flex-1">
 		<table class="min-w-[720px] text-sm">
 			<thead class="bg-surface text-left">
 				<tr>

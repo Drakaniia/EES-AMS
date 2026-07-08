@@ -14,9 +14,7 @@
 		cardInputElement = $bindable(),
 		log,
 		onCardInputChange,
-		onCardSubmit,
-		pickerOpen,
-		onPickerOpen
+		onCardSubmit
 	}: {
 		classes: { id: string; name: string }[];
 		sessionClass: { id: string; name: string; dayStart: string; dayEnd: string } | undefined;
@@ -27,13 +25,11 @@
 		log: LogLine[];
 		onCardInputChange: (value: string) => void;
 		onCardSubmit: (serial: string) => void;
-		pickerOpen: boolean;
-		onPickerOpen: () => void;
 	} = $props();
 </script>
 
 <div
-	class="relative flex min-h-[30rem] items-center justify-center overflow-hidden rounded-2xl border border-border bg-surface p-6 md:p-8"
+	class="relative flex items-center justify-center overflow-hidden rounded-2xl border border-border bg-surface p-6 md:p-8"
 >
 	{#if classes.length === 0}
 		<div class="relative w-full max-w-md text-center">
@@ -101,7 +97,7 @@
 	{/if}
 </div>
 
-<div class="flex min-h-[30rem] flex-col rounded-2xl border border-border bg-card p-5">
+<div class="flex min-h-0 flex-1 flex-col rounded-2xl border border-border bg-card p-5">
 	<div class="mb-4 flex shrink-0 items-start justify-between gap-3">
 		<div class="flex flex-col">
 			<h3 class="text-lg font-medium">Session log</h3>

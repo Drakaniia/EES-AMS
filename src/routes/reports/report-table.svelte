@@ -37,8 +37,8 @@
 </script>
 
 <div
-	class="border border-border bg-card shadow-sm {fullReview
-		? 'flex min-h-0 flex-1 flex-col rounded-xl'
+	class="flex min-h-0 flex-1 flex-col border border-border bg-card shadow-sm {fullReview
+		? 'rounded-xl'
 		: 'rounded-2xl'}"
 >
 	<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
@@ -106,7 +106,7 @@
 		</div>
 	</div>
 
-	<div class={fullReview ? 'min-h-0 flex-1 overflow-auto' : 'max-h-[560px] overflow-auto'}>
+	<div class="min-h-0 flex-1 overflow-auto">
 		<table class="min-w-full border-separate border-spacing-0 text-sm">
 			<thead>
 				<tr>

@@ -128,7 +128,6 @@
 	bind:notice={sf2State.sf2TemplateDialogNotice}
 	bind:creating={sf2State.sf2TemplateCreating}
 	bind:saving={sf2State.sf2SettingsSaving}
-	bind:classId={sf2State.sf2TemplateClassId}
 	bind:schoolId={sf2State.sf2DraftSchoolId}
 	bind:schoolName={sf2State.sf2DraftSchoolName}
 	bind:schoolYear={sf2State.sf2DraftSchoolYear}

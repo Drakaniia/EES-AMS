@@ -6,12 +6,7 @@
 		open,
 		editing,
 		entryMode,
-		entryModeDirection,
 		formName,
-		formClassId,
-		sf2Template,
-		assignedClass,
-		studentCreationBlockedMessage,
 		formGender,
 		formCardSerial,
 		bulkMaleStudentNames,
@@ -34,14 +29,9 @@
 		open: boolean;
 		editing: Student | null;
 		entryMode: EntryMode;
-		entryModeDirection: number;
 		formName: string;
 		formGender: StudentGender;
 		formCardSerial: string;
-		formClassId: string;
-		sf2Template: unknown;
-		assignedClass: { id: string } | null;
-		studentCreationBlockedMessage: string;
 		bulkMaleStudentNames: string;
 		bulkFemaleStudentNames: string;
 		assignedClassLabel: string;

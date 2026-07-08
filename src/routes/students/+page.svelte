@@ -44,7 +44,6 @@
 	let scanFor = $state<Student | null>(null);
 
 	let entryMode = $state<EntryMode>('single');
-	let entryModeDirection = $state(1);
 	let formName = $state('');
 	let formGender = $state<StudentGender>('male');
 	let formCardSerial = $state('');
@@ -93,7 +92,6 @@
 
 	function setEntryMode(mode: EntryMode) {
 		if (entryMode === mode) return;
-		entryModeDirection = mode === 'bulk' ? 1 : -1;
 		entryMode = mode;
 	}
 
@@ -222,7 +220,6 @@
 
 		editing = null;
 		entryMode = 'single';
-		entryModeDirection = 1;
 		formName = '';
 		formGender = 'male';
 		formCardSerial = '';
@@ -235,7 +232,6 @@
 	function openEdit(s: Student) {
 		editing = s;
 		entryMode = 'single';
-		entryModeDirection = 1;
 		formName = s.name;
 		formGender = s.gender ?? 'male';
 		formCardSerial = s.cardSerial ?? '';
@@ -491,6 +487,7 @@
 			onOpenEdit={openEdit}
 			onOpenScan={openScan}
 			{onDelete}
+			bind:availableHeight
 		/>
 	{/if}
 </div>
@@ -505,18 +502,13 @@
 	open={dialogOpen}
 	{editing}
 	{entryMode}
-	{entryModeDirection}
 	{formName}
 	{formGender}
 	{formCardSerial}
-	{formClassId}
 	{bulkMaleStudentNames}
 	{bulkFemaleStudentNames}
 	{assignedClassLabel}
-	{sf2Template}
-	{assignedClass}
 	{canCreateStudents}
-	{studentCreationBlockedMessage}
 	{savingStudent}
 	{bulkMaleNames}
 	{bulkFemaleNames}

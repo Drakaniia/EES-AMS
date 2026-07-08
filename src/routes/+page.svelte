@@ -183,7 +183,7 @@
 	{/snippet}
 </PageHeader>
 
-<div class="page-frame flex flex-col gap-5">
+<div class="page-frame flex min-h-0 flex-1 flex-col gap-5">
 	{#if sessionSummary}
 		<div
 			class="notice-banner flex flex-col gap-4 p-4 text-primary sm:flex-row sm:items-center sm:justify-between"
@@ -256,8 +256,10 @@
 			</div>
 		</section>
 
-		<section class="grid min-h-[28rem] gap-5 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.18fr)]">
-			<aside class="surface-panel">
+		<section
+			class="flex min-h-0 flex-1 gap-5 xl:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.18fr)]"
+		>
+			<aside class="surface-panel flex min-h-0 flex-col">
 				<div class="panel-header">
 					<div class="min-w-0">
 						<h2 class="text-lg font-black">Absent today</h2>
@@ -266,7 +268,7 @@
 					<span class="chip shrink-0">{pendingCount} pending</span>
 				</div>
 
-				<div class="panel-body">
+				<div class="panel-body min-h-0 flex-1 overflow-y-auto">
 					{#if notRecordedStudents.length === 0}
 						<div
 							class="rounded-xl border border-dashed border-border bg-surface/45 px-4 py-6 text-center"

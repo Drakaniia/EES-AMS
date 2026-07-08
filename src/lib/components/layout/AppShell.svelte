@@ -92,7 +92,7 @@
 			class="min-w-0 flex-1 touch-pan-x overflow-x-auto px-2 pb-2 md:overflow-y-auto md:px-2 md:pb-4"
 		>
 			<div class="flex gap-1 md:flex-col">
-				{#each navItems as item ('type' in item && item.type === 'divider' ? 'div' : (item as { href: string }).href)}
+				{#each navItems as item, i ('type' in item && item.type === 'divider' ? `div-${i}` : (item as { href: string }).href)}
 					{#if 'type' in item && item.type === 'divider'}
 						<div
 							class="mx-3 my-1 hidden h-px bg-border md:block"

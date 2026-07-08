@@ -7,7 +7,6 @@
 		fullReview,
 		fullReviewHeaderVisible,
 		workbookSettings,
-		savingDetails,
 		draftSchoolId,
 		draftSchoolName,
 		draftSchoolYear,
@@ -15,16 +14,12 @@
 		draftGradeLevel,
 		draftSection,
 		draftAdviserName,
-		draftSchoolHeadName,
-		onSaveWorkbookDetails,
-		onReportMonthChange,
-		onDraftChange
+		draftSchoolHeadName
 	}: {
 		preview: Sf2ExportPreview | null;
 		fullReview: boolean;
 		fullReviewHeaderVisible: boolean;
 		workbookSettings: Sf2WorkbookSettings | null;
-		savingDetails: boolean;
 		draftSchoolId: string;
 		draftSchoolName: string;
 		draftSchoolYear: string;
@@ -33,9 +28,6 @@
 		draftSection: string;
 		draftAdviserName: string;
 		draftSchoolHeadName: string;
-		onSaveWorkbookDetails: (successMessage?: string | null) => Promise<boolean>;
-		onReportMonthChange: () => void;
-		onDraftChange: (field: string, value: string) => void;
 	} = $props();
 </script>
 

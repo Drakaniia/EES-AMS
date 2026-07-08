@@ -62,7 +62,6 @@
 	let syncingOpen = $state(false);
 	let syncError = $state<string | null>(null);
 	let syncingRoster = $state(false);
-	let rosterSyncError = $state<string | null>(null);
 	let savingDetails = $state(false);
 	let correctingCellKey = $state<string | null>(null);
 	let exportDialogOpen = $state(false);
@@ -184,7 +183,6 @@
 
 	async function onSyncRoster() {
 		if (!activeClassId || !preview?.template || syncingRoster) return;
-		rosterSyncError = null;
 		syncingRoster = true;
 		try {
 			await syncSf2Roster(activeClassId);
@@ -192,7 +190,6 @@
 			await loadReport(activeClassId);
 		} catch (error) {
 			const msg = errorMessage(error, 'Roster sync failed');
-			rosterSyncError = msg;
 			reportDialogs?.showToast(`Could not sync roster: ${msg}`, false);
 		} finally {
 			syncingRoster = false;
@@ -487,7 +484,7 @@
 		<section
 			class="grid min-h-0 flex-1 gap-5 overflow-hidden px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px]"
 		>
-			<div class="min-h-0 space-y-5 overflow-auto pr-0 xl:pr-1">
+			<div class="flex min-h-0 flex-col gap-5 pr-0 xl:pr-1">
 				<ReportTable
 					previewTemplateGradeLevel={preview.template.gradeLevel}
 					previewTemplateSection={preview.template.section}
@@ -636,7 +633,6 @@
 							fullReview={true}
 							{fullReviewHeaderVisible}
 							{workbookSettings}
-							{savingDetails}
 							{draftSchoolId}
 							{draftSchoolName}
 							{draftSchoolYear}
@@ -645,9 +641,6 @@
 							{draftSection}
 							{draftAdviserName}
 							{draftSchoolHeadName}
-							onSaveWorkbookDetails={saveWorkbookDetails}
-							{onReportMonthChange}
-							{onDraftChange}
 						/>
 					{/if}
 					<ReportTable

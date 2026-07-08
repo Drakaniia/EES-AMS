@@ -14,7 +14,6 @@
 		notice = $bindable<string | null>(null),
 		creating = $bindable(false),
 		saving = $bindable(false),
-		classId = $bindable(''),
 		schoolId = $bindable(''),
 		schoolName = $bindable(''),
 		schoolYear = $bindable(''),
@@ -35,7 +34,6 @@
 		notice?: string | null;
 		creating?: boolean;
 		saving?: boolean;
-		classId?: string;
 		schoolId?: string;
 		schoolName?: string;
 		schoolYear?: string;

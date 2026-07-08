@@ -38,7 +38,17 @@
 	let dateRangePickerOpen = $state(false);
 
 	let currentPage = $state(1);
+	let availableHeight = $state(0);
 	let recordsDialog = $state<RecordsExportDialog>();
+
+	const itemsPerPage = $derived.by(() => {
+		if (availableHeight === 0) return 10;
+		const rowHeight = 62;
+		const headerHeight = 48;
+		const verticalBuffer = 120;
+		const calculated = Math.floor((availableHeight - headerHeight - verticalBuffer) / rowHeight);
+		return Math.max(1, calculated);
+	});
 
 	$effect(() => {
 		if (currentPage > totalPages && totalPages > 0) {
@@ -109,10 +119,10 @@
 		});
 	});
 
-	const totalPages = $derived(Math.ceil(groupedAttendance.length / 10));
+	const totalPages = $derived(Math.ceil(groupedAttendance.length / itemsPerPage));
 	const paginatedFiltered = $derived.by(() => {
-		const start = (currentPage - 1) * 10;
-		return groupedAttendance.slice(start, start + 10);
+		const start = (currentPage - 1) * itemsPerPage;
+		return groupedAttendance.slice(start, start + itemsPerPage);
 	});
 
 	async function reload() {
@@ -253,6 +263,7 @@
 			onAudit={(r) => recordsDialog?.openAudit(r)}
 			onDelete={(e, r) => recordsDialog?.onDeleteAttendanceRecord(e, r)}
 			onPageChange={handlePageChange}
+			bind:availableHeight
 		/>
 
 		<RecordsExportDialog bind:this={recordsDialog} {classes} onRecordChanged={reload} />
