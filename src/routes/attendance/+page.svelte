@@ -1,18 +1,16 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import {
-		CalendarDays,
-	} from 'lucide-svelte';
+	import { CalendarDays } from 'lucide-svelte';
 	import { page } from '$app/state';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import DatePickerDialog from '$lib/components/ui/DatePickerDialog.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
-	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 	import AttendanceGrid from './attendance-grid.svelte';
 	import AttendanceControls from './attendance-controls.svelte';
+	import AttendanceLog from './attendance-log.svelte';
 	import {
 		listStudents,
 		listClasses,
@@ -68,20 +66,25 @@
 	let pickerOpen = $state(false);
 	let pickerQuery = $state('');
 	let rosterQuery = $state('');
-	let lastResult = $state<LastResult | null>(null);
 
 	let cardInput = $state('');
 	let cardInputElement: HTMLInputElement | null = $state(null);
-	let toastMessage = $state<string | null>(null);
-	let toastOk = $state(true);
-	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 	let isProcessing = $state(false);
 	let isPresentingAll = $state(false);
-	let lastEventId = $state<string | null>(null);
-	let undoTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastScan = $state<{ serial: string; timestamp: number } | null>(null);
 	let selectedDate = $state(fmtDate(Date.now()));
 	let midnightTimer: ReturnType<typeof setTimeout> | null = null;
+	let attendanceLog:
+		| {
+				showToast: (msg: string, ok?: boolean) => void;
+				addLogEntry: (entry: LogLine) => void;
+				addLogEntries: (entries: LogLine[]) => void;
+				removeLogEntry: (id: string) => void;
+				setUndo: (eventId: string, result: LastResult) => void;
+				resetUndo: () => void;
+				resetState: () => void;
+		  }
+		| undefined = $state();
 
 	onMount(async () => {
 		await loadInitial();
@@ -267,8 +270,15 @@
 	}
 
 	function getAttendanceDraft(student: Student, timestamp?: number) {
-		const classObj = getAttendanceClass(student, currentClass, isCardReaderMode, activeClass, classById);
-		const resolvedTimestamp = timestamp ?? attendanceTimestampForSelectedDate(selectedDate, selectedDateIsToday, classObj);
+		const classObj = getAttendanceClass(
+			student,
+			currentClass,
+			isCardReaderMode,
+			activeClass,
+			classById
+		);
+		const resolvedTimestamp =
+			timestamp ?? attendanceTimestampForSelectedDate(selectedDate, selectedDateIsToday, classObj);
 		const classId = classObj?.id || selectedClassId || student.classId || undefined;
 		const sessionKey = getSessionKey(classObj, resolvedTimestamp);
 
@@ -283,7 +293,12 @@
 
 	function matchesCurrentSession(event: AttendanceEvent, student: Student, timestamp?: number) {
 		const resolvedTimestamp =
-			timestamp ?? attendanceTimestampForSelectedDate(selectedDate, selectedDateIsToday, getAttendanceClass(student, currentClass, isCardReaderMode, activeClass, classById));
+			timestamp ??
+			attendanceTimestampForSelectedDate(
+				selectedDate,
+				selectedDateIsToday,
+				getAttendanceClass(student, currentClass, isCardReaderMode, activeClass, classById)
+			);
 		const draft = getAttendanceDraft(student, resolvedTimestamp);
 		if (event.sessionKey) return event.sessionKey === draft.sessionKey;
 		const eventClassId = event.classId || student.classId || 'unassigned';
@@ -314,16 +329,6 @@
 		);
 	}
 
-	function resetRecentActionState() {
-		lastResult = null;
-		lastEventId = null;
-		log = [];
-		if (undoTimer) {
-			clearTimeout(undoTimer);
-			undoTimer = null;
-		}
-	}
-
 	async function selectAttendanceDate(date: string) {
 		const nextDate = date || fmtDate(Date.now());
 		datePickerOpen = false;
@@ -331,43 +336,28 @@
 
 		const previousDate = selectedDate;
 		selectedDate = nextDate;
-		resetRecentActionState();
+		attendanceLog?.resetState();
 		dateLoading = true;
 		try {
 			events = await listEventsForDate(nextDate);
-			toast(`Loaded attendance for ${formatAttendanceDate(nextDate)}`);
+			attendanceLog?.showToast(`Loaded attendance for ${formatAttendanceDate(nextDate)}`);
 		} catch (error) {
 			selectedDate = previousDate;
 			const message =
 				error instanceof Error ? error.message : 'Attendance date could not be loaded.';
-			toast(`Date load failed: ${message}`, false);
+			attendanceLog?.showToast(`Date load failed: ${message}`, false);
 		} finally {
 			dateLoading = false;
 		}
 	}
 
-	function toast(msg: string, ok = true) {
-		toastMessage = msg;
-		toastOk = ok;
-		if (toastTimer) clearTimeout(toastTimer);
-		toastTimer = setTimeout(() => (toastMessage = null), 3000);
-	}
-
-	async function undoLast() {
-		if (!lastEventId || !lastResult) return;
-
+	async function handleUndo(eventId: string): Promise<boolean> {
 		try {
-			await deleteEvent(lastEventId);
-			const eventIdToRemove = lastEventId;
-			log = log.filter((line) => line.id !== eventIdToRemove);
-			events = events.filter((event) => event.id !== eventIdToRemove);
-			toast(`Undid ${lastResult.name} attendance`);
+			await deleteEvent(eventId);
+			events = events.filter((e) => e.id !== eventId);
+			return true;
 		} catch {
-			toast('Failed to undo last action', false);
-		} finally {
-			lastEventId = null;
-			lastResult = null;
-			if (undoTimer) clearTimeout(undoTimer);
+			return false;
 		}
 	}
 
@@ -376,14 +366,17 @@
 		if (!trimmed) return;
 
 		if (isProcessing || dateLoading) {
-			toast('Please wait - processing previous tap', false);
+			attendanceLog?.showToast('Please wait - processing previous tap', false);
 			return;
 		}
 
 		const now = Date.now();
 		if (lastScan && lastScan.serial === trimmed && now - lastScan.timestamp < 2500) {
 			cardInput = '';
-			toast('Duplicate card tap ignored - wait a moment before scanning again', false);
+			attendanceLog?.showToast(
+				'Duplicate card tap ignored - wait a moment before scanning again',
+				false
+			);
 			cardInputElement?.focus();
 			return;
 		}
@@ -395,12 +388,13 @@
 		try {
 			const student = await findStudentByCard(trimmed);
 			if (!student) {
-				toast('Unknown card - not paired to any student', false);
+				attendanceLog?.showToast('Unknown card - not paired to any student', false);
 				return;
 			}
 			await logForStudent(student);
 		} catch (err: unknown) {
-			handleAttendanceError(err);
+			const message = err instanceof Error ? err.message : String(err);
+			attendanceLog?.showToast(`Error: ${message}`, false);
 		} finally {
 			isProcessing = false;
 			cardInputElement?.focus();
@@ -419,20 +413,23 @@
 			try {
 				await deleteEvent(last.id, 'Toggled off by user');
 				events = events.filter((e) => e.id !== last.id);
-				log = log.filter((l) => l.id !== last.id);
-				toast(`${student.name} - Attendance removed`, true);
-
-				if (undoTimer) clearTimeout(undoTimer);
-				lastResult = null;
-				lastEventId = null;
+				attendanceLog?.removeLogEntry(last.id);
+				attendanceLog?.showToast(`${student.name} - Attendance removed`);
+				attendanceLog?.resetUndo();
 				return;
 			} catch (err: unknown) {
-				handleAttendanceError(err, student);
+				attendanceLog?.showToast('Failed to remove attendance', false);
 				return;
 			}
 		}
 
-		const ts = options.timestamp ?? attendanceTimestampForSelectedDate(selectedDate, selectedDateIsToday, getAttendanceClass(student, currentClass, isCardReaderMode, activeClass, classById));
+		const ts =
+			options.timestamp ??
+			attendanceTimestampForSelectedDate(
+				selectedDate,
+				selectedDateIsToday,
+				getAttendanceClass(student, currentClass, isCardReaderMode, activeClass, classById)
+			);
 		const draft = getAttendanceDraft(student, ts);
 
 		const finalType = type ?? 'in';
@@ -448,51 +445,40 @@
 				timestamp: new Date(ts).toISOString()
 			});
 
-			lastEventId = createdEvent.id;
 			events = [createdEvent, ...events];
-			lastResult = {
+			attendanceLog?.addLogEntry({
+				id: createdEvent.id,
+				studentName: student.name,
+				type: finalType,
+				isLate,
+				message: isLate ? 'Recorded late' : 'Recorded',
+				timestamp: ts
+			});
+			attendanceLog?.showToast(
+				`${student.name} - ${isLate ? 'Late attendance' : 'Recorded'}`,
+				!isLate
+			);
+			attendanceLog?.setUndo(createdEvent.id, {
 				ok: true,
 				name: student.name,
 				type: finalType,
 				time: ts,
 				isLate,
 				eventId: createdEvent.id
-			};
-			log = [
-				{
-					id: createdEvent.id,
-					studentName: student.name,
-					type: finalType,
-					isLate,
-					message: isLate ? 'Recorded late' : 'Recorded',
-					timestamp: ts
-				},
-				...log
-			].slice(0, 30);
-
-			toast(`${student.name} - ${isLate ? 'Late attendance' : 'Recorded'}`, !isLate);
-			if (undoTimer) clearTimeout(undoTimer);
-			undoTimer = setTimeout(() => {
-				lastResult = null;
-				lastEventId = null;
-			}, 5000);
+			});
 		} catch (err: unknown) {
-			handleAttendanceError(err, student);
+			const message = err instanceof Error ? err.message : String(err);
+			if (message.includes('duplicate attendance') || message.includes('already recorded')) {
+				attendanceLog?.showToast('Already recorded for this session', false);
+			} else {
+				attendanceLog?.showToast(`Error: ${message}`, false);
+			}
 		}
-	}
-
-	function handleAttendanceError(err: unknown, student?: Student) {
-		const message = err instanceof Error ? err.message : String(err);
-		if (message.includes('duplicate attendance') || message.includes('already recorded')) {
-			toast('Already recorded for this session', false);
-			return;
-		}
-		toast(`Error: ${message}`, false);
 	}
 
 	async function markStudent(student: Student, action: AttendanceType | null, closePicker = false) {
 		if (isProcessing || dateLoading) {
-			toast('Please wait - processing previous request', false);
+			attendanceLog?.showToast('Please wait - processing previous request', false);
 			return;
 		}
 
@@ -507,21 +493,19 @@
 
 	async function presentAllStudents() {
 		if (isProcessing || dateLoading) {
-			toast('Please wait - processing previous request', false);
+			attendanceLog?.showToast('Please wait - processing previous request', false);
 			return;
 		}
 
 		const studentsToMark = pendingManualStudents;
 		if (studentsToMark.length === 0) {
-			toast('All visible students are already recorded');
+			attendanceLog?.showToast('All visible students are already recorded');
 			return;
 		}
 
 		isProcessing = true;
 		isPresentingAll = true;
-		lastResult = null;
-		lastEventId = null;
-		if (undoTimer) clearTimeout(undoTimer);
+		attendanceLog?.resetUndo();
 
 		const eventRequests: CreateEventRequest[] = [];
 		const eventMetadata = new SvelteMap<string, { student: Student; isLate: boolean }>();
@@ -531,7 +515,11 @@
 
 		try {
 			for (const student of studentsToMark) {
-				const timestamp = attendanceTimestampForSelectedDate(selectedDate, selectedDateIsToday, getAttendanceClass(student, currentClass, isCardReaderMode, activeClass, classById));
+				const timestamp = attendanceTimestampForSelectedDate(
+					selectedDate,
+					selectedDateIsToday,
+					getAttendanceClass(student, currentClass, isCardReaderMode, activeClass, classById)
+				);
 				const draft = getAttendanceDraft(student, timestamp);
 				const isLate = draft.isLate;
 
@@ -567,7 +555,7 @@
 
 			if (createdEvents.length > 0) {
 				events = [...createdEvents, ...events];
-				log = [...createdLogLines, ...log].slice(0, 30);
+				attendanceLog?.addLogEntries(createdLogLines);
 			}
 
 			const recordedLabel = `${createdEvents.length} ${
@@ -576,10 +564,10 @@
 			const lateLabel = lateCount > 0 ? ` (${lateCount} late)` : '';
 			const skippedLabel = skippedCount > 0 ? `; ${skippedCount} already recorded` : '';
 
-			toast(`${recordedLabel}${lateLabel}${skippedLabel}`);
+			attendanceLog?.showToast(`${recordedLabel}${lateLabel}${skippedLabel}`);
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err);
-			toast(`Present all failed: ${message}`, false);
+			attendanceLog?.showToast(`Present all failed: ${message}`, false);
 		} finally {
 			isPresentingAll = false;
 			isProcessing = false;
@@ -588,7 +576,7 @@
 
 	async function clearAllAttendance() {
 		if (isProcessing || dateLoading) {
-			toast('Please wait - processing previous request', false);
+			attendanceLog?.showToast('Please wait - processing previous request', false);
 			return;
 		}
 
@@ -601,21 +589,22 @@
 		}
 
 		if (eventIdsToRemove.length === 0) {
-			toast('No recorded attendance to clear');
+			attendanceLog?.showToast('No recorded attendance to clear');
 			return;
 		}
 
 		isProcessing = true;
-		resetRecentActionState();
+		attendanceLog?.resetState();
 
 		try {
 			await deleteEvents(eventIdsToRemove, 'Cleared all by user');
 			events = events.filter((e) => !eventIdsToRemove.includes(e.id));
-			log = [];
-			toast(`Cleared attendance for ${eventIdsToRemove.length} ${eventIdsToRemove.length === 1 ? 'student' : 'students'}`);
+			attendanceLog?.showToast(
+				`Cleared attendance for ${eventIdsToRemove.length} ${eventIdsToRemove.length === 1 ? 'student' : 'students'}`
+			);
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err);
-			toast(`Clear all failed: ${message}`, false);
+			attendanceLog?.showToast(`Clear all failed: ${message}`, false);
 		} finally {
 			isProcessing = false;
 		}
@@ -734,49 +723,6 @@
 	</div>
 {/if}
 
-{#if lastResult}
-	<div class="pointer-events-none fixed inset-x-0 bottom-10 z-50 flex justify-center px-4">
-		<div
-			class="pointer-events-auto flex max-w-[min(34rem,calc(100vw-2rem))] items-center gap-4 rounded-2xl border px-5 py-4 md:px-8 md:py-5
-				{lastResult.ok
-				? 'border-border bg-background text-foreground'
-				: 'border-destructive bg-destructive text-destructive-foreground'}"
-			role="status"
-			aria-live="assertive"
-		>
-			<div
-				class="grid size-12 place-items-center rounded-full
-				{lastResult.isLate ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'}"
-			>
-				<svg
-					class="size-6"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<polyline points="20 6 9 17 4 12" />
-				</svg>
-			</div>
-			<div class="min-w-0">
-				<div class="text-balance-safe text-lg leading-tight font-bold md:text-xl">
-					{lastResult.name}
-				</div>
-				<div class="label-mono flex gap-2">
-					<span class={lastResult.isLate ? 'font-bold text-destructive' : ''}>
-						{lastResult.isLate ? 'LATE' : 'IN'}
-					</span>
-					<span class="text-muted-foreground">-</span>
-					<span class="text-muted-foreground">{fmtTime(lastResult.time)}</span>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
-
 <DatePickerDialog
 	open={datePickerOpen}
 	value={selectedDate}
@@ -837,10 +783,4 @@
 	</div>
 </Dialog>
 
-<FeedbackToast
-	message={toastMessage}
-	ok={toastOk}
-	actionLabel={lastEventId && toastOk ? 'Undo' : undefined}
-	onAction={undoLast}
-	onClose={() => (toastMessage = null)}
-/>
+<AttendanceLog bind:this={attendanceLog} bind:log onUndo={handleUndo} />
