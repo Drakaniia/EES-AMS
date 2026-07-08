@@ -54,6 +54,7 @@ pub async fn import_sf2_workbook(
         "learnersFound": summary.learners_found,
         "studentsCreated": summary.students_created,
         "studentsReused": summary.students_reused,
+        "studentsUpdated": summary.students_updated,
         "datesMapped": summary.dates_mapped,
         "proceedAnyway": proceed_anyway,
     }))?;
@@ -145,6 +146,32 @@ pub fn get_sf2_export_preview(
     class_id: Option<String>,
 ) -> std::result::Result<Sf2ExportPreview, String> {
     service::export_preview(pool.inner().clone(), class_id).map_err(|e| e.to_string())
+}
+
+/// Sync the latest attendance events from the database to the SF2 Excel working copy.
+/// Call this before reloading the preview to ensure the working copy matches the DB.
+#[tauri::command]
+pub fn sync_sf2_attendance(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: String,
+) -> std::result::Result<(), String> {
+    service::sync_attendance_to_sf2_workbook(pool.inner().clone(), &class_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Sync the class roster to the SF2 working workbook.
+/// For bundled templates this re-assigns all students to dynamic row slots,
+/// expanding the workbook if needed. For imported workbooks this maps new
+/// students to available empty learner rows in the workbook.
+#[tauri::command]
+pub fn sync_sf2_roster(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: String,
+) -> std::result::Result<(), String> {
+    service::sync_workbook_roster_for_class(pool.inner().clone(), &class_id)
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 /// Lightweight toggle — only persists the DB event, no Excel I/O or preview rebuild.

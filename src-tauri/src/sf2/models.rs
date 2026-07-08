@@ -182,6 +182,7 @@ pub struct Sf2ImportSummary {
     pub learners_found: usize,
     pub students_created: usize,
     pub students_reused: usize,
+    pub students_updated: usize,
     pub dates_mapped: usize,
 }
 
