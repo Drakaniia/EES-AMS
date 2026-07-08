@@ -3,6 +3,7 @@ pub(crate) mod attendance_service;
 mod calendar;
 pub(crate) mod calendar_service;
 pub(crate) mod roster;
+pub(crate) mod roster_parser;
 pub(crate) mod roster_sync;
 pub(crate) mod template_ops;
 pub mod excel;

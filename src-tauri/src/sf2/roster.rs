@@ -1,408 +1,13 @@
-use crate::domain::error::{AppError, Result};
-use crate::domain::models::{
-    Class, CreateClassRequest, CreateStudentRequest, Settings, Student, StudentGender,
-    UpdateStudentRequest,
-};
-use crate::infrastructure::database::{ClassRepository, StudentRepository};
-use crate::sf2::logic::{is_learner_name, normalize_learner_name, Sf2CellMark};
-use crate::sf2::models::{
-    Sf2StudentMappingRecord, Sf2WorkbookAnalysis, Sf2WorkbookLearner,
-};
-
-use std::collections::{HashMap, HashSet};
-
-pub(crate) const SF2_NAME_COLUMN: &str = "C";
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct TemplateRosterSlot {
-    pub row_index: u32,
-    pub gender_block: &'static str,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct TemplateRosterAssignment {
-    pub student: Student,
-    pub slot: TemplateRosterSlot,
-}
-
-#[derive(Debug)]
-pub(crate) struct WorkbookLearnerSync {
-    pub(crate) student_mappings: Vec<Sf2StudentMappingRecord>,
-    pub(crate) students_created: usize,
-    pub(crate) students_reused: usize,
-}
-
-// ── Template roster slot definitions ──────────────────────────────────────────
-
-pub(crate) fn template_roster_slots() -> Vec<TemplateRosterSlot> {
-    let mut slots = Vec::new();
-    for row_index in 8..=28 {
-        slots.push(TemplateRosterSlot {
-            row_index,
-            gender_block: "MALE",
-        });
-    }
-    for row_index in 30..=48 {
-        slots.push(TemplateRosterSlot {
-            row_index,
-            gender_block: "FEMALE",
-        });
-    }
-    slots
-}
-
-pub(crate) fn template_owns_roster(template: &crate::sf2::models::Sf2TemplateRecord) -> bool {
-    template.source_hash.starts_with("bundled-")
-}
-
-// ── Roster assignment ─────────────────────────────────────────────────────────
-
-pub(crate) fn template_roster_assignments(
-    students: &[Student],
-) -> Result<Vec<TemplateRosterAssignment>> {
-    let row_slots = template_roster_slots();
-    let male_slots = row_slots
-        .iter()
-        .copied()
-        .filter(|slot| slot.gender_block == StudentGender::Male.sf2_block())
-        .collect::<Vec<_>>();
-    let female_slots = row_slots
-        .iter()
-        .copied()
-        .filter(|slot| slot.gender_block == StudentGender::Female.sf2_block())
-        .collect::<Vec<_>>();
-    let mut male_students = Vec::new();
-    let mut female_students = Vec::new();
-    let mut missing_gender = Vec::new();
-
-    for student in students {
-        match student.gender {
-            Some(StudentGender::Male) => male_students.push(student),
-            Some(StudentGender::Female) => female_students.push(student),
-            None => missing_gender.push(student.name.trim().to_string()),
-        }
-    }
-
-    if !missing_gender.is_empty() {
-        return Err(AppError::InvalidInput(format!(
-            "Set Male/Female for these students before creating or updating the SF2 workbook: {}",
-            missing_gender.join(", ")
-        )));
-    }
-    if male_students.len() > male_slots.len() {
-        return Err(AppError::InvalidInput(format!(
-            "The bundled SF2 template has {} male learner rows, but this class has {} male learners",
-            male_slots.len(),
-            male_students.len()
-        )));
-    }
-    if female_students.len() > female_slots.len() {
-        return Err(AppError::InvalidInput(format!(
-            "The bundled SF2 template has {} female learner rows, but this class has {} female learners",
-            female_slots.len(),
-            female_students.len()
-        )));
-    }
-
-    let mut assignments = Vec::with_capacity(students.len());
-    assignments.extend(
-        male_students
-            .into_iter()
-            .zip(male_slots)
-            .map(|(student, slot)| TemplateRosterAssignment {
-                student: student.clone(),
-                slot,
-            }),
-    );
-    assignments.extend(
-        female_students
-            .into_iter()
-            .zip(female_slots)
-            .map(|(student, slot)| TemplateRosterAssignment {
-                student: student.clone(),
-                slot,
-            }),
-    );
-    Ok(assignments)
-}
-
-// ── Student mappings from roster assignments ──────────────────────────────────
-
-pub(crate) fn student_mappings_from_roster_assignments(
-    template_id: &str,
-    assignments: &[TemplateRosterAssignment],
-) -> Vec<Sf2StudentMappingRecord> {
-    let mut seen_normalized_names = HashSet::new();
-    assignments
-        .iter()
-        .map(|assignment| {
-            let student = &assignment.student;
-            let slot = assignment.slot;
-            let normalized_name = unique_normalized_name(
-                &mut seen_normalized_names,
-                &student.name,
-                &student.id.to_string(),
-            );
-            Sf2StudentMappingRecord {
-                template_id: template_id.to_string(),
-                student_id: student.id.to_string(),
-                workbook_name: student.name.clone(),
-                normalized_name,
-                row_index: slot.row_index,
-                gender_block: Some(slot.gender_block.to_string()),
-            }
-        })
-        .collect()
-}
-
-// ── Unique normalized name deduplication ──────────────────────────────────────
-
-pub(crate) fn unique_normalized_name(
-    seen: &mut HashSet<String>,
-    name: &str,
-    suffix: &str,
-) -> String {
-    let normalized = normalize_learner_name(name);
-    if seen.insert(normalized.clone()) {
-        return normalized;
-    }
-
-    let unique = format!("{normalized}#{suffix}");
-    seen.insert(unique.clone());
-    unique
-}
-
-// ── Duplicate name rejection ──────────────────────────────────────────────────
-
-pub(crate) fn reject_duplicate_roster_names(students: &[Student]) -> Result<()> {
-    let mut names_by_normalized: HashMap<String, Vec<String>> = HashMap::new();
-    for student in students {
-        names_by_normalized
-            .entry(normalize_learner_name(&student.name))
-            .or_default()
-            .push(student.name.clone());
-    }
-
-    let duplicates = names_by_normalized
-        .into_values()
-        .filter(|names| names.len() > 1)
-        .map(|names| names.join(", "))
-        .collect::<Vec<_>>();
-
-    if duplicates.is_empty() {
-        return Ok(());
-    }
-
-    Err(AppError::InvalidInput(format!(
-        "Duplicate learner names must be corrected before creating an SF2 workbook: {}",
-        duplicates.join("; ")
-    )))
-}
-
-// ── Roster name marks for Excel ───────────────────────────────────────────────
-
-pub(crate) fn roster_name_marks(
-    analysis: &Sf2WorkbookAnalysis,
-    assignments: &[TemplateRosterAssignment],
-) -> Vec<Sf2CellMark> {
-    let sheet_names = analysis
-        .sheets
-        .iter()
-        .filter(|sheet| sheet.visible != 0)
-        .map(|sheet| sheet.name.clone())
-        .collect::<Vec<_>>();
-
-    let mut marks = Vec::with_capacity(sheet_names.len() * assignments.len());
-    for sheet_name in sheet_names {
-        for assignment in assignments {
-            let value = assignment.student.name.trim().to_string();
-            marks.push(Sf2CellMark {
-                sheet_name: sheet_name.clone(),
-                cell_address: format!("{SF2_NAME_COLUMN}{}", assignment.slot.row_index),
-                value,
-            });
-        }
-    }
-    marks
-}
-
-// ── Students from draft learner names ─────────────────────────────────────────
-
-pub(crate) fn roster_students_for_draft(
-    student_repo: &StudentRepository,
-    class_id: &str,
-    learner_names: &[String],
-) -> Result<(Vec<Student>, usize, usize)> {
-    let existing_students = student_repo.list_by_class(Some(class_id))?;
-    let mut existing_by_name: HashMap<String, Student> = existing_students
-        .iter()
-        .cloned()
-        .map(|student| (normalize_learner_name(&student.name), student))
-        .collect();
-
-    let mut requested_names = Vec::new();
-    let mut seen_names = HashSet::new();
-    for name in learner_names.iter().map(|name| name.trim()) {
-        if name.is_empty() || !is_learner_name(name) {
-            continue;
-        }
-
-        let normalized = normalize_learner_name(name);
-        if seen_names.insert(normalized) {
-            requested_names.push(name.to_string());
-        }
-    }
-
-    if requested_names.is_empty() {
-        let reused = existing_students.len();
-        return Ok((existing_students, 0, reused));
-    }
-
-    let mut students = Vec::with_capacity(requested_names.len());
-    let mut students_created = 0;
-    let mut students_reused = 0;
-
-    for name in requested_names {
-        let normalized = normalize_learner_name(&name);
-        let student = if let Some(student) = existing_by_name.get(&normalized) {
-            students_reused += 1;
-            student.clone()
-        } else {
-            let created = student_repo.create(CreateStudentRequest {
-                name: name.clone(),
-                gender: None,
-                card_serial: None,
-                class_id: Some(class_id.to_string()),
-            })?;
-            existing_by_name.insert(normalized, created.clone());
-            students_created += 1;
-            created
-        };
-        students.push(student);
-    }
-
-    Ok((students, students_created, students_reused))
-}
-
-// ── Workbook learner mappings sync ────────────────────────────────────────────
-
-pub(crate) fn sync_workbook_learner_mappings(
-    student_repo: &StudentRepository,
-    class_id: &str,
-    template_id: &str,
-    learners: &[Sf2WorkbookLearner],
-) -> Result<WorkbookLearnerSync> {
-    let existing_students = student_repo.list_by_class(Some(class_id))?;
-    let mut existing_by_name: HashMap<String, Student> = existing_students
-        .into_iter()
-        .map(|student| (normalize_learner_name(&student.name), student))
-        .collect();
-    let mut seen_names = HashSet::new();
-    let mut student_mappings = Vec::new();
-    let mut students_created = 0;
-    let mut students_reused = 0;
-
-    for learner in learners
-        .iter()
-        .filter(|learner| is_learner_name(&learner.name))
-    {
-        let normalized_name = normalize_learner_name(&learner.name);
-        if !seen_names.insert(normalized_name.clone()) {
-            continue;
-        }
-        let learner_gender = StudentGender::from_sf2_block(learner.gender_block.as_deref());
-
-        let student = if let Some(student) = existing_by_name.get(&normalized_name) {
-            students_reused += 1;
-            let mut student = student.clone();
-            if let Some(gender) = learner_gender {
-                if student.gender != Some(gender) {
-                    student = student_repo.update(
-                        student.id,
-                        UpdateStudentRequest {
-                            name: None,
-                            gender: Some(gender),
-                            card_serial: None,
-                            class_id: None,
-                        },
-                    )?;
-                    existing_by_name.insert(normalized_name.clone(), student.clone());
-                }
-            }
-            student
-        } else {
-            let created = student_repo.create(CreateStudentRequest {
-                name: learner.name.clone(),
-                gender: learner_gender,
-                card_serial: None,
-                class_id: Some(class_id.to_string()),
-            })?;
-            existing_by_name.insert(normalized_name.clone(), created.clone());
-            students_created += 1;
-            created
-        };
-
-        student_mappings.push(Sf2StudentMappingRecord {
-            template_id: template_id.to_string(),
-            student_id: student.id.to_string(),
-            workbook_name: learner.name.clone(),
-            normalized_name,
-            row_index: learner.row_index,
-            gender_block: learner.gender_block.clone(),
-        });
-    }
-
-    Ok(WorkbookLearnerSync {
-        student_mappings,
-        students_created,
-        students_reused,
-    })
-}
-
-// ── Find or create class ──────────────────────────────────────────────────────
-
-pub(crate) fn find_or_create_class(
-    class_repo: &ClassRepository,
-    class_name: &str,
-    settings: Option<&Settings>,
-) -> Result<Class> {
-    if let Some(existing) = class_repo
-        .list()?
-        .into_iter()
-        .find(|class: &Class| class.name.eq_ignore_ascii_case(class_name))
-    {
-        return Ok(existing);
-    }
-
-    let day_start = settings
-        .map(|s| s.day_start.clone())
-        .unwrap_or_else(|| "08:30".to_string());
-    let day_end = settings
-        .map(|s| s.day_end.clone())
-        .unwrap_or_else(|| "15:30".to_string());
-    let late_after = settings
-        .map(|s| s.late_after.clone())
-        .unwrap_or_else(|| "08:45".to_string());
-
-    class_repo.create(CreateClassRequest {
-        name: class_name.to_string(),
-        room: Some("N/A".to_string()),
-        day_start,
-        day_end,
-        late_after,
-        sessions: Vec::new(),
-        days: vec![1, 2, 3, 4, 5],
-    })
-}
+pub(crate) use crate::sf2::roster_parser::*;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::models::{Student, StudentId, StudentGender};
     use crate::sf2::logic::normalize_learner_name;
+    use crate::sf2::models::Sf2WorkbookAnalysis;
     use chrono::Utc;
+    use std::collections::HashSet;
 
     fn make_template(source_hash: &str) -> crate::sf2::models::Sf2TemplateRecord {
         crate::sf2::models::Sf2TemplateRecord {
@@ -661,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn template_roster_assignments_too_many_males_error() {
+    fn template_roster_assignments_exceeds_male_capacity_uses_expanded_slots() {
         let students: Vec<Student> = (0..22)
             .map(|i| make_student(
                 &format!("00000000-0000-0000-0000-{:012}", i),
@@ -670,14 +275,16 @@ mod tests {
             ))
             .collect();
         let result = template_roster_assignments(&students);
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("21 male learner rows"));
-        assert!(err.contains("22"));
+        assert!(result.is_ok(), "should dynamically expand male slots: {:?}", result.err());
+        let assignments = result.unwrap();
+        assert_eq!(assignments.len(), 22);
+        // 22 male students expand to rows 8-29 (instead of erroring)
+        assert_eq!(assignments[0].slot.row_index, 8);
+        assert_eq!(assignments[21].slot.row_index, 29);
     }
 
     #[test]
-    fn template_roster_assignments_too_many_females_error() {
+    fn template_roster_assignments_exceeds_female_capacity_uses_expanded_slots() {
         let students: Vec<Student> = (0..20)
             .map(|i| make_student(
                 &format!("00000000-0000-0000-0000-{:012}", i),
@@ -686,10 +293,48 @@ mod tests {
             ))
             .collect();
         let result = template_roster_assignments(&students);
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("19 female learner rows"));
-        assert!(err.contains("20"));
+        assert!(result.is_ok(), "should dynamically expand female slots: {:?}", result.err());
+        let assignments = result.unwrap();
+        assert_eq!(assignments.len(), 20);
+        // 20 female students expand to rows 30-49 (instead of erroring)
+        // Female section still starts at 30 since no male expansion needed
+        assert_eq!(assignments[0].slot.row_index, 30);
+        assert_eq!(assignments[19].slot.row_index, 49);
+    }
+
+    #[test]
+    fn template_roster_assignments_exceeds_both_expands_rows() {
+        let mut students: Vec<Student> = Vec::new();
+        for i in 0..25 {
+            students.push(make_student(
+                &format!("00000000-0000-0000-0000-{:012}", i),
+                &format!("Male {i}"),
+                Some(StudentGender::Male),
+            ));
+        }
+        for i in 0..22 {
+            students.push(make_student(
+                &format!("00000000-0000-0000-0000-{:012}", 100 + i),
+                &format!("Female {i}"),
+                Some(StudentGender::Female),
+            ));
+        }
+        let result = template_roster_assignments(&students);
+        assert!(result.is_ok(), "should dynamically expand both: {:?}", result.err());
+        let assignments = result.unwrap();
+        assert_eq!(assignments.len(), 47);
+        // 25 males expand rows: 8..=32, then MALE TOTAL at 33 (was 29 + 4 extra)
+        // Female start = 30 + 4 (extra male) = 34
+        for i in 0..25 {
+            assert_eq!(assignments[i].slot.gender_block, "MALE", "assignment {i} should be MALE");
+        }
+        for i in 25..47 {
+            assert_eq!(assignments[i].slot.gender_block, "FEMALE", "assignment {i} should be FEMALE");
+        }
+        assert_eq!(assignments[0].slot.row_index, 8);
+        assert_eq!(assignments[24].slot.row_index, 32); // last male row
+        assert_eq!(assignments[25].slot.row_index, 34); // first female row (30 + 4 extra male)
+        assert_eq!(assignments[46].slot.row_index, 55); // last female row (34 + 22 - 1 = 55)
     }
 
     #[test]
@@ -818,5 +463,337 @@ mod tests {
         let assignments = template_roster_assignments(&students).unwrap();
         let mappings = student_mappings_from_roster_assignments("t1", &assignments);
         assert!(mappings.is_empty());
+    }
+
+    // ── clear_unused_learner_marks ────────────────────────────────────────────
+
+    #[test]
+    fn clear_unused_learner_marks_no_mapped_rows_clears_all_learner_slots() {
+        let analysis = Sf2WorkbookAnalysis {
+            file_format: 0,
+            has_vb_project: false,
+            school_id: String::new(),
+            school_name: String::new(),
+            school_year: String::new(),
+            report_month: String::new(),
+            grade_level: String::new(),
+            section: String::new(),
+            adviser_name: String::new(),
+            school_head_name: String::new(),
+            learners: Vec::new(),
+            dates: Vec::new(),
+            sheets: vec![
+                crate::sf2::models::Sf2WorkbookSheet {
+                    name: "JANUARY 2025".to_string(),
+                    visible: -1,
+                    used_range: String::new(),
+                },
+            ],
+        };
+        let mapped_rows: Vec<u32> = vec![];
+        let marks = clear_unused_learner_marks(&analysis, &mapped_rows, None, None);
+        // 21 male rows (8-28) + 19 female rows (30-48) = 40 learner slots
+        // Each unused row clears 3 columns (A, B, C) = 120 marks
+        // Note: rows 29 (MALE TOTAL) and 49 (FEMALE TOTAL) are NOT learner slots
+        assert_eq!(marks.len(), 40 * 3);
+        for mark in &marks {
+            assert_eq!(mark.sheet_name, "JANUARY 2025");
+            let col = mark
+                .cell_address
+                .trim_end_matches(|c: char| c.is_ascii_digit());
+            assert!(
+                ["A", "B", "C"].contains(&col),
+                "column should be A, B, or C, got {col}"
+            );
+            assert!(mark.value.is_empty());
+        }
+        // Verify total rows are NOT cleared (they're not learner slots)
+        assert!(!marks.iter().any(|m| m.cell_address == "A29"
+            || m.cell_address == "B29"
+            || m.cell_address == "C29"));
+        assert!(!marks.iter().any(|m| m.cell_address == "A49"
+            || m.cell_address == "B49"
+            || m.cell_address == "C49"));
+        // Verify all learner rows are present (male 8-28, female 30-48)
+        let mut cleared_rows: Vec<u32> = marks
+            .iter()
+            .filter_map(|m| Some(m.cell_address.trim_start_matches(['A', 'B', 'C'])))
+            .filter_map(|s| s.parse::<u32>().ok())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        cleared_rows.sort();
+        assert_eq!(cleared_rows.len(), 40);
+        assert_eq!(cleared_rows[0], 8);
+        assert_eq!(cleared_rows[20], 28);
+        assert_eq!(cleared_rows[21], 30);
+        assert_eq!(cleared_rows[39], 48);
+    }
+
+    #[test]
+    fn clear_unused_learner_marks_all_mapped_returns_empty() {
+        let analysis = Sf2WorkbookAnalysis {
+            file_format: 0,
+            has_vb_project: false,
+            school_id: String::new(),
+            school_name: String::new(),
+            school_year: String::new(),
+            report_month: String::new(),
+            grade_level: String::new(),
+            section: String::new(),
+            adviser_name: String::new(),
+            school_head_name: String::new(),
+            learners: Vec::new(),
+            dates: Vec::new(),
+            sheets: vec![
+                crate::sf2::models::Sf2WorkbookSheet {
+                    name: "JANUARY 2025".to_string(),
+                    visible: -1,
+                    used_range: String::new(),
+                },
+            ],
+        };
+        let all_rows: Vec<u32> = (8..=48).filter(|r| !matches!(r, 29 | 49)).collect();
+        let marks = clear_unused_learner_marks(&analysis, &all_rows, None, None);
+        assert!(marks.is_empty());
+    }
+
+    #[test]
+    fn clear_unused_learner_marks_some_mapped_clears_only_unmapped() {
+        let analysis = Sf2WorkbookAnalysis {
+            file_format: 0,
+            has_vb_project: false,
+            school_id: String::new(),
+            school_name: String::new(),
+            school_year: String::new(),
+            report_month: String::new(),
+            grade_level: String::new(),
+            section: String::new(),
+            adviser_name: String::new(),
+            school_head_name: String::new(),
+            learners: Vec::new(),
+            dates: Vec::new(),
+            sheets: vec![
+                crate::sf2::models::Sf2WorkbookSheet {
+                    name: "JANUARY 2025".to_string(),
+                    visible: -1,
+                    used_range: String::new(),
+                },
+            ],
+        };
+        // Map 5 male students (rows 8-12) and 3 female students (rows 30-32)
+        let mapped_rows = vec![8u32, 9, 10, 11, 12, 30, 31, 32];
+        let marks = clear_unused_learner_marks(&analysis, &mapped_rows, None, None);
+        // 40 total clearable slots - 8 mapped = 32 unused slots
+        // Each unused slot clears 3 columns (A, B, C) = 96 marks
+        assert_eq!(marks.len(), 32 * 3);
+        // These mapped rows should NOT have clear marks in any column
+        let mapped_set: std::collections::HashSet<u32> = mapped_rows.iter().copied().collect();
+        let cleared_rows: std::collections::HashSet<u32> = marks
+            .iter()
+            .filter_map(|m| {
+                m.cell_address
+                    .trim_start_matches(['A', 'B', 'C'])
+                    .parse::<u32>()
+                    .ok()
+            })
+            .collect();
+        for mapped in &mapped_set {
+            assert!(
+                !cleared_rows.contains(mapped),
+                "mapped row {mapped} should not have any clear marks"
+            );
+        }
+    }
+
+    #[test]
+    fn clear_unused_learner_marks_clears_columns_abc_for_unused_rows() {
+        let analysis = Sf2WorkbookAnalysis {
+            file_format: 0,
+            has_vb_project: false,
+            school_id: String::new(),
+            school_name: String::new(),
+            school_year: String::new(),
+            report_month: String::new(),
+            grade_level: String::new(),
+            section: String::new(),
+            adviser_name: String::new(),
+            school_head_name: String::new(),
+            learners: Vec::new(),
+            dates: Vec::new(),
+            sheets: vec![
+                crate::sf2::models::Sf2WorkbookSheet {
+                    name: "JANUARY 2025".to_string(),
+                    visible: -1,
+                    used_range: String::new(),
+                },
+            ],
+        };
+        // Map only the first 2 male rows (8, 9) and first 2 female rows (30, 31)
+        // The remaining 36 learner slots should be cleared in columns A, B, and C
+        let mapped_rows = vec![8u32, 9, 30, 31];
+        let marks = clear_unused_learner_marks(&analysis, &mapped_rows, None, None);
+
+        // 36 unused rows × 3 columns (A, B, C) = 108 marks
+        assert_eq!(marks.len(), 36 * 3, "should clear A, B, C for all 36 unused rows");
+
+        // Group marks by row to verify each unused row has A, B, C cleared
+        let mut marks_by_row: std::collections::HashMap<u32, Vec<&str>> =
+            std::collections::HashMap::new();
+        for mark in &marks {
+            let row_str = mark
+                .cell_address
+                .trim_start_matches(|c: char| c.is_ascii_alphabetic());
+            if let Ok(row) = row_str.parse::<u32>() {
+                let col = mark
+                    .cell_address
+                    .trim_end_matches(|c: char| c.is_ascii_digit());
+                marks_by_row.entry(row).or_default().push(col);
+            }
+        }
+
+        // Mapped rows should NOT have clear marks in any column
+        for mapped in &[8u32, 9, 30, 31] {
+            assert!(
+                !marks_by_row.contains_key(mapped),
+                "mapped row {mapped} should not have any clear marks"
+            );
+        }
+
+        // Unused rows should have exactly 3 column letters (A, B, C) cleared
+        for (&row, cols) in &marks_by_row {
+            assert!(
+                (8u32..=28).contains(&row) || (30u32..=48).contains(&row),
+                "row {row} is not in the learner range"
+            );
+            let mut sorted_cols = cols.clone();
+            sorted_cols.sort();
+            assert_eq!(
+                sorted_cols,
+                vec!["A", "B", "C"],
+                "unused row {row} should have A, B, C cleared, got {:?}",
+                sorted_cols
+            );
+        }
+
+        // All marks should be empty (clearing values)
+        for mark in &marks {
+            assert!(mark.value.is_empty(), "clear marks should have empty value");
+        }
+    }
+
+    #[test]
+    fn clear_unused_learner_marks_non_bundled_scenario_clears_unmapped_rows() {
+        // Simulate the non-bundled import scenario:
+        // - 15 male students mapped to rows 8-22
+        // - 12 female students mapped to rows 30-41
+        // - Male rows 23-28 (6 rows) and female rows 42-48 (7 rows) should be cleared
+        // This mirrors what happens after sync_workbook_learner_mappings.
+        let analysis = Sf2WorkbookAnalysis {
+            file_format: 0,
+            has_vb_project: false,
+            school_id: String::new(),
+            school_name: String::new(),
+            school_year: String::new(),
+            report_month: String::new(),
+            grade_level: String::new(),
+            section: String::new(),
+            adviser_name: String::new(),
+            school_head_name: String::new(),
+            learners: Vec::new(),
+            dates: Vec::new(),
+            sheets: vec![
+                crate::sf2::models::Sf2WorkbookSheet {
+                    name: "JULY 2026".to_string(),
+                    visible: -1,
+                    used_range: String::new(),
+                },
+            ],
+        };
+
+        // 15 male + 12 female = 27 mapped rows
+        let mut mapped_rows: Vec<u32> = (8..=22).collect(); // male rows 8-22
+        mapped_rows.extend(30..=41); // female rows 30-41
+
+        let marks = clear_unused_learner_marks(&analysis, &mapped_rows, None, None);
+
+        // Total unused: (21 male - 15) + (19 female - 12) = 6 + 7 = 13 unused rows
+        // Each unused row clears 3 columns (A, B, C) = 39 marks
+        assert_eq!(marks.len(), 13 * 3, "13 unused rows × 3 columns = 39 marks");
+
+        // Verify unused male rows (23-28) are cleared
+        let cleared_rows: std::collections::HashSet<u32> = marks
+            .iter()
+            .filter_map(|m| {
+                m.cell_address
+                    .trim_start_matches(['A', 'B', 'C'])
+                    .parse::<u32>()
+                    .ok()
+            })
+            .collect();
+
+        for row in 23u32..=28 {
+            assert!(cleared_rows.contains(&row), "unused male row {row} should be cleared");
+        }
+        for row in 42u32..=48 {
+            assert!(cleared_rows.contains(&row), "unused female row {row} should be cleared");
+        }
+
+        // Mapped rows should NOT be in the cleared set
+        for row in &[8u32, 9, 10, 22, 30, 31, 41] {
+            assert!(!cleared_rows.contains(row), "mapped row {row} should not be cleared");
+        }
+
+        // Each cleared row should have A, B, C marks
+        for row in &cleared_rows {
+            let row_marks: Vec<&str> = marks
+                .iter()
+                .filter(|m| m.cell_address.ends_with(&row.to_string()))
+                .map(|m| m.cell_address.trim_end_matches(|c: char| c.is_ascii_digit()))
+                .collect();
+            assert_eq!(row_marks.len(), 3, "row {row} should have 3 column marks");
+            let mut sorted = row_marks.clone();
+            sorted.sort();
+            assert_eq!(sorted, vec!["A", "B", "C"], "row {row} should clear A, B, C");
+        }
+    }
+
+    #[test]
+    fn clear_unused_learner_marks_hidden_sheets_skipped() {
+        let analysis = Sf2WorkbookAnalysis {
+            file_format: 0,
+            has_vb_project: false,
+            school_id: String::new(),
+            school_name: String::new(),
+            school_year: String::new(),
+            report_month: String::new(),
+            grade_level: String::new(),
+            section: String::new(),
+            adviser_name: String::new(),
+            school_head_name: String::new(),
+            learners: Vec::new(),
+            dates: Vec::new(),
+            sheets: vec![
+                crate::sf2::models::Sf2WorkbookSheet {
+                    name: "JANUARY 2025".to_string(),
+                    visible: -1,
+                    used_range: String::new(),
+                },
+                crate::sf2::models::Sf2WorkbookSheet {
+                    name: "FEBRUARY 2025".to_string(),
+                    visible: -1,
+                    used_range: String::new(),
+                },
+                crate::sf2::models::Sf2WorkbookSheet {
+                    name: "Hidden Sheet".to_string(),
+                    visible: 0,
+                    used_range: String::new(),
+                },
+            ],
+        };
+        let mapped_rows: Vec<u32> = vec![];
+        let marks = clear_unused_learner_marks(&analysis, &mapped_rows, None, None);
+        // 2 visible sheets × 40 rows each × 3 columns (A, B, C) = 240 marks
+        assert_eq!(marks.len(), 240);
     }
 }
