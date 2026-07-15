@@ -274,7 +274,7 @@
 	async function onSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		if (savingStudent) return;
-		const name = formName.trim();
+		const name = formName.trim().toUpperCase();
 		const serial = formCardSerial.trim().toLowerCase();
 		const classId = formClassId || assignedClass?.id || '';
 

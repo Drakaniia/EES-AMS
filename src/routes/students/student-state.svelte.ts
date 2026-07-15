@@ -25,7 +25,7 @@ export const entryModeTabs: EntryModeTab[] = [
 export function parseStudentNames(value: string) {
 	return value
 		.split(/\r?\n/)
-		.map((name) => name.trim())
+		.map((name) => name.trim().toUpperCase())
 		.filter(Boolean);
 }
 

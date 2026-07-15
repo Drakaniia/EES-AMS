@@ -144,7 +144,7 @@
 											oninput={(e) =>
 												onBulkMaleChange((e.currentTarget as HTMLTextAreaElement).value)}
 											rows="10"
-											placeholder="Cruz, Juan&#10;Reyes, Marco"
+											placeholder="CRUZ, JUAN M.&#10;REYES, MARCO A."
 											class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
 										></textarea>
 									</div>
@@ -161,7 +161,7 @@
 											oninput={(e) =>
 												onBulkFemaleChange((e.currentTarget as HTMLTextAreaElement).value)}
 											rows="10"
-											placeholder="Dela Cruz, Maria&#10;Santos, Ana"
+											placeholder="DELA CRUZ, MARIA R.&#10;SANTOS, ANA L."
 											class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
 										></textarea>
 									</div>
@@ -197,7 +197,7 @@
 										value={formName}
 										oninput={(e) => onFormNameChange((e.currentTarget as HTMLInputElement).value)}
 										required
-										placeholder="Student full name"
+										placeholder="LASTNAME, FIRSTNAME M."
 										class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 									/>
 								</div>
