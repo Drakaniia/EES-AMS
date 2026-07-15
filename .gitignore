@@ -17,8 +17,8 @@ src-tauri/target/
 Thumbs.db
 
 # Binary/docs
-*.xls
-*.xlsx
+#*.xls
+#*.xlsx
 
 # Env
 .env
@@ -32,3 +32,4 @@ vite.config.ts.timestamp-*
 .codex/config.tobuml
 .opencode/plugins/emdash-notifications.js
 .antigravitycli/
+.claude/settings.local.json
