@@ -113,8 +113,7 @@ class Sf2State {
 			if (shouldPromptForSf2SettingsUpdate(settings)) {
 				this.openImportedSf2SettingsReview(settings);
 				this.ctx.toast(
-					`Imported ${summary.learnersFound} learners. Review SF2 settings first.`,
-					false
+					`Imported ${summary.learnersFound} learners. Review SF2 settings first.`
 				);
 				return;
 			}
