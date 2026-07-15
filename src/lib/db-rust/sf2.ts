@@ -97,3 +97,14 @@ export async function exportSf2Workbook(classId: string): Promise<Sf2ExportResul
 export async function openSf2Workbook(classId?: string): Promise<string> {
 	return await invoke('open_sf2_workbook', { classId: classId || null });
 }
+
+/**
+ * Sync attendance to SF2 workbook AND open it in Excel, with real progress
+ * events emitted from the Rust backend for a determinate progress bar.
+ * The progression goes through 10 steps (1-10).
+ * Listen for 'sf2-progress' events via `listen('sf2-progress', ...)` from
+ * `@tauri-apps/api/event` to track progress on the frontend.
+ */
+export async function syncAndOpenSf2Workbook(classId: string): Promise<string> {
+	return await invoke('sync_and_open_sf2_workbook', { classId });
+}

@@ -8,6 +8,7 @@
 pub use super::attendance_service::{
     set_preview_attendance,
     set_preview_attendance_lightweight,
+    sync_and_open_sf2_workbook,
     sync_attendance_to_sf2_workbook,
 };
 

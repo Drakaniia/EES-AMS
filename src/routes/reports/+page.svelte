@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { fade } from 'svelte/transition';
+	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
@@ -13,8 +15,7 @@
 		getSf2ExportPreview,
 		getSf2WorkbookSettings,
 		listClasses,
-		openSf2Workbook,
-		syncSf2Attendance,
+		syncAndOpenSf2Workbook,
 		syncSf2Roster,
 		toggleSf2PreviewAttendance,
 		updateSf2WorkbookSettings,
@@ -32,14 +33,16 @@
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import {
 		ArrowLeft,
+		CheckCircle2,
+		CircleX,
 		ExternalLink,
 		Maximize2,
 		Pencil,
 		RefreshCw,
 		Save,
 		Settings2,
-		TriangleAlert,
-		UserX
+		UserX,
+		X
 	} from 'lucide-svelte';
 	import {
 		buildMatrixWeekGroups,
@@ -50,6 +53,34 @@
 		type MatrixStudentRow
 	} from './report-state.svelte';
 
+	// ── Friendly loading messages that cycle during SF2 open ────────────────
+	const SF2_OPEN_MESSAGES = [
+		'Warming up the workbook…',
+		'Reading attendance records…',
+		'Writing marks to the workbook…',
+		'Almost there, wrapping things up…',
+		'Opening in Excel…',
+		'Double-checking everything is in order…',
+		'Just a moment longer!'
+	] as const;
+
+	// ── Progress state for the SF2 open dialog ──────────────────────────────
+	type Sf2OpenStatus = 'idle' | 'syncing' | 'success' | 'error';
+	let sf2OpenStatus = $state<Sf2OpenStatus>('idle');
+	let sf2OpenProgressCurrent = $state(0);
+	let sf2OpenProgressTotal = $state(10);
+	let sf2OpenMessage = $state('');
+	let sf2OpenError = $state<string | null>(null);
+	let sf2OpenResultPath = $state<string | null>(null);
+
+	// Cycling messages state
+	let sf2OpenCycleIndex = $state(0);
+	let sf2OpenLastBackendMsg = $state('');
+	let sf2OpenLastBackendTime = $state(0);
+	let sf2OpenCycleTimer: ReturnType<typeof setInterval> | null = null;
+	let sf2OpenSuccessTimer: ReturnType<typeof setTimeout> | null = null;
+	let sf2OpenUnlisten: UnlistenFn | null = null;
+
 	let classes = $state<Class[]>([]);
 	let selectedClassId = $state('');
 	let preview = $state<Sf2ExportPreview | null>(null);
@@ -58,9 +89,6 @@
 	let loadError = $state<string | null>(null);
 	let genderFilter = $state<'all' | 'male' | 'female'>('all');
 	let exporting = $state(false);
-	let opening = $state(false);
-	let syncingOpen = $state(false);
-	let syncError = $state<string | null>(null);
 	let syncingRoster = $state(false);
 	let savingDetails = $state(false);
 	let correctingCellKey = $state<string | null>(null);
@@ -84,6 +112,148 @@
 	onMount(async () => {
 		await loadInitial();
 	});
+
+	onDestroy(() => {
+		cleanupSf2Open();
+	});
+
+	// ── SF2 Open progress helpers ───────────────────────────────────────────
+
+	function startSf2MessageCycle() {
+		stopSf2MessageCycle();
+		sf2OpenCycleTimer = setInterval(() => {
+			const now = Date.now();
+			// Only cycle if no backend message arrived in the last 3 seconds
+			if (now - sf2OpenLastBackendTime > 3000) {
+				sf2OpenCycleIndex = (sf2OpenCycleIndex + 1) % SF2_OPEN_MESSAGES.length;
+			}
+		}, 2500);
+	}
+
+	function stopSf2MessageCycle() {
+		if (sf2OpenCycleTimer !== null) {
+			clearInterval(sf2OpenCycleTimer);
+			sf2OpenCycleTimer = null;
+		}
+	}
+
+	const sf2OpenDisplayMessage = $derived.by(() => {
+		if (sf2OpenLastBackendMsg && Date.now() - sf2OpenLastBackendTime < 4000) {
+			return sf2OpenLastBackendMsg;
+		}
+		// Map progress steps to messages when no backend message
+		if (sf2OpenProgressCurrent > 0 && sf2OpenProgressTotal > 0) {
+			const progressMessages: Record<number, string> = {
+				1: 'Warming up the workbook…',
+				2: 'Reading attendance records…',
+				3: 'Checking date mappings…',
+				4: 'Clearing previous marks…',
+				5: 'Computing attendance marks…',
+				6: 'Writing marks to the workbook…',
+				7: 'Saving workbook changes…',
+				8: 'Preparing to open…',
+				9: 'Opening in Excel…',
+				10: 'Done!'
+			};
+			return progressMessages[sf2OpenProgressCurrent] || SF2_OPEN_MESSAGES[sf2OpenCycleIndex];
+		}
+		return SF2_OPEN_MESSAGES[sf2OpenCycleIndex];
+	});
+
+	const sf2OpenProgressPercent = $derived.by(() => {
+		if (sf2OpenProgressTotal <= 0) return 0;
+		return Math.round((sf2OpenProgressCurrent / sf2OpenProgressTotal) * 100);
+	});
+
+	async function setupSf2ProgressListener() {
+		cleanupSf2Open();
+		try {
+			sf2OpenUnlisten = await listen<{
+				task: string;
+				current: number;
+				total: number;
+				message: string;
+			}>('sf2-progress', (event) => {
+				if (event.payload.task === 'open') {
+					sf2OpenProgressCurrent = event.payload.current;
+					sf2OpenProgressTotal = event.payload.total;
+					if (event.payload.message) {
+						sf2OpenLastBackendMsg = event.payload.message;
+						sf2OpenLastBackendTime = Date.now();
+					}
+				}
+			});
+		} catch {
+			// Listener setup failed; continue without it (indeterminate fallback)
+		}
+	}
+
+	function cleanupSf2Open() {
+		stopSf2MessageCycle();
+		if (sf2OpenSuccessTimer !== null) {
+			clearTimeout(sf2OpenSuccessTimer);
+			sf2OpenSuccessTimer = null;
+		}
+		if (sf2OpenUnlisten) {
+			sf2OpenUnlisten();
+			sf2OpenUnlisten = null;
+		}
+	}
+
+	async function onOpenSf2() {
+		if (!activeClassId || !preview?.template || sf2OpenStatus === 'syncing') return;
+
+		// Reset progress state
+		sf2OpenStatus = 'syncing';
+		sf2OpenProgressCurrent = 0;
+		sf2OpenProgressTotal = 10;
+		sf2OpenMessage = '';
+		sf2OpenError = null;
+		sf2OpenResultPath = null;
+		sf2OpenCycleIndex = 0;
+		sf2OpenLastBackendMsg = '';
+		sf2OpenLastBackendTime = 0;
+
+		// Show first step immediately for responsiveness
+		sf2OpenProgressCurrent = 1;
+		sf2OpenCycleIndex = 0;
+
+		// Set up progress event listener
+		await setupSf2ProgressListener();
+		startSf2MessageCycle();
+
+		try {
+			const path = await syncAndOpenSf2Workbook(activeClassId);
+			sf2OpenResultPath = path;
+			sf2OpenStatus = 'success';
+			stopSf2MessageCycle();
+			reportDialogs?.showToast(`Opened SF2 working copy: ${path}`);
+
+			// Auto-close after 1.5 seconds
+			sf2OpenSuccessTimer = setTimeout(() => {
+				sf2OpenStatus = 'idle';
+			}, 1500);
+		} catch (error) {
+			stopSf2MessageCycle();
+			const msg = errorMessage(error, 'Failed to update SF2 workbook');
+			if (msg.toLowerCase().includes('excel')) {
+				sf2OpenError =
+					'The SF2 working copy is currently open in Microsoft Excel. ' +
+					'Close the workbook in Excel first, then click Open SF2 again.';
+			} else {
+				sf2OpenError = `Could not sync attendance to the SF2 workbook: ${msg}`;
+			}
+			sf2OpenStatus = 'error';
+		}
+	}
+
+	async function retrySf2Open() {
+		sf2OpenStatus = 'idle';
+		sf2OpenError = null;
+		// Small delay so the UI resets cleanly before re-triggering
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		await onOpenSf2();
+	}
 
 	const activeClassId = $derived(
 		selectedClassId || preview?.classId || preview?.template?.classId || ''
@@ -150,36 +320,7 @@
 		}
 	}
 
-	async function onOpenSf2() {
-		if (!activeClassId || !preview?.template || opening || syncingOpen) return;
-		syncError = null;
-		syncingOpen = true;
-		try {
-			await syncSf2Attendance(activeClassId);
-			opening = true;
-			const path = await openSf2Workbook(activeClassId);
-			reportDialogs?.showToast(`Opened SF2 working copy: ${path}`);
-			syncingOpen = false;
-		} catch (error) {
-			const msg = errorMessage(error, 'Failed to update SF2 workbook');
-			// Detect if the error is from Excel COM (file locked while open in Excel)
-			if (msg.toLowerCase().includes('excel')) {
-				syncError =
-					'The SF2 working copy is currently open in Microsoft Excel. ' +
-					'Close the workbook in Excel first, then click Open SF2 again.';
-			} else {
-				syncError = `Could not sync attendance to the SF2 workbook: ${msg}`;
-			}
-		} finally {
-			opening = false;
-		}
-	}
 
-	async function retrySync() {
-		syncError = null;
-		syncingOpen = false;
-		await onOpenSf2();
-	}
 
 	async function onSyncRoster() {
 		if (!activeClassId || !preview?.template || syncingRoster) return;
@@ -404,10 +545,7 @@
 					aria-label="Sync class roster to SF2 workbook"
 				>
 					{#if syncingRoster}
-						<span
-							class="size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
-							aria-hidden="true"
-						></span>
+						<Spinner />
 					{:else}
 						<RefreshCw class="size-4" aria-hidden="true" />
 					{/if}
@@ -416,11 +554,11 @@
 				<button
 					type="button"
 					onclick={onOpenSf2}
-					disabled={!preview?.template || opening || syncingOpen || !activeClassId}
+					disabled={!preview?.template || sf2OpenStatus === 'syncing' || !activeClassId}
 					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					<ExternalLink class="size-4" aria-hidden="true" />
-					{syncingOpen ? 'Syncing...' : opening ? 'Opening...' : 'Open SF2'}
+					{sf2OpenStatus === 'syncing' ? 'Opening...' : 'Open SF2'}
 				</button>
 				<button
 					type="button"
@@ -751,50 +889,105 @@
 	</label>
 {/snippet}
 
-{#if syncingOpen || syncError}
+{#if sf2OpenStatus !== 'idle'}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		role="dialog"
 		aria-modal="true"
-		aria-label={syncError ? 'Sync failed' : 'Syncing SF2 workbook'}
-		class="fixed inset-0 z-[70] flex items-center justify-center bg-background/40"
+		aria-label={sf2OpenStatus === 'error' ? 'Opening failed' : 'Opening SF2 workbook'}
+		class="fixed inset-0 z-[70] flex items-center justify-center bg-background/40 backdrop-blur-[2px] transition-opacity"
+		tabindex="-1"
+		onkeydown={(e) => {
+			if (e.key === 'Escape' && sf2OpenStatus === 'error') {
+				sf2OpenStatus = 'idle';
+			}
+		}}
 	>
-		{#if syncError}
+		{#if sf2OpenStatus === 'error'}
+			<!-- Error state -->
 			<div
 				class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
 			>
-				<div class="flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600">
-					<TriangleAlert class="size-6" aria-hidden="true" />
+				<div
+					class="flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600"
+				>
+					<CircleX class="size-6" aria-hidden="true" />
 				</div>
 				<div class="space-y-2">
-					<h3 class="text-base font-semibold text-foreground">Unable to sync workbook</h3>
-					<p class="text-sm leading-relaxed text-muted-foreground">{syncError}</p>
+					<h3 class="text-base font-semibold text-foreground">Unable to open workbook</h3>
+					<p class="text-sm leading-relaxed text-muted-foreground">{sf2OpenError}</p>
 				</div>
 				<div class="flex gap-3">
 					<button
 						type="button"
-						onclick={() => {
-							syncError = null;
-							syncingOpen = false;
-						}}
+						onclick={() => (sf2OpenStatus = 'idle')}
 						class="control-ring rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 					>
 						Close
 					</button>
 					<button
 						type="button"
-						onclick={retrySync}
+						onclick={retrySf2Open}
 						class="control-ring rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent"
 					>
 						Try again
 					</button>
 				</div>
 			</div>
-		{:else}
+		{:else if sf2OpenStatus === 'success'}
+			<!-- Success state -->
 			<div
-				class="flex flex-col items-center gap-4 rounded-2xl border border-border bg-surface p-8 shadow-2xl"
+				class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
+				in:fade={{ duration: 200 }}
 			>
-				<Spinner class="size-8 text-primary" />
-				<p class="text-sm font-medium text-foreground">Syncing attendance to SF2 workbook…</p>
+				<div
+					class="flex size-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"
+				>
+					<CheckCircle2 class="size-6" aria-hidden="true" />
+				</div>
+				<div class="space-y-1">
+					<h3 class="text-base font-semibold text-foreground">Workbook opened!</h3>
+					<p class="text-xs text-muted-foreground">
+						{sf2OpenResultPath ? `Location: ${sf2OpenResultPath}` : ''}
+					</p>
+				</div>
+			</div>
+		{:else}
+			<!-- Progress state (syncing) -->
+			<div
+				class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
+				role="status"
+				aria-live="polite"
+			>
+				<!-- Current friendly message -->
+				<div class="space-y-1">
+					<p class="text-sm font-semibold text-foreground transition-all duration-300">
+						{sf2OpenDisplayMessage}
+					</p>
+				</div>
+
+				<!-- Determinate progress bar with percentage -->
+				<div class="w-full space-y-2">
+					<div
+						class="h-3 w-full overflow-hidden rounded-pill border border-primary/20 bg-background"
+						role="progressbar"
+						aria-valuemin="0"
+						aria-valuemax={sf2OpenProgressTotal}
+						aria-valuenow={sf2OpenProgressCurrent}
+						aria-valuetext={`${sf2OpenProgressPercent} percent`}
+					>
+						<div
+							class="h-full rounded-pill bg-primary transition-all duration-400 ease-out"
+							style="width: {sf2OpenProgressPercent}%"
+						></div>
+					</div>
+					<div class="label-mono text-xs text-primary">{sf2OpenProgressPercent}%</div>
+				</div>
+
+				<!-- Subtle "closing soon" hint when at 100% -->
+				{#if sf2OpenProgressPercent >= 100}
+					<p class="text-xs text-muted-foreground">Finalizing…</p>
+				{/if}
 			</div>
 		{/if}
 	</div>

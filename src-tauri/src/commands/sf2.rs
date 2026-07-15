@@ -224,6 +224,19 @@ pub async fn export_sf2_workbook(
     Ok(result)
 }
 
+/// Sync attendance to the SF2 workbook and open it in Excel, emitting progress
+/// events throughout the entire workflow so the frontend can show a determinate
+/// progress bar with friendly messages.
+#[tauri::command]
+pub async fn sync_and_open_sf2_workbook(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: String,
+) -> std::result::Result<String, String> {
+    service::sync_and_open_sf2_workbook(&app, pool.inner().clone(), &class_id)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn open_sf2_workbook(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
