@@ -17,8 +17,8 @@ src-tauri/target/
 Thumbs.db
 
 # Binary/docs
-#*.xls
-#*.xlsx
+*.xls
+*.xlsx
 
 # Env
 .env

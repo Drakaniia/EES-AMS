@@ -13,33 +13,6 @@ use tauri_plugin_dialog::DialogExt;
 pub(super) const BUNDLED_TEMPLATE_BYTES: &[u8] =
     include_bytes!("../../resources/sf2/TEMPLATE_AUTOMATED_SF2.xls");
 
-pub(super) fn copy_workbook_to_app_data<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    source_path: &Path,
-    template_id: &str,
-    analysis: &Sf2WorkbookAnalysis,
-) -> Result<PathBuf> {
-    let dir = sf2_workbook_dir(app)?;
-    let template_prefix = template_id.chars().take(8).collect::<String>();
-    let file_name = format!(
-        "SF2-{}-{}-{}.xls",
-        sanitized_or(&analysis.grade_level, "GRADE"),
-        sanitized_or(&analysis.section, "SECTION"),
-        template_prefix
-    );
-    let working_copy_path = dir.join(file_name);
-
-    if source_path != working_copy_path {
-        std::fs::copy(source_path, &working_copy_path).map_err(|error| {
-            AppError::Internal(format!(
-                "failed to copy SF2 workbook into app data: {error}"
-            ))
-        })?;
-    }
-
-    Ok(working_copy_path)
-}
-
 pub(super) fn write_bundled_template_to_dir(
     dir: &Path,
     template_id: &str,
@@ -199,12 +172,6 @@ pub(super) fn write_temp_binary_file(
     file.write_all(contents)
         .map_err(|error| AppError::Internal(format!("failed to write temp file: {error}")))?;
     Ok(path)
-}
-
-pub(super) fn file_hash(path: &Path) -> Result<String> {
-    let bytes = std::fs::read(path)
-        .map_err(|error| AppError::Internal(format!("failed to read SF2 workbook: {error}")))?;
-    Ok(hash_bytes(&bytes))
 }
 
 pub(super) fn layout_fingerprint(analysis: &Sf2WorkbookAnalysis) -> String {
