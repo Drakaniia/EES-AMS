@@ -119,6 +119,90 @@ pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
                 }
             }
 
+            // ── Fallback: no monthly sheets found ─────────────────────────
+            // When a workbook has no sheets with standard month+year names
+            // (e.g. single-sheet workbooks named "school_form_2_ver2014.2.1.1"),
+            // fall back to the first visible sheet that contains "School Form 2"
+            // in cell A1 and extract metadata / dates / learners from it.
+            if first_monthly_sheet.is_none() {
+                for sheet_index in 1..=sheet_count {
+                    let sheet = sheets.get_object_with_args(
+                        "Item",
+                        vec![ComVariant::i4(sheet_index)],
+                    )?;
+                    let sheet_name = sheet.get_string("Name")?;
+                    let visible = sheet.get_i32("Visible")?;
+
+                    // Skip sheets already handled as monthly (above)
+                    if month_number(&sheet_name) > 0 && year_from_sheet_name(&sheet_name) > 0 {
+                        continue;
+                    }
+
+                    // Use the shared candidate check: visible, non-monthly, SF2 title
+                    let title = cell_text(&sheet, 1, 1)?.trim().to_string();
+                    if !sheet_is_analysis_candidate(&sheet_name, &title, visible) {
+                        continue;
+                    }
+
+                    // Extract metadata from the fallback sheet
+                    school_id = cell_text(&sheet, 3, 6)?.trim().to_string();
+                    school_name = cell_text(&sheet, 4, 6)?.trim().to_string();
+                    school_year = cell_text(&sheet, 3, 13)?.trim().to_string();
+                    report_month = cell_text(&sheet, 3, 27)?.trim().to_string();
+                    grade_level = cell_text(&sheet, 4, 27)?.trim().to_string();
+                    section = cell_text(&sheet, 4, 39)?.trim().to_string();
+                    adviser_name = cell_text(&sheet, 76, 40)?.trim().to_string();
+                    if adviser_name.is_empty() {
+                        adviser_name = cell_text(&sheet, 82, 26)?.trim().to_string();
+                    }
+                    school_head_name = cell_text(&sheet, 82, 40)?.trim().to_string();
+
+                    // Derive the year and month for constructing dates from
+                    // the report month metadata found in the workbook itself.
+                    let fallback_month = month_number(&report_month);
+                    let fallback_year = if fallback_month > 0 {
+                        report_year(&school_year, fallback_month)
+                    } else {
+                        report_year("", 1)
+                    };
+                    let date_year = fallback_year;
+                    let date_month = if fallback_month > 0 {
+                        fallback_month
+                    } else {
+                        1
+                    };
+
+                    for column in 6..=38 {
+                        let day_text = cell_text(&sheet, 6, column)?.trim().to_string();
+                        let Ok(day) = day_text.parse::<u32>() else {
+                            continue;
+                        };
+                        if !(1..=31).contains(&day) {
+                            continue;
+                        }
+                        let Some(date) = NaiveDate::from_ymd_opt(
+                            date_year,
+                            date_month,
+                            day,
+                        ) else {
+                            continue;
+                        };
+                        dates.push(Sf2WorkbookDate {
+                            sheet_name: sheet_name.clone(),
+                            date: date.format("%Y-%m-%d").to_string(),
+                            column_letter: column_number_to_letter(column),
+                            column_index: column as u32,
+                        });
+                    }
+
+                    // Also use this sheet for learner detection
+                    let quality = sf2_sheet_quality(&sheet)?;
+                    best_roster_sheet = Some((sheet.clone(), quality));
+                    first_monthly_sheet = Some(sheet);
+                    break;
+                }
+            }
+
             let learner_sheet = best_roster_sheet
                 .map(|(sheet, _)| sheet)
                 .or(first_monthly_sheet);
@@ -909,6 +993,238 @@ pub fn column_number_to_letter(mut column: i32) -> String {
 
 pub fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
     haystack.to_uppercase().contains(&needle.to_uppercase())
+}
+
+/// Determine whether a worksheet should be used as an analysis source based on
+/// its sheet name, title, and visibility.
+///
+/// - Monthly sheets (name contains a month abbreviation + 4-digit year starting
+///   with "20") are always candidates — they have proper date headers.
+/// - Non-monthly sheets are candidates ONLY if their cell A1 contains "School Form 2"
+///   (indicating they are genuine SF2 forms despite the non-standard sheet name).
+/// - Hidden sheets are never included.
+pub fn sheet_is_analysis_candidate(name: &str, title: &str, visible: i32) -> bool {
+    if visible != -1 {
+        return false;
+    }
+
+    let mn = month_number(name);
+    let yr = year_from_sheet_name(name);
+    if mn > 0 && yr > 0 {
+        // Monthly sheet — always a candidate
+        return true;
+    }
+
+    // Non-monthly sheet — only a candidate if it is a genuine SF2 form
+    contains_ignore_ascii_case(title, "School Form 2")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── month_number ──────────────────────────────────────────────────────
+
+    #[test]
+    fn month_number_standard_month_name() {
+        assert_eq!(month_number("JUNE 2026"), 6);
+    }
+
+    #[test]
+    fn month_number_lowercase() {
+        assert_eq!(month_number("june 2026"), 6);
+    }
+
+    #[test]
+    fn month_number_partial_match_march() {
+        // "MAR" is inside "MARCH"
+        assert_eq!(month_number("MARCH 2026"), 3);
+    }
+
+    #[test]
+    fn month_number_problematic_sheet_name() {
+        // The sheet name from the failing SF2 file
+        assert_eq!(month_number("school_form_2_ver2014.2.1.1"), 0);
+    }
+
+    #[test]
+    fn month_number_empty_string() {
+        assert_eq!(month_number(""), 0);
+    }
+
+    #[test]
+    fn month_number_no_match() {
+        // "SUMMARY" contains "MAR" as substring (positions 3-5), so it
+        // returns 3. Use a truly non-matching name for the "no match" test.
+        assert_eq!(month_number("OVERVIEW"), 0);
+    }
+
+    #[test]
+    fn month_number_all_months() {
+        assert_eq!(month_number("JANUARY 2026"), 1);
+        assert_eq!(month_number("FEBRUARY 2026"), 2);
+        assert_eq!(month_number("MARCH 2026"), 3);
+        assert_eq!(month_number("APRIL 2026"), 4);
+        assert_eq!(month_number("MAY 2026"), 5);
+        assert_eq!(month_number("JUNE 2026"), 6);
+        assert_eq!(month_number("JULY 2026"), 7);
+        assert_eq!(month_number("AUGUST 2026"), 8);
+        assert_eq!(month_number("SEPTEMBER 2026"), 9);
+        assert_eq!(month_number("OCTOBER 2026"), 10);
+        assert_eq!(month_number("NOVEMBER 2026"), 11);
+        assert_eq!(month_number("DECEMBER 2026"), 12);
+    }
+
+    // ── year_from_sheet_name ──────────────────────────────────────────────
+
+    #[test]
+    fn year_from_sheet_name_standard() {
+        assert_eq!(year_from_sheet_name("JUNE 2026"), 2026);
+    }
+
+    #[test]
+    fn year_from_sheet_name_problematic_name() {
+        // The sheet name contains "2014" from the version string
+        assert_eq!(year_from_sheet_name("school_form_2_ver2014.2.1.1"), 2014);
+    }
+
+    #[test]
+    fn year_from_sheet_name_no_year() {
+        assert_eq!(year_from_sheet_name("SUMMARY"), 0);
+    }
+
+    #[test]
+    fn year_from_sheet_name_not_starting_with_20() {
+        assert_eq!(year_from_sheet_name("SHEET_1999"), 0);
+    }
+
+    #[test]
+    fn year_from_sheet_name_four_digit_starting_with_20() {
+        assert_eq!(year_from_sheet_name("SHEET_2026"), 2026);
+    }
+
+    #[test]
+    fn year_from_sheet_name_empty_string() {
+        assert_eq!(year_from_sheet_name(""), 0);
+    }
+
+    // ── contains_ignore_ascii_case ────────────────────────────────────────
+
+    #[test]
+    fn contains_ignore_ascii_case_exact_match() {
+        assert!(contains_ignore_ascii_case("School Form 2", "School Form 2"));
+    }
+
+    #[test]
+    fn contains_ignore_ascii_case_case_insensitive() {
+        assert!(contains_ignore_ascii_case("school form 2 (sf2)", "School Form 2"));
+    }
+
+    #[test]
+    fn contains_ignore_ascii_case_substring() {
+        assert!(contains_ignore_ascii_case(
+            "School Form 2 (SF2) Daily Attendance Report of Learners",
+            "School Form 2"
+        ));
+    }
+
+    #[test]
+    fn contains_ignore_ascii_case_no_match() {
+        assert!(!contains_ignore_ascii_case("Something else entirely", "School Form 2"));
+    }
+
+    #[test]
+    fn contains_ignore_ascii_case_empty_haystack() {
+        assert!(!contains_ignore_ascii_case("", "School Form 2"));
+    }
+
+    #[test]
+    fn contains_ignore_ascii_case_empty_needle() {
+        assert!(contains_ignore_ascii_case("anything", ""));
+    }
+
+    // ── column_number_to_letter ───────────────────────────────────────────
+
+    #[test]
+    fn column_number_to_letter_a() {
+        assert_eq!(column_number_to_letter(1), "A");
+    }
+
+    #[test]
+    fn column_number_to_letter_z() {
+        assert_eq!(column_number_to_letter(26), "Z");
+    }
+
+    #[test]
+    fn column_number_to_letter_aa() {
+        assert_eq!(column_number_to_letter(27), "AA");
+    }
+
+    #[test]
+    fn column_number_to_letter_f() {
+        assert_eq!(column_number_to_letter(6), "F");
+    }
+
+    #[test]
+    fn column_number_to_letter_al() {
+        assert_eq!(column_number_to_letter(38), "AL");
+    }
+
+    // ── sheet_is_analysis_candidate ───────────────────────────────────────
+
+    #[test]
+    fn sheet_is_analysis_candidate_monthly_sheet() {
+        // Standard monthly sheet should always be a candidate
+        assert!(sheet_is_analysis_candidate(
+            "JUNE 2026",
+            "School Form 2 (SF2) Daily Attendance Report of Learners",
+            -1,
+        ));
+    }
+
+    #[test]
+    fn sheet_is_analysis_candidate_non_monthly_sf2_sheet() {
+        // THIS IS THE BUG REPRODUCTION:
+        // A visible sheet containing a genuine SF2 form but with a non-standard
+        // sheet name (like the failing file) should be usable as a fallback.
+        // Currently the code skips it entirely — this test expects it to work.
+        assert!(sheet_is_analysis_candidate(
+            "school_form_2_ver2014.2.1.1",
+            "School Form 2 (SF2) Daily Attendance Report of Learners",
+            -1,
+        ));
+    }
+
+    #[test]
+    fn sheet_is_analysis_candidate_non_monthly_non_sf2_sheet() {
+        // A non-monthly sheet that is NOT an SF2 form should not be a candidate
+        assert!(!sheet_is_analysis_candidate(
+            "Summary",
+            "Some random data",
+            -1,
+        ));
+    }
+
+    #[test]
+    fn sheet_is_analysis_candidate_hidden_sheet() {
+        // Hidden sheets should never be candidates
+        assert!(!sheet_is_analysis_candidate(
+            "JUNE 2026",
+            "School Form 2 (SF2) Daily Attendance Report of Learners",
+            0,
+        ));
+    }
+
+    #[test]
+    fn sheet_is_analysis_candidate_non_monthly_sf2_with_no_sf2_title() {
+        // A non-monthly sheet that has a name matching the problematic pattern
+        // but doesn't have "School Form 2" in the title should NOT be a candidate
+        assert!(!sheet_is_analysis_candidate(
+            "school_form_2_ver2014.2.1.1",
+            "Some other data",
+            -1,
+        ));
+    }
 }
 
 pub fn sf2_sheet_quality(sheet: &ComObject) -> Result<Sf2SheetQuality> {
