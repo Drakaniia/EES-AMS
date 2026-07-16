@@ -4,6 +4,33 @@ use crate::sf2::models::{Sf2WorkbookAnalysis, Sf2WorkbookMetadata};
 use std::collections::HashSet;
 use std::path::Path;
 
+// Re-export the WorkbookSession type on Windows so callers can use it.
+#[cfg(target_os = "windows")]
+pub use super::excel_com::WorkbookSession;
+
+/// Placeholder for non-Windows platforms.
+#[cfg(not(target_os = "windows"))]
+pub struct WorkbookSession;
+
+/// Perform multiple Excel operations in a single Excel process.
+///
+/// Opens the workbook, runs `action` with a session handle that exposes
+/// all the standard operations (analyze, write_marks, write_metadata, etc.),
+/// then saves (if `save_on_close`) and closes.
+///
+/// This is the Phase 1 batching API — call once instead of 9 separate times.
+pub fn batch_operations<T, F>(
+    path: &Path,
+    save_on_close: bool,
+    action: F,
+) -> Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce(&WorkbookSession) -> Result<T> + Send + 'static,
+{
+    batch_operations_impl(path, save_on_close, action)
+}
+
 pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
     analyze_workbook_impl(path)
 }
@@ -70,6 +97,32 @@ pub fn expand_roster_rows(
 
 pub fn write_metadata(workbook_path: &Path, metadata: &Sf2WorkbookMetadata) -> Result<()> {
     write_metadata_impl(workbook_path, metadata)
+}
+
+#[cfg(target_os = "windows")]
+fn batch_operations_impl<T, F>(
+    path: &Path,
+    save_on_close: bool,
+    action: F,
+) -> Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce(&super::excel_com::WorkbookSession) -> Result<T> + Send + 'static,
+{
+    super::excel_com::batch_operations(path, save_on_close, action)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn batch_operations_impl<T, F>(
+    _path: &Path,
+    _save_on_close: bool,
+    _action: F,
+) -> Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce(&WorkbookSession) -> Result<T> + Send + 'static,
+{
+    Err(unsupported_excel_automation())
 }
 
 #[cfg(target_os = "windows")]
