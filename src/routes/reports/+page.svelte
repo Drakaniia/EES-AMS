@@ -15,6 +15,7 @@
 		getSf2ExportPreview,
 		getSf2WorkbookSettings,
 		listClasses,
+		setSf2ReportMonth,
 		syncAndOpenSf2Workbook,
 		syncSf2Roster,
 		toggleSf2PreviewAttendance,
@@ -33,6 +34,8 @@
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import {
 		ArrowLeft,
+		Calendar,
+		Check,
 		CheckCircle2,
 		CircleX,
 		ExternalLink,
@@ -77,6 +80,7 @@
 	let sf2OpenCycleIndex = $state(0);
 	let sf2OpenLastBackendMsg = $state('');
 	let sf2OpenLastBackendTime = $state(0);
+	let sf2OpenDisplayMessage = $state('');
 	let sf2OpenCycleTimer: ReturnType<typeof setInterval> | null = null;
 	let sf2OpenSuccessTimer: ReturnType<typeof setTimeout> | null = null;
 	let sf2OpenUnlisten: UnlistenFn | null = null;
@@ -97,6 +101,9 @@
 	let fullReviewOpen = $state(false);
 	let fullReviewHeaderVisible = $state(false);
 	let workbookDetailsOpen = $state(false);
+	let monthPickerOpen = $state(false);
+	let monthSwitchLoading = $state(false);
+	let monthSwitchError = $state<string | null>(null);
 	let modalSaving = $state(false);
 	let reportDialogs: ReportExportDialogs;
 
@@ -121,12 +128,14 @@
 
 	function startSf2MessageCycle() {
 		stopSf2MessageCycle();
+		updateSf2DisplayMessage();
 		sf2OpenCycleTimer = setInterval(() => {
 			const now = Date.now();
 			// Only cycle if no backend message arrived in the last 3 seconds
 			if (now - sf2OpenLastBackendTime > 3000) {
 				sf2OpenCycleIndex = (sf2OpenCycleIndex + 1) % SF2_OPEN_MESSAGES.length;
 			}
+			updateSf2DisplayMessage();
 		}, 2500);
 	}
 
@@ -137,9 +146,14 @@
 		}
 	}
 
-	const sf2OpenDisplayMessage = $derived.by(() => {
+	/// Compute the current display message using $state so it's always reactive.
+	/// Called from the cycle timer, the progress event listener, and on reset.
+	/// Previously used $derived + Date.now() which was NOT reactive.
+	function updateSf2DisplayMessage() {
+		// Backend message has priority for 4 seconds
 		if (sf2OpenLastBackendMsg && Date.now() - sf2OpenLastBackendTime < 4000) {
-			return sf2OpenLastBackendMsg;
+			sf2OpenDisplayMessage = sf2OpenLastBackendMsg;
+			return;
 		}
 		// Map progress steps to messages when no backend message
 		if (sf2OpenProgressCurrent > 0 && sf2OpenProgressTotal > 0) {
@@ -155,10 +169,11 @@
 				9: 'Opening in Excel…',
 				10: 'Done!'
 			};
-			return progressMessages[sf2OpenProgressCurrent] || SF2_OPEN_MESSAGES[sf2OpenCycleIndex];
+			sf2OpenDisplayMessage = progressMessages[sf2OpenProgressCurrent] || SF2_OPEN_MESSAGES[sf2OpenCycleIndex];
+			return;
 		}
-		return SF2_OPEN_MESSAGES[sf2OpenCycleIndex];
-	});
+		sf2OpenDisplayMessage = SF2_OPEN_MESSAGES[sf2OpenCycleIndex];
+	}
 
 	const sf2OpenProgressPercent = $derived.by(() => {
 		if (sf2OpenProgressTotal <= 0) return 0;
@@ -181,6 +196,7 @@
 						sf2OpenLastBackendMsg = event.payload.message;
 						sf2OpenLastBackendTime = Date.now();
 					}
+					updateSf2DisplayMessage();
 				}
 			});
 		} catch {
@@ -399,8 +415,39 @@
 	async function onReportMonthChange() {
 		const previousReportMonth =
 			workbookSettings?.reportMonth || preview?.template?.reportMonth || '';
-		const saved = await saveWorkbookDetails('SF2 report month updated');
-		if (!saved) draftReportMonth = previousReportMonth;
+		const nextMonth = draftReportMonth;
+		if (!nextMonth || nextMonth === previousReportMonth) return;
+
+		// Lightweight switch: update only the active report month in the DB.
+		// This deliberately avoids the heavy Excel automation that a full
+		// settings save would trigger, so switching months is instant and
+		// cannot fail with "Excel automation failed" when Excel is locked.
+		if (!activeClassId) {
+			draftReportMonth = previousReportMonth;
+			return;
+		}
+
+		monthSwitchLoading = true;
+		monthSwitchError = null;
+		const switchStartTime = Date.now();
+		try {
+			await setSf2ReportMonth(activeClassId, nextMonth);
+			await loadReport(activeClassId);
+			reportDialogs?.showToast(`Switched to ${reportMonthLabel(nextMonth)}`);
+		} catch (error) {
+			const msg = errorMessage(error, 'Failed to switch report month');
+			monthSwitchError = msg;
+			reportDialogs?.showToast(`Could not switch month: ${msg}`, false);
+			draftReportMonth = previousReportMonth;
+		} finally {
+			// Ensure the progress dialog is visible for at least 500ms to
+			// prevent a jarring flash for fast switches.
+			const elapsed = Date.now() - switchStartTime;
+			if (elapsed < 500) {
+				await new Promise((resolve) => setTimeout(resolve, 500 - elapsed));
+			}
+			monthSwitchLoading = false;
+		}
 	}
 
 	function onWindowKeydown(event: KeyboardEvent) {
@@ -450,11 +497,12 @@
 
 	let hasModalDraftChanges = $derived.by(() => {
 		if (!workbookSettings) return false;
+		// Report Month is excluded from modal draft changes because it is
+		// changed exclusively via the Switch Month button, not the edit dialog.
 		return (
 			draftSchoolId !== workbookSettings.schoolId ||
 			draftSchoolName !== workbookSettings.schoolName ||
 			draftSchoolYear !== workbookSettings.schoolYear ||
-			draftReportMonth !== workbookSettings.reportMonth ||
 			draftGradeLevel !== workbookSettings.gradeLevel ||
 			draftSection !== workbookSettings.section ||
 			draftAdviserName !== workbookSettings.adviserName ||
@@ -650,6 +698,16 @@
 							<Pencil class="size-3.5" aria-hidden="true" />
 							Edit
 						</button>
+						<button
+							type="button"
+							onclick={() => (monthPickerOpen = true)}
+							disabled={!workbookSettings || !activeClassId}
+							class="control-ring inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+							title="Switch SF2 report month"
+						>
+							<Calendar class="size-3.5" aria-hidden="true" />
+							Switch month
+						</button>
 					</div>
 					<dl class="mt-4 space-y-3 text-sm">
 						{@render metaRow('Class', preview.className || selectedClass?.name || 'Unlinked')}
@@ -819,20 +877,12 @@
 		{@render modalTextField('School Year', draftSchoolYear, 'draftSchoolYear')}
 		<label class="space-y-1.5">
 			<span class="label-mono">Report Month</span>
-			<select
-				value={draftReportMonth}
-				onchange={(e) => {
-					onDraftChange('draftReportMonth', (e.currentTarget as HTMLSelectElement).value);
-					onReportMonthChange();
-				}}
-				disabled={!workbookSettings || modalSaving}
-				class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none disabled:opacity-60"
-			>
-				<option value="">Select month</option>
-				{#each SF2_SCHOOL_MONTHS as month (month.value)}
-					<option value={month.value}>{month.label}</option>
-				{/each}
-			</select>
+			<input
+				value={reportMonthLabel(draftReportMonth || workbookSettings?.reportMonth || '')}
+				disabled={true}
+				class="h-10 w-full rounded-md border border-border bg-muted/30 px-3 text-sm text-muted-foreground opacity-60 cursor-not-allowed"
+				title="Use the 'Switch month' button to change the report month"
+			/>
 		</label>
 		{@render modalTextField('Grade Level', draftGradeLevel, 'draftGradeLevel')}
 		<div class="md:col-span-2">
@@ -874,6 +924,95 @@
 		</div>
 	</div>
 </Dialog>
+
+<Dialog
+	open={monthPickerOpen}
+	title="Switch SF2 Report Month"
+	description="Choose the school month to display. This is instant and does not rewrite the Excel workbook."
+	maxWidth="sm"
+	onClose={() => (monthPickerOpen = false)}
+>
+	<div class="grid grid-cols-2 gap-2">
+		{#each SF2_SCHOOL_MONTHS as month (month.value)}
+			<button
+				type="button"
+				onclick={async () => {
+					draftReportMonth = month.value;
+					monthPickerOpen = false;
+					await onReportMonthChange();
+				}}
+				disabled={!activeClassId}
+				class="control-ring flex items-center justify-between gap-2 rounded-md border px-3 py-2.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {month.value ===
+				(workbookSettings?.reportMonth || preview?.template?.reportMonth)
+					? 'border-primary bg-primary/10 text-primary'
+					: 'border-border bg-background text-foreground hover:bg-surface'}"
+			>
+				<span>{month.label}</span>
+				{#if month.value === (workbookSettings?.reportMonth || preview?.template?.reportMonth)}
+					<Check class="size-4 shrink-0" aria-hidden="true" />
+				{/if}
+			</button>
+		{/each}
+	</div>
+</Dialog>
+
+{#if monthSwitchLoading}
+	<div
+		role="dialog"
+		aria-modal="true"
+		aria-label="Switching SF2 report month"
+		class="fixed inset-0 z-[70] flex items-center justify-center bg-background/40 backdrop-blur-[2px]"
+	>
+		<div
+			class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
+			role="status"
+			aria-live="polite"
+		>
+			<Spinner />
+			<div class="space-y-1">
+				<p class="text-sm font-semibold text-foreground">
+					Switching report month…
+				</p>
+				<p class="text-xs text-muted-foreground">
+					Updating workbook calendar and attendance marks
+				</p>
+			</div>
+		</div>
+	</div>
+{/if}
+
+{#if monthSwitchError}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		role="dialog"
+		aria-modal="true"
+		aria-label="Month switch failed"
+		class="fixed inset-0 z-[70] flex items-center justify-center bg-background/40 backdrop-blur-[2px]"
+		tabindex="-1"
+		onkeydown={(e) => {
+			if (e.key === 'Escape') monthSwitchError = null;
+		}}
+	>
+		<div
+			class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
+		>
+			<div class="flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+				<CircleX class="size-6" aria-hidden="true" />
+			</div>
+			<div class="space-y-2">
+				<h3 class="text-base font-semibold text-foreground">Could not switch month</h3>
+				<p class="text-sm leading-relaxed text-muted-foreground">{monthSwitchError}</p>
+			</div>
+			<button
+				type="button"
+				onclick={() => (monthSwitchError = null)}
+				class="control-ring rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent"
+			>
+				Dismiss
+			</button>
+		</div>
+	</div>
+{/if}
 
 {#snippet modalTextField(label: string, value: string, field: string)}
 	<label class="space-y-1.5">

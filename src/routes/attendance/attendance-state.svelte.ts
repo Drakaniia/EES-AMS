@@ -72,6 +72,15 @@ export function parseDateKey(dateKey: string) {
 	return { year, monthIndex: month - 1, day };
 }
 
+export function adjustDate(dateKey: string, offsetDays: number): string {
+	const parts = parseDateKey(dateKey);
+	if (!parts) return dateKey;
+
+	const date = new Date(parts.year, parts.monthIndex, parts.day);
+	date.setDate(date.getDate() + offsetDays);
+	return fmtDate(date.getTime());
+}
+
 export function formatAttendanceDate(dateKey: string) {
 	const parts = parseDateKey(dateKey);
 	if (!parts) return dateKey;

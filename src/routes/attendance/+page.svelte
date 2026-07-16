@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { CalendarDays } from 'lucide-svelte';
+	import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-svelte';
 	import { page } from '$app/state';
 	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import DatePickerDialog from '$lib/components/ui/DatePickerDialog.svelte';
@@ -12,6 +12,7 @@
 	import AttendanceControls from './attendance-controls.svelte';
 	import AttendanceLog from './attendance-log.svelte';
 	import {
+		getSf2WorkbookSettings,
 		listStudents,
 		listClasses,
 		listEventsForDate,
@@ -26,6 +27,10 @@
 		type Student,
 		type Class
 	} from '$lib/db-rust';
+	import {
+		sf2MonthByValue,
+		defaultSf2FirstSchoolDay
+	} from '$lib/features/settings/sf2-workbook';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import {
@@ -33,6 +38,7 @@
 		getActiveClass,
 		eventTime,
 		formatAttendanceDate,
+		adjustDate,
 		attendanceTimestampForSelectedDate,
 		getAttendanceClass,
 		getSessionKey,
@@ -114,6 +120,33 @@
 				selectedClassId = active?.id ?? classes[0]?.id ?? '';
 			}
 
+			// Sync the attendance page date with the current SF2 report month so
+			// the teacher does not have to manually select a date every time.
+			try {
+				if (selectedClassId) {
+					const sf2Settings = await getSf2WorkbookSettings(selectedClassId);
+					if (sf2Settings?.reportMonth) {
+						const sf2Month = sf2MonthByValue(sf2Settings.reportMonth);
+						if (sf2Month) {
+							const firstSchoolDay = defaultSf2FirstSchoolDay(
+								sf2Settings.reportMonth,
+								sf2Settings.schoolYear
+							);
+							const year = new Date().getFullYear();
+							const adjustedDate = fmtDate(
+								new Date(year, sf2Month.monthIndex, firstSchoolDay).getTime()
+							);
+							if (adjustedDate !== selectedDate) {
+								selectedDate = adjustedDate;
+								events = await listEventsForDate(selectedDate);
+							}
+						}
+					}
+				}
+			} catch {
+				// SF2 not configured — keep the default today date
+			}
+
 			if (page.url.searchParams.get('manual') === 'true') {
 				pickerQuery = '';
 				pickerOpen = true;
@@ -145,6 +178,21 @@
 		events.filter((event) => fmtDate(event.timestamp) === selectedDate)
 	);
 	const selectedDateLabel = $derived(formatAttendanceDate(selectedDate));
+	const displayDateLabel = $derived.by(() => {
+		const today = fmtDate(Date.now());
+		const yesterday = adjustDate(today, -1);
+		const tomorrow = adjustDate(today, 1);
+
+		const formatted = formatAttendanceDate(selectedDate);
+		if (selectedDate === today) {
+			return `Today • ${formatted}`;
+		} else if (selectedDate === yesterday) {
+			return `Yesterday • ${formatted}`;
+		} else if (selectedDate === tomorrow) {
+			return `Tomorrow • ${formatted}`;
+		}
+		return formatted;
+	});
 	const selectedDateIsToday = $derived(selectedDate === fmtDate(Date.now()));
 	const studentById = $derived(new SvelteMap(students.map((student) => [student.id, student])));
 	const classById = $derived(new SvelteMap(classes.map((classItem) => [classItem.id, classItem])));
@@ -341,6 +389,11 @@
 		} finally {
 			dateLoading = false;
 		}
+	}
+
+	function handleDateOffset(offset: number) {
+		const nextDate = adjustDate(selectedDate, offset);
+		void selectAttendanceDate(nextDate);
 	}
 
 	async function handleUndo(eventId: string): Promise<boolean> {
@@ -615,21 +668,43 @@
 <PageHeader category={pageCategory} title={dynamicTitle} description={dynamicDescription}>
 	{#snippet actions()}
 		<div class="flex flex-wrap items-center gap-3">
-			<button
-				type="button"
-				onclick={() => (datePickerOpen = true)}
-				disabled={dateLoading || isProcessing}
-				aria-haspopup="dialog"
-				aria-expanded={datePickerOpen}
-				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-			>
-				{#if dateLoading}
-					<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-				{:else}
-					<CalendarDays class="size-4 text-primary" aria-hidden="true" />
-				{/if}
-				<span class="font-mono">{selectedDate}</span>
-			</button>
+			<div class="inline-flex items-center rounded-pill border border-border bg-background p-0.5 shadow-sm">
+				<button
+					type="button"
+					onclick={() => handleDateOffset(-1)}
+					disabled={dateLoading || isProcessing}
+					class="flex size-9 items-center justify-center rounded-pill text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
+					aria-label="Previous day"
+				>
+					<ChevronLeft class="size-4" />
+				</button>
+
+				<button
+					type="button"
+					onclick={() => (datePickerOpen = true)}
+					disabled={dateLoading || isProcessing}
+					class="inline-flex h-9 items-center gap-2 rounded-pill px-3 text-sm font-semibold hover:bg-surface transition-colors cursor-pointer disabled:opacity-60"
+					aria-haspopup="dialog"
+					aria-expanded={datePickerOpen}
+				>
+					{#if dateLoading}
+						<span class="size-2 rounded-full bg-primary animate-pulse" aria-hidden="true"></span>
+					{:else}
+						<CalendarDays class="size-4 text-primary" aria-hidden="true" />
+					{/if}
+					<span class="font-mono text-xs md:text-sm">{displayDateLabel}</span>
+				</button>
+
+				<button
+					type="button"
+					onclick={() => handleDateOffset(1)}
+					disabled={dateLoading || isProcessing}
+					class="flex size-9 items-center justify-center rounded-pill text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
+					aria-label="Next day"
+				>
+					<ChevronRight class="size-4" />
+				</button>
+			</div>
 
 			{#if isCardReaderMode}
 				<button

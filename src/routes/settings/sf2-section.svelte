@@ -112,6 +112,89 @@
 	{/if}
 </section>
 
+{#if sf2State.sf2ProgressVisible}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		role="dialog"
+		aria-modal="true"
+		aria-label="SF2 {sf2State.sf2ProgressTask} in progress"
+		class="fixed inset-0 z-[70] flex items-center justify-center bg-background/40 backdrop-blur-[2px]"
+		tabindex="-1"
+	>
+		<div
+			class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
+			role="status"
+			aria-live="polite"
+		>
+			<!-- Current message -->
+			<div class="space-y-1">
+				<p class="text-sm font-semibold text-foreground transition-all duration-300">
+					{sf2State.sf2ProgressDisplayMessage ||
+						(sf2State.sf2ProgressTask === 'import'
+							? 'Importing SF2 workbook…'
+							: 'Creating SF2 workbook…')}
+				</p>
+			</div>
+
+			<!-- Determinate progress bar -->
+			{#if sf2State.sf2ProgressTotal > 0}
+				<div class="w-full space-y-2">
+					<div
+						class="h-3 w-full overflow-hidden rounded-pill border border-primary/20 bg-background"
+						role="progressbar"
+						aria-valuemin="0"
+						aria-valuemax={sf2State.sf2ProgressTotal}
+						aria-valuenow={sf2State.sf2ProgressCurrent}
+						aria-valuetext={`{Math.round((sf2State.sf2ProgressCurrent / sf2State.sf2ProgressTotal) * 100)} percent`}
+					>
+						<div
+							class="h-full rounded-pill bg-primary transition-all duration-400 ease-out"
+							style="width: {sf2State.sf2ProgressTotal > 0
+								? Math.round((sf2State.sf2ProgressCurrent / sf2State.sf2ProgressTotal) * 100)
+								: 0}%"
+						></div>
+					</div>
+					<div class="label-mono text-xs text-primary">
+						Step {sf2State.sf2ProgressCurrent} of {sf2State.sf2ProgressTotal}
+					</div>
+				</div>
+			{:else}
+				<!-- Indeterminate progress when total is unknown -->
+				<div class="w-full">
+					<div
+						class="h-3 w-full overflow-hidden rounded-pill border border-primary/20 bg-background"
+						role="progressbar"
+						aria-label="Loading"
+					>
+						<div
+							class="h-full rounded-pill bg-primary indeterminate-progress"
+						></div>
+					</div>
+				</div>
+			{/if}
+
+			{#if sf2State.sf2ProgressCurrent === sf2State.sf2ProgressTotal && sf2State.sf2ProgressTotal > 0}
+				<p class="text-xs text-muted-foreground">Finalizing…</p>
+			{/if}
+		</div>
+	</div>
+{/if}
+
+<style>
+	.indeterminate-progress {
+		animation: indeterminate-slide 2s ease-in-out infinite;
+		width: 40%;
+	}
+	@keyframes indeterminate-slide {
+		0% {
+			transform: translateX(-100%);
+		}
+		100% {
+			transform: translateX(350%);
+		}
+	}
+</style>
+
 <Sf2ImportValidationDialog
 	bind:open={sf2State.sf2ValidationDialogOpen}
 	bind:validation={sf2State.sf2Validation}

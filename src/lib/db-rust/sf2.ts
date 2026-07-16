@@ -51,6 +51,18 @@ export async function updateSf2WorkbookSettings(
 	return await invoke('update_sf2_workbook_settings', { draft });
 }
 
+/**
+ * Switch the active SF2 report month for a class WITHOUT touching the Excel
+ * workbook. Pure DB change so the reports page can switch months instantly and
+ * avoid the slow Excel automation that `updateSf2WorkbookSettings` runs.
+ */
+export async function setSf2ReportMonth(
+	classId: string,
+	reportMonth: string
+): Promise<void> {
+	await invoke('set_sf2_report_month', { classId, reportMonth });
+}
+
 export async function getSf2ExportReadiness(classId?: string): Promise<Sf2ExportReadiness> {
 	return await invoke('get_sf2_export_readiness', { classId: classId || null });
 }
