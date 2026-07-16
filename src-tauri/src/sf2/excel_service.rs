@@ -90,6 +90,7 @@ pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2Exp
                 layout_fingerprint: String::new(),
                 active_class_id: summary.class_id,
                 imported_at: summary.imported_at,
+                last_synced_at: None,
             }),
     };
 
@@ -147,6 +148,7 @@ pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2Exp
                 layout_fingerprint: template.layout_fingerprint.clone(),
                 active_class_id: template.active_class_id.clone(),
                 imported_at: template.imported_at,
+                last_synced_at: template.last_synced_at,
             },
         )),
         mapped_students,
@@ -268,8 +270,12 @@ pub(super) fn refresh_template_calendar_from_saved_month(
             .map(|mapping| mapping.date.as_str()),
     )?);
 
-    excel::write_metadata(&workbook_path, &metadata)?;
-    let analysis = excel::analyze_workbook(&workbook_path)?;
+    // Refactored: batch write_metadata + analyze into a single Excel session
+    let metadata_for_excel = metadata.clone();
+    let analysis = excel::batch_operations(&workbook_path, true, move |session| {
+        session.write_metadata(&metadata_for_excel)?;
+        session.analyze()
+    })?;
     validate_configured_calendar(&analysis, &metadata)?;
 
     let refreshed_template = Sf2TemplateRecord {
@@ -287,6 +293,7 @@ pub(super) fn refresh_template_calendar_from_saved_month(
         layout_fingerprint: layout_fingerprint(&analysis),
         active_class_id: template.active_class_id.clone(),
         imported_at: template.imported_at,
+        last_synced_at: template.last_synced_at,
     };
     let refreshed_date_mappings = date_mappings_from_analysis(&template.id, &analysis);
     sf2_repo.update_template_with_mappings(
@@ -325,6 +332,7 @@ fn latest_template_for_request(
             layout_fingerprint: String::new(),
             active_class_id: summary.class_id,
             imported_at: summary.imported_at,
+            last_synced_at: None,
         }))
 }
 

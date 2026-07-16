@@ -73,8 +73,17 @@ fn import_workbook_with_analysis(
     let class =
         super::calendar_service::find_or_create_class(&class_repo, &class_name, None)?;
 
-    // Use a fresh template ID for each import
-    let template_id = uuid::Uuid::new_v4().to_string();
+    let source_hash = format!("bundled-import-{}", class.id);
+    let grade_level = source_analysis.grade_level.clone();
+    let section = source_analysis.section.clone();
+
+    // Use existing template ID on re-import (same source_hash, grade_level, section)
+    // to avoid FK violation — the UPSERT preserves the old id on conflict, so all
+    // subsequent student/date mappings must reference that same id.
+    let template_id = sf2_repo
+        .find_template(&source_hash, &grade_level, &section)?
+        .map(|template| template.id)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
     // Fetch old template student mappings for name-update-on-reimport
     let old_mappings = sf2_repo
@@ -121,10 +130,6 @@ fn import_workbook_with_analysis(
         7,
         "Creating working copy from automated template",
     );
-    let source_hash = format!("bundled-import-{}", class.id);
-    let grade_level = source_analysis.grade_level.clone();
-    let section = source_analysis.section.clone();
-
     let workbook_dir = sf2_workbook_dir(&app)?;
     let working_copy_path = write_bundled_template_to_dir(
         &workbook_dir,
@@ -236,6 +241,7 @@ fn import_workbook_with_analysis(
         layout_fingerprint: fingerprint,
         active_class_id: class.id.clone(),
         imported_at: chrono::Utc::now().timestamp(),
+        last_synced_at: None,
     };
 
     // Step 14: Write Excel formulas for MALE TOTAL, FEMALE TOTAL, Combined TOTAL

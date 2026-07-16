@@ -25,6 +25,7 @@ mod tests {
             layout_fingerprint: String::new(),
             active_class_id: String::new(),
             imported_at: 0,
+            last_synced_at: None,
         }
     }
 
