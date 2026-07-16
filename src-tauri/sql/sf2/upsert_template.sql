@@ -12,9 +12,10 @@ INSERT INTO sf2_templates (
     school_head_name,
     layout_fingerprint,
     active_class_id,
-    imported_at
+    imported_at,
+    last_synced_at
 )
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
 ON CONFLICT(source_hash, grade_level, section) DO UPDATE SET
     source_path = excluded.source_path,
     school_id = excluded.school_id,
@@ -27,4 +28,5 @@ ON CONFLICT(source_hash, grade_level, section) DO UPDATE SET
     school_head_name = excluded.school_head_name,
     layout_fingerprint = excluded.layout_fingerprint,
     active_class_id = excluded.active_class_id,
-    imported_at = excluded.imported_at;
+    imported_at = excluded.imported_at,
+    last_synced_at = excluded.last_synced_at;

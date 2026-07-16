@@ -14,6 +14,7 @@ pub use super::attendance_service::{
 
 pub use super::template_ops::{
     create_workbook_from_template,
+    set_report_month,
     update_workbook_settings,
 };
 

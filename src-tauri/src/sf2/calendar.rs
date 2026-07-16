@@ -373,3 +373,72 @@ pub(super) fn first_school_day_from_mappings(date_mappings: &[Sf2DateMappingReco
         .min()
         .unwrap_or(1)
 }
+
+/// Decide whether attendance marks must be rewritten to the Excel working copy.
+///
+/// Returns `true` when at least one attendance event was recorded (or updated)
+/// *after* the last successful sync, meaning the workbook is stale and Excel
+/// automation must run. Returns `false` when the workbook is already in sync,
+/// so `sync_and_open_sf2_workbook` can skip the slow Excel write entirely.
+///
+/// `last_synced_at` is the timestamp (seconds) of the last successful mark
+/// write; `None` means the workbook has never been synced, so we must sync.
+/// `latest_event_at` is the most recent attendance event timestamp for the
+/// class; `None` means there are no attendance events at all (nothing to write).
+pub(super) fn attendance_changed_since(
+    last_synced_at: Option<i64>,
+    latest_event_at: Option<i64>,
+) -> bool {
+    let Some(latest_event_at) = latest_event_at else {
+        return false;
+    };
+    match last_synced_at {
+        None => true,
+        Some(synced) => latest_event_at > synced,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_events_means_no_sync_needed() {
+        assert!(
+            !attendance_changed_since(Some(1000), None),
+            "with no attendance events, the workbook is already current"
+        );
+    }
+
+    #[test]
+    fn never_synced_with_events_requires_sync() {
+        assert!(
+            attendance_changed_since(None, Some(500)),
+            "if the workbook was never synced but has events, we must sync"
+        );
+    }
+
+    #[test]
+    fn event_after_last_sync_requires_sync() {
+        assert!(
+            attendance_changed_since(Some(1000), Some(1001)),
+            "an event newer than the last sync means the workbook is stale"
+        );
+    }
+
+    #[test]
+    fn event_equal_to_last_sync_skips_sync() {
+        assert!(
+            !attendance_changed_since(Some(1000), Some(1000)),
+            "an event exactly at the last sync time is already written"
+        );
+    }
+
+    #[test]
+    fn event_before_last_sync_skips_sync() {
+        assert!(
+            !attendance_changed_since(Some(1000), Some(999)),
+            "events older than the last sync are already reflected"
+        );
+    }
+}

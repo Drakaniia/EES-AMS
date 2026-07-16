@@ -72,6 +72,7 @@ impl Sf2Repository {
                 template.layout_fingerprint,
                 template.active_class_id,
                 template.imported_at,
+                template.last_synced_at,
             ],
         )?;
         transaction.execute(DELETE_STUDENT_MAPPINGS_SQL, params![template.id])?;
@@ -134,6 +135,7 @@ impl Sf2Repository {
                 template.layout_fingerprint,
                 template.active_class_id,
                 template.imported_at,
+                template.last_synced_at
             ],
         )?;
         if rows_updated == 0 {
@@ -186,6 +188,54 @@ impl Sf2Repository {
 
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(Into::into)
+    }
+
+    /// Lightweight update of only the active report month for a template.
+    /// Intentionally does NOT touch the Excel workbook — switching the active
+    /// month is a pure DB change (the workbook is multi-sheet) so the reports
+    /// page can switch months instantly without Excel automation.
+    pub fn set_report_month(&self, template_id: &str, report_month: &str) -> Result<()> {
+        let mut conn = self.pool.get()?;
+        let rows = conn.execute(
+            "UPDATE sf2_templates SET report_month = ?2 WHERE id = ?1",
+            params![template_id, report_month],
+        )?;
+        if rows == 0 {
+            return Err(crate::domain::error::AppError::InvalidInput(
+                "Selected SF2 workbook was not found".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Record the timestamp (seconds) of the last successful attendance→Excel
+    /// sync so `sync_and_open_sf2_workbook` can skip Excel when nothing changed.
+    pub fn set_last_synced_at(&self, template_id: &str, synced_at: i64) -> Result<()> {
+        let mut conn = self.pool.get()?;
+        conn.execute(
+            "UPDATE sf2_templates SET last_synced_at = ?2 WHERE id = ?1",
+            params![template_id, synced_at],
+        )?;
+        Ok(())
+    }
+
+    /// Most recent attendance event timestamp (seconds) for a class, or `None`
+    /// when the class has no events yet.
+    pub fn latest_event_timestamp(&self, class_id: &str) -> Result<Option<i64>> {
+        let conn = self.pool.get()?;
+        // MAX(timestamp) returns NULL when the class has no events.  We read as
+        // Option<i64> so that a NULL result produces Ok(None) instead of crashing
+        // with "Invalid column type Null".
+        match conn.query_row(
+            "SELECT MAX(timestamp) FROM events WHERE class_id = ?1",
+            params![class_id],
+            |row| row.get::<_, Option<i64>>(0),
+        ) {
+            Ok(Some(ts)) => Ok(Some(ts)),
+            Ok(None) => Ok(None),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     pub fn latest_template_for_class(&self, class_id: &str) -> Result<Option<Sf2TemplateRecord>> {
@@ -275,5 +325,6 @@ fn read_template_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<Sf2Template
         layout_fingerprint: row.get(11)?,
         active_class_id: row.get(12)?,
         imported_at: row.get(13)?,
+        last_synced_at: row.get(14)?,
     })
 }

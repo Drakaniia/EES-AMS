@@ -133,6 +133,16 @@ pub fn update_sf2_workbook_settings(
 }
 
 #[tauri::command]
+pub fn set_sf2_report_month(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: String,
+    report_month: String,
+) -> std::result::Result<(), String> {
+    service::set_report_month(pool.inner().clone(), &class_id, &report_month)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn get_sf2_export_readiness(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
     class_id: Option<String>,

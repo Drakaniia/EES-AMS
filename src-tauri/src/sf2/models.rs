@@ -59,6 +59,10 @@ pub struct Sf2TemplateRecord {
     pub layout_fingerprint: String,
     pub active_class_id: String,
     pub imported_at: i64,
+    /// Timestamp (seconds) of the last successful attendance→Excel sync.
+    /// `None` means the workbook has never been synced, so the next open
+    /// must rewrite marks. Used to skip Excel automation when nothing changed.
+    pub last_synced_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
