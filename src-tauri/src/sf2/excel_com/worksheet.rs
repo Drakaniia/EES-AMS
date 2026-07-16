@@ -129,3 +129,4 @@ pub fn rename_sheet_unique(sheet: &ComObject, base_name: &str) -> Result<()> {
 fn truncate_sheet_name(name: &str) -> String {
     name.chars().take(31).collect()
 }
+

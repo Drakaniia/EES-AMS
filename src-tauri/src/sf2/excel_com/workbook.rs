@@ -485,9 +485,479 @@ pub fn write_metadata(workbook_path: &Path, metadata: &Sf2WorkbookMetadata) -> R
     })
 }
 
+// ── WorkbookSession (Batch Excel Operations) ────────────────────────────────
+//
+// A session that holds an open Excel workbook, allowing multiple operations
+// (analyze, write_marks, write_metadata, etc.) to run within a single Excel
+// process. This eliminates the 2–5 second overhead of starting/stopping Excel
+// for each operation.
+//
+// Use `batch_operations()` to create a session and run operations in one shot.
+
+/// An open Excel workbook session with its owning Excel application object.
+///
+/// When this session is dropped, the workbook is closed WITHOUT saving and
+/// Excel is quit. Use `batch_operations` to coordinate save/close correctly.
+pub struct WorkbookSession {
+    excel: ExcelSession,
+    workbook: ComObject,
+}
+
+impl WorkbookSession {
+    /// Open a workbook and return a session handle.
+    ///
+    /// The workbook is opened in read-only mode by default (save_on_close=false).
+    /// Use `batch_operations(…, save_on_close=true)` for write workflows.
+    fn open(path: &Path, read_only: bool) -> Result<Self> {
+        let excel = ExcelSession::new()?;
+        let workbook = excel.open_workbook(path, read_only)?;
+        Ok(Self { excel, workbook })
+    }
+
+    /// Close the workbook and quit Excel, optionally saving first.
+    fn close(mut self, save: bool) -> Result<()> {
+        let close_result = self.workbook.method("Close", vec![ComVariant::bool(save)]);
+        let quit_result = self.excel.quit();
+        match (close_result, quit_result) {
+            (Ok(_), Ok(_)) => Ok(()),
+            (Err(e), _) => Err(e),
+            (_, Err(e)) => Err(e),
+        }
+    }
+
+    /// Save the workbook to disk.
+    pub fn save(&self) -> Result<()> {
+        self.workbook.method("Save", Vec::new())?;
+        Ok(())
+    }
+
+    /// Full recalculation of all formulas.
+    pub fn calculate(&self) -> Result<()> {
+        self.excel.calculate_full_rebuild()?;
+        Ok(())
+    }
+
+    // ── Session Operations ────────────────────────────────────────────────
+
+    /// Analyze the open workbook, extracting metadata, dates, and learners.
+    pub fn analyze(&self) -> Result<Sf2WorkbookAnalysis> {
+        let sheets = self.workbook.get_object("Worksheets")?;
+        let sheet_count = sheets.get_i32("Count")?;
+        let mut sheet_infos = Vec::new();
+        let mut dates = Vec::new();
+        let mut first_monthly_sheet = None;
+        let mut best_roster_sheet: Option<(ComObject, Sf2SheetQuality)> = None;
+        let mut school_year = String::new();
+        let mut school_id = String::new();
+        let mut school_name = String::new();
+        let mut report_month = String::new();
+        let mut grade_level = String::new();
+        let mut section = String::new();
+        let mut adviser_name = String::new();
+        let mut school_head_name = String::new();
+
+        for sheet_index in 1..=sheet_count {
+            let sheet =
+                sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
+            let sheet_name = sheet.get_string("Name")?;
+            let visible = sheet.get_i32("Visible")?;
+            let used_range = sheet.get_object("UsedRange")?;
+            let used_range_address = used_range.get_with_args(
+                "Address",
+                vec![ComVariant::bool(false), ComVariant::bool(false)],
+            )?;
+
+            sheet_infos.push(crate::sf2::models::Sf2WorkbookSheet {
+                name: sheet_name.clone(),
+                visible,
+                used_range: used_range_address.to_string_value(),
+            });
+
+            if visible != EXCEL_SHEET_VISIBLE {
+                continue;
+            }
+
+            let month_number = month_number(&sheet_name);
+            let year = year_from_sheet_name(&sheet_name);
+            if month_number == 0 || year == 0 {
+                continue;
+            }
+
+            if first_monthly_sheet.is_none() {
+                school_id = cell_text(&sheet, 3, 6)?.trim().to_string();
+                school_name = cell_text(&sheet, 4, 6)?.trim().to_string();
+                school_year = cell_text(&sheet, 3, 13)?.trim().to_string();
+                report_month = cell_text(&sheet, 3, 27)?.trim().to_string();
+                grade_level = cell_text(&sheet, 4, 27)?.trim().to_string();
+                section = cell_text(&sheet, 4, 39)?.trim().to_string();
+                adviser_name = cell_text(&sheet, 76, 40)?.trim().to_string();
+                if adviser_name.is_empty() {
+                    adviser_name = cell_text(&sheet, 82, 26)?.trim().to_string();
+                }
+                school_head_name = cell_text(&sheet, 82, 40)?.trim().to_string();
+                first_monthly_sheet = Some(sheet.clone());
+            }
+
+            let quality = sf2_sheet_quality(&sheet)?;
+            if best_roster_sheet
+                .as_ref()
+                .is_none_or(|(_, best_quality)| quality > *best_quality)
+            {
+                best_roster_sheet = Some((sheet.clone(), quality));
+            }
+
+            for column in 6..=38 {
+                let day_text = cell_text(&sheet, 6, column)?.trim().to_string();
+                let Ok(day) = day_text.parse::<u32>() else {
+                    continue;
+                };
+                if !(1..=31).contains(&day) {
+                    continue;
+                }
+                let Some(date) = NaiveDate::from_ymd_opt(year, month_number, day) else {
+                    continue;
+                };
+                dates.push(Sf2WorkbookDate {
+                    sheet_name: sheet_name.clone(),
+                    date: date.format("%Y-%m-%d").to_string(),
+                    column_letter: column_number_to_letter(column),
+                    column_index: column as u32,
+                });
+            }
+        }
+
+        // Fallback: no monthly sheets found
+        if first_monthly_sheet.is_none() {
+            for sheet_index in 1..=sheet_count {
+                let sheet = sheets.get_object_with_args(
+                    "Item",
+                    vec![ComVariant::i4(sheet_index)],
+                )?;
+                let sheet_name = sheet.get_string("Name")?;
+                let visible = sheet.get_i32("Visible")?;
+
+                if month_number(&sheet_name) > 0 && year_from_sheet_name(&sheet_name) > 0 {
+                    continue;
+                }
+
+                let title = cell_text(&sheet, 1, 1)?.trim().to_string();
+                if !sheet_is_analysis_candidate(&sheet_name, &title, visible) {
+                    continue;
+                }
+
+                school_id = cell_text(&sheet, 3, 6)?.trim().to_string();
+                school_name = cell_text(&sheet, 4, 6)?.trim().to_string();
+                school_year = cell_text(&sheet, 3, 13)?.trim().to_string();
+                report_month = cell_text(&sheet, 3, 27)?.trim().to_string();
+                grade_level = cell_text(&sheet, 4, 27)?.trim().to_string();
+                section = cell_text(&sheet, 4, 39)?.trim().to_string();
+                adviser_name = cell_text(&sheet, 76, 40)?.trim().to_string();
+                if adviser_name.is_empty() {
+                    adviser_name = cell_text(&sheet, 82, 26)?.trim().to_string();
+                }
+                school_head_name = cell_text(&sheet, 82, 40)?.trim().to_string();
+
+                let fallback_month = month_number(&report_month);
+                let fallback_year = if fallback_month > 0 {
+                    report_year(&school_year, fallback_month)
+                } else {
+                    report_year("", 1)
+                };
+                let date_year = fallback_year;
+                let date_month = if fallback_month > 0 {
+                    fallback_month
+                } else {
+                    1
+                };
+
+                for column in 6..=38 {
+                    let day_text = cell_text(&sheet, 6, column)?.trim().to_string();
+                    let Ok(day) = day_text.parse::<u32>() else {
+                        continue;
+                    };
+                    if !(1..=31).contains(&day) {
+                        continue;
+                    }
+                    let Some(date) = NaiveDate::from_ymd_opt(
+                        date_year,
+                        date_month,
+                        day,
+                    ) else {
+                        continue;
+                    };
+                    dates.push(Sf2WorkbookDate {
+                        sheet_name: sheet_name.clone(),
+                        date: date.format("%Y-%m-%d").to_string(),
+                        column_letter: column_number_to_letter(column),
+                        column_index: column as u32,
+                    });
+                }
+
+                let quality = sf2_sheet_quality(&sheet)?;
+                best_roster_sheet = Some((sheet.clone(), quality));
+                first_monthly_sheet = Some(sheet);
+                break;
+            }
+        }
+
+        let learner_sheet = best_roster_sheet
+            .map(|(sheet, _)| sheet)
+            .or(first_monthly_sheet);
+        let learners = match learner_sheet {
+            Some(sheet) => workbook_learners(&sheet)?,
+            None => Vec::new(),
+        };
+
+        Ok(Sf2WorkbookAnalysis {
+            file_format: self.workbook.get_i32("FileFormat")?,
+            has_vb_project: self.workbook.get_bool("HasVBProject")?,
+            school_id,
+            school_name,
+            school_year,
+            report_month,
+            grade_level,
+            section,
+            adviser_name,
+            school_head_name,
+            learners,
+            dates,
+            sheets: sheet_infos,
+        })
+    }
+
+    /// Write attendance marks to the open workbook.
+    pub fn write_marks(&self, marks: &[Sf2CellMark]) -> Result<()> {
+        let sheets = self.workbook.get_object("Worksheets")?;
+        for mark in marks {
+            let sheet = sheets
+                .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
+            set_sf2_mark(&sheet, &mark.cell_address, &mark.value)?;
+        }
+        self.calculate()?;
+        Ok(())
+    }
+
+    /// Write attendance marks to the open workbook, overwriting formula cells.
+    pub fn write_marks_force(&self, marks: &[Sf2CellMark]) -> Result<()> {
+        let sheets = self.workbook.get_object("Worksheets")?;
+        for mark in marks {
+            let sheet = sheets
+                .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
+            set_sf2_mark_force(&sheet, &mark.cell_address, &mark.value)?;
+        }
+        self.calculate()?;
+        Ok(())
+    }
+
+    /// Write Excel formulas to the open workbook.
+    pub fn write_formulas(&self, formula_marks: &[Sf2CellMark]) -> Result<()> {
+        let sheets = self.workbook.get_object("Worksheets")?;
+        for mark in formula_marks {
+            let sheet = sheets
+                .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
+            set_sf2_formula(&sheet, &mark.cell_address, &mark.value)?;
+        }
+        self.calculate()?;
+        Ok(())
+    }
+
+    /// Write metadata (school info, headers) to all SF2 sheets in the open workbook.
+    pub fn write_metadata(&self, metadata: &Sf2WorkbookMetadata) -> Result<()> {
+        let sheets = self.workbook.get_object("Worksheets")?;
+        let sheet_count = sheets.get_i32("Count")?;
+        let mut sf2_sheets = Vec::new();
+        let mut monthly_sheets = Vec::new();
+        let mut sheets_updated = 0usize;
+
+        for sheet_index in 1..=sheet_count {
+            let sheet =
+                sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
+            let title = cell_text(&sheet, 1, 1)?.trim().to_string();
+            if !contains_ignore_ascii_case(&title, "School Form 2") {
+                continue;
+            }
+
+            let sheet_name = sheet.get_string("Name")?;
+            if month_number(&sheet_name) > 0 && year_from_sheet_name(&sheet_name) > 0 {
+                monthly_sheets.push(sheet.clone());
+            }
+            sf2_sheets.push(sheet.clone());
+
+            set_sf2_cell(&sheet, 3, 6, &metadata.school_id, true)?;
+            set_sf2_cell(&sheet, 3, 13, &metadata.school_year, true)?;
+            set_sf2_cell(&sheet, 3, 27, &metadata.report_month, true)?;
+            set_sf2_cell(&sheet, 4, 6, &metadata.school_name, true)?;
+            set_sf2_cell(&sheet, 4, 27, &metadata.grade_level, true)?;
+            set_sf2_cell(&sheet, 4, 39, &metadata.section, true)?;
+            set_sf2_cell(&sheet, 76, 40, &metadata.adviser_name, true)?;
+            set_sf2_cell(&sheet, 82, 26, &metadata.adviser_name, true)?;
+            set_sf2_cell(&sheet, 82, 40, &metadata.school_head_name, true)?;
+            sheets_updated += 1;
+        }
+
+        if metadata.configure_calendar && !monthly_sheets.is_empty() {
+            configure_sf2_calendar(&monthly_sheets, &sf2_sheets, metadata)?;
+        }
+
+        self.calculate()?;
+        log::debug!("updated SF2 metadata on {sheets_updated} sheets");
+        Ok(())
+    }
+
+    /// Expand the roster area by inserting extra rows before MALE/FEMALE TOTAL.
+    pub fn expand_roster_rows(
+        &self,
+        extra_male_rows: u32,
+        extra_female_rows: u32,
+        male_total_row: Option<u32>,
+        female_total_row: Option<u32>,
+    ) -> Result<()> {
+        if extra_male_rows == 0 && extra_female_rows == 0 {
+            return Ok(());
+        }
+
+        let male_base = male_total_row.unwrap_or(29);
+        let sheets = self.workbook.get_object("Worksheets")?;
+        let sheet_count = sheets.get_i32("Count")?;
+
+        for sheet_index in 1..=sheet_count {
+            let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
+            let visible = sheet.get_i32("Visible")?;
+            if visible != EXCEL_SHEET_VISIBLE {
+                continue;
+            }
+
+            let sheet_name = sheet.get_string("Name")?;
+            if month_number(&sheet_name) == 0 || year_from_sheet_name(&sheet_name) == 0 {
+                continue;
+            }
+
+            if extra_male_rows > 0 {
+                let insert_start = male_base as i32;
+                let range = sheet.get_object_with_args(
+                    "Range",
+                    vec![ComVariant::bstr(&format!("{insert_start}:{insert_start}"))],
+                )?;
+                let entire_row = range.get_object("EntireRow")?;
+                for _ in 0..extra_male_rows {
+                    entire_row.method(
+                        "Insert",
+                        vec![ComVariant::i4(-4121), ComVariant::i4(0)],
+                    )?;
+                }
+            }
+
+            if extra_female_rows > 0 {
+                let female_base = female_total_row.unwrap_or(49) + extra_male_rows;
+                let range = sheet.get_object_with_args(
+                    "Range",
+                    vec![ComVariant::bstr(&format!("{female_base}:{female_base}"))],
+                )?;
+                let entire_row = range.get_object("EntireRow")?;
+                for _ in 0..extra_female_rows {
+                    entire_row.method(
+                        "Insert",
+                        vec![ComVariant::i4(-4121), ComVariant::i4(0)],
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Hide empty learner rows on all monthly sheets.
+    pub fn hide_empty_learner_rows(
+        &self,
+        male_total_row: u32,
+        female_total_row: u32,
+        occupied_rows: &HashSet<u32>,
+    ) -> Result<()> {
+        let sheets = self.workbook.get_object("Worksheets")?;
+        let sheet_count = sheets.get_i32("Count")?;
+
+        for sheet_index in 1..=sheet_count {
+            let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
+            let visible = sheet.get_i32("Visible")?;
+            if visible != EXCEL_SHEET_VISIBLE {
+                continue;
+            }
+
+            let sheet_name = sheet.get_string("Name")?;
+            if month_number(&sheet_name) == 0 || year_from_sheet_name(&sheet_name) == 0 {
+                continue;
+            }
+
+            if male_total_row > 8 {
+                for row in 8..male_total_row {
+                    let range = sheet.get_object_with_args(
+                        "Range",
+                        vec![ComVariant::bstr(&format!("{row}:{row}"))],
+                    )?;
+                    let entire_row = range.get_object("EntireRow")?;
+                    let hidden = !occupied_rows.contains(&row);
+                    entire_row.put_bool("Hidden", hidden)?;
+                }
+            }
+
+            let female_start = male_total_row + 1;
+            if female_total_row > female_start {
+                for row in female_start..female_total_row {
+                    let range = sheet.get_object_with_args(
+                        "Range",
+                        vec![ComVariant::bstr(&format!("{row}:{row}"))],
+                    )?;
+                    let entire_row = range.get_object("EntireRow")?;
+                    let hidden = !occupied_rows.contains(&row);
+                    entire_row.put_bool("Hidden", hidden)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Execute multiple Excel operations within a single Excel process.
+///
+/// Opens the workbook at `path`, calls `action` with a `&WorkbookSession` that
+/// exposes `analyze()`, `write_marks()`, `write_metadata()`, `write_formulas()`,
+/// `expand_roster_rows()`, and `hide_empty_learner_rows()` — all operating on
+/// the same open workbook without starting/stopping Excel between calls.
+///
+/// When `save_on_close` is true the workbook is saved before closing.
+///
+/// ⚠️ Cleanup is always performed even when `action` fails, to prevent orphan
+/// Excel processes from accumulating. The action error takes precedence over
+/// any close/quit errors in the returned `Result`.
+pub fn batch_operations<T, F>(path: &Path, save_on_close: bool, action: F) -> Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce(&WorkbookSession) -> Result<T> + Send + 'static,
+{
+    let path = path.to_path_buf();
+    run_excel_task(move || {
+        kill_stale_excel_processes();
+        let session = WorkbookSession::open(&path, !save_on_close)?;
+        let action_result = action(&session);
+        let save_result = if save_on_close {
+            session.save()
+        } else {
+            Ok(())
+        };
+        let close_result = session.close(save_on_close);
+        // Always clean up (save + close) even on action failure, then
+        // propagate results preferring action error (same as with_workbook).
+        match (action_result, save_result, close_result) {
+            (Ok(value), Ok(_), Ok(_)) => Ok(value),
+            (Err(error), _, _) => Err(error),
+            (_, Err(error), _) => Err(error),
+            (_, _, Err(error)) => Err(error),
+        }
+    })
+}
+
 // ── COM Infrastructure ────────────────────────────────────────────────────────
 
-fn run_excel_task<T, F>(task: F) -> Result<T>
+pub(crate) fn run_excel_task<T, F>(task: F) -> Result<T>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T> + Send + 'static,
@@ -527,6 +997,11 @@ fn with_workbook<T, F>(path: &Path, read_only: bool, save_on_close: bool, action
 where
     F: FnOnce(&ExcelSession, &ComObject) -> Result<T>,
 {
+    // Note: kill_stale_excel_processes is intentionally NOT called here — it's
+    // moved to entry points (batch_operations) so standalone functions that
+    // open/close Excel quickly (e.g. simple reads) don't pay the ~200ms taskkill
+    // overhead on every call. The error-recovery path (when Excel fails to
+    // start) happens via with_workbook's callers if needed.
     let mut excel = ExcelSession::new()?;
     let workbook = excel.open_workbook(path, read_only)?;
     let action_result = action(&excel, &workbook);
@@ -541,13 +1016,13 @@ where
     }
 }
 
-struct ExcelSession {
-    app: ComObject,
+pub(crate) struct ExcelSession {
+    pub(crate) app: ComObject,
     quit_called: Cell<bool>,
 }
 
 impl ExcelSession {
-    fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         let app = ComObject::excel_application()?;
         app.put_bool("Visible", false)?;
         app.put_bool("DisplayAlerts", false)?;
@@ -576,7 +1051,7 @@ impl ExcelSession {
         Ok(())
     }
 
-    fn quit(&mut self) -> Result<()> {
+    pub(crate) fn quit(&mut self) -> Result<()> {
         if self.quit_called.replace(true) {
             return Ok(());
         }
@@ -1075,6 +1550,13 @@ mod tests {
         assert_eq!(month_number("DECEMBER 2026"), 12);
     }
 
+    // ── stale Excel process cleanup ────────────────────────────────────────
+
+    #[test]
+    fn excel_process_image_name_is_excel_exe() {
+        assert_eq!(excel_process_image_name(), "EXCEL.EXE");
+    }
+
     // ── year_from_sheet_name ──────────────────────────────────────────────
 
     #[test]
@@ -1225,6 +1707,330 @@ mod tests {
             -1,
         ));
     }
+
+    // ── formula cell handling (RED test) ─────────────────────────────────
+    //
+    // RED: This test proves that `set_sf2_mark` rejects formula cells via
+    // `ensure_not_formula` (the BUG behavior), while `set_sf2_mark_force`
+    // does NOT check for formulas and can overwrite them (the FIX behavior).
+    //
+    // The `write_template_marks_for_mappings` backfill used `write_marks` →
+    // `set_sf2_mark` and errored on formula cells like `JULY 2026!I23`.
+    // The fix changes to `write_marks_force` → `set_sf2_mark_force` which
+    // skips the formula check entirely.
+    //
+    // This test requires Microsoft Excel to be installed at runtime.
+
+    // ── WorkbookSession / batch_operations (Phase 1) ─────────────────────
+    //
+    // These tests prove that the new batch operations API can execute multiple
+    // Excel operations (analyze, write_marks, write_metadata, write_formulas,
+    // expand_roster_rows, hide_empty_learner_rows) in a SINGLE Excel process
+    // instead of one process per operation.
+    //
+    // They require Microsoft Excel to be installed at runtime.
+
+    #[test]
+    fn batch_operations_analyze_succeeds() {
+        let temp_dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let workbook_path = temp_dir.join(format!("test_batch_analyze_{pid}.xls"));
+        struct Cleanup(std::path::PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+        let _guard = Cleanup(workbook_path.clone());
+        let _ = std::fs::remove_file(&workbook_path);
+
+        // Setup: create a simple workbook
+        // Note: tests run with --test-threads=1 to avoid COM conflicts between parallel Excel instances.
+        let path_for_setup = workbook_path.clone();
+        let setup = run_excel_task(move || {
+            let mut excel = ExcelSession::new()?;
+            let workbooks = excel.app.get_object("Workbooks")?;
+            let workbook = workbooks.method_object("Add", vec![])?;
+            let sheets = workbook.get_object("Worksheets")?;
+            let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(1)])?;
+            sheet.put_string("Name", "JULY 2026")?;
+            let _ = workbook.method("SaveAs", vec![
+                ComVariant::bstr(&path_for_setup.to_string_lossy()),
+                ComVariant::i4(-4143),
+            ]);
+            let _ = workbook.method("Close", vec![ComVariant::bool(false)]);
+            let _ = excel.quit();
+            Ok(())
+        });
+        assert!(setup.is_ok(), "workbook setup should succeed");
+
+        // TEST: batch_operations should be able to analyze the workbook
+        let result = super::batch_operations(&workbook_path, false, |session| {
+            let analysis = session.analyze()?;
+            assert!(!analysis.sheets.is_empty(), "should have at least 1 sheet");
+            assert!(!analysis.learners.is_empty() || analysis.sheets.len() >= 1,
+                "analysis should return sheet info");
+            Ok(())
+        });
+
+        assert!(
+            result.is_ok(),
+            "batch_operations with analyze should succeed, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn batch_operations_multiple_ops_succeed() {
+        let temp_dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let workbook_path = temp_dir.join(format!("test_batch_multi_{pid}.xls"));
+        struct Cleanup(std::path::PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+        let _guard = Cleanup(workbook_path.clone());
+        let _ = std::fs::remove_file(&workbook_path);
+
+        // Setup: create a workbook
+        // Note: tests run with --test-threads=1 to avoid COM conflicts between parallel Excel instances.
+        let path_for_setup = workbook_path.clone();
+        let setup = run_excel_task(move || {
+            let mut excel = ExcelSession::new()?;
+            let workbooks = excel.app.get_object("Workbooks")?;
+            let workbook = workbooks.method_object("Add", vec![])?;
+            let sheets = workbook.get_object("Worksheets")?;
+            let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(1)])?;
+            sheet.put_string("Name", "JULY 2026")?;
+            let _ = workbook.method("SaveAs", vec![
+                ComVariant::bstr(&path_for_setup.to_string_lossy()),
+                ComVariant::i4(-4143),
+            ]);
+            let _ = workbook.method("Close", vec![ComVariant::bool(false)]);
+            let _ = excel.quit();
+            Ok(())
+        });
+        assert!(setup.is_ok(), "workbook setup should succeed");
+
+        // TEST: Execute multiple operations in a single batch_operations call
+        // This is the KEY test proving batching works.
+        //
+        // Note: marks is moved into the closure (move keyword) because the
+        // closure must be 'static (sent to another thread via run_excel_task).
+        let marks = vec![
+            crate::sf2::logic::Sf2CellMark {
+                sheet_name: "JULY 2026".to_string(),
+                cell_address: "A1".to_string(),
+                value: "Test".to_string(),
+            },
+        ];
+
+        let result = super::batch_operations(&workbook_path, true, move |session| {
+            // Operation 1: analyze
+            let analysis = session.analyze()?;
+            assert!(!analysis.sheets.is_empty(), "analyze must return sheets");
+
+            // Operation 2: write marks
+            session.write_marks(&marks)?;
+
+            // Operation 3: write marks force
+            session.write_marks_force(&marks)?;
+
+            // Operation 4: write formulas
+            session.write_formulas(&marks)?;
+
+            // Operation 5: expand roster (0 rows — no-op but tests the API)
+            session.expand_roster_rows(0, 0, None, None)?;
+
+            // Operation 6: hide empty learner rows (no-op for this simple workbook)
+            let occupied = std::collections::HashSet::new();
+            session.hide_empty_learner_rows(29, 49, &occupied)?;
+
+            Ok(())
+        });
+
+        assert!(
+            result.is_ok(),
+            "batch_operations with multiple ops should succeed, got: {:?}",
+            result
+        );
+
+        // Verify: open the workbook again and check A1 value
+        let path_for_check = workbook_path.clone();
+        let check = run_excel_task(move || {
+            let mut excel = ExcelSession::new()?;
+            let workbooks = excel.app.get_object("Workbooks")?;
+            let workbook = workbooks.method_object("Open", vec![
+                ComVariant::bstr(&path_for_check.to_string_lossy()),
+                ComVariant::i4(0),
+                ComVariant::bool(true),
+            ])?;
+            let sheets = workbook.get_object("Worksheets")?;
+            let sheet = sheets.get_object_with_args("Item", vec![ComVariant::bstr("JULY 2026")])?;
+            let cell = sheet.get_object_with_args("Range", vec![ComVariant::bstr("A1")])?;
+            let value = cell.get("Value2")?.to_string_value();
+            assert_eq!(value, "Test", "cell A1 should contain 'Test' after write_marks");
+            let _ = workbook.method("Close", vec![ComVariant::bool(false)]);
+            let _ = excel.quit();
+            Ok(())
+        });
+
+        assert!(
+            check.is_ok(),
+            "verification should succeed, got: {:?}",
+            check
+        );
+    }
+
+    #[test]
+    fn set_sf2_mark_rejects_formula_cells_but_force_accepts() {
+        let temp_dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let workbook_path = temp_dir.join(format!("test_formula_cell_{pid}.xls"));
+        let _ = std::fs::remove_file(&workbook_path);
+
+        let path_for_thread = workbook_path.clone();
+        let result = run_excel_task(move || {
+            let mut excel = ExcelSession::new()?;
+            let workbooks = excel.app.get_object("Workbooks")?;
+            let workbook = workbooks.method_object("Add", vec![])?;
+            let sheets = workbook.get_object("Worksheets")?;
+            let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(1)])?;
+
+            // Write a formula to cell A1
+            let cell = sheet.get_object_with_args(
+                "Range",
+                vec![ComVariant::bstr("A1")],
+            )?;
+            cell.put_string("Formula", "=1+1")?;
+
+            // Confirm the cell HAS a formula (setup verification)
+            let has_formula = cell.get_bool("HasFormula")?;
+            assert!(has_formula, "cell A1 should have '=1+1' formula after setup");
+
+            // TEST 1: set_sf2_mark SHOULD REJECT formula cells (this IS the bug)
+            let reject = crate::sf2::excel_com::worksheet::set_sf2_mark(&sheet, "A1", "X");
+            assert!(
+                reject.is_err(),
+                "set_sf2_mark MUST reject formula cells — its call to ensure_not_formula should refuse"
+            );
+            let err_msg = reject.err().unwrap().to_string();
+            assert!(
+                err_msg.contains("Refusing to overwrite formula cell"),
+                "error message should contain 'Refusing to overwrite formula cell', got: {err_msg}"
+            );
+
+            // TEST 2: set_sf2_mark_force SHOULD ACCEPT formula cells (this IS the fix)
+            let force = crate::sf2::excel_com::worksheet::set_sf2_mark_force(&sheet, "A1", "X");
+            assert!(
+                force.is_ok(),
+                "set_sf2_mark_force MUST accept formula cells — it skips ensure_not_formula"
+            );
+
+            // Save and close
+            let _ = workbook.method(
+                "SaveAs",
+                vec![
+                    ComVariant::bstr(&path_for_thread.to_string_lossy()),
+                    ComVariant::i4(-4143), // xlExcel9795
+                ],
+            );
+            let _ = workbook.method("Close", vec![ComVariant::bool(false)]);
+            let _ = excel.quit();
+
+            Ok(())
+        });
+
+        let _ = std::fs::remove_file(&workbook_path);
+
+        match result {
+            Ok(()) => {}
+            Err(e) => panic!("Test failed with Excel error: {e}"),
+        }
+    }
+
+    /// RED: This test proves that `write_marks` (the CURRENT function used by
+    /// `write_template_marks_for_mappings`) FAILS when the workbook contains
+    /// formula cells in the attendance area. `write_marks_force` succeeds.
+    ///
+    /// This directly models the BUG: the backfill calls `write_marks` which
+    /// calls `set_sf2_mark` → `ensure_not_formula`. The fix calls
+    /// `write_marks_force` → `set_sf2_mark_force` (no formula check).
+    #[test]
+    fn write_marks_rejects_formula_cells_but_write_marks_force_accepts() {
+        // Use Drop-based cleanup guard so temp file is removed even on panic
+        struct Cleanup(std::path::PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+
+        let temp_dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let workbook_path = temp_dir.join(format!("test_write_marks_formula_{pid}.xls"));
+        let _guard = Cleanup(workbook_path.clone());
+        let _ = std::fs::remove_file(&workbook_path);
+
+        // Step 1: Create a workbook with a formula in cell A1
+        let path_for_setup = workbook_path.clone();
+        let setup_result = run_excel_task(move || {
+            let mut excel = ExcelSession::new()?;
+            let workbooks = excel.app.get_object("Workbooks")?;
+            let workbook = workbooks.method_object("Add", vec![])?;
+            let sheets = workbook.get_object("Worksheets")?;
+            let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(1)])?;
+
+            let cell = sheet.get_object_with_args(
+                "Range",
+                vec![ComVariant::bstr("A1")],
+            )?;
+            cell.put_string("Formula", "=1+1")?;
+
+            // Rename sheet to match an SF2-like name for write_marks lookup
+            let _ = sheet.put_string("Name", "JULY 2026");
+
+            let _ = workbook.method(
+                "SaveAs",
+                vec![
+                    ComVariant::bstr(&path_for_setup.to_string_lossy()),
+                    ComVariant::i4(-4143),
+                ],
+            );
+            let _ = workbook.method("Close", vec![ComVariant::bool(false)]);
+            let _ = excel.quit();
+            Ok(())
+        });
+        assert!(setup_result.is_ok(), "workbook setup should succeed");
+
+        // Step 2: Test write_marks on a mark targeting the formula cell A1
+        let marks = vec![Sf2CellMark {
+            sheet_name: "JULY 2026".to_string(),
+            cell_address: "A1".to_string(),
+            value: "X".to_string(),
+        }];
+
+        // write_marks should FAIL — this is the BUG in the current backfill
+        let write_result = super::write_marks(&workbook_path, &marks);
+        assert!(
+            write_result.is_err(),
+            "write_marks MUST fail on formula cells — THIS IS THE BUG"
+        );
+        let err_msg = write_result.err().unwrap().to_string();
+        assert!(
+            err_msg.contains("Refusing to overwrite formula cell"),
+            "error must mention formula cell refusal, got: {err_msg}"
+        );
+
+        // Step 3: Test write_marks_force on the same mark — should SUCCEED
+        let force_result = super::write_marks_force(&workbook_path, &marks);
+        assert!(
+            force_result.is_ok(),
+            "write_marks_force MUST succeed on formula cells — THIS IS THE FIX"
+        );
+    }
 }
 
 pub fn sf2_sheet_quality(sheet: &ComObject) -> Result<Sf2SheetQuality> {
@@ -1266,3 +2072,36 @@ fn sf2_total_day_cell_count(sheet: &ComObject) -> Result<usize> {
     }
     Ok(count)
 }
+
+// ── Stale Excel process cleanup ───────────────────────────────────────────────
+//
+// Opening the SF2 workbook copy can fail (exit code 1) when a previous Excel
+// COM session did not terminate and a lingering EXCEL.EXE keeps the workbook
+// file locked. Force-killing any stale Excel process before opening guarantees
+// the copy opens cleanly.
+
+/// The process image name used to forcibly terminate stale Excel instances.
+pub(crate) fn excel_process_image_name() -> &'static str {
+    "EXCEL.EXE"
+}
+
+/// Forcefully terminate any lingering Excel processes so the SF2 workbook copy
+/// can be opened without a file-lock conflict. Best-effort: errors are ignored
+/// because a clean environment simply means nothing to kill.
+pub(crate) fn kill_stale_excel_processes() {
+    #[cfg(target_os = "windows")]
+    {
+        let image = excel_process_image_name();
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/IM", image])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Excel COM automation is Windows-only; nothing to clean up elsewhere.
+    }
+}
+
+

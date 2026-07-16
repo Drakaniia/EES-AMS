@@ -5,7 +5,7 @@ use crate::infrastructure::database::{
     StudentRepository,
 };
 use crate::sf2::attendance::present_events_for_day;
-use crate::sf2::calendar::sf2_date_mappings_for_report_month;
+use crate::sf2::calendar::{attendance_changed_since, sf2_date_mappings_for_report_month};
 use crate::sf2::excel;
 use crate::sf2::logic::{attendance_marks_for_closed_day, Sf2CellMark, Sf2StudentMapping};
 use crate::sf2::models::{
@@ -104,19 +104,35 @@ pub fn sync_and_open_sf2_workbook<R: tauri::Runtime>(
         .map(|m| m.date.clone())
         .collect::<Vec<_>>();
 
-    // Step 4/10: Clear previous marks
+    // Decide whether the Excel workbook actually needs to be rewritten.
+    // If no attendance event was recorded after the last successful sync,
+    // the workbook is already current and we can skip the slow Excel COM
+    // automation entirely — opening is then instant.
+    let latest_event_at = sf2_repo.latest_event_timestamp(class_id)?;
+    let marks_changed = attendance_changed_since(template.last_synced_at, latest_event_at);
+
+    // Step 4/10: Clear previous marks (only when rewriting)
     emit_sf2_progress(app, "open", 4, 10, "Clearing previous marks…");
 
-    // Step 5/10: Compute attendance marks
-    emit_sf2_progress(app, "open", 5, 10, "Computing attendance marks…");
+    if marks_changed {
+        // Step 5/10: Compute attendance marks
+        emit_sf2_progress(app, "open", 5, 10, "Computing attendance marks…");
 
-    // Step 6/10: Write marks to workbook
-    emit_sf2_progress(app, "open", 6, 10, "Writing marks to workbook…");
-    let _marks_written =
-        write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
+        // Step 6/10: Write marks to workbook
+        emit_sf2_progress(app, "open", 6, 10, "Writing marks to workbook…");
+        let _marks_written =
+            write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
 
-    // Step 7/10: Save workbook changes
-    emit_sf2_progress(app, "open", 7, 10, "Saving workbook changes…");
+        // Step 7/10: Save workbook changes
+        emit_sf2_progress(app, "open", 7, 10, "Saving workbook changes…");
+        let synced_at = chrono::Utc::now().timestamp();
+        sf2_repo.set_last_synced_at(&template.id, synced_at)?;
+    } else {
+        // Workbook already reflects the latest attendance — skip Excel I/O.
+        emit_sf2_progress(app, "open", 5, 10, "Attendance already up to date…");
+        emit_sf2_progress(app, "open", 6, 10, "Skipping workbook rewrite…");
+        emit_sf2_progress(app, "open", 7, 10, "Workbook is current…");
+    }
 
     // Step 8/10: Prepare to open
     emit_sf2_progress(app, "open", 8, 10, "Preparing to open…");
@@ -319,7 +335,7 @@ pub(super) fn write_template_marks_for_mappings(
     let attendance_mark_count = attendance_marks.len();
 
     marks.extend(attendance_marks);
-    excel::write_marks(&workbook_path, &marks)?;
+    excel::write_marks_force(&workbook_path, &marks)?;
 
     Ok(attendance_mark_count)
 }
@@ -836,6 +852,7 @@ mod tests {
             layout_fingerprint: String::new(),
             active_class_id: "class-1".to_string(),
             imported_at: 0,
+            last_synced_at: None,
         };
 
         // Only 3 date mappings for July 1-3 in columns F, G, H (columns 6, 7, 8)
