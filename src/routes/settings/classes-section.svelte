@@ -32,7 +32,7 @@
 			>
 				<path d="M12 5v14M5 12h14" />
 			</svg>
-			{classState.classes.length > 0 ? 'One Class Only' : 'Add Class'}
+			Add Class
 		</button>
 	</div>
 

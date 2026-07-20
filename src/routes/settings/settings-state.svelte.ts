@@ -1,9 +1,6 @@
 import { settingsStore } from '$lib/stores/settings.svelte';
 import {
 	listClasses,
-	clearAuditEvents,
-	listAuditEvents,
-	type AuditEvent,
 	type Settings,
 	type AttendanceMode
 } from '$lib/features/settings/native';
@@ -21,7 +18,7 @@ import type { Ctx } from './state-context';
 /**
  * Settings page orchestrator.
  * Coordinates across sub-states and owns cross-cutting concerns:
- * global settings, audit trail, toast notifications.
+ * global settings, toast notifications.
  */
 class SettingsPageState implements Ctx {
 	constructor() {
@@ -38,8 +35,8 @@ class SettingsPageState implements Ctx {
 	quarterState = quarterState;
 
 	// ── Global settings ────────────────────────────────────────────────────────
-	defaultDayStart = $state('08:30');
-	defaultDayEnd = $state('15:30');
+	defaultDayStart = $state('08:00');
+	defaultDayEnd = $state('15:00');
 	defaultLateAfter = $state('08:45');
 	attendanceMode = $state<AttendanceMode>('manual');
 
@@ -103,7 +100,6 @@ class SettingsPageState implements Ctx {
 			this.applyGlobalSettings(savedSettings);
 			this.unsavedGlobalDialogOpen = false;
 			this.toast('Global configuration saved');
-			await this.reloadAuditEvents();
 			return true;
 		} catch (error) {
 			const msg = this.errorMessage(error, 'Failed to save settings');
@@ -159,7 +155,6 @@ class SettingsPageState implements Ctx {
 	init() {
 		this.reload();
 		this.backupState.reloadBackups();
-		this.reloadAuditEvents();
 	}
 
 	async reload() {
@@ -181,41 +176,6 @@ class SettingsPageState implements Ctx {
 		}
 	}
 
-	// ── Audit ──────────────────────────────────────────────────────────────────
-	auditEvents = $state<AuditEvent[]>([]);
-	auditLoading = $state(false);
-	auditClearing = $state(false);
-	auditClearTarget = $state(false);
-
-	async reloadAuditEvents() {
-		this.auditLoading = true;
-		try {
-			this.auditEvents = await listAuditEvents(50);
-		} catch (err: unknown) {
-			const msg = this.errorMessage(err, 'Audit trail unavailable');
-			this.toast(`Audit trail unavailable: ${msg}`, false);
-		} finally {
-			this.auditLoading = false;
-		}
-	}
-
-	async confirmClearAuditEvents() {
-		if (this.auditClearing) return;
-		this.auditClearing = true;
-		try {
-			const deletedCount = await clearAuditEvents();
-			this.auditEvents = [];
-			this.auditClearTarget = false;
-			this.toast(
-				deletedCount === 1 ? 'Cleared 1 audit event' : `Cleared ${deletedCount} audit events`
-			);
-		} catch (err: unknown) {
-			const msg = this.errorMessage(err, 'Audit trail could not be cleared');
-			this.toast(`Audit trail could not be cleared: ${msg}`, false);
-		} finally {
-			this.auditClearing = false;
-		}
-	}
 }
 
 export const settingsState = new SettingsPageState();

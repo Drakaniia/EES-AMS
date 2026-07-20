@@ -94,7 +94,6 @@ class BackupState {
 		try {
 			this.backupStatus = await createBackupNow();
 			await this.reloadBackupSummaries();
-			await this.ctx.reloadAuditEvents();
 			this.ctx.toast('Backup created');
 		} catch (error) {
 			const msg = this.errorMessage(error, 'Backup failed');
@@ -210,7 +209,7 @@ class BackupState {
 		try {
 			const result = await restoreBackup(this.restorePreview.sourcePath);
 			this.restorePreview = null;
-			await Promise.all([this.ctx.reload(), this.reloadBackups(), this.ctx.reloadAuditEvents()]);
+			await Promise.all([this.ctx.reload(), this.reloadBackups()]);
 			this.ctx.toast(`Database restored. Safety backup: ${result.preRestoreBackupPath}`);
 		} catch (error) {
 			const msg = this.errorMessage(error, 'Restore failed');
@@ -238,7 +237,6 @@ class BackupState {
 			}
 
 			this.exportDialogOpen = false;
-			await this.ctx.reloadAuditEvents();
 		} catch (error) {
 			const msg = this.errorMessage(error, 'Export failed');
 			this.ctx.toast(`Export failed: ${msg}`, false);
@@ -251,7 +249,6 @@ class BackupState {
 			const data = JSON.parse(txt);
 			await importAll(data);
 			await this.ctx.reload();
-			await this.ctx.reloadAuditEvents();
 			this.ctx.toast('Backup imported');
 		} catch (err: unknown) {
 			const msg = this.errorMessage(err, 'Unknown error');
@@ -274,7 +271,6 @@ class BackupState {
 	async onWipeConfirm() {
 		await wipeAll();
 		await this.ctx.reload();
-		await this.ctx.reloadAuditEvents();
 		this.ctx.toast('All data wiped');
 	}
 }

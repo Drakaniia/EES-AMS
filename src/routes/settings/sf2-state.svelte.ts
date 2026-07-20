@@ -270,7 +270,6 @@ class Sf2State {
 		this.sf2ValidationDialogOpen = false;
 		this.sf2ValidationDetailsOpen = false;
 		await this.ctx.reload();
-		await this.ctx.reloadAuditEvents();
 
 		try {
 			const settings = await getSf2WorkbookSettings(summary.classId);
@@ -435,7 +434,6 @@ class Sf2State {
 			this.sf2TemplateClassId = summary.classId;
 			this.closeSf2TemplateDialog(true);
 			await this.ctx.reload();
-			await this.ctx.reloadAuditEvents();
 			this.ctx.toast(
 				creating
 					? `Created SF2 working copy for ${summary.learnersFound} learners`

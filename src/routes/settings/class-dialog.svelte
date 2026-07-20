@@ -8,11 +8,11 @@
 		editingClass = $bindable<Class | null>(null),
 		formClassName = $bindable(''),
 		formRoom = $bindable(''),
-		formDayStart = $bindable('08:30'),
-		formDayEnd = $bindable('15:30'),
+		formDayStart = $bindable('08:00'),
+		formDayEnd = $bindable('15:00'),
 		formLateAfter = $bindable('08:45'),
 		formSessions = $bindable<Session[]>([
-			{ name: 'Full Day', startTime: '08:30', endTime: '15:30', lateAfter: '08:45' }
+			{ name: 'Full Day', startTime: '08:00', endTime: '15:00', lateAfter: '08:45' }
 		]),
 		formDays = $bindable<number[]>([1, 2, 3, 4, 5]),
 		sessionMode = $bindable<'single' | 'morning-afternoon' | 'custom'>('single'),

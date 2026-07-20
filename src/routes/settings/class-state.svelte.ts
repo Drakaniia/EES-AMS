@@ -117,7 +117,6 @@ class ClassState {
 			this.ctx.toast(this.editingClass ? 'Class updated' : 'Class added');
 			this.classDialogOpen = false;
 			await this.ctx.reload();
-			await this.ctx.reloadAuditEvents();
 		} catch (error) {
 			this.ctx.toast(`Failed to save class: ${error}`, false);
 		}
@@ -129,7 +128,6 @@ class ClassState {
 		this.ctx.toast('Class deleted');
 		this.deleteTarget = null;
 		await this.ctx.reload();
-		await this.ctx.reloadAuditEvents();
 	}
 
 	async onDeleteClass(event: MouseEvent, id: string) {

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { settingsState } from './settings-state.svelte';
@@ -9,7 +8,6 @@
 	import BackupSection from './backup-section.svelte';
 	import Sf2Section from './sf2-section.svelte';
 	import GlobalConfigForm from './global-config-form.svelte';
-	import AuditTrailSection from './audit-trail-section.svelte';
 	import RestoreBackupDialog from './restore-backup-dialog.svelte';
 
 	onMount(() => {
@@ -23,12 +21,6 @@
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col overflow-hidden">
-	<PageHeader
-		category="Settings"
-		title="System Configuration"
-		description="Manage your class schedule and system-wide attendance rules."
-	/>
-
 	<div class="min-h-0 flex-1 overflow-auto">
 		{#if settingsStore.loading}
 			<div class="px-6 py-12 text-sm text-muted-foreground md:px-12">Loading…</div>
@@ -49,7 +41,6 @@
 				<!-- ── Right column ──────────────────────────────────────────── -->
 				<div class="space-y-6 lg:col-span-4">
 					<GlobalConfigForm />
-					<AuditTrailSection />
 				</div>
 			</div>
 		{/if}
