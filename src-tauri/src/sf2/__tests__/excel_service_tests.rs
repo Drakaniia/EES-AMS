@@ -23,9 +23,7 @@ fn unmapped_roster_issue_two_students() {
 
 #[test]
 fn unmapped_roster_issue_shows_first_five() {
-    let names = (1..=7)
-        .map(|i| format!("Student{i}"))
-        .collect::<Vec<_>>();
+    let names = (1..=7).map(|i| format!("Student{i}")).collect::<Vec<_>>();
     let msg = unmapped_roster_issue(&names);
     assert!(msg.contains("Student1"));
     assert!(msg.contains("Student5"));
@@ -35,9 +33,7 @@ fn unmapped_roster_issue_shows_first_five() {
 
 #[test]
 fn unmapped_roster_issue_exactly_five() {
-    let names = (1..=5)
-        .map(|i| format!("Student{i}"))
-        .collect::<Vec<_>>();
+    let names = (1..=5).map(|i| format!("Student{i}")).collect::<Vec<_>>();
     let msg = unmapped_roster_issue(&names);
     assert!(msg.contains("Student5"));
     assert!(!msg.contains("more"), "should not have 'more' suffix");
@@ -54,9 +50,7 @@ fn unmapped_roster_issue_zero_students() {
 
 #[test]
 fn unmapped_roster_issue_exactly_one_more_after_five() {
-    let names = (1..=6)
-        .map(|i| format!("Student{i}"))
-        .collect::<Vec<_>>();
+    let names = (1..=6).map(|i| format!("Student{i}")).collect::<Vec<_>>();
     let msg = unmapped_roster_issue(&names);
     assert!(msg.contains(", and 1 more"));
 }

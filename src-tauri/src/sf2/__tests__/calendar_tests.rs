@@ -21,15 +21,13 @@ fn current_month_all_mappings_returns_true() {
         imported_at: 0,
         last_synced_at: None,
     };
-    let mappings = vec![
-        Sf2DateMappingRecord {
-            template_id: "test".to_string(),
-            sheet_name: "JULY 2026".to_string(),
-            date: "2026-07-01".to_string(),
-            column_letter: "F".to_string(),
-            column_index: 6,
-        },
-    ];
+    let mappings = vec![Sf2DateMappingRecord {
+        template_id: "test".to_string(),
+        sheet_name: "JULY 2026".to_string(),
+        date: "2026-07-01".to_string(),
+        column_letter: "F".to_string(),
+        column_index: 6,
+    }];
     assert!(
         date_mappings_are_current_for_report_month(&template, &mappings),
         "mappings for the current report month should return true"
@@ -101,15 +99,13 @@ fn only_other_month_mappings_returns_false() {
         imported_at: 0,
         last_synced_at: None,
     };
-    let mappings = vec![
-        Sf2DateMappingRecord {
-            template_id: "test".to_string(),
-            sheet_name: "DECEMBER 2026".to_string(),
-            date: "2026-12-01".to_string(),
-            column_letter: "F".to_string(),
-            column_index: 6,
-        },
-    ];
+    let mappings = vec![Sf2DateMappingRecord {
+        template_id: "test".to_string(),
+        sheet_name: "DECEMBER 2026".to_string(),
+        date: "2026-12-01".to_string(),
+        column_letter: "F".to_string(),
+        column_index: 6,
+    }];
     assert!(
         !date_mappings_are_current_for_report_month(&template, &mappings),
         "only mappings for a different month should return false"
@@ -161,15 +157,13 @@ fn invalid_report_month_returns_false() {
         imported_at: 0,
         last_synced_at: None,
     };
-    let mappings = vec![
-        Sf2DateMappingRecord {
-            template_id: "test".to_string(),
-            sheet_name: "JULY 2026".to_string(),
-            date: "2026-07-01".to_string(),
-            column_letter: "F".to_string(),
-            column_index: 6,
-        },
-    ];
+    let mappings = vec![Sf2DateMappingRecord {
+        template_id: "test".to_string(),
+        sheet_name: "JULY 2026".to_string(),
+        date: "2026-07-01".to_string(),
+        column_letter: "F".to_string(),
+        column_index: 6,
+    }];
     assert!(
         !date_mappings_are_current_for_report_month(&template, &mappings),
         "invalid report month should return false"
