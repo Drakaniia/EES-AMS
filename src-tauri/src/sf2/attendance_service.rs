@@ -120,7 +120,7 @@ pub fn sync_and_open_sf2_workbook<R: tauri::Runtime>(
         // Step 7/10: Save workbook changes
         emit_sf2_progress(app, "open", 7, 10, "Saving workbook changes…");
         let synced_at = chrono::Utc::now().timestamp();
-        sf2_repo.set_last_synced_at(&template.id, synced_at)?;
+        sf2_repo.set_last_synced_at(&template.id, Some(synced_at))?;
     } else {
         // Workbook already reflects the latest attendance — skip Excel I/O.
         emit_sf2_progress(app, "open", 5, 10, "Attendance already up to date…");
@@ -171,18 +171,9 @@ pub fn set_preview_attendance_lightweight(
         .ok_or_else(|| {
             AppError::InvalidInput("No SF2 template imported for this class".to_string())
         })?;
-    let date_mappings = sf2_date_mappings_for_report_month(
-        &template,
-        &sf2_repo.date_mappings_for_template(&template.id)?,
-    );
-    if !date_mappings
-        .iter()
-        .any(|mapping| mapping.date.as_str() == date.as_str())
-    {
-        return Err(AppError::InvalidInput(format!(
-            "{date} is not mapped to an SF2 date column"
-        )));
-    }
+    // Removed date_mapping validation: unmapped dates should also be
+    // clickable/toggleable. The toggle is DB-only — it does not write to Excel.
+    // Events for unmapped dates are handled correctly during export (filtered out).
 
     let class = ClassRepository::new(pool.clone())
         .get(&class_id)?
@@ -198,41 +189,38 @@ pub fn set_preview_attendance_lightweight(
     // students. This establishes the day as having attendance taken, and leaves
     // this specific student without an "in" event → they show as Absent (X).
     if !present {
-        let today = Local::now().date_naive();
-        if date_value <= today {
-            let event_repo = EventRepository::new(pool.clone());
-            let all_events = event_repo.list()?;
-            let present_events = present_events_for_day(&all_events, &students, &class_id, &date);
-            if !day_has_attendance_taken(&present_events) {
-                // This is an Open day → mark all other mapped students as present
-                let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
-                for mapping in &student_mappings {
-                    if mapping.student_id == student_id {
-                        // Skip — this student should remain absent
-                        continue;
-                    }
-                    if present_events
-                        .iter()
-                        .any(|e| e.student_id == mapping.student_id)
-                    {
-                        // Already has an "in" event — skip
-                        continue;
-                    }
-                    if let Err(e) = set_attendance_event_for_day(
-                        pool.clone(),
-                        &mapping.student_id,
-                        &class_id,
-                        date_value,
-                        &class.day_start,
-                        true,
-                    ) {
-                        log::warn!(
-                            "Failed to mark student {} present on {}: {}",
-                            mapping.student_id,
-                            date,
-                            e
-                        );
-                    }
+        let event_repo = EventRepository::new(pool.clone());
+        let all_events = event_repo.list()?;
+        let present_events = present_events_for_day(&all_events, &students, &class_id, &date);
+        if !day_has_attendance_taken(&present_events) {
+            // This is an Open day → mark all other mapped students as present
+            let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
+            for mapping in &student_mappings {
+                if mapping.student_id == student_id {
+                    // Skip — this student should remain absent
+                    continue;
+                }
+                if present_events
+                    .iter()
+                    .any(|e| e.student_id == mapping.student_id)
+                {
+                    // Already has an "in" event — skip
+                    continue;
+                }
+                if let Err(e) = set_attendance_event_for_day(
+                    pool.clone(),
+                    &mapping.student_id,
+                    &class_id,
+                    date_value,
+                    &class.day_start,
+                    true,
+                ) {
+                    log::warn!(
+                        "Failed to mark student {} present on {}: {}",
+                        mapping.student_id,
+                        date,
+                        e
+                    );
                 }
             }
         }
@@ -245,7 +233,14 @@ pub fn set_preview_attendance_lightweight(
         date_value,
         &class.day_start,
         present,
-    )
+    )?;
+    // Reset last_synced_at so the next SF2 open detects the change and
+    // rewrites marks. Without this, the sync optimization in
+    // sync_and_open_sf2_workbook would skip rewriting because all events
+    // created here have past-date timestamps, making the MAX(timestamp)
+    // comparison against last_synced_at return false.
+    sf2_repo.set_last_synced_at(&template.id, None)?;
+    Ok(())
 }
 
 pub fn set_preview_attendance(
@@ -298,8 +293,11 @@ pub fn set_preview_attendance(
         &class.day_start,
         present,
     )?;
-    let template =
-        super::excel_service::refresh_template_calendar_from_saved_month(pool.clone(), &template)?;
+    let template = super::excel_service::refresh_template_calendar_from_saved_month(
+        pool.clone(),
+        &template,
+        false,
+    )?;
     write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
 
     super::excel_service::export_preview(pool, Some(class_id))
@@ -346,18 +344,12 @@ pub fn set_all_students_present(pool: DbPool, class_id: &str) -> Result<usize> {
 
     let report_dates: Vec<String> = date_mappings.iter().map(|m| m.date.clone()).collect();
 
-    let today = Local::now().date_naive();
     let mut created_count = 0usize;
 
     for date_str in &report_dates {
         let Ok(date) = parse_date(date_str) else {
             continue;
         };
-
-        // Skip future dates
-        if date > today {
-            continue;
-        }
 
         // Check if attendance was taken on this day
         let present_events = present_events_for_day(&events, &students, class_id, date_str);
@@ -495,16 +487,6 @@ fn export_marks(
     student_mappings: &[Sf2StudentMappingRecord],
     date_mappings: &[Sf2DateMappingRecord],
 ) -> Result<Vec<Sf2CellMark>> {
-    let today = Local::now().date_naive();
-    let past_days: Vec<&String> = closed_days
-        .iter()
-        .filter(|day| {
-            NaiveDate::parse_from_str(day, "%Y-%m-%d")
-                .map(|d| d <= today)
-                .unwrap_or(true)
-        })
-        .collect();
-
     let date_by_day: HashMap<&str, &Sf2DateMappingRecord> = date_mappings
         .iter()
         .map(|mapping| (mapping.date.as_str(), mapping))
@@ -515,7 +497,7 @@ fn export_marks(
     let events = event_repo.list()?;
 
     let mut marks = Vec::new();
-    for day in past_days {
+    for day in closed_days {
         let Some(date_mapping) = date_by_day.get(day.as_str()) else {
             continue;
         };
