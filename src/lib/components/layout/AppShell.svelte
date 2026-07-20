@@ -73,7 +73,9 @@
 	</a>
 
 	<aside
-		class="sidebar flex shrink-0 flex-col border-b border-border bg-background transition-all duration-300 md:min-h-0 md:border-r md:border-b-0 {isCollapsed ? 'md:w-16 collapsed' : 'md:w-64'}"
+		class="sidebar flex shrink-0 flex-col border-b border-border bg-background transition-all duration-300 md:min-h-0 md:border-r md:border-b-0 {isCollapsed
+			? 'collapsed md:w-16'
+			: 'md:w-64'}"
 		aria-label="Primary navigation"
 	>
 		<!-- Header -->
@@ -91,10 +93,16 @@
 				class="size-10 shrink-0 rounded-xl object-contain ring-1 ring-border md:size-11"
 			/>
 			<div class="min-w-0">
-				<div class="truncate text-base leading-tight font-bold tracking-tight md:text-lg {isCollapsed ? 'hidden' : ''}">
+				<div
+					class="truncate text-base leading-tight font-bold tracking-tight md:text-lg {isCollapsed
+						? 'hidden'
+						: ''}"
+				>
 					EES AMS
 				</div>
-				<div class="mt-0.5 text-[11px] font-medium text-muted-foreground {isCollapsed ? 'hidden' : ''}">
+				<div
+					class="mt-0.5 text-[11px] font-medium text-muted-foreground {isCollapsed ? 'hidden' : ''}"
+				>
 					{settingsStore.settings?.quarter ?? '1st Quarter'}
 				</div>
 			</div>
@@ -143,7 +151,11 @@
 		</nav>
 
 		<!-- Footer -->
-		<div class="sidebar-footer border-t border-border px-4 py-3 {isCollapsed ? 'hidden' : 'max-md:hidden md:block'}">
+		<div
+			class="sidebar-footer border-t border-border px-4 py-3 {isCollapsed
+				? 'hidden'
+				: 'max-md:hidden md:block'}"
+		>
 			<div class="flex items-center justify-between gap-2">
 				<div class="min-w-0">
 					<div class="truncate text-xs font-semibold text-muted-foreground">{todayLabel}</div>

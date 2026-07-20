@@ -166,9 +166,7 @@
 						role="progressbar"
 						aria-label="Loading"
 					>
-						<div
-							class="h-full rounded-pill bg-primary indeterminate-progress"
-						></div>
+						<div class="indeterminate-progress h-full rounded-pill bg-primary"></div>
 					</div>
 				</div>
 			{/if}
@@ -179,21 +177,6 @@
 		</div>
 	</div>
 {/if}
-
-<style>
-	.indeterminate-progress {
-		animation: indeterminate-slide 2s ease-in-out infinite;
-		width: 40%;
-	}
-	@keyframes indeterminate-slide {
-		0% {
-			transform: translateX(-100%);
-		}
-		100% {
-			transform: translateX(350%);
-		}
-	}
-</style>
 
 <Sf2ImportValidationDialog
 	bind:open={sf2State.sf2ValidationDialogOpen}
@@ -242,3 +225,18 @@
 	onsubmit={(e) => sf2State.onCreateSf2FromTemplate(e)}
 	onclose={(force) => sf2State.closeSf2TemplateDialog(force)}
 />
+
+<style>
+	.indeterminate-progress {
+		animation: indeterminate-slide 2s ease-in-out infinite;
+		width: 40%;
+	}
+	@keyframes indeterminate-slide {
+		0% {
+			transform: translateX(-100%);
+		}
+		100% {
+			transform: translateX(350%);
+		}
+	}
+</style>
