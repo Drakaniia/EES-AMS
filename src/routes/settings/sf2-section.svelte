@@ -113,7 +113,6 @@
 </section>
 
 {#if sf2State.sf2ProgressVisible}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		role="dialog"
 		aria-modal="true"

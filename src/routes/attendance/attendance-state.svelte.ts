@@ -76,7 +76,7 @@ export function adjustDate(dateKey: string, offsetDays: number): string {
 	const parts = parseDateKey(dateKey);
 	if (!parts) return dateKey;
 
-	const date = new Date(parts.year, parts.monthIndex, parts.day);
+	const date = new SvelteDate(parts.year, parts.monthIndex, parts.day);
 	date.setDate(date.getDate() + offsetDays);
 	return fmtDate(date.getTime());
 }

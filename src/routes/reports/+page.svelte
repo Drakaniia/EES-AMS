@@ -27,6 +27,7 @@
 		type Sf2TemplateDraft,
 		type Sf2WorkbookSettings
 	} from '$lib/db-rust';
+	import { SvelteMap } from 'svelte/reactivity';
 	import {
 		normalizedSf2FirstSchoolDay,
 		SF2_SCHOOL_MONTHS
@@ -68,7 +69,7 @@
 	// ── Preview cache: eliminates redundant backend calls on month switch ───
 	// When switching to a month that's already been loaded, returns instantly.
 	// Key format: `${classId}:${reportMonth}`
-	const previewCache = new Map<string, Sf2ExportPreview>();
+	const previewCache = new SvelteMap<string, Sf2ExportPreview>();
 
 	function cacheKey(classId: string, reportMonth: string): string {
 		return `${classId}:${reportMonth}`;
@@ -87,7 +88,7 @@
 	let sf2OpenStatus = $state<Sf2OpenStatus>('idle');
 	let sf2OpenProgressCurrent = $state(0);
 	let sf2OpenProgressTotal = $state(10);
-	let sf2OpenMessage = $state('');
+
 	let sf2OpenError = $state<string | null>(null);
 	let sf2OpenResultPath = $state<string | null>(null);
 
@@ -240,7 +241,7 @@
 		sf2OpenStatus = 'syncing';
 		sf2OpenProgressCurrent = 0;
 		sf2OpenProgressTotal = 10;
-		sf2OpenMessage = '';
+
 		sf2OpenError = null;
 		sf2OpenResultPath = null;
 		sf2OpenCycleIndex = 0;
@@ -302,7 +303,7 @@
 			.filter((row) => genderFilter === 'all' || row.gender?.toLowerCase() === genderFilter)
 			.map((row) => ({
 				...row,
-				cellsByDate: new Map(row.cells.map((cell) => [cell.date, cell]))
+				cellsByDate: new SvelteMap(row.cells.map((cell) => [cell.date, cell]))
 			}))
 	);
 
@@ -1065,7 +1066,6 @@
 {/if}
 
 {#if monthSwitchError}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		role="dialog"
 		aria-modal="true"
@@ -1112,7 +1112,6 @@
 {/snippet}
 
 {#if sf2OpenStatus !== 'idle'}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		role="dialog"
 		aria-modal="true"
