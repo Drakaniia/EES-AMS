@@ -41,7 +41,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Check frontend
-        run: bun run check && bun run lint && bun run typecheck
+        run: bun run check && bun run lint && bun run typecheck && bun run test
 
       - name: Check Rust formatting
         working-directory: src-tauri

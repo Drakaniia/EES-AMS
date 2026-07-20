@@ -8,8 +8,7 @@ export default defineConfig({
 		environment: 'jsdom',
 		setupFiles: ['./src/test-setup.ts'],
 		globals: true,
-		testTimeout: 60000,
-		pool: 'forks'
+		testTimeout: 60000
 	},
 	resolve: {
 		conditions: ['browser', 'development']
