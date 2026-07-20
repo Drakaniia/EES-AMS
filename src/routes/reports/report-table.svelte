@@ -126,7 +126,6 @@
 				<Maximize2 class="size-3.5" aria-hidden="true" />
 				Full Preview
 			</button>
-
 		</div>
 	</div>
 

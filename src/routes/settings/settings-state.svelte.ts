@@ -1,9 +1,5 @@
 import { settingsStore } from '$lib/stores/settings.svelte';
-import {
-	listClasses,
-	type Settings,
-	type AttendanceMode
-} from '$lib/features/settings/native';
+import { listClasses, type Settings, type AttendanceMode } from '$lib/features/settings/native';
 import {
 	buildGlobalSettingsPayload,
 	globalSettingsEqual,
@@ -175,7 +171,6 @@ class SettingsPageState implements Ctx {
 			this.toast(`Failed to load: ${msg}`, false);
 		}
 	}
-
 }
 
 export const settingsState = new SettingsPageState();

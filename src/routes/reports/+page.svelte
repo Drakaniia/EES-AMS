@@ -185,7 +185,8 @@
 				9: 'Opening in Excel…',
 				10: 'Done!'
 			};
-			sf2OpenDisplayMessage = progressMessages[sf2OpenProgressCurrent] || SF2_OPEN_MESSAGES[sf2OpenCycleIndex];
+			sf2OpenDisplayMessage =
+				progressMessages[sf2OpenProgressCurrent] || SF2_OPEN_MESSAGES[sf2OpenCycleIndex];
 			return;
 		}
 		sf2OpenDisplayMessage = SF2_OPEN_MESSAGES[sf2OpenCycleIndex];
@@ -395,11 +396,7 @@
 		}
 	}
 
-
-
-	const hasAbsentCells = $derived(
-		(preview?.absentList.length ?? 0) > 0
-	);
+	const hasAbsentCells = $derived((preview?.absentList.length ?? 0) > 0);
 
 	async function onPresentAll() {
 		if (!activeClassId || !preview?.template || presentingAll) return;
@@ -408,9 +405,7 @@
 			const count = await presentAllSf2PreviewAttendance(activeClassId);
 			// Invalidate cache since attendance data changed
 			invalidateCacheForMonth(activeClassId, activeReportMonth);
-			reportDialogs?.showToast(
-				`All students cleared to Present (${count} marks cleared)`
-			);
+			reportDialogs?.showToast(`All students cleared to Present (${count} marks cleared)`);
 			await loadReport(activeClassId);
 		} catch (error) {
 			const msg = errorMessage(error, 'Present All failed');
@@ -676,8 +671,6 @@
 <svelte:window onkeydown={onWindowKeydown} />
 
 <div class="flex h-full flex-col overflow-hidden">
-
-
 	{#if loading}
 		<div class="px-4 py-5 md:px-8 lg:px-10">
 			<LoadingBlock rows={4} label="Loading SF2 workbook preview" />
@@ -730,7 +723,7 @@
 					{presentingAll}
 					{hasAbsentCells}
 					onToggleAttendance={toggleAttendance}
-					onPresentAll={onPresentAll}
+					{onPresentAll}
 					onFullReviewOpen={() => (fullReviewOpen = true)}
 					onGenderFilterChange={(value) => (genderFilter = value)}
 				/>
@@ -738,13 +731,13 @@
 
 			<aside class="min-h-0 space-y-5 overflow-auto">
 				<div class="rounded-2xl border border-border bg-surface p-5">
-					<div class="label-mono text-primary mb-4">Actions</div>
+					<div class="label-mono mb-4 text-primary">Actions</div>
 					<div class="flex flex-col gap-2">
 						<button
 							type="button"
 							onclick={onOpenSf2}
 							disabled={!preview?.template || sf2OpenStatus === 'syncing' || !activeClassId}
-							class="control-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50 w-full"
+							class="control-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							<ExternalLink class="size-4" aria-hidden="true" />
 							{sf2OpenStatus === 'syncing' ? 'Opening...' : 'Open SF2'}
@@ -753,7 +746,7 @@
 							type="button"
 							onclick={onSyncRoster}
 							disabled={!preview?.template || syncingRoster || !activeClassId}
-							class="control-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50 w-full"
+							class="control-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 							aria-label="Sync class roster to SF2 workbook"
 						>
 							{#if syncingRoster}
@@ -767,7 +760,7 @@
 							type="button"
 							onclick={requestExport}
 							disabled={exportDisabled}
-							class="control-ring inline-flex h-10 items-center justify-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 w-full"
+							class="control-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							<Save class="size-4" aria-hidden="true" />
 							{exporting ? 'Exporting...' : 'Review Export'}
@@ -940,7 +933,7 @@
 						{presentingAll}
 						{hasAbsentCells}
 						onToggleAttendance={toggleAttendance}
-						onPresentAll={onPresentAll}
+						{onPresentAll}
 						onFullReviewOpen={() => (fullReviewOpen = true)}
 						onGenderFilterChange={(value) => (genderFilter = value)}
 					/>
@@ -974,7 +967,7 @@
 			<input
 				value={reportMonthLabel(draftReportMonth || workbookSettings?.reportMonth || '')}
 				disabled={true}
-				class="h-10 w-full rounded-md border border-border bg-muted/30 px-3 text-sm text-muted-foreground opacity-60 cursor-not-allowed"
+				class="h-10 w-full cursor-not-allowed rounded-md border border-border bg-muted/30 px-3 text-sm text-muted-foreground opacity-60"
 				title="Use the 'Switch month' button to change the report month"
 			/>
 		</label>
@@ -1064,12 +1057,8 @@
 		>
 			<Spinner />
 			<div class="space-y-1">
-				<p class="text-sm font-semibold text-foreground">
-					Switching report month…
-				</p>
-				<p class="text-xs text-muted-foreground">
-					Updating workbook calendar and attendance marks
-				</p>
+				<p class="text-sm font-semibold text-foreground">Switching report month…</p>
+				<p class="text-xs text-muted-foreground">Updating workbook calendar and attendance marks</p>
 			</div>
 		</div>
 	</div>
@@ -1141,9 +1130,7 @@
 			<div
 				class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
 			>
-				<div
-					class="flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600"
-				>
+				<div class="flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600">
 					<CircleX class="size-6" aria-hidden="true" />
 				</div>
 				<div class="space-y-2">

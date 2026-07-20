@@ -99,11 +99,7 @@ class Sf2State {
 			'Configuring attendance columns…',
 			'Almost there…'
 		],
-		update: [
-			'Updating workbook settings…',
-			'Reconfiguring calendar…',
-			'Writing changes…'
-		]
+		update: ['Updating workbook settings…', 'Reconfiguring calendar…', 'Writing changes…']
 	};
 
 	private sf2ProgressCycleIndex = 0;
@@ -155,8 +151,7 @@ class Sf2State {
 				const messages =
 					Sf2State.SF2_PROGRESS_MESSAGES[this.sf2ProgressTask] ??
 					Sf2State.SF2_PROGRESS_MESSAGES.import;
-				this.sf2ProgressCycleIndex =
-					(this.sf2ProgressCycleIndex + 1) % messages.length;
+				this.sf2ProgressCycleIndex = (this.sf2ProgressCycleIndex + 1) % messages.length;
 			}
 			this.sf2UpdateProgressMessage();
 		}, 2500);
@@ -201,10 +196,8 @@ class Sf2State {
 		}
 		// Fallback to cycling messages
 		const messages =
-			Sf2State.SF2_PROGRESS_MESSAGES[this.sf2ProgressTask] ??
-			Sf2State.SF2_PROGRESS_MESSAGES.import;
-		this.sf2ProgressDisplayMessage =
-			messages[this.sf2ProgressCycleIndex % messages.length];
+			Sf2State.SF2_PROGRESS_MESSAGES[this.sf2ProgressTask] ?? Sf2State.SF2_PROGRESS_MESSAGES.import;
+		this.sf2ProgressDisplayMessage = messages[this.sf2ProgressCycleIndex % messages.length];
 	}
 
 	sf2CleanupProgress() {
@@ -275,9 +268,7 @@ class Sf2State {
 			const settings = await getSf2WorkbookSettings(summary.classId);
 			if (shouldPromptForSf2SettingsUpdate(settings)) {
 				this.openImportedSf2SettingsReview(settings);
-				this.ctx.toast(
-					`Imported ${summary.learnersFound} learners. Review SF2 settings first.`
-				);
+				this.ctx.toast(`Imported ${summary.learnersFound} learners. Review SF2 settings first.`);
 				return;
 			}
 		} catch (error) {

@@ -26,10 +26,7 @@
 		type Student,
 		type Class
 	} from '$lib/db-rust';
-	import {
-		sf2MonthByValue,
-		defaultSf2FirstSchoolDay
-	} from '$lib/features/settings/sf2-workbook';
+	import { sf2MonthByValue, defaultSf2FirstSchoolDay } from '$lib/features/settings/sf2-workbook';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import {
@@ -620,12 +617,14 @@
 </svelte:head>
 
 {#snippet dateNavControls()}
-	<div class="inline-flex items-center rounded-pill border border-border bg-background p-0.5 shadow-sm">
+	<div
+		class="inline-flex items-center rounded-pill border border-border bg-background p-0.5 shadow-sm"
+	>
 		<button
 			type="button"
 			onclick={() => handleDateOffset(-1)}
 			disabled={dateLoading || isProcessing}
-			class="flex size-9 items-center justify-center rounded-pill text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
+			class="flex size-9 cursor-pointer items-center justify-center rounded-pill text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:opacity-40"
 			aria-label="Previous day"
 		>
 			<ChevronLeft class="size-4" />
@@ -635,12 +634,12 @@
 			type="button"
 			onclick={() => (datePickerOpen = true)}
 			disabled={dateLoading || isProcessing}
-			class="inline-flex h-9 items-center gap-2 rounded-pill px-3 text-sm font-semibold hover:bg-surface transition-colors cursor-pointer disabled:opacity-60"
+			class="inline-flex h-9 cursor-pointer items-center gap-2 rounded-pill px-3 text-sm font-semibold transition-colors hover:bg-surface disabled:opacity-60"
 			aria-haspopup="dialog"
 			aria-expanded={datePickerOpen}
 		>
 			{#if dateLoading}
-				<span class="size-2 rounded-full bg-primary animate-pulse" aria-hidden="true"></span>
+				<span class="size-2 animate-pulse rounded-full bg-primary" aria-hidden="true"></span>
 			{:else}
 				<CalendarDays class="size-4 text-primary" aria-hidden="true" />
 			{/if}
@@ -651,7 +650,7 @@
 			type="button"
 			onclick={() => handleDateOffset(1)}
 			disabled={dateLoading || isProcessing}
-			class="flex size-9 items-center justify-center rounded-pill text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
+			class="flex size-9 cursor-pointer items-center justify-center rounded-pill text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:opacity-40"
 			aria-label="Next day"
 		>
 			<ChevronRight class="size-4" />
@@ -681,11 +680,9 @@
 	<section
 		class="flex min-h-0 flex-1 flex-col gap-5 px-4 py-5 md:px-8 lg:px-10 xl:grid xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
 	>
-		<div class="xl:col-span-2 flex flex-wrap items-center justify-between gap-3">
+		<div class="flex flex-wrap items-center justify-between gap-3 xl:col-span-2">
 			<div>
-				<p class="text-sm text-muted-foreground">
-					Tap a card to record attendance
-				</p>
+				<p class="text-sm text-muted-foreground">Tap a card to record attendance</p>
 			</div>
 			<div class="flex flex-wrap items-center gap-3">
 				{@render dateNavControls()}

@@ -56,10 +56,7 @@ export async function updateSf2WorkbookSettings(
  * workbook. Pure DB change so the reports page can switch months instantly and
  * avoid the slow Excel automation that `updateSf2WorkbookSettings` runs.
  */
-export async function setSf2ReportMonth(
-	classId: string,
-	reportMonth: string
-): Promise<void> {
+export async function setSf2ReportMonth(classId: string, reportMonth: string): Promise<void> {
 	await invoke('set_sf2_report_month', { classId, reportMonth });
 }
 
