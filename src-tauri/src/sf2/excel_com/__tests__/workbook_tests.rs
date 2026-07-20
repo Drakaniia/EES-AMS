@@ -101,7 +101,10 @@ fn contains_ignore_ascii_case_exact_match() {
 
 #[test]
 fn contains_ignore_ascii_case_case_insensitive() {
-    assert!(contains_ignore_ascii_case("school form 2 (sf2)", "School Form 2"));
+    assert!(contains_ignore_ascii_case(
+        "school form 2 (sf2)",
+        "School Form 2"
+    ));
 }
 
 #[test]
@@ -114,7 +117,10 @@ fn contains_ignore_ascii_case_substring() {
 
 #[test]
 fn contains_ignore_ascii_case_no_match() {
-    assert!(!contains_ignore_ascii_case("Something else entirely", "School Form 2"));
+    assert!(!contains_ignore_ascii_case(
+        "Something else entirely",
+        "School Form 2"
+    ));
 }
 
 #[test]
@@ -231,6 +237,11 @@ fn sheet_is_analysis_candidate_non_monthly_sf2_with_no_sf2_title() {
 // instead of one process per operation.
 //
 // They require Microsoft Excel to be installed at runtime.
+//
+// ⚠️ These tests MUST be run sequentially (--test-threads=1) because
+// Excel COM automation does not support multiple concurrent sessions
+// from the same process. When run in parallel, they will fail with
+// "workbook setup should succeed" or similar COM errors.
 
 #[test]
 fn batch_operations_analyze_succeeds() {
@@ -256,10 +267,13 @@ fn batch_operations_analyze_succeeds() {
         let sheets = workbook.get_object("Worksheets")?;
         let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(1)])?;
         sheet.put_string("Name", "JULY 2026")?;
-        let _ = workbook.method("SaveAs", vec![
-            ComVariant::bstr(&path_for_setup.to_string_lossy()),
-            ComVariant::i4(-4143),
-        ]);
+        let _ = workbook.method(
+            "SaveAs",
+            vec![
+                ComVariant::bstr(&path_for_setup.to_string_lossy()),
+                ComVariant::i4(-4143),
+            ],
+        );
         let _ = workbook.method("Close", vec![ComVariant::bool(false)]);
         let _ = excel.quit();
         Ok(())
@@ -270,8 +284,10 @@ fn batch_operations_analyze_succeeds() {
     let result = super::batch_operations(&workbook_path, false, |session| {
         let analysis = session.analyze()?;
         assert!(!analysis.sheets.is_empty(), "should have at least 1 sheet");
-        assert!(!analysis.learners.is_empty() || analysis.sheets.len() >= 1,
-            "analysis should return sheet info");
+        assert!(
+            !analysis.learners.is_empty() || analysis.sheets.len() >= 1,
+            "analysis should return sheet info"
+        );
         Ok(())
     });
 
@@ -306,10 +322,13 @@ fn batch_operations_multiple_ops_succeed() {
         let sheets = workbook.get_object("Worksheets")?;
         let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(1)])?;
         sheet.put_string("Name", "JULY 2026")?;
-        let _ = workbook.method("SaveAs", vec![
-            ComVariant::bstr(&path_for_setup.to_string_lossy()),
-            ComVariant::i4(-4143),
-        ]);
+        let _ = workbook.method(
+            "SaveAs",
+            vec![
+                ComVariant::bstr(&path_for_setup.to_string_lossy()),
+                ComVariant::i4(-4143),
+            ],
+        );
         let _ = workbook.method("Close", vec![ComVariant::bool(false)]);
         let _ = excel.quit();
         Ok(())
@@ -321,13 +340,11 @@ fn batch_operations_multiple_ops_succeed() {
     //
     // Note: marks is moved into the closure (move keyword) because the
     // closure must be 'static (sent to another thread via run_excel_task).
-    let marks = vec![
-        crate::sf2::logic::Sf2CellMark {
-            sheet_name: "JULY 2026".to_string(),
-            cell_address: "A1".to_string(),
-            value: "Test".to_string(),
-        },
-    ];
+    let marks = vec![crate::sf2::logic::Sf2CellMark {
+        sheet_name: "JULY 2026".to_string(),
+        cell_address: "A1".to_string(),
+        value: "Test".to_string(),
+    }];
 
     let result = super::batch_operations(&workbook_path, true, move |session| {
         // Operation 1: analyze
@@ -364,16 +381,22 @@ fn batch_operations_multiple_ops_succeed() {
     let check = run_excel_task(move || {
         let mut excel = ExcelSession::new()?;
         let workbooks = excel.app.get_object("Workbooks")?;
-        let workbook = workbooks.method_object("Open", vec![
-            ComVariant::bstr(&path_for_check.to_string_lossy()),
-            ComVariant::i4(0),
-            ComVariant::bool(true),
-        ])?;
+        let workbook = workbooks.method_object(
+            "Open",
+            vec![
+                ComVariant::bstr(&path_for_check.to_string_lossy()),
+                ComVariant::i4(0),
+                ComVariant::bool(true),
+            ],
+        )?;
         let sheets = workbook.get_object("Worksheets")?;
         let sheet = sheets.get_object_with_args("Item", vec![ComVariant::bstr("JULY 2026")])?;
         let cell = sheet.get_object_with_args("Range", vec![ComVariant::bstr("A1")])?;
         let value = cell.get("Value2")?.to_string_value();
-        assert_eq!(value, "Test", "cell A1 should contain 'Test' after write_marks");
+        assert_eq!(
+            value, "Test",
+            "cell A1 should contain 'Test' after write_marks"
+        );
         let _ = workbook.method("Close", vec![ComVariant::bool(false)]);
         let _ = excel.quit();
         Ok(())
@@ -402,15 +425,15 @@ fn set_sf2_mark_rejects_formula_cells_but_force_accepts() {
         let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(1)])?;
 
         // Write a formula to cell A1
-        let cell = sheet.get_object_with_args(
-            "Range",
-            vec![ComVariant::bstr("A1")],
-        )?;
+        let cell = sheet.get_object_with_args("Range", vec![ComVariant::bstr("A1")])?;
         cell.put_string("Formula", "=1+1")?;
 
         // Confirm the cell HAS a formula (setup verification)
         let has_formula = cell.get_bool("HasFormula")?;
-        assert!(has_formula, "cell A1 should have '=1+1' formula after setup");
+        assert!(
+            has_formula,
+            "cell A1 should have '=1+1' formula after setup"
+        );
 
         // TEST 1: set_sf2_mark SHOULD REJECT formula cells (this IS the bug)
         let reject = crate::sf2::excel_com::worksheet::set_sf2_mark(&sheet, "A1", "X");
@@ -485,10 +508,7 @@ fn write_marks_rejects_formula_cells_but_write_marks_force_accepts() {
         let sheets = workbook.get_object("Worksheets")?;
         let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(1)])?;
 
-        let cell = sheet.get_object_with_args(
-            "Range",
-            vec![ComVariant::bstr("A1")],
-        )?;
+        let cell = sheet.get_object_with_args("Range", vec![ComVariant::bstr("A1")])?;
         cell.put_string("Formula", "=1+1")?;
 
         // Rename sheet to match an SF2-like name for write_marks lookup

@@ -1,5 +1,5 @@
 use super::*;
-use crate::domain::models::{Student, StudentId, StudentGender};
+use crate::domain::models::{Student, StudentGender, StudentId};
 use crate::sf2::logic::normalize_learner_name;
 use crate::sf2::models::Sf2WorkbookAnalysis;
 use chrono::Utc;
@@ -131,7 +131,10 @@ fn unique_normalized_name_duplicate_appends_suffix() {
     let first = unique_normalized_name(&mut seen, "Maria Santos", "1");
     let second = unique_normalized_name(&mut seen, "Maria Santos", "2");
     assert_eq!(first, normalize_learner_name("Maria Santos"));
-    assert_eq!(second, format!("{}#{}", normalize_learner_name("Maria Santos"), "2"));
+    assert_eq!(
+        second,
+        format!("{}#{}", normalize_learner_name("Maria Santos"), "2")
+    );
 }
 
 #[test]
@@ -141,8 +144,14 @@ fn unique_normalized_name_multiple_duplicates() {
     let b = unique_normalized_name(&mut seen, "John Smith", "20");
     let c = unique_normalized_name(&mut seen, "John Smith", "30");
     assert_eq!(a, normalize_learner_name("John Smith"));
-    assert_eq!(b, format!("{}#{}", normalize_learner_name("John Smith"), "20"));
-    assert_eq!(c, format!("{}#{}", normalize_learner_name("John Smith"), "30"));
+    assert_eq!(
+        b,
+        format!("{}#{}", normalize_learner_name("John Smith"), "20")
+    );
+    assert_eq!(
+        c,
+        format!("{}#{}", normalize_learner_name("John Smith"), "30")
+    );
 }
 
 #[test]
@@ -164,8 +173,16 @@ fn unique_normalized_name_name_with_accents() {
 #[test]
 fn reject_duplicate_roster_names_no_duplicates() {
     let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Juan", Some(StudentGender::Male)),
-        make_student("00000000-0000-0000-0000-000000000002", "Maria", Some(StudentGender::Female)),
+        make_student(
+            "00000000-0000-0000-0000-000000000001",
+            "Juan",
+            Some(StudentGender::Male),
+        ),
+        make_student(
+            "00000000-0000-0000-0000-000000000002",
+            "Maria",
+            Some(StudentGender::Female),
+        ),
     ];
     assert!(reject_duplicate_roster_names(&students).is_ok());
 }
@@ -173,8 +190,16 @@ fn reject_duplicate_roster_names_no_duplicates() {
 #[test]
 fn reject_duplicate_roster_names_duplicate_found() {
     let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Juan dela Cruz", Some(StudentGender::Male)),
-        make_student("00000000-0000-0000-0000-000000000002", "Juan Dela Cruz", Some(StudentGender::Male)),
+        make_student(
+            "00000000-0000-0000-0000-000000000001",
+            "Juan dela Cruz",
+            Some(StudentGender::Male),
+        ),
+        make_student(
+            "00000000-0000-0000-0000-000000000002",
+            "Juan Dela Cruz",
+            Some(StudentGender::Male),
+        ),
     ];
     let result = reject_duplicate_roster_names(&students);
     assert!(result.is_err());
@@ -186,10 +211,26 @@ fn reject_duplicate_roster_names_duplicate_found() {
 #[test]
 fn reject_duplicate_roster_names_multiple_duplicate_groups() {
     let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Alice", Some(StudentGender::Female)),
-        make_student("00000000-0000-0000-0000-000000000002", "Alice", Some(StudentGender::Female)),
-        make_student("00000000-0000-0000-0000-000000000003", "Bob", Some(StudentGender::Male)),
-        make_student("00000000-0000-0000-0000-000000000004", "Bob", Some(StudentGender::Male)),
+        make_student(
+            "00000000-0000-0000-0000-000000000001",
+            "Alice",
+            Some(StudentGender::Female),
+        ),
+        make_student(
+            "00000000-0000-0000-0000-000000000002",
+            "Alice",
+            Some(StudentGender::Female),
+        ),
+        make_student(
+            "00000000-0000-0000-0000-000000000003",
+            "Bob",
+            Some(StudentGender::Male),
+        ),
+        make_student(
+            "00000000-0000-0000-0000-000000000004",
+            "Bob",
+            Some(StudentGender::Male),
+        ),
     ];
     let result = reject_duplicate_roster_names(&students);
     assert!(result.is_err());
@@ -200,9 +241,11 @@ fn reject_duplicate_roster_names_multiple_duplicate_groups() {
 
 #[test]
 fn reject_duplicate_roster_names_single_student() {
-    let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Only One", Some(StudentGender::Male)),
-    ];
+    let students = vec![make_student(
+        "00000000-0000-0000-0000-000000000001",
+        "Only One",
+        Some(StudentGender::Male),
+    )];
     assert!(reject_duplicate_roster_names(&students).is_ok());
 }
 
@@ -215,8 +258,16 @@ fn reject_duplicate_roster_names_empty_list() {
 #[test]
 fn reject_duplicate_roster_names_same_normalized_different_case() {
     let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "JUAN", Some(StudentGender::Male)),
-        make_student("00000000-0000-0000-0000-000000000002", "juan", Some(StudentGender::Male)),
+        make_student(
+            "00000000-0000-0000-0000-000000000001",
+            "JUAN",
+            Some(StudentGender::Male),
+        ),
+        make_student(
+            "00000000-0000-0000-0000-000000000002",
+            "juan",
+            Some(StudentGender::Male),
+        ),
     ];
     let result = reject_duplicate_roster_names(&students);
     assert!(result.is_err(), "same normalized name should be rejected");
@@ -225,8 +276,16 @@ fn reject_duplicate_roster_names_same_normalized_different_case() {
 #[test]
 fn template_roster_assignments_basic() {
     let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Juan", Some(StudentGender::Male)),
-        make_student("00000000-0000-0000-0000-000000000002", "Maria", Some(StudentGender::Female)),
+        make_student(
+            "00000000-0000-0000-0000-000000000001",
+            "Juan",
+            Some(StudentGender::Male),
+        ),
+        make_student(
+            "00000000-0000-0000-0000-000000000002",
+            "Maria",
+            Some(StudentGender::Female),
+        ),
     ];
     let result = template_roster_assignments(&students);
     assert!(result.is_ok());
@@ -239,8 +298,16 @@ fn template_roster_assignments_basic() {
 #[test]
 fn template_roster_assignments_all_male() {
     let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Juan", Some(StudentGender::Male)),
-        make_student("00000000-0000-0000-0000-000000000002", "Pedro", Some(StudentGender::Male)),
+        make_student(
+            "00000000-0000-0000-0000-000000000001",
+            "Juan",
+            Some(StudentGender::Male),
+        ),
+        make_student(
+            "00000000-0000-0000-0000-000000000002",
+            "Pedro",
+            Some(StudentGender::Male),
+        ),
     ];
     let result = template_roster_assignments(&students);
     assert!(result.is_ok());
@@ -252,9 +319,11 @@ fn template_roster_assignments_all_male() {
 
 #[test]
 fn template_roster_assignments_missing_gender_error() {
-    let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Unknown", None),
-    ];
+    let students = vec![make_student(
+        "00000000-0000-0000-0000-000000000001",
+        "Unknown",
+        None,
+    )];
     let result = template_roster_assignments(&students);
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
@@ -265,14 +334,20 @@ fn template_roster_assignments_missing_gender_error() {
 #[test]
 fn template_roster_assignments_exceeds_male_capacity_uses_expanded_slots() {
     let students: Vec<Student> = (0..22)
-        .map(|i| make_student(
-            &format!("00000000-0000-0000-0000-{:012}", i),
-            &format!("Male Student {i}"),
-            Some(StudentGender::Male),
-        ))
+        .map(|i| {
+            make_student(
+                &format!("00000000-0000-0000-0000-{:012}", i),
+                &format!("Male Student {i}"),
+                Some(StudentGender::Male),
+            )
+        })
         .collect();
     let result = template_roster_assignments(&students);
-    assert!(result.is_ok(), "should dynamically expand male slots: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "should dynamically expand male slots: {:?}",
+        result.err()
+    );
     let assignments = result.unwrap();
     assert_eq!(assignments.len(), 22);
     // 22 male students expand to rows 8-29 (instead of erroring)
@@ -283,14 +358,20 @@ fn template_roster_assignments_exceeds_male_capacity_uses_expanded_slots() {
 #[test]
 fn template_roster_assignments_exceeds_female_capacity_uses_expanded_slots() {
     let students: Vec<Student> = (0..20)
-        .map(|i| make_student(
-            &format!("00000000-0000-0000-0000-{:012}", i),
-            &format!("Female Student {i}"),
-            Some(StudentGender::Female),
-        ))
+        .map(|i| {
+            make_student(
+                &format!("00000000-0000-0000-0000-{:012}", i),
+                &format!("Female Student {i}"),
+                Some(StudentGender::Female),
+            )
+        })
         .collect();
     let result = template_roster_assignments(&students);
-    assert!(result.is_ok(), "should dynamically expand female slots: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "should dynamically expand female slots: {:?}",
+        result.err()
+    );
     let assignments = result.unwrap();
     assert_eq!(assignments.len(), 20);
     // 20 female students expand to rows 30-49 (instead of erroring)
@@ -317,16 +398,26 @@ fn template_roster_assignments_exceeds_both_expands_rows() {
         ));
     }
     let result = template_roster_assignments(&students);
-    assert!(result.is_ok(), "should dynamically expand both: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "should dynamically expand both: {:?}",
+        result.err()
+    );
     let assignments = result.unwrap();
     assert_eq!(assignments.len(), 47);
     // 25 males expand rows: 8..=32, then MALE TOTAL at 33 (was 29 + 4 extra)
     // Female start = 30 + 4 (extra male) = 34
     for i in 0..25 {
-        assert_eq!(assignments[i].slot.gender_block, "MALE", "assignment {i} should be MALE");
+        assert_eq!(
+            assignments[i].slot.gender_block, "MALE",
+            "assignment {i} should be MALE"
+        );
     }
     for i in 25..47 {
-        assert_eq!(assignments[i].slot.gender_block, "FEMALE", "assignment {i} should be FEMALE");
+        assert_eq!(
+            assignments[i].slot.gender_block, "FEMALE",
+            "assignment {i} should be FEMALE"
+        );
     }
     assert_eq!(assignments[0].slot.row_index, 8);
     assert_eq!(assignments[24].slot.row_index, 32); // last male row (8 + 24 = 32)
@@ -336,9 +427,11 @@ fn template_roster_assignments_exceeds_both_expands_rows() {
 
 #[test]
 fn template_roster_assignments_males_use_first_slots() {
-    let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Juan", Some(StudentGender::Male)),
-    ];
+    let students = vec![make_student(
+        "00000000-0000-0000-0000-000000000001",
+        "Juan",
+        Some(StudentGender::Male),
+    )];
     let result = template_roster_assignments(&students).unwrap();
     assert_eq!(result[0].slot.row_index, 8);
     assert_eq!(result[0].student.name, "Juan");
@@ -346,9 +439,11 @@ fn template_roster_assignments_males_use_first_slots() {
 
 #[test]
 fn template_roster_assignments_females_use_female_slots() {
-    let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Maria", Some(StudentGender::Female)),
-    ];
+    let students = vec![make_student(
+        "00000000-0000-0000-0000-000000000001",
+        "Maria",
+        Some(StudentGender::Female),
+    )];
     let result = template_roster_assignments(&students).unwrap();
     assert_eq!(result[0].slot.row_index, 30);
     assert_eq!(result[0].student.name, "Maria");
@@ -357,11 +452,13 @@ fn template_roster_assignments_females_use_female_slots() {
 #[test]
 fn template_roster_assignments_max_male_capacity() {
     let students: Vec<Student> = (0..21)
-        .map(|i| make_student(
-            &format!("00000000-0000-0000-0000-{:012}", i),
-            &format!("Male {i}"),
-            Some(StudentGender::Male),
-        ))
+        .map(|i| {
+            make_student(
+                &format!("00000000-0000-0000-0000-{:012}", i),
+                &format!("Male {i}"),
+                Some(StudentGender::Male),
+            )
+        })
         .collect();
     let result = template_roster_assignments(&students);
     assert!(result.is_ok());
@@ -371,11 +468,13 @@ fn template_roster_assignments_max_male_capacity() {
 #[test]
 fn template_roster_assignments_max_female_capacity() {
     let students: Vec<Student> = (0..19)
-        .map(|i| make_student(
-            &format!("00000000-0000-0000-0000-{:012}", i),
-            &format!("Female {i}"),
-            Some(StudentGender::Female),
-        ))
+        .map(|i| {
+            make_student(
+                &format!("00000000-0000-0000-0000-{:012}", i),
+                &format!("Female {i}"),
+                Some(StudentGender::Female),
+            )
+        })
         .collect();
     let result = template_roster_assignments(&students);
     assert!(result.is_ok());
@@ -402,10 +501,16 @@ fn template_roster_assignments_mixed_full_roster() {
     let result = template_roster_assignments(&students).unwrap();
     assert_eq!(result.len(), 27);
     for i in 0..15 {
-        assert_eq!(result[i].slot.gender_block, "MALE", "assignment {i} should be MALE");
+        assert_eq!(
+            result[i].slot.gender_block, "MALE",
+            "assignment {i} should be MALE"
+        );
     }
     for i in 15..27 {
-        assert_eq!(result[i].slot.gender_block, "FEMALE", "assignment {i} should be FEMALE");
+        assert_eq!(
+            result[i].slot.gender_block, "FEMALE",
+            "assignment {i} should be FEMALE"
+        );
     }
     assert_eq!(result[0].slot.row_index, 8);
     assert_eq!(result[14].slot.row_index, 22);
@@ -416,8 +521,16 @@ fn template_roster_assignments_mixed_full_roster() {
 #[test]
 fn student_mappings_from_roster_assignments_basic() {
     let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Juan", Some(StudentGender::Male)),
-        make_student("00000000-0000-0000-0000-000000000002", "Maria", Some(StudentGender::Female)),
+        make_student(
+            "00000000-0000-0000-0000-000000000001",
+            "Juan",
+            Some(StudentGender::Male),
+        ),
+        make_student(
+            "00000000-0000-0000-0000-000000000002",
+            "Maria",
+            Some(StudentGender::Female),
+        ),
     ];
     let assignments = template_roster_assignments(&students).unwrap();
     let mappings = student_mappings_from_roster_assignments("template-1", &assignments);
@@ -434,19 +547,32 @@ fn student_mappings_from_roster_assignments_basic() {
 
 #[test]
 fn student_mappings_from_roster_assignments_student_id_mapped() {
-    let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Juan", Some(StudentGender::Male)),
-    ];
+    let students = vec![make_student(
+        "00000000-0000-0000-0000-000000000001",
+        "Juan",
+        Some(StudentGender::Male),
+    )];
     let assignments = template_roster_assignments(&students).unwrap();
     let mappings = student_mappings_from_roster_assignments("t1", &assignments);
-    assert_eq!(mappings[0].student_id, "00000000-0000-0000-0000-000000000001");
+    assert_eq!(
+        mappings[0].student_id,
+        "00000000-0000-0000-0000-000000000001"
+    );
 }
 
 #[test]
 fn student_mappings_from_roster_assignments_duplicate_normalized_names() {
     let students = vec![
-        make_student("00000000-0000-0000-0000-000000000001", "Juan", Some(StudentGender::Male)),
-        make_student("00000000-0000-0000-0000-000000000002", "JUAN", Some(StudentGender::Male)),
+        make_student(
+            "00000000-0000-0000-0000-000000000001",
+            "Juan",
+            Some(StudentGender::Male),
+        ),
+        make_student(
+            "00000000-0000-0000-0000-000000000002",
+            "JUAN",
+            Some(StudentGender::Male),
+        ),
     ];
     let assignments = template_roster_assignments(&students).unwrap();
     let mappings = student_mappings_from_roster_assignments("t1", &assignments);
@@ -479,13 +605,11 @@ fn clear_unused_learner_marks_no_mapped_rows_clears_all_learner_slots() {
         school_head_name: String::new(),
         learners: Vec::new(),
         dates: Vec::new(),
-        sheets: vec![
-            crate::sf2::models::Sf2WorkbookSheet {
-                name: "JANUARY 2025".to_string(),
-                visible: -1,
-                used_range: String::new(),
-            },
-        ],
+        sheets: vec![crate::sf2::models::Sf2WorkbookSheet {
+            name: "JANUARY 2025".to_string(),
+            visible: -1,
+            used_range: String::new(),
+        }],
     };
     let mapped_rows: Vec<u32> = vec![];
     let marks = clear_unused_learner_marks(&analysis, &mapped_rows, None, None);
@@ -505,12 +629,12 @@ fn clear_unused_learner_marks_no_mapped_rows_clears_all_learner_slots() {
         assert!(mark.value.is_empty());
     }
     // Verify total rows are NOT cleared (they're not learner slots)
-    assert!(!marks.iter().any(|m| m.cell_address == "A29"
-        || m.cell_address == "B29"
-        || m.cell_address == "C29"));
-    assert!(!marks.iter().any(|m| m.cell_address == "A49"
-        || m.cell_address == "B49"
-        || m.cell_address == "C49"));
+    assert!(!marks
+        .iter()
+        .any(|m| m.cell_address == "A29" || m.cell_address == "B29" || m.cell_address == "C29"));
+    assert!(!marks
+        .iter()
+        .any(|m| m.cell_address == "A49" || m.cell_address == "B49" || m.cell_address == "C49"));
     // Verify all learner rows are present (male 8-28, female 30-48)
     let mut cleared_rows: Vec<u32> = marks
         .iter()
@@ -542,13 +666,11 @@ fn clear_unused_learner_marks_all_mapped_returns_empty() {
         school_head_name: String::new(),
         learners: Vec::new(),
         dates: Vec::new(),
-        sheets: vec![
-            crate::sf2::models::Sf2WorkbookSheet {
-                name: "JANUARY 2025".to_string(),
-                visible: -1,
-                used_range: String::new(),
-            },
-        ],
+        sheets: vec![crate::sf2::models::Sf2WorkbookSheet {
+            name: "JANUARY 2025".to_string(),
+            visible: -1,
+            used_range: String::new(),
+        }],
     };
     let all_rows: Vec<u32> = (8..=48).filter(|r| !matches!(r, 29 | 49)).collect();
     let marks = clear_unused_learner_marks(&analysis, &all_rows, None, None);
@@ -570,13 +692,11 @@ fn clear_unused_learner_marks_some_mapped_clears_only_unmapped() {
         school_head_name: String::new(),
         learners: Vec::new(),
         dates: Vec::new(),
-        sheets: vec![
-            crate::sf2::models::Sf2WorkbookSheet {
-                name: "JANUARY 2025".to_string(),
-                visible: -1,
-                used_range: String::new(),
-            },
-        ],
+        sheets: vec![crate::sf2::models::Sf2WorkbookSheet {
+            name: "JANUARY 2025".to_string(),
+            visible: -1,
+            used_range: String::new(),
+        }],
     };
     // Map 5 male students (rows 8-12) and 3 female students (rows 30-32)
     let mapped_rows = vec![8u32, 9, 10, 11, 12, 30, 31, 32];
@@ -618,13 +738,11 @@ fn clear_unused_learner_marks_clears_columns_abc_for_unused_rows() {
         school_head_name: String::new(),
         learners: Vec::new(),
         dates: Vec::new(),
-        sheets: vec![
-            crate::sf2::models::Sf2WorkbookSheet {
-                name: "JANUARY 2025".to_string(),
-                visible: -1,
-                used_range: String::new(),
-            },
-        ],
+        sheets: vec![crate::sf2::models::Sf2WorkbookSheet {
+            name: "JANUARY 2025".to_string(),
+            visible: -1,
+            used_range: String::new(),
+        }],
     };
     // Map only the first 2 male rows (8, 9) and first 2 female rows (30, 31)
     // The remaining 36 learner slots should be cleared in columns A, B, and C
@@ -632,7 +750,11 @@ fn clear_unused_learner_marks_clears_columns_abc_for_unused_rows() {
     let marks = clear_unused_learner_marks(&analysis, &mapped_rows, None, None);
 
     // 36 unused rows × 3 columns (A, B, C) = 108 marks
-    assert_eq!(marks.len(), 36 * 3, "should clear A, B, C for all 36 unused rows");
+    assert_eq!(
+        marks.len(),
+        36 * 3,
+        "should clear A, B, C for all 36 unused rows"
+    );
 
     // Group marks by row to verify each unused row has A, B, C cleared
     let mut marks_by_row: std::collections::HashMap<u32, Vec<&str>> =
@@ -699,13 +821,11 @@ fn clear_unused_learner_marks_non_bundled_scenario_clears_unmapped_rows() {
         school_head_name: String::new(),
         learners: Vec::new(),
         dates: Vec::new(),
-        sheets: vec![
-            crate::sf2::models::Sf2WorkbookSheet {
-                name: "JULY 2026".to_string(),
-                visible: -1,
-                used_range: String::new(),
-            },
-        ],
+        sheets: vec![crate::sf2::models::Sf2WorkbookSheet {
+            name: "JULY 2026".to_string(),
+            visible: -1,
+            used_range: String::new(),
+        }],
     };
 
     // 15 male + 12 female = 27 mapped rows
@@ -730,15 +850,24 @@ fn clear_unused_learner_marks_non_bundled_scenario_clears_unmapped_rows() {
         .collect();
 
     for row in 23u32..=28 {
-        assert!(cleared_rows.contains(&row), "unused male row {row} should be cleared");
+        assert!(
+            cleared_rows.contains(&row),
+            "unused male row {row} should be cleared"
+        );
     }
     for row in 42u32..=48 {
-        assert!(cleared_rows.contains(&row), "unused female row {row} should be cleared");
+        assert!(
+            cleared_rows.contains(&row),
+            "unused female row {row} should be cleared"
+        );
     }
 
     // Mapped rows should NOT be in the cleared set
     for row in &[8u32, 9, 10, 22, 30, 31, 41] {
-        assert!(!cleared_rows.contains(row), "mapped row {row} should not be cleared");
+        assert!(
+            !cleared_rows.contains(row),
+            "mapped row {row} should not be cleared"
+        );
     }
 
     // Each cleared row should have A, B, C marks
@@ -746,12 +875,19 @@ fn clear_unused_learner_marks_non_bundled_scenario_clears_unmapped_rows() {
         let row_marks: Vec<&str> = marks
             .iter()
             .filter(|m| m.cell_address.ends_with(&row.to_string()))
-            .map(|m| m.cell_address.trim_end_matches(|c: char| c.is_ascii_digit()))
+            .map(|m| {
+                m.cell_address
+                    .trim_end_matches(|c: char| c.is_ascii_digit())
+            })
             .collect();
         assert_eq!(row_marks.len(), 3, "row {row} should have 3 column marks");
         let mut sorted = row_marks.clone();
         sorted.sort();
-        assert_eq!(sorted, vec!["A", "B", "C"], "row {row} should clear A, B, C");
+        assert_eq!(
+            sorted,
+            vec!["A", "B", "C"],
+            "row {row} should clear A, B, C"
+        );
     }
 }
 
