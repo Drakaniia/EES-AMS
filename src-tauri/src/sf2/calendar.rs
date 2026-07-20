@@ -16,7 +16,7 @@ pub(super) fn date_mappings_are_current_for_report_month(
     let year_text = year.to_string();
 
     !date_mappings.is_empty()
-        && date_mappings.iter().all(|mapping| {
+        && date_mappings.iter().any(|mapping| {
             let Ok(date) = parse_date(&mapping.date) else {
                 return false;
             };
@@ -345,9 +345,6 @@ pub(super) fn sf2_date_mappings_for_report_month(
             }
 
             let normalized_date = NaiveDate::from_ymd_opt(year, month, date.day())?;
-            if normalized_date.weekday().number_from_monday() > 5 {
-                return None;
-            }
 
             Some(Sf2DateMappingRecord {
                 template_id: mapping.template_id.clone(),
@@ -399,46 +396,5 @@ pub(super) fn attendance_changed_since(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn no_events_means_no_sync_needed() {
-        assert!(
-            !attendance_changed_since(Some(1000), None),
-            "with no attendance events, the workbook is already current"
-        );
-    }
-
-    #[test]
-    fn never_synced_with_events_requires_sync() {
-        assert!(
-            attendance_changed_since(None, Some(500)),
-            "if the workbook was never synced but has events, we must sync"
-        );
-    }
-
-    #[test]
-    fn event_after_last_sync_requires_sync() {
-        assert!(
-            attendance_changed_since(Some(1000), Some(1001)),
-            "an event newer than the last sync means the workbook is stale"
-        );
-    }
-
-    #[test]
-    fn event_equal_to_last_sync_skips_sync() {
-        assert!(
-            !attendance_changed_since(Some(1000), Some(1000)),
-            "an event exactly at the last sync time is already written"
-        );
-    }
-
-    #[test]
-    fn event_before_last_sync_skips_sync() {
-        assert!(
-            !attendance_changed_since(Some(1000), Some(999)),
-            "events older than the last sync are already reflected"
-        );
-    }
-}
+#[path = "__tests__/calendar_tests.rs"]
+mod tests;

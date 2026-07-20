@@ -1,63 +1,29 @@
-use crate::domain::error::{AppError, Result};
-use crate::domain::models::StudentGender;
-use crate::infrastructure::database::{
-    ClassRepository, DbPool, EventRepository, StudentRepository,
-};
+use crate::domain::error::Result;
+use crate::domain::models::{AttendanceEvent, Student, StudentGender};
 use crate::sf2::attendance::present_student_ids;
-use crate::sf2::calendar::sf2_date_mappings_for_report_month;
 use crate::sf2::logic::normalize_learner_name;
 use crate::sf2::models::{
-    Sf2ExportPreview, Sf2ExportReadiness, Sf2PreviewAbsence, Sf2PreviewCell, Sf2PreviewCellStatus,
-    Sf2PreviewDate, Sf2PreviewStudentRow, Sf2StudentMappingRecord,
+    Sf2DateMappingRecord, Sf2ExportPreview, Sf2ExportReadiness, Sf2PreviewAbsence,
+    Sf2PreviewCell, Sf2PreviewCellStatus, Sf2PreviewDate, Sf2PreviewStudentRow,
+    Sf2StudentMappingRecord, Sf2TemplateRecord,
 };
-use crate::sf2::naming::class_name;
-use crate::sf2::repository::{template_summary, Sf2Repository};
+use crate::sf2::repository::template_summary;
 use chrono::{Local, NaiveDate};
 use std::collections::{HashMap, HashSet};
 
+/// Build an export preview from pre-queried data (no DB queries inside).
+/// This eliminates the duplicate DB round-trips that the previous flow had
+/// (export_readiness queried everything, then this function queried it all
+/// again independently).
 pub(super) fn export_preview(
-    pool: DbPool,
+    template: &Sf2TemplateRecord,
+    student_mappings: &[Sf2StudentMappingRecord],
+    date_mappings: &[Sf2DateMappingRecord],
+    class_name: &str,
+    class_students: &[Student],
+    events: &[AttendanceEvent],
     readiness: Sf2ExportReadiness,
 ) -> Result<Sf2ExportPreview> {
-    let Some(summary) = readiness.template.clone() else {
-        return Ok(Sf2ExportPreview {
-            template: None,
-            class_id: None,
-            class_name: String::new(),
-            source_path: None,
-            dates: Vec::new(),
-            students: Vec::new(),
-            absent_list: Vec::new(),
-            mapped_students: readiness.mapped_students,
-            mapped_dates: readiness.mapped_dates,
-            present_count: 0,
-            absence_count: 0,
-            unmapped_student_count: 0,
-            can_export: false,
-            issues: readiness.issues,
-            warnings: readiness.warnings,
-        });
-    };
-
-    let sf2_repo = Sf2Repository::new(pool.clone());
-    let template = sf2_repo
-        .latest_template_for_class(&summary.class_id)?
-        .ok_or_else(|| AppError::InvalidInput("No SF2 template imported".to_string()))?;
-    let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
-    let date_mappings = sf2_date_mappings_for_report_month(
-        &template,
-        &sf2_repo.date_mappings_for_template(&template.id)?,
-    );
-
-    let class_repo = ClassRepository::new(pool.clone());
-    let class = class_repo.get(&template.active_class_id)?;
-    let class_name = class
-        .as_ref()
-        .map(|class| class.name.clone())
-        .unwrap_or_else(|| class_name(&template.grade_level, &template.section));
-
-    let student_repo = StudentRepository::new(pool.clone());
-    let class_students = student_repo.list_by_class(Some(&template.active_class_id))?;
     let student_lookup = class_students
         .iter()
         .map(|student| (student.id.to_string(), student))
@@ -73,16 +39,14 @@ pub(super) fn export_preview(
         })
         .collect::<Vec<_>>();
 
-    let event_repo = EventRepository::new(pool.clone());
-    let events = event_repo.list()?;
     let present_by_day = dates
         .iter()
         .map(|date| {
             (
                 date.date.clone(),
                 present_student_ids(
-                    &events,
-                    &class_students,
+                    events,
+                    class_students,
                     &template.active_class_id,
                     &date.date,
                 ),
@@ -98,7 +62,7 @@ pub(super) fn export_preview(
     let mut mapped_student_ids = HashSet::new();
     let today = Local::now().date_naive();
 
-    for mapping in &student_mappings {
+    for mapping in student_mappings {
         mapped_student_ids.insert(mapping.student_id.clone());
         let student = student_lookup.get(&mapping.student_id);
         let student_name = student
@@ -130,24 +94,33 @@ pub(super) fn export_preview(
                 let is_future = NaiveDate::parse_from_str(&date.date, "%Y-%m-%d")
                     .map(|d| d > today)
                     .unwrap_or(false);
-                
-                let status = if is_present {
-                    row_present_count += 1;
-                    present_count += 1;
-                    Sf2PreviewCellStatus::Present
-                } else if is_future {
-                    Sf2PreviewCellStatus::Open
-                } else {
-                    row_absent_count += 1;
-                    absence_count += 1;
-                    absent_list.push(Sf2PreviewAbsence {
-                        student_id: mapping.student_id.clone(),
-                        student_name: student_name.clone(),
-                        date: date.date.clone(),
-                        row_index: mapping.row_index,
-                    });
-                    Sf2PreviewCellStatus::Absent
-                };
+
+                // A day has attendance taken if at least one student has an "in" event
+                let day_has_attendance = present_by_day
+                    .get(&date.date)
+                    .is_some_and(|present| !present.is_empty());
+
+                let status = preview_cell_status(is_present, is_future, day_has_attendance);
+
+                match status {
+                    Sf2PreviewCellStatus::Present => {
+                        row_present_count += 1;
+                        present_count += 1;
+                    }
+                    Sf2PreviewCellStatus::Absent => {
+                        row_absent_count += 1;
+                        absence_count += 1;
+                        absent_list.push(Sf2PreviewAbsence {
+                            student_id: mapping.student_id.clone(),
+                            student_name: student_name.clone(),
+                            date: date.date.clone(),
+                            row_index: mapping.row_index,
+                        });
+                    }
+                    Sf2PreviewCellStatus::Open => {
+                        // No counting for Open days
+                    }
+                }
 
                 Sf2PreviewCell {
                     date: date.date.clone(),
@@ -221,9 +194,9 @@ pub(super) fn export_preview(
 
     Ok(Sf2ExportPreview {
         template: Some(template_summary(template.clone())),
-        class_id: Some(template.active_class_id),
-        class_name,
-        source_path: Some(template.source_path),
+        class_id: Some(template.active_class_id.clone()),
+        class_name: class_name.to_string(),
+        source_path: Some(template.source_path.clone()),
         dates,
         students,
         absent_list,
@@ -237,6 +210,35 @@ pub(super) fn export_preview(
         warnings,
     })
 }
+
+/// Determine the cell status for a student on a given day in the SF2 preview.
+///
+/// - Present: student has an "in" event → empty cell
+/// - Future: day is in the future → Open ("-")
+/// - Absent: day had attendance taken but this student wasn't present → "X"
+/// - Present (fallback): past day with no attendance — show as empty so it's clickable
+pub(super) fn preview_cell_status(
+    is_present: bool,
+    is_future: bool,
+    day_has_attendance: bool,
+) -> Sf2PreviewCellStatus {
+    if is_present {
+        Sf2PreviewCellStatus::Present
+    } else if is_future {
+        Sf2PreviewCellStatus::Open
+    } else if day_has_attendance {
+        Sf2PreviewCellStatus::Absent
+    } else {
+        // Past day with no attendance: show as Present (empty) so the cell
+        // is clickable. Clicking it will mark this student as Absent (X) and
+        // create "in" events for all other students to establish the day.
+        Sf2PreviewCellStatus::Present
+    }
+}
+
+#[cfg(test)]
+#[path = "__tests__/preview_tests.rs"]
+mod tests;
 
 fn preview_gender(
     gender: Option<StudentGender>,

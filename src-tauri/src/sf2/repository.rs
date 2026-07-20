@@ -145,7 +145,6 @@ impl Sf2Repository {
         }
 
         transaction.execute(DELETE_STUDENT_MAPPINGS_SQL, params![template.id])?;
-        transaction.execute(DELETE_DATE_MAPPINGS_SQL, params![template.id])?;
 
         {
             let mut statement = transaction.prepare(INSERT_STUDENT_MAPPING_SQL)?;
@@ -162,6 +161,12 @@ impl Sf2Repository {
         }
 
         {
+            // Preserve date mappings from all months by using INSERT OR REPLACE.
+            // The PRIMARY KEY(template_id, date) constraint ensures that mappings
+            // for the same date are replaced, while mappings for different months
+            // (different dates) are preserved. This means date mappings are cached
+            // across month switches: once a month's mappings are computed via Excel,
+            // they persist in the DB and subsequent switches to that month skip Excel.
             let mut statement = transaction.prepare(INSERT_DATE_MAPPING_SQL)?;
             for date in dates {
                 statement.execute(params![
@@ -195,7 +200,7 @@ impl Sf2Repository {
     /// month is a pure DB change (the workbook is multi-sheet) so the reports
     /// page can switch months instantly without Excel automation.
     pub fn set_report_month(&self, template_id: &str, report_month: &str) -> Result<()> {
-        let mut conn = self.pool.get()?;
+        let conn = self.pool.get()?;
         let rows = conn.execute(
             "UPDATE sf2_templates SET report_month = ?2 WHERE id = ?1",
             params![template_id, report_month],
@@ -211,7 +216,7 @@ impl Sf2Repository {
     /// Record the timestamp (seconds) of the last successful attendance→Excel
     /// sync so `sync_and_open_sf2_workbook` can skip Excel when nothing changed.
     pub fn set_last_synced_at(&self, template_id: &str, synced_at: i64) -> Result<()> {
-        let mut conn = self.pool.get()?;
+        let conn = self.pool.get()?;
         conn.execute(
             "UPDATE sf2_templates SET last_synced_at = ?2 WHERE id = ?1",
             params![template_id, synced_at],

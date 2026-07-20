@@ -98,11 +98,15 @@ pub async fn create_sf2_workbook_from_template(
 }
 
 #[tauri::command]
-pub fn get_sf2_workbook_settings(
+pub async fn get_sf2_workbook_settings(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
     class_id: Option<String>,
 ) -> std::result::Result<Sf2WorkbookSettings, String> {
-    service::workbook_settings(pool.inner().clone(), class_id).map_err(|e| e.to_string())
+    let pool = pool.inner().clone();
+    tokio::task::spawn_blocking(move || service::workbook_settings(pool, class_id))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -151,11 +155,15 @@ pub fn get_sf2_export_readiness(
 }
 
 #[tauri::command]
-pub fn get_sf2_export_preview(
+pub async fn get_sf2_export_preview(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
     class_id: Option<String>,
 ) -> std::result::Result<Sf2ExportPreview, String> {
-    service::export_preview(pool.inner().clone(), class_id).map_err(|e| e.to_string())
+    let pool = pool.inner().clone();
+    tokio::task::spawn_blocking(move || service::export_preview(pool, class_id))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
 }
 
 /// Sync the latest attendance events from the database to the SF2 Excel working copy.
@@ -173,6 +181,18 @@ pub fn sync_sf2_attendance(
 /// For bundled templates this re-assigns all students to dynamic row slots,
 /// expanding the workbook if needed. For imported workbooks this maps new
 /// students to available empty learner rows in the workbook.
+/// Mark ALL mapped students as present for the current report month.
+/// Creates "in" events for every absent student on every day where
+/// attendance was taken. Open days (no attendance taken) are left as-is.
+#[tauri::command]
+pub fn present_all_sf2_preview_attendance(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: String,
+) -> std::result::Result<usize, String> {
+    service::set_all_students_present(pool.inner().clone(), &class_id)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn sync_sf2_roster(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,

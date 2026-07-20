@@ -55,6 +55,18 @@ pub fn is_learner_name(value: &str) -> bool {
     normalized.contains(',') && normalized.chars().any(|c| c.is_alphabetic())
 }
 
+/// Check if a day has any attendance taken based on present events.
+/// A day has "attendance taken" when at least one "in" event exists.
+pub fn day_has_attendance_taken(present_events: &[Sf2AttendanceEvent]) -> bool {
+    present_events
+        .iter()
+        .any(|event| event.event_type == "in")
+}
+
+#[cfg(test)]
+#[path = "__tests__/logic_tests.rs"]
+mod tests;
+
 pub fn attendance_marks_for_closed_day(
     students: &[Sf2StudentMapping],
     present_events: &[Sf2AttendanceEvent],

@@ -6,14 +6,15 @@ use crate::sf2::excel;
 use crate::sf2::excel_com::workbook::month_number;
 use crate::sf2::logic::{normalize_learner_name, Sf2CellMark};
 use crate::sf2::models::{
-    Sf2StudentMappingRecord, Sf2TemplateRecord, Sf2WorkbookLearner,
+    Sf2DateMappingRecord, Sf2StudentMappingRecord, Sf2TemplateRecord, Sf2WorkbookLearner,
 };
 use crate::sf2::repository::Sf2Repository;
 use crate::sf2::roster::{
-    clear_unused_learner_marks, reject_duplicate_roster_names,
+    bundled_template_total_rows, clear_unused_learner_marks, reject_duplicate_roster_names,
     roster_name_marks, student_mappings_from_roster_assignments, template_owns_roster,
     template_roster_assignments,
 };
+use crate::sf2::attendance_service::{summary_formula_marks, total_formula_marks};
 use crate::sf2::workbook_files::layout_fingerprint;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -88,22 +89,26 @@ fn sync_bundled_template_roster(
     let extra_male = male_count.saturating_sub(current_male_capacity) as u32;
     let extra_female = female_count.saturating_sub(current_female_capacity) as u32;
 
-    let male_total_row = existing_mappings.iter()
-        .filter(|m| m.gender_block.as_deref() == Some("MALE"))
-        .map(|m| m.row_index).max().map(|r| r + 1).unwrap_or(29);
-    let female_total_row = existing_mappings.iter()
-        .filter(|m| m.gender_block.as_deref() == Some("FEMALE"))
-        .map(|m| m.row_index).max().map(|r| r + 1).unwrap_or(49);
-
     let roster_assignments = template_roster_assignments(students)?;
+
+    // Row positions derived from the slot layout — automatically adapts to any
+    // expansion without hardcoding 29/49 base values.
+    let (male_total_row, female_total_row, combined_total_row) = bundled_template_total_rows(male_count, female_count);
+
+    let current_male_capacity = existing_male_mapped.max(21) as u32;
+    let current_extra_male = current_male_capacity.saturating_sub(21);
+    let current_female_capacity = existing_female_mapped.max(19) as u32;
+    // Compute where the total rows CURRENTLY sit before any expansion.
+    let current_male_total = 8u32 + current_male_capacity;
+    let current_female_total = 30u32 + current_extra_male + current_female_capacity;
 
     if extra_male > 0 || extra_female > 0 {
         excel::expand_roster_rows(
             &workbook_path,
             extra_male,
             extra_female,
-            existing_mappings.is_empty().then_some(29).or(Some(male_total_row)),
-            existing_mappings.is_empty().then_some(49).or(Some(female_total_row)),
+            existing_mappings.is_empty().then_some(29).or(Some(current_male_total)),
+            existing_mappings.is_empty().then_some(49).or(Some(current_female_total)),
         )?;
     }
 
@@ -123,18 +128,43 @@ fn sync_bundled_template_roster(
     }
 
     // Hide empty learner rows — only rows with students should be visible.
-    // TOTAL row positions use the fixed DepEd formula: 29/49 + expansion.
+    // TOTAL row positions derived from slot layout via bundled_template_total_rows().
     let occupied_rows: HashSet<u32> = roster_assignments.iter().map(|a| a.slot.row_index).collect();
-    let extra_male_hide = (male_count as u32).saturating_sub(21);
-    let extra_female_hide = (female_count as u32).saturating_sub(19);
-    let hide_male_total = 29u32 + extra_male_hide;
-    let hide_female_total = 49u32 + extra_male_hide + extra_female_hide;
-    excel::hide_empty_learner_rows(&workbook_path, hide_male_total, hide_female_total, &occupied_rows)?;
+    excel::hide_empty_learner_rows(&workbook_path, male_total_row, female_total_row, &occupied_rows)?;
 
     let refreshed_analysis = excel::analyze_workbook(&workbook_path)?;
     let student_mappings =
         student_mappings_from_roster_assignments(&template.id, &roster_assignments);
     let date_mappings = date_mappings_from_analysis(&template.id, &refreshed_analysis);
+
+    // ── Write TOTAL Per Day formulas and summary section ───────────────
+    // After syncing the roster (student names may have changed, counts may
+    // differ), the MALE/FEMALE/Combined TOTAL rows and the Enrolment summary
+    // must be rewritten so they reflect the current student gender counts.
+    let (total_formulas, summary_formulas, summary_static) = roster_sync_formula_marks(
+        male_count,
+        female_count,
+        male_total_row,
+        female_total_row,
+        combined_total_row,
+        &date_mappings,
+    );
+    if !total_formulas.is_empty() {
+        if let Err(error) = excel::write_formulas(&workbook_path, &total_formulas) {
+            log::warn!("failed to write TOTAL formula marks during roster sync: {error}");
+        }
+    }
+    if !summary_formulas.is_empty() {
+        if let Err(error) = excel::write_formulas(&workbook_path, &summary_formulas) {
+            log::warn!("failed to write summary formula marks during roster sync: {error}");
+        }
+    }
+    if !summary_static.is_empty() {
+        if let Err(error) = excel::write_marks_force(&workbook_path, &summary_static) {
+            log::warn!("failed to write summary static marks during roster sync: {error}");
+        }
+    }
+
     let synced_template = Sf2TemplateRecord {
         layout_fingerprint: layout_fingerprint(&refreshed_analysis),
         ..template.clone()
@@ -152,6 +182,43 @@ fn sync_bundled_template_roster(
     }
 
     Ok(synced_template)
+}
+
+/// Compute the TOTAL Per Day formulas and summary section marks for a roster sync.
+///
+/// Returns `(total_formula_marks, summary_formula_marks, summary_static_marks)`.
+/// These marks should be written to the workbook after syncing the roster so that
+/// the MALE/FEMALE/Combined TOTAL rows and the Enrolment summary (Row 53) reflect
+/// the current student count and gender distribution.
+pub(super) fn roster_sync_formula_marks(
+    male_count: usize,
+    female_count: usize,
+    male_total_row: u32,
+    female_total_row: u32,
+    combined_total_row: u32,
+    date_mappings: &[Sf2DateMappingRecord],
+) -> (Vec<Sf2CellMark>, Vec<Sf2CellMark>, Vec<Sf2CellMark>) {
+    let total_marks = total_formula_marks(
+        male_count,
+        female_count,
+        male_total_row,
+        female_total_row,
+        combined_total_row,
+        date_mappings,
+    );
+
+    let total_students = male_count + female_count;
+    let (summary_formula_marks, summary_static_marks) = summary_formula_marks(
+        male_count,
+        female_count,
+        total_students,
+        male_total_row,
+        female_total_row,
+        combined_total_row,
+        date_mappings,
+    );
+
+    (total_marks, summary_formula_marks, summary_static_marks)
 }
 
 /// Sync an imported workbook's roster: map new DB students to available empty learner rows.
@@ -321,5 +388,9 @@ fn sync_imported_workbook_roster(
 
     Ok(synced_template)
 }
+
+#[cfg(test)]
+#[path = "__tests__/roster_sync_tests.rs"]
+mod tests;
 
 

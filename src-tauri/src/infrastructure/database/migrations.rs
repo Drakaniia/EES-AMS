@@ -176,7 +176,7 @@ fn migrate_to_v1(conn: &rusqlite::Connection) -> Result<()> {
 
         -- Insert default settings
         INSERT OR IGNORE INTO settings (id, day_start, day_end, late_after, quarter)
-        VALUES ('app', '08:30', '15:30', '08:45', '1st Quarter');
+        VALUES ('app', '08:00', '15:00', '08:45', '1st Quarter');
         "#,
     )?;
 
