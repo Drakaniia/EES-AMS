@@ -624,9 +624,15 @@ pub fn set_report_month(pool: DbPool, class_id: &str, report_month: &str) -> Res
     //    - Re-analyzes the workbook to create fresh date mappings
     //    - Persists the new mappings in the DB
     //    - Returns the fully refreshed template with current date mappings
+    //
+    //    force_refresh=true ensures the Excel calendar is ALWAYS reconfigured
+    //    on month switch, even if partial date mappings already exist in the DB
+    //    from a previous buggy refresh. This guarantees every new month gets
+    //    complete, correct date mappings.
     let refreshed = super::excel_service::refresh_template_calendar_from_saved_month(
         pool.clone(),
         &updated_template,
+        true,
     )?;
 
     // 4. Verify date mappings exist for the new month.

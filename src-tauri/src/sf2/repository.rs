@@ -215,7 +215,9 @@ impl Sf2Repository {
 
     /// Record the timestamp (seconds) of the last successful attendance→Excel
     /// sync so `sync_and_open_sf2_workbook` can skip Excel when nothing changed.
-    pub fn set_last_synced_at(&self, template_id: &str, synced_at: i64) -> Result<()> {
+    /// Pass `None` to reset (e.g. after a lightweight toggle), forcing a full
+    /// re-sync on the next open.
+    pub fn set_last_synced_at(&self, template_id: &str, synced_at: Option<i64>) -> Result<()> {
         let conn = self.pool.get()?;
         conn.execute(
             "UPDATE sf2_templates SET last_synced_at = ?2 WHERE id = ?1",

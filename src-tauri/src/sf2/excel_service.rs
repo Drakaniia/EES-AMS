@@ -3,18 +3,20 @@ use crate::infrastructure::database::{
     ClassRepository, DbPool, EventRepository, StudentRepository,
 };
 use crate::sf2::calendar::{
-    sf2_date_mappings_for_report_month, sf2_metadata_warnings, template_metadata,
+    last_day_of_month, sf2_date_mappings_for_report_month, sf2_metadata_warnings,
+    sf2_month_number, sf2_report_year, template_metadata,
 };
 use crate::sf2::excel;
 use crate::sf2::models::{
-    Sf2ExportPreview, Sf2ExportReadiness, Sf2ExportResult, Sf2StudentMappingRecord,
-    Sf2TemplateRecord, Sf2WorkbookSettings,
+    Sf2DateMappingRecord, Sf2ExportPreview, Sf2ExportReadiness, Sf2ExportResult,
+    Sf2PreviewDate, Sf2StudentMappingRecord, Sf2TemplateRecord, Sf2WorkbookSettings,
 };
 use crate::sf2::naming::class_name;
 use crate::sf2::preview;
 use crate::sf2::repository::{template_summary, Sf2Repository};
 use crate::sf2::workbook_files::{open_path_in_default_app, save_workbook_path};
-use std::collections::HashSet;
+use chrono::{Datelike, NaiveDate};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 pub fn workbook_settings(pool: DbPool, class_id: Option<String>) -> Result<Sf2WorkbookSettings> {
@@ -229,6 +231,13 @@ pub fn export_preview(pool: DbPool, class_id: Option<String>) -> Result<Sf2Expor
     let date_mappings =
         crate::sf2::calendar::sf2_date_mappings_for_report_month(&template, &all_date_mappings);
 
+    // Expand preview dates to ALL weekdays of the report month, not just
+    // mapped SF2 columns. This ensures every weekday shows a cell in the
+    // preview grid. Unmapped dates get placeholder entries (empty sheet_name,
+    // column_letter, 0 index) — they can't be written to Excel but their
+    // attendance state is computed from events and shown correctly.
+    let preview_dates = expand_to_all_weekdays(&template, &date_mappings);
+
     // Build readiness-like checks from already-queried data (no re-querying)
     let mut issues: Vec<String> = Vec::new();
     if !Path::new(&template.source_path).exists() {
@@ -292,9 +301,11 @@ pub fn export_preview(pool: DbPool, class_id: Option<String>) -> Result<Sf2Expor
     });
 
     // ── Filtered events (only for this class + this month) ────────────────
-    let events = if !date_mappings.is_empty() {
-        let first_date = &date_mappings[0].date;
-        let last_date = &date_mappings[date_mappings.len() - 1].date;
+    // Use the expanded preview dates for the event date range so events from
+    // unmapped days are still included in the preview calculation.
+    let events = if !preview_dates.is_empty() && !date_mappings.is_empty() {
+        let first_date = &preview_dates[0].date;
+        let last_date = &preview_dates[preview_dates.len() - 1].date;
         EventRepository::new(pool.clone()).list_for_class_and_date_range(
             &template.active_class_id,
             first_date,
@@ -316,7 +327,7 @@ pub fn export_preview(pool: DbPool, class_id: Option<String>) -> Result<Sf2Expor
     preview::export_preview(
         &template,
         &student_mappings,
-        &date_mappings,
+        &preview_dates,
         &class_name,
         &class_students,
         &events,
@@ -335,7 +346,7 @@ pub fn export_workbook(
         .ok_or_else(|| {
             AppError::InvalidInput("No SF2 template imported for this class".to_string())
         })?;
-    let template = refresh_template_calendar_from_saved_month(pool.clone(), &template)?;
+    let template = refresh_template_calendar_from_saved_month(pool.clone(), &template, false)?;
     let template =
         super::calendar_service::sync_template_roster_from_class(pool.clone(), &template)?;
 
@@ -400,6 +411,7 @@ pub fn export_workbook(
 pub(super) fn refresh_template_calendar_from_saved_month(
     pool: DbPool,
     template: &Sf2TemplateRecord,
+    force_refresh: bool,
 ) -> Result<Sf2TemplateRecord> {
     use crate::sf2::calendar::{
         date_mappings_are_current_for_report_month, date_mappings_from_analysis,
@@ -413,7 +425,9 @@ pub(super) fn refresh_template_calendar_from_saved_month(
 
     let sf2_repo = Sf2Repository::new(pool);
     let existing_date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
-    if date_mappings_are_current_for_report_month(template, &existing_date_mappings) {
+    if !force_refresh
+        && date_mappings_are_current_for_report_month(template, &existing_date_mappings)
+    {
         return Ok(template.clone());
     }
 
@@ -583,6 +597,76 @@ fn unmapped_roster_student_names(
         .filter(|student| !mapped_student_ids.contains(student.id.to_string().as_str()))
         .map(|student| student.name)
         .collect())
+}
+
+/// Expand SF2 date mappings to include ALL weekdays of the report month.
+///
+/// For each Monday–Friday day in the month:
+/// - If a date mapping exists (SF2 column was detected in the workbook), use it.
+/// - Otherwise, create a placeholder `Sf2PreviewDate` with empty sheet_name,
+///   column_letter, and 0 column_index. These placeholders are used in the
+///   preview grid so every weekday shows a clickable cell regardless of SF2
+///   mapping. Unmapped dates are naturally filtered out during Excel export
+///   by `write_template_marks_for_days`.
+fn expand_to_all_weekdays(
+    template: &Sf2TemplateRecord,
+    date_mappings: &[Sf2DateMappingRecord],
+) -> Vec<Sf2PreviewDate> {
+    let Some(month) = sf2_month_number(&template.report_month) else {
+        // Invalid report month — fall back to just the mapped dates
+        return date_mappings
+            .iter()
+            .map(|m| Sf2PreviewDate {
+                date: m.date.clone(),
+                sheet_name: m.sheet_name.clone(),
+                column_letter: m.column_letter.clone(),
+                column_index: m.column_index,
+            })
+            .collect();
+    };
+    let year = sf2_report_year(&template.school_year, month);
+    let last_day = last_day_of_month(year, month);
+
+    // Build a lookup from date string to existing mapping
+    let mapping_by_date: HashMap<&str, &Sf2DateMappingRecord> = date_mappings
+        .iter()
+        .map(|m| (m.date.as_str(), m))
+        .collect();
+
+    let mut preview_dates = Vec::with_capacity(last_day as usize);
+    for day in 1..=last_day {
+        let Some(date) = NaiveDate::from_ymd_opt(year, month, day) else {
+            continue;
+        };
+
+        // Skip weekends (Mon=1 .. Fri=5)
+        let weekday = date.weekday().number_from_monday();
+        if weekday > 5 {
+            continue;
+        }
+
+        let date_str = date.format("%Y-%m-%d").to_string();
+
+        if let Some(mapping) = mapping_by_date.get(date_str.as_str()) {
+            preview_dates.push(Sf2PreviewDate {
+                date: date_str,
+                sheet_name: mapping.sheet_name.clone(),
+                column_letter: mapping.column_letter.clone(),
+                column_index: mapping.column_index,
+            });
+        } else {
+            // Placeholder for unmapped weekday — shown in preview but can't
+            // be written to Excel (filtered out by export logic).
+            preview_dates.push(Sf2PreviewDate {
+                date: date_str,
+                sheet_name: String::new(),
+                column_letter: String::new(),
+                column_index: 0,
+            });
+        }
+    }
+
+    preview_dates
 }
 
 fn unmapped_roster_issue(student_names: &[String]) -> String {

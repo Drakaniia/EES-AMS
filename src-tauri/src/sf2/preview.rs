@@ -3,12 +3,11 @@ use crate::domain::models::{AttendanceEvent, Student, StudentGender};
 use crate::sf2::attendance::present_student_ids;
 use crate::sf2::logic::normalize_learner_name;
 use crate::sf2::models::{
-    Sf2DateMappingRecord, Sf2ExportPreview, Sf2ExportReadiness, Sf2PreviewAbsence, Sf2PreviewCell,
+    Sf2ExportPreview, Sf2ExportReadiness, Sf2PreviewAbsence, Sf2PreviewCell,
     Sf2PreviewCellStatus, Sf2PreviewDate, Sf2PreviewStudentRow, Sf2StudentMappingRecord,
     Sf2TemplateRecord,
 };
 use crate::sf2::repository::template_summary;
-use chrono::{Local, NaiveDate};
 use std::collections::{HashMap, HashSet};
 
 /// Build an export preview from pre-queried data (no DB queries inside).
@@ -18,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 pub(super) fn export_preview(
     template: &Sf2TemplateRecord,
     student_mappings: &[Sf2StudentMappingRecord],
-    date_mappings: &[Sf2DateMappingRecord],
+    dates: &[Sf2PreviewDate],
     class_name: &str,
     class_students: &[Student],
     events: &[AttendanceEvent],
@@ -28,16 +27,6 @@ pub(super) fn export_preview(
         .iter()
         .map(|student| (student.id.to_string(), student))
         .collect::<HashMap<_, _>>();
-
-    let dates = date_mappings
-        .iter()
-        .map(|mapping| Sf2PreviewDate {
-            date: mapping.date.clone(),
-            sheet_name: mapping.sheet_name.clone(),
-            column_letter: mapping.column_letter.clone(),
-            column_index: mapping.column_index,
-        })
-        .collect::<Vec<_>>();
 
     let present_by_day = dates
         .iter()
@@ -60,7 +49,6 @@ pub(super) fn export_preview(
     let mut present_count = 0;
     let mut absence_count = 0;
     let mut mapped_student_ids = HashSet::new();
-    let today = Local::now().date_naive();
 
     for mapping in student_mappings {
         mapped_student_ids.insert(mapping.student_id.clone());
@@ -91,35 +79,25 @@ pub(super) fn export_preview(
                     .get(&date.date)
                     .is_some_and(|present| present.contains(&mapping.student_id));
 
-                let is_future = NaiveDate::parse_from_str(&date.date, "%Y-%m-%d")
-                    .map(|d| d > today)
-                    .unwrap_or(false);
-
                 // A day has attendance taken if at least one student has an "in" event
                 let day_has_attendance = present_by_day
                     .get(&date.date)
                     .is_some_and(|present| !present.is_empty());
 
-                let status = preview_cell_status(is_present, is_future, day_has_attendance);
+                let status = preview_cell_status(is_present, day_has_attendance);
 
-                match status {
-                    Sf2PreviewCellStatus::Present => {
-                        row_present_count += 1;
-                        present_count += 1;
-                    }
-                    Sf2PreviewCellStatus::Absent => {
-                        row_absent_count += 1;
-                        absence_count += 1;
-                        absent_list.push(Sf2PreviewAbsence {
-                            student_id: mapping.student_id.clone(),
-                            student_name: student_name.clone(),
-                            date: date.date.clone(),
-                            row_index: mapping.row_index,
-                        });
-                    }
-                    Sf2PreviewCellStatus::Open => {
-                        // No counting for Open days
-                    }
+                if status == Sf2PreviewCellStatus::Present {
+                    row_present_count += 1;
+                    present_count += 1;
+                } else {
+                    row_absent_count += 1;
+                    absence_count += 1;
+                    absent_list.push(Sf2PreviewAbsence {
+                        student_id: mapping.student_id.clone(),
+                        student_name: student_name.clone(),
+                        date: date.date.clone(),
+                        row_index: mapping.row_index,
+                    });
                 }
 
                 Sf2PreviewCell {
@@ -197,7 +175,7 @@ pub(super) fn export_preview(
         class_id: Some(template.active_class_id.clone()),
         class_name: class_name.to_string(),
         source_path: Some(template.source_path.clone()),
-        dates,
+        dates: dates.to_vec(),
         students,
         absent_list,
         mapped_students: readiness.mapped_students,
@@ -214,23 +192,22 @@ pub(super) fn export_preview(
 /// Determine the cell status for a student on a given day in the SF2 preview.
 ///
 /// - Present: student has an "in" event → empty cell
-/// - Future: day is in the future → Open ("-")
 /// - Absent: day had attendance taken but this student wasn't present → "X"
-/// - Present (fallback): past day with no attendance — show as empty so it's clickable
+/// - Present (fallback): no attendance taken — show as empty so the cell
+///   is clickable. Clicking it will mark this student as Absent (X) and
+///   create "in" events for all other students to establish the day.
 pub(super) fn preview_cell_status(
     is_present: bool,
-    is_future: bool,
     day_has_attendance: bool,
 ) -> Sf2PreviewCellStatus {
     if is_present {
         Sf2PreviewCellStatus::Present
-    } else if is_future {
-        Sf2PreviewCellStatus::Open
     } else if day_has_attendance {
         Sf2PreviewCellStatus::Absent
     } else {
-        // Past day with no attendance: show as Present (empty) so the cell
-        // is clickable. Clicking it will mark this student as Absent (X) and
+        // No attendance taken: show as Present (empty) so the cell
+        // is clickable (regardless of whether the day is past or future).
+        // Clicking it will mark this student as Absent (X) and
         // create "in" events for all other students to establish the day.
         Sf2PreviewCellStatus::Present
     }

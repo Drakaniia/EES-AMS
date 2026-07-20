@@ -275,7 +275,7 @@ pub(super) fn sf2_report_year(_school_year: &str, _month: u32) -> i32 {
     Local::now().year()
 }
 
-fn last_day_of_month(year: i32, month: u32) -> u32 {
+pub(super) fn last_day_of_month(year: i32, month: u32) -> u32 {
     let (next_year, next_month) = if month == 12 {
         (year + 1, 1)
     } else {
