@@ -71,14 +71,14 @@ $derived computations on frontend:
 
 ### 2.1 Key Bottlenecks Identified
 
-| # | Bottleneck | Location | Impact |
-|---|-----------|----------|--------|
-| 1 | **Duplicate DB queries** — `export_readiness()` and `preview::export_preview()` both query the template, student mappings, and date mappings independently, essentially doing the same work twice. | `excel_service.rs` + `preview.rs` | 2× DB overhead |
-| 2 | **ALL events loaded without filter** — `event_repo.list()` loads every attendance event across all classes and all dates. No WHERE clause on class_id or date range. | `preview.rs` line 80 | Scales poorly with event count |
-| 3 | **Two sequential IPC round-trips** — `getSf2ExportPreview` and `getSf2WorkbookSettings` are called sequentially, each requiring its own IPC serialization/deserialization cycle. | `+page.svelte` → `db-rust/sf2.ts` | Double IPC overhead |
-| 4 | **Synchronous Tauri command** — `get_sf2_export_preview` is NOT `async`. While Tauri v2 runs sync commands on a threadpool, the large response struct serialization blocks the IPC channel during marshalling. | `commands/sf2.rs` | Blocks UI during serialization |
-| 5 | **Full preview rebuild on every switch** — The entire `Sf2ExportPreview` is rebuilt from scratch when only the report_month field changed. There is no caching or incremental update. | `excel_service.rs` → `preview.rs` | 100% recomputation |
-| 6 | **$derived recomputation on large objects** — `matrixStudents` rebuilds `Map` objects for every student on every preview update. With 30 students × 22 days = 660 entries, this is minor but still unnecessary overhead. | `+page.svelte` | Adds to total jank duration |
+| #   | Bottleneck                                                                                                                                                                                                               | Location                          | Impact                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- | ------------------------------ |
+| 1   | **Duplicate DB queries** — `export_readiness()` and `preview::export_preview()` both query the template, student mappings, and date mappings independently, essentially doing the same work twice.                       | `excel_service.rs` + `preview.rs` | 2× DB overhead                 |
+| 2   | **ALL events loaded without filter** — `event_repo.list()` loads every attendance event across all classes and all dates. No WHERE clause on class_id or date range.                                                     | `preview.rs` line 80              | Scales poorly with event count |
+| 3   | **Two sequential IPC round-trips** — `getSf2ExportPreview` and `getSf2WorkbookSettings` are called sequentially, each requiring its own IPC serialization/deserialization cycle.                                         | `+page.svelte` → `db-rust/sf2.ts` | Double IPC overhead            |
+| 4   | **Synchronous Tauri command** — `get_sf2_export_preview` is NOT `async`. While Tauri v2 runs sync commands on a threadpool, the large response struct serialization blocks the IPC channel during marshalling.           | `commands/sf2.rs`                 | Blocks UI during serialization |
+| 5   | **Full preview rebuild on every switch** — The entire `Sf2ExportPreview` is rebuilt from scratch when only the report_month field changed. There is no caching or incremental update.                                    | `excel_service.rs` → `preview.rs` | 100% recomputation             |
+| 6   | **$derived recomputation on large objects** — `matrixStudents` rebuilds `Map` objects for every student on every preview update. With 30 students × 22 days = 660 entries, this is minor but still unnecessary overhead. | `+page.svelte`                    | Adds to total jank duration    |
 
 ---
 
@@ -135,24 +135,25 @@ pub fn list_for_class_and_date_range(
 const previewCache = new Map<string, Sf2ExportPreview>();
 
 function getCacheKey(classId: string, reportMonth: string): string {
-    return `${classId}:${reportMonth}`;
+	return `${classId}:${reportMonth}`;
 }
 
 async function loadReport(classId?: string) {
-    const cacheKey = getCacheKey(activeClassId, activeReportMonth);
-    const cached = previewCache.get(cacheKey);
-    if (cached) {
-        preview = cached;
-        return;
-    }
-    const nextPreview = await getSf2ExportPreview(classId);
-    previewCache.set(cacheKey, nextPreview);
-    preview = nextPreview;
-    // ...
+	const cacheKey = getCacheKey(activeClassId, activeReportMonth);
+	const cached = previewCache.get(cacheKey);
+	if (cached) {
+		preview = cached;
+		return;
+	}
+	const nextPreview = await getSf2ExportPreview(classId);
+	previewCache.set(cacheKey, nextPreview);
+	preview = nextPreview;
+	// ...
 }
 ```
 
 **Important consideration:** The cache must be invalidated when attendance events change (a student is marked present/absent in the current month). This can be done by:
+
 - Clearing the cache for the current month after any toggle/attendance change
 - Setting a maximum cache size (e.g., 3 months) to prevent memory bloat
 
@@ -167,16 +168,16 @@ async function loadReport(classId?: string) {
 ```typescript
 // Proposed: Parallel execution
 async function loadReport(classId?: string) {
-    const [nextPreview, nextSettings] = await Promise.all([
-        getSf2ExportPreview(classId),
-        classId ? getSf2WorkbookSettings(classId).catch(() => null) : Promise.resolve(null)
-    ]);
-    preview = nextPreview;
-    if (nextPreview.classId) selectedClassId = nextPreview.classId;
-    if (nextSettings) {
-        workbookSettings = nextSettings;
-        hydrateDraft(nextSettings);
-    }
+	const [nextPreview, nextSettings] = await Promise.all([
+		getSf2ExportPreview(classId),
+		classId ? getSf2WorkbookSettings(classId).catch(() => null) : Promise.resolve(null)
+	]);
+	preview = nextPreview;
+	if (nextPreview.classId) selectedClassId = nextPreview.classId;
+	if (nextSettings) {
+		workbookSettings = nextSettings;
+		hydrateDraft(nextSettings);
+	}
 }
 ```
 
@@ -218,14 +219,14 @@ let lastPreviewVersion = $state(0);
 let matrixStudentsCache = $state<MatrixStudentRow[]>([]);
 
 $effect(() => {
-    if (preview) {
-        matrixStudentsCache = (preview.students ?? [])
-            .filter((row) => genderFilter === 'all' || row.gender?.toLowerCase() === genderFilter)
-            .map((row) => ({
-                ...row,
-                cellsByDate: new Map(row.cells.map((cell) => [cell.date, cell]))
-            }));
-    }
+	if (preview) {
+		matrixStudentsCache = (preview.students ?? [])
+			.filter((row) => genderFilter === 'all' || row.gender?.toLowerCase() === genderFilter)
+			.map((row) => ({
+				...row,
+				cellsByDate: new Map(row.cells.map((cell) => [cell.date, cell]))
+			}));
+	}
 });
 ```
 
@@ -238,27 +239,34 @@ $effect(() => {
 During preliminary investigation, several hypotheses were tested:
 
 ### Hypothesis 1: Data Volume
+
 **Test:** User reports 30 students, 1 class, zero attendance data during testing.
 **Result:** ❌ Eliminated. Even with zero events, switching takes 10-30 seconds.
 
 ### Hypothesis 2: Excel COM Automation
+
 **Test:** Check if `export_preview` or `export_readiness` interacts with the Excel file.
 **Result:** ❌ Eliminated. `export_preview` only checks `Path::new(&template.source_path).exists()` — no Excel COM interaction.
 
 ### Hypothesis 3: DB Query Performance
+
 **Test:** SQLite queries on a local file with 0-100 rows.
 **Result:** ❌ Eliminated. All individual queries should complete in <1ms.
 
 ### Hypothesis 4: Tauri IPC Serialization Overhead
+
 **Test:** `Sf2ExportPreview` is a large nested struct. With 30 students × 22 dates, the JSON payload is ~50-70 KB.
 **Result:** ⚠️ **Likely contributor.** The synchronous Tauri command serializes the entire struct to JSON on the threadpool, then deserializes it on the frontend. For a 70 KB nested object with many small strings, this can take 100-500ms — but not 10-30 seconds.
 
 ### Hypothesis 5: WebView / WRY Performance
+
 **Test:** The Tauri v2 webview (WRY on Windows) may have performance issues with large reactive updates.
 **Result:** ⚠️ **Possible contributor.** The frontend `$derived` recomputations coupled with a large state update could cause WebView layout thrashing.
 
 ### Hypothesis 6: Cumulative Effect (Most Likely)
+
 **Conclusion:** The 10-30 second freeze is caused by a **combination** of:
+
 1. Synchronous IPC with large payload blocking the message channel
 2. Duplicate DB queries doubling the work
 3. Frontend reactive cascade (preview assignment triggers multiple $derived recomputations)
@@ -268,14 +276,14 @@ During preliminary investigation, several hypotheses were tested:
 
 ## 5. Implementation Priority
 
-| Priority | Optimization | Effort | Impact | Risk |
-|----------|-------------|--------|--------|------|
-| P0 | Combine duplicate DB queries | Small | High | Low |
-| P0 | Cache preview data across month switches | Medium | High | Low |
-| P1 | Filter events by class and date range | Small | Medium (future-proof) | Low |
-| P1 | Parallelize IPC calls | Small | Medium | Low |
-| P2 | Make Tauri commands async | Medium | Low-Medium | Medium |
-| P2 | Optimize frontend derived state | Small | Low | Low |
+| Priority | Optimization                             | Effort | Impact                | Risk   |
+| -------- | ---------------------------------------- | ------ | --------------------- | ------ |
+| P0       | Combine duplicate DB queries             | Small  | High                  | Low    |
+| P0       | Cache preview data across month switches | Medium | High                  | Low    |
+| P1       | Filter events by class and date range    | Small  | Medium (future-proof) | Low    |
+| P1       | Parallelize IPC calls                    | Small  | Medium                | Low    |
+| P2       | Make Tauri commands async                | Medium | Low-Medium            | Medium |
+| P2       | Optimize frontend derived state          | Small  | Low                   | Low    |
 
 ## 6. Success Criteria
 
@@ -288,42 +296,48 @@ During preliminary investigation, several hypotheses were tested:
 ## 7. Edge Cases
 
 ### 7.1 Cache Invalidation
+
 When a student's attendance is toggled (present/absent) in the current month, the cached preview for that month must be invalidated. Proposed strategy:
+
 - After any `toggleSf2PreviewAttendance` call, delete the cache entry for the current month
 - After `presentAllSf2PreviewAttendance`, delete the cache entry
 - After `syncSf2Roster`, delete ALL cached entries (roster changed)
 
 ### 7.2 First Switch After App Start
+
 The first month switch after app launch will still be slow (no cache). This is acceptable as long as subsequent switches are fast.
 
 ### 7.3 Month Switch + Roster Sync
+
 If the user switches months and then syncs the roster, the cached preview for the new month becomes stale. The roster sync handler should clear relevant cache entries.
 
 ### 7.4 Multiple Classes
+
 If a school has multiple classes with SF2 workbooks, the cache keyed by `(classId, reportMonth)` handles this correctly — each class has its own cache entries.
 
 ### 7.5 Memory Considerations
+
 With 30 students × 22 days = ~50 KB per month preview, caching 3 months uses ~150 KB. Even caching 12 months uses ~600 KB — negligible for a desktop app.
 
 ## 8. Files to Modify
 
 ### Rust Backend
 
-| File | Changes |
-|------|---------|
-| `src-tauri/src/sf2/excel_service.rs` | Merge `export_readiness` into preview path to avoid duplicate queries |
-| `src-tauri/src/sf2/preview.rs` | Optimize `export_preview` — filter events, reuse readiness data |
-| `src-tauri/src/sf2/repository.rs` | Add method for filtered events by class and date range |
-| `src-tauri/src/infrastructure/database/events.rs` | Add `list_for_class_and_date_range()` repository method |
-| `src-tauri/src/commands/sf2.rs` | Make command async, consider merging preview+settings into one response |
+| File                                              | Changes                                                                 |
+| ------------------------------------------------- | ----------------------------------------------------------------------- |
+| `src-tauri/src/sf2/excel_service.rs`              | Merge `export_readiness` into preview path to avoid duplicate queries   |
+| `src-tauri/src/sf2/preview.rs`                    | Optimize `export_preview` — filter events, reuse readiness data         |
+| `src-tauri/src/sf2/repository.rs`                 | Add method for filtered events by class and date range                  |
+| `src-tauri/src/infrastructure/database/events.rs` | Add `list_for_class_and_date_range()` repository method                 |
+| `src-tauri/src/commands/sf2.rs`                   | Make command async, consider merging preview+settings into one response |
 
 ### Svelte Frontend
 
-| File | Changes |
-|------|---------|
-| `src/routes/reports/+page.svelte` | Add preview caching, parallelize IPC calls, add $derived memoization |
-| `src/routes/reports/report-state.svelte.ts` | Add cache helpers and memoization utilities |
-| `src/lib/db-rust/sf2.ts` | Add combined preview+settings command if merged |
+| File                                        | Changes                                                              |
+| ------------------------------------------- | -------------------------------------------------------------------- |
+| `src/routes/reports/+page.svelte`           | Add preview caching, parallelize IPC calls, add $derived memoization |
+| `src/routes/reports/report-state.svelte.ts` | Add cache helpers and memoization utilities                          |
+| `src/lib/db-rust/sf2.ts`                    | Add combined preview+settings command if merged                      |
 
 ## 9. Measuring Impact
 
@@ -335,6 +349,7 @@ Before implementing, establish a performance baseline:
 4. **Frontend rendering time**: Time from `preview = nextPreview` to DOM update complete
 
 These can be measured with:
+
 - `console.time()` / `console.timeEnd()` around IPC calls
 - Rust `std::time::Instant` for backend timing (add debug logs)
 - Browser DevTools Performance tab (if accessible via Tauri dev tools)

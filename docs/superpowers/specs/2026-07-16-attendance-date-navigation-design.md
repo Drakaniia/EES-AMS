@@ -1,12 +1,14 @@
 # Design Spec: Attendance Page Date Indicator & Navigation Controls
 
 **Date:** 2026-07-16  
-**Status:** Approved  
+**Status:** Approved
 
 ## Overview
+
 This design outlines the addition of a clear, human-readable relative date indicator and seamless day-by-day date navigation (previous/next arrows) on the attendance page. This navigation serves as a direct, fast alternative to the existing calendar date picker dialog.
 
 ## Motivation
+
 Currently, navigating to a different day requires clicking the date button, opening the full `DatePickerDialog` modal, finding the target date, and clicking it. For day-to-day work, teachers need a rapid, seamless way to switch back and forth by one day (e.g. to check yesterday's logs or log attendance for an adjacent day) without opening a modal dialog. Additionally, the date button only displays the raw ISO date format (e.g., `2026-07-16`), which is not user-friendly.
 
 ---
@@ -14,6 +16,7 @@ Currently, navigating to a different day requires clicking the date button, open
 ## Detailed Design
 
 ### 1. Pure Helper Additions
+
 We will add utility functions in [attendance-state.svelte.ts](file:///C:/Users/Qwenzy/Desktop/ees_ams/src/routes/attendance/attendance-state.svelte.ts) for date arithmetic.
 
 ```typescript
@@ -32,9 +35,12 @@ export function adjustDate(dateKey: string, offsetDays: number): string {
 ```
 
 ### 2. UI Component Modifications
+
 In [attendance/+page.svelte](file:///C:/Users/Qwenzy/Desktop/ees_ams/src/routes/attendance/+page.svelte), we will:
+
 1. Import `ChevronLeft` and `ChevronRight` from `lucide-svelte`.
 2. Define a derived reactive state `displayDateLabel` that uses the chosen relative date labels (`Today • ...`, `Yesterday • ...`, `Tomorrow • ...`):
+
    ```typescript
    const displayDateLabel = $derived.by(() => {
    	const today = fmtDate(Date.now());
@@ -52,6 +58,7 @@ In [attendance/+page.svelte](file:///C:/Users/Qwenzy/Desktop/ees_ams/src/routes/
    	return formatted;
    });
    ```
+
 3. Implement `handleDateOffset(offset: number)` to trigger date updates:
    ```typescript
    function handleDateOffset(offset: number) {
@@ -60,41 +67,34 @@ In [attendance/+page.svelte](file:///C:/Users/Qwenzy/Desktop/ees_ams/src/routes/
    }
    ```
 4. Replace the old date button in the header actions block with the unified navigation control:
+
    ```html
-   <div class="inline-flex items-center rounded-full border border-border bg-background p-0.5 shadow-sm">
-   	<button
-   		type="button"
-   		onclick={() => handleDateOffset(-1)}
-   		disabled={dateLoading || isProcessing}
-   		class="flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
-   		aria-label="Previous day"
-   	>
+   <div
+   	class="inline-flex items-center rounded-full border border-border bg-background p-0.5 shadow-sm"
+   >
+   	<button type="button" onclick="{()" ="">
+   		handleDateOffset(-1)} disabled={dateLoading || isProcessing} class="flex size-9 items-center
+   		justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground
+   		disabled:opacity-40 transition-colors cursor-pointer" aria-label="Previous day" >
    		<ChevronLeft class="size-4" />
    	</button>
 
-   	<button
-   		type="button"
-   		onclick={() => (datePickerOpen = true)}
-   		disabled={dateLoading || isProcessing}
-   		class="inline-flex h-9 items-center gap-2 rounded-full px-3 text-sm font-semibold hover:bg-surface transition-colors cursor-pointer disabled:opacity-60"
-   		aria-haspopup="dialog"
-   		aria-expanded={datePickerOpen}
-   	>
+   	<button type="button" onclick="{()" ="">
+   		(datePickerOpen = true)} disabled={dateLoading || isProcessing} class="inline-flex h-9
+   		items-center gap-2 rounded-full px-3 text-sm font-semibold hover:bg-surface transition-colors
+   		cursor-pointer disabled:opacity-60" aria-haspopup="dialog" aria-expanded={datePickerOpen} >
    		{#if dateLoading}
-   			<span class="size-2 rounded-full bg-primary animate-pulse" aria-hidden="true"></span>
+   		<span class="size-2 animate-pulse rounded-full bg-primary" aria-hidden="true"></span>
    		{:else}
-   			<CalendarDays class="size-4 text-primary" aria-hidden="true" />
+   		<CalendarDays class="size-4 text-primary" aria-hidden="true" />
    		{/if}
    		<span class="font-mono text-xs md:text-sm">{displayDateLabel}</span>
    	</button>
 
-   	<button
-   		type="button"
-   		onclick={() => handleDateOffset(1)}
-   		disabled={dateLoading || isProcessing}
-   		class="flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
-   		aria-label="Next day"
-   	>
+   	<button type="button" onclick="{()" ="">
+   		handleDateOffset(1)} disabled={dateLoading || isProcessing} class="flex size-9 items-center
+   		justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground
+   		disabled:opacity-40 transition-colors cursor-pointer" aria-label="Next day" >
    		<ChevronRight class="size-4" />
    	</button>
    </div>
@@ -105,6 +105,7 @@ In [attendance/+page.svelte](file:///C:/Users/Qwenzy/Desktop/ees_ams/src/routes/
 ## Verification Plan
 
 ### Manual Verification
+
 1. **Initial Load**: Open the attendance page. The date indicator should display `Today • [DayOfWeek, Month Date, Year]` (e.g., `Today • Thu, Jul 16, 2026`).
 2. **Backward Navigation**: Click the left arrow. The indicator should update to `Yesterday • [DayOfWeek, Month Date, Year]` (e.g., `Yesterday • Wed, Jul 15, 2026`), and events for that day should load correctly.
 3. **Forward Navigation**: Click the right arrow. The indicator should update back to `Today ...`. Click again to go to `Tomorrow • ...` to verify the "Tomorrow" relative label works correctly.

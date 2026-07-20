@@ -24,6 +24,7 @@ However, the EES-AMS system auto-generates these "X" marks after the day ends **
 ### 1.3 Design Philosophy
 
 The SF2 Excel report should match the mental model of the physical SF2 form:
+
 - **Empty = Present** (no mark needed)
 - **"X" = Absent** (explicit teacher action)
 - The system should NOT assume absence on days where attendance was never taken
@@ -32,15 +33,15 @@ The SF2 Excel report should match the mental model of the physical SF2 form:
 
 ## 2. Decision Log (from Client Interview)
 
-| # | Question | Decision |
-|---|----------|----------|
-| 1 | How to handle days with zero attendance taken? | **Show all students as "Open"** — not "Absent" |
-| 2 | What counts as "attendance taken"? | **Only "in" events**. If at least one student has an "in" event on a date, that day is considered "attendance taken" |
-| 3 | How should non-school days display? | **Always show as "Open"** regardless of any events |
-| 4 | Add a "Present All" button? | **Yes** — add to the SF2 report page |
-| 5 | Should "Open" cells be clickable/editable? | **Yes** — teachers can toggle past Open days between Present/Absent |
-| 6 | How should Open cells export to the actual Excel file? | **Leave empty** (the SF2 Excel formula counts empty cells as present) |
-| 7 | How should Present status be shown in the UI? | **Remove the green checkmark entirely.** Empty = Present. Only show "X" for Absent. |
+| #   | Question                                               | Decision                                                                                                             |
+| --- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| 1   | How to handle days with zero attendance taken?         | **Show all students as "Open"** — not "Absent"                                                                       |
+| 2   | What counts as "attendance taken"?                     | **Only "in" events**. If at least one student has an "in" event on a date, that day is considered "attendance taken" |
+| 3   | How should non-school days display?                    | **Always show as "Open"** regardless of any events                                                                   |
+| 4   | Add a "Present All" button?                            | **Yes** — add to the SF2 report page                                                                                 |
+| 5   | Should "Open" cells be clickable/editable?             | **Yes** — teachers can toggle past Open days between Present/Absent                                                  |
+| 6   | How should Open cells export to the actual Excel file? | **Leave empty** (the SF2 Excel formula counts empty cells as present)                                                |
+| 7   | How should Present status be shown in the UI?          | **Remove the green checkmark entirely.** Empty = Present. Only show "X" for Absent.                                  |
 
 ---
 
@@ -51,6 +52,7 @@ The SF2 Excel report should match the mental model of the physical SF2 form:
 > **A day is "Open" (no attendance taken) if ZERO "in" attendance events exist for ANY student on that date for the class.**
 
 Previously:
+
 ```
 if is_present → Present
 else if is_future → Open
@@ -58,6 +60,7 @@ else → Absent  ← THIS IS THE PROBLEM
 ```
 
 New logic in `preview.rs`:
+
 ```
 if is_present → Present (empty / no visual mark)
 else if is_future → Open
@@ -67,13 +70,14 @@ else → Open (day was skipped entirely)
 
 ### 3.2 Detection: `day_has_any_attendance_taken`
 
-- Query: "Are there any 'in' attendance events for *any* student in this class on this date?"
+- Query: "Are there any 'in' attendance events for _any_ student in this class on this date?"
 - If YES → attendance sf2-ewas taken → students without an event are truly **Absent**
 - If NO → attendance was NOT taken → show all students as **Open**
 
 ### 3.3 Filtering Logic
 
 The "day has any attendance" check and the "is student present" check should both use the same `present_by_day` data already computed in `preview.rs`. The difference is:
+
 - **per-student**: Is THIS specific student present?
 - **per-day**: Is ANY student present on this date?
 
@@ -93,15 +97,16 @@ A day qualifies as "attendance taken" when `present_by_day[date]` contains at le
 
 The three statuses in the SF2 report table (`report-table.svelte`) change as follows:
 
-| Status | Current Visual | New Visual | Meaning |
-|--------|---------------|------------|---------|
-| Present | Green checkmark (`Check` icon, green background) | **Empty cell** (no icon, no colored background, neutral border) | Student was present for that day |
-| Absent | Red "X" (`X` icon, red background) | **Red "X"** (`X` icon, red background) — **unchanged** | Student was absent on a day where attendance was taken |
-| Open | Dash ("-", gray/muted) | **Dash ("-")** — gray/muted (as-is) | Day is in the future, or no attendance was taken for this day |
+| Status  | Current Visual                                   | New Visual                                                      | Meaning                                                       |
+| ------- | ------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------- |
+| Present | Green checkmark (`Check` icon, green background) | **Empty cell** (no icon, no colored background, neutral border) | Student was present for that day                              |
+| Absent  | Red "X" (`X` icon, red background)               | **Red "X"** (`X` icon, red background) — **unchanged**          | Student was absent on a day where attendance was taken        |
+| Open    | Dash ("-", gray/muted)                           | **Dash ("-")** — gray/muted (as-is)                             | Day is in the future, or no attendance was taken for this day |
 
 ### 4.2 Cell Classes (`report-state.svelte`)
 
 Update `cellClass()` function:
+
 - `present` → `bg-background text-muted-foreground border-border` (neutral, no green)
 - `absent` → `border-red-500/35 bg-red-50 text-red-700` (unchanged)
 - `open` → `border-border bg-background text-muted-foreground` (unchanged)
@@ -132,6 +137,7 @@ New to add:         [Present] (shown as empty — no icon needed)
 ```
 
 Or simplify to just:
+
 ```
 [X] Absent    [-] Open day (no attendance taken yet)
 ```
@@ -152,6 +158,7 @@ Suggested location: In the report page header action bar, near the existing "Syn
 ### 5.2 Behavior
 
 **What it does:**
+
 - Clears ALL "X" (Absent) marks for the current report month's visible students, setting every cell to Present (empty)
 - Does NOT affect Open days (they're already empty = Present)
 
@@ -178,12 +185,12 @@ Suggested location: In the report page header action bar, near the existing "Syn
 
 ### 6.1 What Gets Written to Excel
 
-| Cell Status | What gets written to Excel |
-|-------------|---------------------------|
-| Present | Empty string (no mark) |
-| Absent | "X" |
-| Open (past, no attendance) | Empty string (no mark) |
-| Open (future) | Empty string (no mark) |
+| Cell Status                | What gets written to Excel |
+| -------------------------- | -------------------------- |
+| Present                    | Empty string (no mark)     |
+| Absent                     | "X"                        |
+| Open (past, no attendance) | Empty string (no mark)     |
+| Open (future)              | Empty string (no mark)     |
 
 ### 6.2 Rationale
 
@@ -194,10 +201,12 @@ The existing SF2 TOTAL formulas use `COUNTIF(range,"X")` to count absents, then 
 ### 6.3 Implementation Impact
 
 In `attendance_service.rs`, the `export_marks` function currently:
+
 1. Filters for past days
 2. For each past day, writes "X" for students without present events
 
 **Changes needed:**
+
 - Check if the day has ANY attendance events (any "in" event for any student)
 - If no attendance was taken on that day → skip writing marks for that day entirely
 - Write marks only for days where attendance was actually taken
@@ -210,26 +219,26 @@ This is the same per-day logic used in the preview. The `export_marks` function 
 
 ### Rust Backend
 
-| File | Changes Required |
-|------|-----------------|
-| `src-tauri/src/sf2/preview.rs` | Modify `export_preview()` to check if a day has ANY attendance taken before marking as Absent |
-| `src-tauri/src/sf2/attendance_service.rs` | Modify `export_marks()` to skip days where no attendance was taken for any student |
-| `src-tauri/src/sf2/logic.rs` | Potentially update `attendance_marks_for_closed_day` or add helper for per-day attendance check |
+| File                                      | Changes Required                                                                                |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `src-tauri/src/sf2/preview.rs`            | Modify `export_preview()` to check if a day has ANY attendance taken before marking as Absent   |
+| `src-tauri/src/sf2/attendance_service.rs` | Modify `export_marks()` to skip days where no attendance was taken for any student              |
+| `src-tauri/src/sf2/logic.rs`              | Potentially update `attendance_marks_for_closed_day` or add helper for per-day attendance check |
 
 ### Svelte Frontend
 
-| File | Changes Required |
-|------|-----------------|
-| `src/routes/reports/report-table.svelte` | Remove checkmark icon for Present; update cell rendering for three states |
-| `src/routes/reports/report-state.svelte` | Update `cellClass()` function — remove green styling for present |
-| `src/routes/reports/+page.svelte` | Add "Present all" button in the action bar; add handling logic |
-| `src/routes/reports/report-export-dialogs.svelte` | No changes needed unless export summary text changes |
+| File                                              | Changes Required                                                          |
+| ------------------------------------------------- | ------------------------------------------------------------------------- |
+| `src/routes/reports/report-table.svelte`          | Remove checkmark icon for Present; update cell rendering for three states |
+| `src/routes/reports/report-state.svelte`          | Update `cellClass()` function — remove green styling for present          |
+| `src/routes/reports/+page.svelte`                 | Add "Present all" button in the action bar; add handling logic            |
+| `src/routes/reports/report-export-dialogs.svelte` | No changes needed unless export summary text changes                      |
 
 ### Types
 
-| File | Changes Required |
-|------|-----------------|
-| `src/lib/types.ts` | `Sf2PreviewCellStatus` already has `'present' | 'absent' | 'open'` — no change needed |
+| File                | Changes Required                                                   |
+| ------------------- | ------------------------------------------------------------------ | -------- | -------------------------- |
+| `src/lib/types.ts`  | `Sf2PreviewCellStatus` already has `'present'                      | 'absent' | 'open'` — no change needed |
 | `src/lib/db-rust/*` | May need a new Tauri command for "Present All" (bulk mark present) |
 
 ---
@@ -239,6 +248,7 @@ This is the same per-day logic used in the preview. The `export_marks` function 
 ### 8.1 Mixed Day (Some Present, Some Absent)
 
 This is the normal case: attendance was taken, and some students were present while others were absent.
+
 - Students with "in" events → **Present** (empty)
 - Students without "in" events → **Absent** (X)
 - This behavior is **unchanged** from current.
@@ -246,12 +256,14 @@ This is the normal case: attendance was taken, and some students were present wh
 ### 8.2 All Present Day
 
 If all students were marked present on a day:
+
 - Every student → **Present** (empty)
 - The teacher sees no marks at all for that day, which is correct
 
 ### 8.3 All Absent Day (Theoretical)
 
 If a teacher marks 0 students on a day where they DID take attendance (unusual but possible):
+
 - Since there are 0 "in" events → day appears as **Open** (no attendance taken)
 - This is technically correct: if no one was marked, attendance wasn't really "taken"
 - If the teacher wants to record "everyone absent" they should manually mark each student as absent via the report
@@ -269,6 +281,7 @@ When switching between report months (July → August), the per-day attendance d
 ### 8.6 "Present All" on Partial Data
 
 If the teacher has already marked some students present and some absent:
+
 - "Present all" should clear all X marks → all students = Present
 - Already-Present students stay Present (no-op)
 - Open days stay Open
@@ -288,17 +301,21 @@ If the teacher has already marked some students present and some absent:
 ## 10. Implementation Order
 
 Phase 1: **Preview Logic Change** (Rust)
+
 - Modify `preview.rs` to use per-day attendance check
 - Add helper to check if any events exist for a date
 
-Phase 2: **Export Logic Change** (Rust)  
+Phase 2: **Export Logic Change** (Rust)
+
 - Modify `attendance_service.rs` `export_marks()` to skip days without attendance
 
 Phase 3: **UI Status Update** (Svelte)
+
 - Remove checkmark icon for Present status
 - Update cell styling and legend
 
 Phase 4: **Present All Button** (Rust + Svelte)
+
 - Add Tauri command for bulk clear/present
 - Add button to report page
 - Wire up loading states and toasts
