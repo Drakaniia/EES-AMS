@@ -8,13 +8,19 @@
 		FileSpreadsheet,
 		FileText,
 		LayoutDashboard,
+		PanelLeft,
 		ScanLine,
 		Settings,
 		UsersRound
 	} from 'lucide-svelte';
 
 	let { children } = $props();
+	let isCollapsed = $state(false);
 	let isOnline = $state(true);
+
+	function toggleCollapse() {
+		isCollapsed = !isCollapsed;
+	}
 
 	const navItems = [
 		{ href: '/', label: 'Overview', icon: LayoutDashboard },
@@ -67,21 +73,28 @@
 	</a>
 
 	<aside
-		class="sidebar flex shrink-0 flex-col border-b border-border bg-background md:min-h-0 md:w-64 md:border-r md:border-b-0"
+		class="sidebar flex shrink-0 flex-col border-b border-border bg-background transition-all duration-300 md:min-h-0 md:border-r md:border-b-0 {isCollapsed ? 'md:w-16 collapsed' : 'md:w-64'}"
 		aria-label="Primary navigation"
 	>
 		<!-- Header -->
 		<div class="flex items-center gap-3 px-4 py-3 md:px-4 md:pt-5 md:pb-4">
+			<button
+				onclick={toggleCollapse}
+				aria-label="Toggle sidebar"
+				class="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface/70 hover:text-foreground"
+			>
+				<PanelLeft class="size-4" />
+			</button>
 			<img
 				src={logo}
 				alt="Espiritu Elementary School seal"
 				class="size-10 shrink-0 rounded-xl object-contain ring-1 ring-border md:size-11"
 			/>
 			<div class="min-w-0">
-				<div class="truncate text-base leading-tight font-bold tracking-tight md:text-lg">
+				<div class="truncate text-base leading-tight font-bold tracking-tight md:text-lg {isCollapsed ? 'hidden' : ''}">
 					EES AMS
 				</div>
-				<div class="mt-0.5 text-[11px] font-medium text-muted-foreground">
+				<div class="mt-0.5 text-[11px] font-medium text-muted-foreground {isCollapsed ? 'hidden' : ''}">
 					{settingsStore.settings?.quarter ?? '1st Quarter'}
 				</div>
 			</div>
@@ -113,14 +126,14 @@
 								: 'text-muted-foreground hover:bg-surface/70 hover:text-foreground'}"
 						>
 							<span
-								class="grid size-7 shrink-0 place-items-center rounded-lg transition-all
+								class="nav-icon grid size-7 shrink-0 place-items-center rounded-lg transition-all
 									{active
 									? 'bg-primary text-primary-foreground shadow-sm'
 									: 'text-muted-foreground group-hover:text-foreground'}"
 							>
 								<Icon class="size-4" aria-hidden="true" />
 							</span>
-							<span class="truncate">
+							<span class="nav-label truncate {isCollapsed ? 'hidden' : ''}">
 								{navItem.href === '/attendance' ? attendanceNavLabel : navItem.label}
 							</span>
 						</a>
@@ -130,7 +143,7 @@
 		</nav>
 
 		<!-- Footer -->
-		<div class="hidden border-t border-border px-4 py-3 md:block">
+		<div class="sidebar-footer border-t border-border px-4 py-3 {isCollapsed ? 'hidden' : 'max-md:hidden md:block'}">
 			<div class="flex items-center justify-between gap-2">
 				<div class="min-w-0">
 					<div class="truncate text-xs font-semibold text-muted-foreground">{todayLabel}</div>

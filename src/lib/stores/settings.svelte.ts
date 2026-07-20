@@ -43,8 +43,8 @@ class SettingsStore {
 			// Set fallback settings to prevent UI from breaking
 			this._settings = {
 				id: 'app',
-				dayStart: '08:30',
-				dayEnd: '15:30',
+				dayStart: '08:00',
+				dayEnd: '15:00',
 				lateAfter: '08:45',
 				quarter: '1st Quarter',
 				attendanceMode: 'manual',

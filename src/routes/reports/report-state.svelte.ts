@@ -81,7 +81,8 @@ export function unmappedCellLabel(row: Sf2PreviewStudentRow, date: string) {
 
 export function cellClass(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
 	if (!row.mapped) return 'border-border bg-surface text-muted-foreground';
-	if (cell.status === 'present') return 'border-emerald-500/30 bg-emerald-50 text-emerald-700';
+	// Present = visually empty (no green background, no checkmark)
+	if (cell.status === 'present') return 'border-border bg-background text-muted-foreground';
 	if (cell.status === 'absent') return 'border-red-500/35 bg-red-50 text-red-700';
 	return 'border-border bg-background text-muted-foreground';
 }

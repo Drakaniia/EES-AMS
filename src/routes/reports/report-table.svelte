@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { AlertTriangle, Check, X } from 'lucide-svelte';
+	import { AlertTriangle, X, CheckCheck, Maximize2 } from 'lucide-svelte';
+	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import type { Sf2PreviewStudentRow, Sf2PreviewCell } from '$lib/db-rust';
 	import type { MatrixWeekGroup, MatrixStudentRow } from './report-state.svelte';
 	import {
@@ -21,7 +22,11 @@
 		matrixStudents,
 		correctingCellKey,
 		fullReview,
+		presentingAll,
+		hasAbsentCells,
 		onToggleAttendance,
+		onPresentAll,
+		onFullReviewOpen,
 		onGenderFilterChange
 	}: {
 		previewTemplateGradeLevel: string;
@@ -31,7 +36,11 @@
 		matrixStudents: MatrixStudentRow[];
 		correctingCellKey: string | null;
 		fullReview: boolean;
+		presentingAll: boolean;
+		hasAbsentCells: boolean;
 		onToggleAttendance: (row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) => void;
+		onPresentAll: () => void;
+		onFullReviewOpen: () => void;
 		onGenderFilterChange?: (value: 'all' | 'male' | 'female') => void;
 	} = $props();
 </script>
@@ -90,19 +99,34 @@
 					</button>
 				</div>
 			{/if}
-			<span
-				class="rounded-pill border border-emerald-500/30 bg-emerald-50 px-2.5 py-1 text-emerald-700"
+
+			<div class="h-4 w-px bg-border" aria-hidden="true"></div>
+
+			<button
+				type="button"
+				onclick={onPresentAll}
+				disabled={!hasAbsentCells || presentingAll}
+				class="control-ring inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+				title="Clears all X marks, resetting every cell to Present (empty)"
 			>
-				Present
-			</span>
-			<span class="rounded-pill border border-red-500/35 bg-red-50 px-2.5 py-1 text-red-700">
-				Absent
-			</span>
-			<span
-				class="rounded-pill border border-border bg-background px-2.5 py-1 text-muted-foreground"
+				{#if presentingAll}
+					<Spinner />
+				{:else}
+					<CheckCheck class="size-3.5" aria-hidden="true" />
+				{/if}
+				{presentingAll ? 'Clearing...' : 'Present All'}
+			</button>
+
+			<button
+				type="button"
+				onclick={onFullReviewOpen}
+				class="control-ring inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-surface"
+				title="Open full review"
 			>
-				Open day
-			</span>
+				<Maximize2 class="size-3.5" aria-hidden="true" />
+				Full Preview
+			</button>
+
 		</div>
 	</div>
 
@@ -199,7 +223,7 @@
 											{#if correctingCellKey === cellKey(row.studentId, cell.date)}
 												<span class="font-mono text-[10px]">...</span>
 											{:else if cell.status === 'present'}
-												<Check class="size-4" aria-hidden="true" />
+												<!-- Empty = Present (per spec: no visual mark needed) -->
 											{:else if cell.status === 'absent'}
 												<X class="size-4" aria-hidden="true" />
 											{:else}

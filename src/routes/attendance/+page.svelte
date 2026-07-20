@@ -3,7 +3,6 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-svelte';
 	import { page } from '$app/state';
-	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import DatePickerDialog from '$lib/components/ui/DatePickerDialog.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
@@ -34,7 +33,6 @@
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import {
-		getTimeOfDay,
 		getActiveClass,
 		eventTime,
 		formatAttendanceDate,
@@ -225,21 +223,6 @@
 			.sort((a, b) => a.name.localeCompare(b.name));
 	});
 
-	const recentActivity = $derived.by(() =>
-		selectedDateEvents
-			.filter((event) => {
-				const student = studentById.get(event.studentId);
-				return (
-					!selectedClassId ||
-					event.classId === selectedClassId ||
-					student?.classId === selectedClassId ||
-					(classes.length <= 1 && !event.classId && !student?.classId)
-				);
-			})
-			.sort((a, b) => eventTime(b) - eventTime(a))
-			.slice(0, 14)
-	);
-
 	const lastEventByStudentForSession = $derived.by(() => {
 		const byStudent = new SvelteMap<string, AttendanceEvent>();
 
@@ -268,35 +251,6 @@
 		if (isCardReaderMode) return activeClass ?? undefined;
 		return undefined;
 	});
-	const timeOfDay = $derived(getTimeOfDay());
-	const pageCategory = $derived(
-		settingsPending ? 'Attendance' : isCardReaderMode ? 'Tap Mode' : 'Manual Mode'
-	);
-	const dynamicTitle = $derived.by(() => {
-		if (settingsPending) return 'Attendance';
-		if (isCardReaderMode) {
-			if (sessionClass) return `${timeOfDay} ${sessionClass.name} Attendance`;
-			return 'Live Session';
-		}
-		if (currentClass) return `${currentClass.name} Attendance`;
-		return 'Manual Attendance';
-	});
-
-	const dynamicDescription = $derived.by(() => {
-		if (settingsPending) return 'Loading attendance mode and class roster.';
-		if (isCardReaderMode) {
-			if (sessionClass) {
-				return `Recording attendance for ${sessionClass.name} on ${selectedDateLabel} (${sessionClass.dayStart} - ${sessionClass.dayEnd})`;
-			}
-			return `Active monitoring of student attendance for ${selectedDateLabel}.`;
-		}
-
-		if (currentClass) {
-			return `Name-only attendance for ${currentClass.name} on ${selectedDateLabel} (${currentClass.dayStart} - ${currentClass.dayEnd})`;
-		}
-		return `Choose names from the class list and record attendance for ${selectedDateLabel}.`;
-	});
-
 	function getNextAttendanceType(student: Student): AttendanceType | null {
 		const last = lastEventByStudentForSession.get(student.id);
 		if (!last) return 'in';
@@ -665,62 +619,45 @@
 	<meta name="description" content="Record student attendance." />
 </svelte:head>
 
-<PageHeader category={pageCategory} title={dynamicTitle} description={dynamicDescription}>
-	{#snippet actions()}
-		<div class="flex flex-wrap items-center gap-3">
-			<div class="inline-flex items-center rounded-pill border border-border bg-background p-0.5 shadow-sm">
-				<button
-					type="button"
-					onclick={() => handleDateOffset(-1)}
-					disabled={dateLoading || isProcessing}
-					class="flex size-9 items-center justify-center rounded-pill text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
-					aria-label="Previous day"
-				>
-					<ChevronLeft class="size-4" />
-				</button>
+{#snippet dateNavControls()}
+	<div class="inline-flex items-center rounded-pill border border-border bg-background p-0.5 shadow-sm">
+		<button
+			type="button"
+			onclick={() => handleDateOffset(-1)}
+			disabled={dateLoading || isProcessing}
+			class="flex size-9 items-center justify-center rounded-pill text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
+			aria-label="Previous day"
+		>
+			<ChevronLeft class="size-4" />
+		</button>
 
-				<button
-					type="button"
-					onclick={() => (datePickerOpen = true)}
-					disabled={dateLoading || isProcessing}
-					class="inline-flex h-9 items-center gap-2 rounded-pill px-3 text-sm font-semibold hover:bg-surface transition-colors cursor-pointer disabled:opacity-60"
-					aria-haspopup="dialog"
-					aria-expanded={datePickerOpen}
-				>
-					{#if dateLoading}
-						<span class="size-2 rounded-full bg-primary animate-pulse" aria-hidden="true"></span>
-					{:else}
-						<CalendarDays class="size-4 text-primary" aria-hidden="true" />
-					{/if}
-					<span class="font-mono text-xs md:text-sm">{displayDateLabel}</span>
-				</button>
-
-				<button
-					type="button"
-					onclick={() => handleDateOffset(1)}
-					disabled={dateLoading || isProcessing}
-					class="flex size-9 items-center justify-center rounded-pill text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
-					aria-label="Next day"
-				>
-					<ChevronRight class="size-4" />
-				</button>
-			</div>
-
-			{#if isCardReaderMode}
-				<button
-					disabled={classes.length === 0}
-					onclick={() => {
-						pickerQuery = '';
-						pickerOpen = true;
-					}}
-					class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					Manual log
-				</button>
+		<button
+			type="button"
+			onclick={() => (datePickerOpen = true)}
+			disabled={dateLoading || isProcessing}
+			class="inline-flex h-9 items-center gap-2 rounded-pill px-3 text-sm font-semibold hover:bg-surface transition-colors cursor-pointer disabled:opacity-60"
+			aria-haspopup="dialog"
+			aria-expanded={datePickerOpen}
+		>
+			{#if dateLoading}
+				<span class="size-2 rounded-full bg-primary animate-pulse" aria-hidden="true"></span>
+			{:else}
+				<CalendarDays class="size-4 text-primary" aria-hidden="true" />
 			{/if}
-		</div>
-	{/snippet}
-</PageHeader>
+			<span class="font-mono text-xs md:text-sm">{displayDateLabel}</span>
+		</button>
+
+		<button
+			type="button"
+			onclick={() => handleDateOffset(1)}
+			disabled={dateLoading || isProcessing}
+			class="flex size-9 items-center justify-center rounded-pill text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-40 transition-colors cursor-pointer"
+			aria-label="Next day"
+		>
+			<ChevronRight class="size-4" />
+		</button>
+	</div>
+{/snippet}
 
 {#if loading || settingsPending}
 	<div class="px-4 py-5 md:px-8 lg:px-10">
@@ -744,6 +681,26 @@
 	<section
 		class="flex min-h-0 flex-1 flex-col gap-5 px-4 py-5 md:px-8 lg:px-10 xl:grid xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
 	>
+		<div class="xl:col-span-2 flex flex-wrap items-center justify-between gap-3">
+			<div>
+				<p class="text-sm text-muted-foreground">
+					Tap a card to record attendance
+				</p>
+			</div>
+			<div class="flex flex-wrap items-center gap-3">
+				{@render dateNavControls()}
+				<button
+					disabled={classes.length === 0}
+					onclick={() => {
+						pickerQuery = '';
+						pickerOpen = true;
+					}}
+					class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					Manual log
+				</button>
+			</div>
+		</div>
 		<AttendanceControls
 			{classes}
 			{sessionClass}
@@ -765,9 +722,6 @@
 			{dateLoading}
 			{selectedClassId}
 			{selectedDateLabel}
-			{selectedDate}
-			{recentActivity}
-			{studentById}
 			{classById}
 			{recordedCount}
 			{pendingCount}
@@ -781,7 +735,11 @@
 			onRosterQueryChange={(value) => (rosterQuery = value)}
 			onGetNextAttendanceType={getNextAttendanceType}
 			onGetStudentStatus={getStudentStatus}
-		/>
+		>
+			{#snippet dateNav()}
+				{@render dateNavControls()}
+			{/snippet}
+		</AttendanceGrid>
 	</div>
 {/if}
 
