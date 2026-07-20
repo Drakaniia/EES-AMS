@@ -54,11 +54,6 @@ fn month_number_all_months() {
 
 // ── stale Excel process cleanup ────────────────────────────────────────
 
-#[test]
-fn excel_process_image_name_is_excel_exe() {
-    assert_eq!(excel_process_image_name(), "EXCEL.EXE");
-}
-
 // ── year_from_sheet_name ──────────────────────────────────────────────
 
 #[test]

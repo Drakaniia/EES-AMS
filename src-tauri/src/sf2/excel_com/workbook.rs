@@ -911,7 +911,6 @@ where
 {
     let path = path.to_path_buf();
     run_excel_task(move || {
-        kill_stale_excel_processes();
         let session = WorkbookSession::open(&path, !save_on_close)?;
         let action_result = action(&session);
         let save_result = if save_on_close {
@@ -973,15 +972,9 @@ fn with_workbook<T, F>(path: &Path, read_only: bool, save_on_close: bool, action
 where
     F: FnOnce(&ExcelSession, &ComObject) -> Result<T>,
 {
-    // Terminate any stale/hanging Excel processes that may hold a file lock
-    // on the workbook. This prevents "can't open" errors when a zombie Excel
-    // instance from a previous COM session is still holding the file.
-    kill_stale_excel_processes();
-    // Give killed processes a moment to fully release file locks before we
-    // try to open via COM. Without this delay the OS may still report the
-    // file as locked even though the EXCEL.EXE process has terminated.
-    std::thread::sleep(std::time::Duration::from_millis(300));
-
+    // If the workbook is currently open in Microsoft Excel (locked), the COM
+    // `Workbooks.Open` call below will fail. The user will see a dialog asking
+    // them to close the workbook in Excel first and try again — no force-kill.
     let mut excel = ExcelSession::new()?;
     let workbook = excel.open_workbook(path, read_only)?;
     let action_result = action(&excel, &workbook);
@@ -1538,27 +1531,3 @@ fn sf2_total_day_cell_count(sheet: &ComObject) -> Result<usize> {
 // COM session did not terminate and a lingering EXCEL.EXE keeps the workbook
 // file locked. Force-killing any stale Excel process before opening guarantees
 // the copy opens cleanly.
-
-/// The process image name used to forcibly terminate stale Excel instances.
-pub(crate) fn excel_process_image_name() -> &'static str {
-    "EXCEL.EXE"
-}
-
-/// Forcefully terminate any lingering Excel processes so the SF2 workbook copy
-/// can be opened without a file-lock conflict. Best-effort: errors are ignored
-/// because a clean environment simply means nothing to kill.
-pub(crate) fn kill_stale_excel_processes() {
-    #[cfg(target_os = "windows")]
-    {
-        let image = excel_process_image_name();
-        let _ = std::process::Command::new("taskkill")
-            .args(["/F", "/IM", image])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        // Excel COM automation is Windows-only; nothing to clean up elsewhere.
-    }
-}

@@ -2,7 +2,7 @@ use crate::domain::error::{AppError, Result};
 use crate::sf2::excel_com::learners::best_sf2_monthly_sheet;
 use crate::sf2::excel_com::workbook::{self, month_name, month_number, report_year, ComObject};
 use crate::sf2::excel_com::worksheet::{
-    cell_text, rename_sheet_unique, set_sf2_cell, worksheet_cell,
+    rename_sheet_unique, set_sf2_cell, worksheet_cell,
 };
 use crate::sf2::models::Sf2WorkbookMetadata;
 use chrono::{Datelike, NaiveDate};
@@ -126,30 +126,32 @@ fn clear_sf2_month_dates(sheet: &ComObject) -> Result<()> {
     Ok(())
 }
 
-fn sf2_weekday_slots(sheet: &ComObject) -> Result<Vec<Sf2WeekdaySlot>> {
-    let mut slots = Vec::new();
-    let mut week_index = 0;
-    let mut previous_weekday = None;
-
+fn sf2_weekday_slots(_sheet: &ComObject) -> Result<Vec<Sf2WeekdaySlot>> {
+    // Compute weekday slots directly from column indices (6-38) using the
+    // standard DepEd SF2 layout: 7 weeks × 5 weekdays (Mon-Fri) = 35 columns.
+    //
+    // Previously this function read weekday labels from row 7 of the workbook
+    // and matched them against specific values ("M", "T", "W", "TH", "F").
+    // That approach failed when the imported workbook used different label
+    // formats (e.g., "MON" instead of "M"), causing ALL slots to be skipped
+    // → no dates written → empty date mappings for the month.
+    //
+    // Hardcoding from the column index is safe because the DepEd SF2 standard
+    // mandates that columns F-AL (6-38) are weekday columns in M-F repetition.
+    // After writing dates, the correct labels are written back to row 7
+    // (inside set_sf2_month_dates), so subsequent label-based reads work too.
+    let mut slots = Vec::with_capacity(33);
     for column in 6..=38 {
-        let weekday_text = cell_text(sheet, 7, column)?.trim().to_string();
-        let Some(weekday_index) = weekday_index(&weekday_text) else {
-            continue;
-        };
-
-        if previous_weekday.is_some_and(|previous| weekday_index <= previous) {
-            week_index += 1;
-        }
-
+        let relative = (column - 6) as usize;
+        let week_index = (relative / 5) as i32;
+        let weekday_index = (relative % 5) as i64;
         slots.push(Sf2WeekdaySlot {
             column,
             week_index,
             weekday_index,
             label: weekday_label(weekday_index).to_string(),
         });
-        previous_weekday = Some(weekday_index);
     }
-
     Ok(slots)
 }
 
@@ -167,17 +169,6 @@ fn set_sf2_date_cell(sheet: &ComObject, column: i32, value: &str) -> Result<()> 
     let _ = target.put_i4("HorizontalAlignment", EXCEL_ALIGN_LEFT);
     let _ = target.put_i4("IndentLevel", 0);
     Ok(())
-}
-
-fn weekday_index(label: &str) -> Option<i64> {
-    match label.to_uppercase().as_str() {
-        "M" => Some(0),
-        "T" => Some(1),
-        "W" => Some(2),
-        "TH" => Some(3),
-        "F" => Some(4),
-        _ => None,
-    }
 }
 
 fn date_weekday_index(date: NaiveDate) -> Option<i64> {
