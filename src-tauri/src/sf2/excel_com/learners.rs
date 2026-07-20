@@ -1,6 +1,6 @@
 use crate::domain::error::Result;
-use crate::sf2::excel_com::worksheet::cell_text;
 use crate::sf2::excel_com::workbook::ComObject;
+use crate::sf2::excel_com::worksheet::cell_text;
 use crate::sf2::models::Sf2WorkbookLearner;
 
 /// Parse learner names from an SF2 worksheet.
@@ -65,13 +65,15 @@ pub fn sf2_sheet_quality(sheet: &ComObject) -> Result<Sf2SheetQuality> {
     let male_count = learners
         .iter()
         .filter(|learner| {
-            learner.gender_block.as_deref() == Some("MALE") && crate::sf2::logic::is_learner_name(&learner.name)
+            learner.gender_block.as_deref() == Some("MALE")
+                && crate::sf2::logic::is_learner_name(&learner.name)
         })
         .count();
     let female_count = learners
         .iter()
         .filter(|learner| {
-            learner.gender_block.as_deref() == Some("FEMALE") && crate::sf2::logic::is_learner_name(&learner.name)
+            learner.gender_block.as_deref() == Some("FEMALE")
+                && crate::sf2::logic::is_learner_name(&learner.name)
         })
         .count();
     let total_day_cells = sf2_total_day_cell_count(sheet)?;

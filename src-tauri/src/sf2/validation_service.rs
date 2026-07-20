@@ -2,8 +2,7 @@ use crate::domain::error::Result;
 use crate::domain::models::StudentGender;
 use crate::infrastructure::database::{ClassRepository, DbPool};
 use crate::sf2::calendar::{
-    date_mappings_from_analysis, metadata_from_import_analysis,
-    sf2_date_mappings_for_report_month,
+    date_mappings_from_analysis, metadata_from_import_analysis, sf2_date_mappings_for_report_month,
 };
 use crate::sf2::excel;
 use crate::sf2::models::{
@@ -71,8 +70,7 @@ fn import_workbook_with_analysis(
     let student_repo = crate::infrastructure::database::StudentRepository::new(pool.clone());
     let sf2_repo = Sf2Repository::new(pool.clone());
 
-    let class =
-        super::calendar_service::find_or_create_class(&class_repo, &class_name, None)?;
+    let class = super::calendar_service::find_or_create_class(&class_repo, &class_name, None)?;
 
     let source_hash = format!("bundled-import-{}", class.id);
     let grade_level = source_analysis.grade_level.clone();
@@ -89,9 +87,7 @@ fn import_workbook_with_analysis(
     // Fetch old template student mappings for name-update-on-reimport
     let old_mappings = sf2_repo
         .latest_template_for_class(&class.id)?
-        .map(|old_template| {
-            sf2_repo.student_mappings_for_template(&old_template.id)
-        })
+        .map(|old_template| sf2_repo.student_mappings_for_template(&old_template.id))
         .transpose()?
         .unwrap_or_default();
 
@@ -132,12 +128,8 @@ fn import_workbook_with_analysis(
         "Creating working copy from automated template",
     );
     let workbook_dir = sf2_workbook_dir(&app)?;
-    let working_copy_path = write_bundled_template_to_dir(
-        &workbook_dir,
-        &template_id,
-        &grade_level,
-        &section,
-    )?;
+    let working_copy_path =
+        write_bundled_template_to_dir(&workbook_dir, &template_id, &grade_level, &section)?;
 
     // Step 5: Write metadata from imported file into the bundled template
     let metadata = metadata_from_import_analysis(&source_analysis)?;
@@ -152,13 +144,7 @@ fn import_workbook_with_analysis(
 
     // Step 6: Expand the workbook if more than 21 male / 19 female students
     if extra_male > 0 || extra_female > 0 {
-        excel::expand_roster_rows(
-            &working_copy_path,
-            extra_male,
-            extra_female,
-            None,
-            None,
-        )?;
+        excel::expand_roster_rows(&working_copy_path, extra_male, extra_female, None, None)?;
     }
 
     // Step 7: Analyze the bundled template to get its sheet layout
@@ -172,22 +158,30 @@ fn import_workbook_with_analysis(
     }
 
     // Step 9: Clear unused learner rows in the template
-    let mapped_rows: Vec<u32> =
-        roster_assignments.iter().map(|a| a.slot.row_index).collect();
+    let mapped_rows: Vec<u32> = roster_assignments
+        .iter()
+        .map(|a| a.slot.row_index)
+        .collect();
     let expanded_counts = if extra_male > 0 || extra_female > 0 {
         (Some(male_count), Some(female_count))
     } else {
         (None, None)
     };
-    let clear_marks =
-        clear_unused_learner_marks(&analysis, &mapped_rows, expanded_counts.0, expanded_counts.1);
+    let clear_marks = clear_unused_learner_marks(
+        &analysis,
+        &mapped_rows,
+        expanded_counts.0,
+        expanded_counts.1,
+    );
     if !clear_marks.is_empty() {
         excel::write_marks(&working_copy_path, &clear_marks)?;
     }
 
     // Step 10: Hide empty learner rows — only rows with students should be visible.
-    let occupied: HashSet<u32> =
-        roster_assignments.iter().map(|a| a.slot.row_index).collect();
+    let occupied: HashSet<u32> = roster_assignments
+        .iter()
+        .map(|a| a.slot.row_index)
+        .collect();
     let extra_male_hide = (male_count as u32).saturating_sub(21);
     let extra_female_hide = (female_count as u32).saturating_sub(19);
     let hide_male_total = 29u32 + extra_male_hide;
@@ -246,11 +240,15 @@ fn import_workbook_with_analysis(
 
     // Step 14: Write Excel formulas for MALE TOTAL, FEMALE TOTAL, Combined TOTAL
     // Row positions derived from slot layout — adapts to any expansion automatically.
-    let (male_total_row, female_total_row, combined_total_row) = bundled_template_total_rows(male_count, female_count);
+    let (male_total_row, female_total_row, combined_total_row) =
+        bundled_template_total_rows(male_count, female_count);
 
     // Clear stale template values from TOTAL cells for columns without dates.
     let clear_total_marks = super::attendance_service::clear_total_cell_marks(
-        male_total_row, female_total_row, combined_total_row, &date_mappings,
+        male_total_row,
+        female_total_row,
+        combined_total_row,
+        &date_mappings,
     );
     if !clear_total_marks.is_empty() {
         if let Err(error) = excel::write_marks_force(&working_copy_path, &clear_total_marks) {

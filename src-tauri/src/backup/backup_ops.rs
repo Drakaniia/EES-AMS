@@ -1,9 +1,11 @@
 use super::file_ops::{
-    backup_dir, is_app_backup_file, load_state, save_state, summary_from_path,
-    unique_backup_path, BackupState, SYNC_BACKUP_DIR_NAME,
+    backup_dir, is_app_backup_file, load_state, save_state, summary_from_path, unique_backup_path,
+    BackupState, SYNC_BACKUP_DIR_NAME,
 };
 use super::models::{BackupKind, BackupPreview, BackupStatus, BackupSummary};
-use super::sqlite_utils::{count_table_rows, read_schema_version, require_core_tables, run_integrity_check};
+use super::sqlite_utils::{
+    count_table_rows, read_schema_version, require_core_tables, run_integrity_check,
+};
 use crate::infrastructure::database::DbPool;
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Local};
@@ -256,7 +258,8 @@ pub(crate) fn create_backup_at(
         log::warn!("backup sync failed: {error}");
         error.to_string()
     });
-    if let Err(error) = super::google_drive::upload_backup_to_google_drive(&mut state, &final_path) {
+    if let Err(error) = super::google_drive::upload_backup_to_google_drive(&mut state, &final_path)
+    {
         if let Some(google_drive) = state.google_drive.as_mut() {
             google_drive.last_error = Some(error.to_string());
         }

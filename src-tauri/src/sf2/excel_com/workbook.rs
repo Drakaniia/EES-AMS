@@ -1,12 +1,10 @@
 use crate::domain::error::{AppError, Result};
+use crate::sf2::excel_com::calendar::configure_sf2_calendar;
+use crate::sf2::excel_com::learners::workbook_learners;
+use crate::sf2::excel_com::learners::Sf2SheetQuality;
 use crate::sf2::excel_com::worksheet::{
     cell_text, set_sf2_cell, set_sf2_formula, set_sf2_mark, set_sf2_mark_force,
 };
-use crate::sf2::excel_com::calendar::{
-    configure_sf2_calendar,
-};
-use crate::sf2::excel_com::learners::workbook_learners;
-use crate::sf2::excel_com::learners::Sf2SheetQuality;
 use crate::sf2::logic::Sf2CellMark;
 use crate::sf2::models::{Sf2WorkbookAnalysis, Sf2WorkbookDate, Sf2WorkbookMetadata};
 use chrono::{Datelike, NaiveDate};
@@ -126,10 +124,8 @@ pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
             // in cell A1 and extract metadata / dates / learners from it.
             if first_monthly_sheet.is_none() {
                 for sheet_index in 1..=sheet_count {
-                    let sheet = sheets.get_object_with_args(
-                        "Item",
-                        vec![ComVariant::i4(sheet_index)],
-                    )?;
+                    let sheet =
+                        sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
                     let sheet_name = sheet.get_string("Name")?;
                     let visible = sheet.get_i32("Visible")?;
 
@@ -180,11 +176,7 @@ pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
                         if !(1..=31).contains(&day) {
                             continue;
                         }
-                        let Some(date) = NaiveDate::from_ymd_opt(
-                            date_year,
-                            date_month,
-                            day,
-                        ) else {
+                        let Some(date) = NaiveDate::from_ymd_opt(date_year, date_month, day) else {
                             continue;
                         };
                         dates.push(Sf2WorkbookDate {
@@ -257,7 +249,8 @@ pub fn expand_roster_rows(
             let sheet_count = sheets.get_i32("Count")?;
 
             for sheet_index in 1..=sheet_count {
-                let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
+                let sheet =
+                    sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
                 let visible = sheet.get_i32("Visible")?;
                 if visible != EXCEL_SHEET_VISIBLE {
                     continue;
@@ -279,10 +272,8 @@ pub fn expand_roster_rows(
                     let entire_row = range.get_object("EntireRow")?;
                     for _ in 0..extra_male_rows {
                         // xlShiftDown = -4121, xlFormatFromLeftOrAbove = 0
-                        entire_row.method(
-                            "Insert",
-                            vec![ComVariant::i4(-4121), ComVariant::i4(0)],
-                        )?;
+                        entire_row
+                            .method("Insert", vec![ComVariant::i4(-4121), ComVariant::i4(0)])?;
                     }
                 }
 
@@ -296,10 +287,8 @@ pub fn expand_roster_rows(
                     )?;
                     let entire_row = range.get_object("EntireRow")?;
                     for _ in 0..extra_female_rows {
-                        entire_row.method(
-                            "Insert",
-                            vec![ComVariant::i4(-4121), ComVariant::i4(0)],
-                        )?;
+                        entire_row
+                            .method("Insert", vec![ComVariant::i4(-4121), ComVariant::i4(0)])?;
                     }
                 }
             }
@@ -331,7 +320,8 @@ pub fn hide_empty_learner_rows(
             let sheet_count = sheets.get_i32("Count")?;
 
             for sheet_index in 1..=sheet_count {
-                let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
+                let sheet =
+                    sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
                 let visible = sheet.get_i32("Visible")?;
                 if visible != EXCEL_SHEET_VISIBLE {
                     continue;
@@ -557,8 +547,7 @@ impl WorkbookSession {
         let mut school_head_name = String::new();
 
         for sheet_index in 1..=sheet_count {
-            let sheet =
-                sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
+            let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
             let sheet_name = sheet.get_string("Name")?;
             let visible = sheet.get_i32("Visible")?;
             let used_range = sheet.get_object("UsedRange")?;
@@ -629,10 +618,8 @@ impl WorkbookSession {
         // Fallback: no monthly sheets found
         if first_monthly_sheet.is_none() {
             for sheet_index in 1..=sheet_count {
-                let sheet = sheets.get_object_with_args(
-                    "Item",
-                    vec![ComVariant::i4(sheet_index)],
-                )?;
+                let sheet =
+                    sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
                 let sheet_name = sheet.get_string("Name")?;
                 let visible = sheet.get_i32("Visible")?;
 
@@ -678,11 +665,7 @@ impl WorkbookSession {
                     if !(1..=31).contains(&day) {
                         continue;
                     }
-                    let Some(date) = NaiveDate::from_ymd_opt(
-                        date_year,
-                        date_month,
-                        day,
-                    ) else {
+                    let Some(date) = NaiveDate::from_ymd_opt(date_year, date_month, day) else {
                         continue;
                     };
                     dates.push(Sf2WorkbookDate {
@@ -729,8 +712,8 @@ impl WorkbookSession {
     pub fn write_marks(&self, marks: &[Sf2CellMark]) -> Result<()> {
         let sheets = self.workbook.get_object("Worksheets")?;
         for mark in marks {
-            let sheet = sheets
-                .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
+            let sheet =
+                sheets.get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
             set_sf2_mark(&sheet, &mark.cell_address, &mark.value)?;
         }
         self.calculate()?;
@@ -741,8 +724,8 @@ impl WorkbookSession {
     pub fn write_marks_force(&self, marks: &[Sf2CellMark]) -> Result<()> {
         let sheets = self.workbook.get_object("Worksheets")?;
         for mark in marks {
-            let sheet = sheets
-                .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
+            let sheet =
+                sheets.get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
             set_sf2_mark_force(&sheet, &mark.cell_address, &mark.value)?;
         }
         self.calculate()?;
@@ -753,8 +736,8 @@ impl WorkbookSession {
     pub fn write_formulas(&self, formula_marks: &[Sf2CellMark]) -> Result<()> {
         let sheets = self.workbook.get_object("Worksheets")?;
         for mark in formula_marks {
-            let sheet = sheets
-                .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
+            let sheet =
+                sheets.get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
             set_sf2_formula(&sheet, &mark.cell_address, &mark.value)?;
         }
         self.calculate()?;
@@ -770,8 +753,7 @@ impl WorkbookSession {
         let mut sheets_updated = 0usize;
 
         for sheet_index in 1..=sheet_count {
-            let sheet =
-                sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
+            let sheet = sheets.get_object_with_args("Item", vec![ComVariant::i4(sheet_index)])?;
             let title = cell_text(&sheet, 1, 1)?.trim().to_string();
             if !contains_ignore_ascii_case(&title, "School Form 2") {
                 continue;
@@ -840,25 +822,19 @@ impl WorkbookSession {
                 )?;
                 let entire_row = range.get_object("EntireRow")?;
                 for _ in 0..extra_male_rows {
-                    entire_row.method(
-                        "Insert",
-                        vec![ComVariant::i4(-4121), ComVariant::i4(0)],
-                    )?;
+                    entire_row.method("Insert", vec![ComVariant::i4(-4121), ComVariant::i4(0)])?;
                 }
             }
 
             if extra_female_rows > 0 {
-            let female_base = female_total_row.unwrap_or(49) + extra_male_rows;
+                let female_base = female_total_row.unwrap_or(49) + extra_male_rows;
                 let range = sheet.get_object_with_args(
                     "Range",
                     vec![ComVariant::bstr(&format!("{female_base}:{female_base}"))],
                 )?;
                 let entire_row = range.get_object("EntireRow")?;
                 for _ in 0..extra_female_rows {
-                    entire_row.method(
-                        "Insert",
-                        vec![ComVariant::i4(-4121), ComVariant::i4(0)],
-                    )?;
+                    entire_row.method("Insert", vec![ComVariant::i4(-4121), ComVariant::i4(0)])?;
                 }
             }
         }
@@ -1520,13 +1496,15 @@ pub fn sf2_sheet_quality(sheet: &ComObject) -> Result<Sf2SheetQuality> {
     let male_count = learners
         .iter()
         .filter(|learner| {
-            learner.gender_block.as_deref() == Some("MALE") && crate::sf2::logic::is_learner_name(&learner.name)
+            learner.gender_block.as_deref() == Some("MALE")
+                && crate::sf2::logic::is_learner_name(&learner.name)
         })
         .count();
     let female_count = learners
         .iter()
         .filter(|learner| {
-            learner.gender_block.as_deref() == Some("FEMALE") && crate::sf2::logic::is_learner_name(&learner.name)
+            learner.gender_block.as_deref() == Some("FEMALE")
+                && crate::sf2::logic::is_learner_name(&learner.name)
         })
         .count();
     let total_day_cells = sf2_total_day_cell_count(sheet)?;
@@ -1543,7 +1521,10 @@ fn sf2_total_day_cell_count(sheet: &ComObject) -> Result<usize> {
     let mut count = 0usize;
     for row in [29, 49] {
         for column in 6..=38 {
-            if !crate::sf2::excel_com::worksheet::cell_text(sheet, row, column)?.trim().is_empty() {
+            if !crate::sf2::excel_com::worksheet::cell_text(sheet, row, column)?
+                .trim()
+                .is_empty()
+            {
                 count += 1;
             }
         }
@@ -1581,5 +1562,3 @@ pub(crate) fn kill_stale_excel_processes() {
         // Excel COM automation is Windows-only; nothing to clean up elsewhere.
     }
 }
-
-

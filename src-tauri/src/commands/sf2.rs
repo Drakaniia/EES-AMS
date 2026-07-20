@@ -189,8 +189,7 @@ pub fn present_all_sf2_preview_attendance(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
     class_id: String,
 ) -> std::result::Result<usize, String> {
-    service::set_all_students_present(pool.inner().clone(), &class_id)
-        .map_err(|e| e.to_string())
+    service::set_all_students_present(pool.inner().clone(), &class_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -214,8 +213,14 @@ pub fn toggle_sf2_preview_attendance(
     date: String,
     present: bool,
 ) -> std::result::Result<(), String> {
-    service::set_preview_attendance_lightweight(pool.inner().clone(), class_id, student_id, date, present)
-        .map_err(|e| e.to_string())
+    service::set_preview_attendance_lightweight(
+        pool.inner().clone(),
+        class_id,
+        student_id,
+        date,
+        present,
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

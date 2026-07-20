@@ -7,10 +7,10 @@ use crate::infrastructure::database::{
 use crate::sf2::attendance::present_events_for_day;
 use crate::sf2::calendar::{attendance_changed_since, sf2_date_mappings_for_report_month};
 use crate::sf2::excel;
-use crate::sf2::logic::{attendance_marks_for_closed_day, day_has_attendance_taken, Sf2CellMark, Sf2StudentMapping};
-use crate::sf2::models::{
-    Sf2DateMappingRecord, Sf2StudentMappingRecord, Sf2TemplateRecord,
+use crate::sf2::logic::{
+    attendance_marks_for_closed_day, day_has_attendance_taken, Sf2CellMark, Sf2StudentMapping,
 };
+use crate::sf2::models::{Sf2DateMappingRecord, Sf2StudentMappingRecord, Sf2TemplateRecord};
 use crate::sf2::repository::Sf2Repository;
 
 use chrono::{Local, NaiveDate, Utc};
@@ -40,10 +40,7 @@ pub(super) fn emit_sf2_progress<R: tauri::Runtime>(
 /// Sync latest attendance events to the SF2 Excel working copy for a given class.
 /// This ensures the Excel file's attendance marks reflect the current attendance state
 /// after a student is marked present or absent from the attendance page.
-pub fn sync_attendance_to_sf2_workbook(
-    pool: DbPool,
-    class_id: &str,
-) -> Result<()> {
+pub fn sync_attendance_to_sf2_workbook(pool: DbPool, class_id: &str) -> Result<()> {
     let sf2_repo = Sf2Repository::new(pool.clone());
     let Some(template) = sf2_repo.latest_template_for_class(class_id)? else {
         return Ok(());
@@ -79,9 +76,7 @@ pub fn sync_and_open_sf2_workbook<R: tauri::Runtime>(
     let template = sf2_repo
         .latest_template_for_class(class_id)?
         .ok_or_else(|| {
-            AppError::InvalidInput(
-                "No SF2 template imported for this class".to_string(),
-            )
+            AppError::InvalidInput("No SF2 template imported for this class".to_string())
         })?;
 
     // Step 2/10: Load student mappings
@@ -120,8 +115,7 @@ pub fn sync_and_open_sf2_workbook<R: tauri::Runtime>(
 
         // Step 6/10: Write marks to workbook
         emit_sf2_progress(app, "open", 6, 10, "Writing marks to workbook…");
-        let _marks_written =
-            write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
+        let _marks_written = write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
 
         // Step 7/10: Save workbook changes
         emit_sf2_progress(app, "open", 7, 10, "Saving workbook changes…");
@@ -217,7 +211,10 @@ pub fn set_preview_attendance_lightweight(
                         // Skip — this student should remain absent
                         continue;
                     }
-                    if present_events.iter().any(|e| e.student_id == mapping.student_id) {
+                    if present_events
+                        .iter()
+                        .any(|e| e.student_id == mapping.student_id)
+                    {
                         // Already has an "in" event — skip
                         continue;
                     }
@@ -279,7 +276,10 @@ pub fn set_preview_attendance(
         )));
     }
 
-    let report_dates = date_mappings.iter().map(|m| m.date.clone()).collect::<Vec<_>>();
+    let report_dates = date_mappings
+        .iter()
+        .map(|m| m.date.clone())
+        .collect::<Vec<_>>();
 
     let class = ClassRepository::new(pool.clone())
         .get(&class_id)?
@@ -298,7 +298,8 @@ pub fn set_preview_attendance(
         &class.day_start,
         present,
     )?;
-    let template = super::excel_service::refresh_template_calendar_from_saved_month(pool.clone(), &template)?;
+    let template =
+        super::excel_service::refresh_template_calendar_from_saved_month(pool.clone(), &template)?;
     write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
 
     super::excel_service::export_preview(pool, Some(class_id))
@@ -311,10 +312,7 @@ pub fn set_preview_attendance(
 /// absent. This effectively "clears" all X marks, resetting to all Present.
 ///
 /// Open days (no attendance taken at all) are left as-is.
-pub fn set_all_students_present(
-    pool: DbPool,
-    class_id: &str,
-) -> Result<usize> {
+pub fn set_all_students_present(pool: DbPool, class_id: &str) -> Result<usize> {
     use crate::sf2::calendar::{parse_date, sf2_date_mappings_for_report_month};
 
     let sf2_repo = Sf2Repository::new(pool.clone());
@@ -346,10 +344,7 @@ pub fn set_all_students_present(
     let students = student_repo.list_by_class(Some(class_id))?;
     let events = event_repo.list()?;
 
-    let report_dates: Vec<String> = date_mappings
-        .iter()
-        .map(|m| m.date.clone())
-        .collect();
+    let report_dates: Vec<String> = date_mappings.iter().map(|m| m.date.clone()).collect();
 
     let today = Local::now().date_naive();
     let mut created_count = 0usize;
@@ -472,7 +467,8 @@ pub(super) fn write_template_marks_for_mappings(
         sf2_date_mappings_for_report_month(template, &all_date_mappings)
     };
 
-    let mut marks = clear_attendance_marks_for_records(template, &clear_date_mappings, student_mappings);
+    let mut marks =
+        clear_attendance_marks_for_records(template, &clear_date_mappings, student_mappings);
     let attendance_marks = if export_days.is_empty() || student_mappings.is_empty() {
         Vec::new()
     } else {
@@ -581,13 +577,10 @@ fn clear_attendance_marks_for_records(
     // This ensures stale marks are cleared even from weekday columns that have no
     // valid date in the report month (e.g. Monday/Tuesday in the first week when
     // the month starts mid-week).
-    let all_column_letters: Vec<String> = (6..=38)
-        .map(|col| column_number_to_letter(col))
-        .collect();
+    let all_column_letters: Vec<String> = (6..=38).map(column_number_to_letter).collect();
 
-    let mut marks = Vec::with_capacity(
-        sheet_names.len() * all_column_letters.len() * row_indices.len(),
-    );
+    let mut marks =
+        Vec::with_capacity(sheet_names.len() * all_column_letters.len() * row_indices.len());
     for sheet_name in &sheet_names {
         for col_letter in &all_column_letters {
             for row_index in &row_indices {
@@ -956,7 +949,10 @@ pub(super) fn clear_total_cell_marks(
     marks
 }
 
-fn attendance_grid_rows<I>(row_slots: &[super::calendar_service::TemplateRosterSlot], extra_rows: I) -> Vec<u32>
+fn attendance_grid_rows<I>(
+    row_slots: &[super::calendar_service::TemplateRosterSlot],
+    extra_rows: I,
+) -> Vec<u32>
 where
     I: IntoIterator<Item = u32>,
 {

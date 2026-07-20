@@ -1,6 +1,9 @@
 use crate::domain::error::{AppError, Result};
 use crate::domain::models::{Student, StudentGender};
 use crate::infrastructure::database::{ClassRepository, DbPool, StudentRepository};
+use crate::sf2::attendance_service::{
+    clear_total_cell_marks, summary_formula_marks, total_formula_marks,
+};
 use crate::sf2::calendar::{date_mappings_from_analysis, sf2_date_mappings_for_report_month};
 use crate::sf2::excel;
 use crate::sf2::excel_com::workbook::month_number;
@@ -14,7 +17,6 @@ use crate::sf2::roster::{
     roster_name_marks, student_mappings_from_roster_assignments, template_owns_roster,
     template_roster_assignments,
 };
-use crate::sf2::attendance_service::{summary_formula_marks, total_formula_marks};
 use crate::sf2::workbook_files::layout_fingerprint;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -76,13 +78,23 @@ fn sync_bundled_template_roster(
     let workbook_path = PathBuf::from(&template.source_path);
     let sf2_repo = Sf2Repository::new(pool.clone());
 
-    let male_count = students.iter().filter(|s| s.gender == Some(StudentGender::Male)).count();
-    let female_count = students.iter().filter(|s| s.gender == Some(StudentGender::Female)).count();
+    let male_count = students
+        .iter()
+        .filter(|s| s.gender == Some(StudentGender::Male))
+        .count();
+    let female_count = students
+        .iter()
+        .filter(|s| s.gender == Some(StudentGender::Female))
+        .count();
 
-    let existing_male_mapped = existing_mappings.iter()
-        .filter(|m| m.gender_block.as_deref() == Some("MALE")).count();
-    let existing_female_mapped = existing_mappings.iter()
-        .filter(|m| m.gender_block.as_deref() == Some("FEMALE")).count();
+    let existing_male_mapped = existing_mappings
+        .iter()
+        .filter(|m| m.gender_block.as_deref() == Some("MALE"))
+        .count();
+    let existing_female_mapped = existing_mappings
+        .iter()
+        .filter(|m| m.gender_block.as_deref() == Some("FEMALE"))
+        .count();
 
     let current_male_capacity = existing_male_mapped.max(21);
     let current_female_capacity = existing_female_mapped.max(19);
@@ -93,7 +105,8 @@ fn sync_bundled_template_roster(
 
     // Row positions derived from the slot layout — automatically adapts to any
     // expansion without hardcoding 29/49 base values.
-    let (male_total_row, female_total_row, combined_total_row) = bundled_template_total_rows(male_count, female_count);
+    let (male_total_row, female_total_row, combined_total_row) =
+        bundled_template_total_rows(male_count, female_count);
 
     let current_male_capacity = existing_male_mapped.max(21) as u32;
     let current_extra_male = current_male_capacity.saturating_sub(21);
@@ -107,8 +120,14 @@ fn sync_bundled_template_roster(
             &workbook_path,
             extra_male,
             extra_female,
-            existing_mappings.is_empty().then_some(29).or(Some(current_male_total)),
-            existing_mappings.is_empty().then_some(49).or(Some(current_female_total)),
+            existing_mappings
+                .is_empty()
+                .then_some(29)
+                .or(Some(current_male_total)),
+            existing_mappings
+                .is_empty()
+                .then_some(49)
+                .or(Some(current_female_total)),
         )?;
     }
 
@@ -116,26 +135,57 @@ fn sync_bundled_template_roster(
     let roster_marks = roster_name_marks(&analysis, &roster_assignments);
     excel::write_marks(&workbook_path, &roster_marks)?;
 
-    let mapped_rows: Vec<u32> = roster_assignments.iter().map(|a| a.slot.row_index).collect();
+    let mapped_rows: Vec<u32> = roster_assignments
+        .iter()
+        .map(|a| a.slot.row_index)
+        .collect();
     let expanded_counts = if extra_male > 0 || extra_female > 0 {
         (Some(male_count), Some(female_count))
     } else {
         (None, None)
     };
-    let clear_marks = clear_unused_learner_marks(&analysis, &mapped_rows, expanded_counts.0, expanded_counts.1);
+    let clear_marks = clear_unused_learner_marks(
+        &analysis,
+        &mapped_rows,
+        expanded_counts.0,
+        expanded_counts.1,
+    );
     if !clear_marks.is_empty() {
         excel::write_marks(&workbook_path, &clear_marks)?;
     }
 
     // Hide empty learner rows — only rows with students should be visible.
     // TOTAL row positions derived from slot layout via bundled_template_total_rows().
-    let occupied_rows: HashSet<u32> = roster_assignments.iter().map(|a| a.slot.row_index).collect();
-    excel::hide_empty_learner_rows(&workbook_path, male_total_row, female_total_row, &occupied_rows)?;
+    let occupied_rows: HashSet<u32> = roster_assignments
+        .iter()
+        .map(|a| a.slot.row_index)
+        .collect();
+    excel::hide_empty_learner_rows(
+        &workbook_path,
+        male_total_row,
+        female_total_row,
+        &occupied_rows,
+    )?;
 
     let refreshed_analysis = excel::analyze_workbook(&workbook_path)?;
     let student_mappings =
         student_mappings_from_roster_assignments(&template.id, &roster_assignments);
     let date_mappings = date_mappings_from_analysis(&template.id, &refreshed_analysis);
+
+    // Clear stale TOTAL cell values from all weekday columns (6–38) before
+    // rewriting formulas. Without this, columns without a date in the current
+    // report month retain stale values inherited from the bundled template.
+    let clear_marks = clear_total_cell_marks(
+        male_total_row,
+        female_total_row,
+        combined_total_row,
+        &date_mappings,
+    );
+    if !clear_marks.is_empty() {
+        if let Err(error) = excel::write_marks_force(&workbook_path, &clear_marks) {
+            log::warn!("failed to clear stale TOTAL formula cells during roster sync: {error}");
+        }
+    }
 
     // ── Write TOTAL Per Day formulas and summary section ───────────────
     // After syncing the roster (student names may have changed, counts may
@@ -173,10 +223,16 @@ fn sync_bundled_template_roster(
     sf2_repo.update_template_with_mappings(&synced_template, &student_mappings, &date_mappings)?;
 
     let report_dates = sf2_date_mappings_for_report_month(&synced_template, &date_mappings)
-        .iter().map(|m| m.date.clone()).collect::<Vec<_>>();
+        .iter()
+        .map(|m| m.date.clone())
+        .collect::<Vec<_>>();
 
     if let Err(error) = super::attendance_service::write_template_marks_for_mappings(
-        pool, &synced_template, &report_dates, &student_mappings, &date_mappings,
+        pool,
+        &synced_template,
+        &report_dates,
+        &student_mappings,
+        &date_mappings,
     ) {
         log::warn!("failed to backfill synced SF2 workbook marks: {error}");
     }
@@ -260,13 +316,14 @@ fn sync_imported_workbook_roster(
         .collect();
 
     // Find DB students that don't have a mapping yet (by student_id), split by gender
-    let mapped_student_set: std::collections::HashSet<String> =
-        existing_mappings.iter().map(|m| m.student_id.clone()).collect();
+    let mapped_student_set: std::collections::HashSet<String> = existing_mappings
+        .iter()
+        .map(|m| m.student_id.clone())
+        .collect();
     let new_male_students: Vec<&Student> = students
         .iter()
         .filter(|s| {
-            s.gender == Some(StudentGender::Male)
-                && !mapped_student_set.contains(&s.id.to_string())
+            s.gender == Some(StudentGender::Male) && !mapped_student_set.contains(&s.id.to_string())
         })
         .collect();
     let new_female_students: Vec<&Student> = students
@@ -348,8 +405,18 @@ fn sync_imported_workbook_roster(
         Ok(())
     };
 
-    assign_to_rows(new_male_students, unmapped_male_learner_rows, &mut new_mappings, &mut name_marks)?;
-    assign_to_rows(new_female_students, unmapped_female_learner_rows, &mut new_mappings, &mut name_marks)?;
+    assign_to_rows(
+        new_male_students,
+        unmapped_male_learner_rows,
+        &mut new_mappings,
+        &mut name_marks,
+    )?;
+    assign_to_rows(
+        new_female_students,
+        unmapped_female_learner_rows,
+        &mut new_mappings,
+        &mut name_marks,
+    )?;
 
     if !name_marks.is_empty() {
         excel::write_marks(&workbook_path, &name_marks)?;
@@ -373,17 +440,26 @@ fn sync_imported_workbook_roster(
     sf2_repo.update_template_with_mappings(&synced_template, &all_mappings, &date_mappings)?;
 
     let report_dates = sf2_date_mappings_for_report_month(&synced_template, &date_mappings)
-        .iter().map(|m| m.date.clone()).collect::<Vec<_>>();
+        .iter()
+        .map(|m| m.date.clone())
+        .collect::<Vec<_>>();
 
     if let Err(error) = super::attendance_service::write_template_marks_for_mappings(
-        pool, &synced_template, &report_dates, &all_mappings, &date_mappings,
+        pool,
+        &synced_template,
+        &report_dates,
+        &all_mappings,
+        &date_mappings,
     ) {
         log::warn!("failed to backfill synced imported workbook marks: {error}");
     }
 
     log::info!(
         "Roster sync for imported workbook '{}': added {} new student(s) ({} male, {} female)",
-        template.id, total_new, new_male_count, new_female_count
+        template.id,
+        total_new,
+        new_male_count,
+        new_female_count
     );
 
     Ok(synced_template)
@@ -392,5 +468,3 @@ fn sync_imported_workbook_roster(
 #[cfg(test)]
 #[path = "__tests__/roster_sync_tests.rs"]
 mod tests;
-
-

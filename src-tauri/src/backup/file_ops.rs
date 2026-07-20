@@ -60,8 +60,7 @@ pub(crate) fn load_state(app_dir: &Path) -> Result<BackupState> {
 
     let content =
         fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
-    serde_json::from_str(&content)
-        .with_context(|| format!("failed to parse {}", path.display()))
+    serde_json::from_str(&content).with_context(|| format!("failed to parse {}", path.display()))
 }
 
 pub(crate) fn save_state(app_dir: &Path, state: &BackupState) -> Result<()> {
@@ -73,8 +72,7 @@ pub(crate) fn save_state(app_dir: &Path, state: &BackupState) -> Result<()> {
     fs::write(&temp_path, content)
         .with_context(|| format!("failed to write {}", temp_path.display()))?;
     if path.exists() {
-        fs::remove_file(&path)
-            .with_context(|| format!("failed to replace {}", path.display()))?;
+        fs::remove_file(&path).with_context(|| format!("failed to replace {}", path.display()))?;
     }
     fs::rename(&temp_path, &path)
         .with_context(|| format!("failed to finalize {}", path.display()))?;
@@ -102,7 +100,11 @@ pub(crate) fn summary_from_path(path: &Path) -> Result<BackupSummary> {
     })
 }
 
-pub(crate) fn unique_backup_path(backup_dir: &Path, kind: BackupKind, now: DateTime<Local>) -> PathBuf {
+pub(crate) fn unique_backup_path(
+    backup_dir: &Path,
+    kind: BackupKind,
+    now: DateTime<Local>,
+) -> PathBuf {
     let timestamp = now.format("%Y%m%d_%H%M%S");
     let base_name = format!(
         "{BACKUP_PREFIX}{}-{timestamp}.db",
