@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { Search, CheckCheck, Grid2X2, List } from 'lucide-svelte';
-	import { fmtTime } from '$lib/csv';
+	import type { Snippet } from 'svelte';
 	import type { Student, AttendanceType } from '$lib/db-rust';
 	import type { ManualViewMode } from './attendance-state.svelte';
-	import { getStudentInitials, getStudentClassName, studentName } from './attendance-state.svelte';
+	import { getStudentInitials, getStudentClassName } from './attendance-state.svelte';
 
 	let {
 		manualStudents,
@@ -12,9 +12,6 @@
 		dateLoading,
 		selectedClassId,
 		selectedDateLabel,
-		selectedDate,
-		recentActivity,
-		studentById,
 		classById,
 		recordedCount,
 		pendingCount,
@@ -27,7 +24,8 @@
 		onClearAllAttendance,
 		onRosterQueryChange,
 		onGetNextAttendanceType,
-		onGetStudentStatus
+		onGetStudentStatus,
+		dateNav
 	}: {
 		manualStudents: Student[];
 		manualViewMode: ManualViewMode;
@@ -35,9 +33,6 @@
 		dateLoading: boolean;
 		selectedClassId: string;
 		selectedDateLabel: string;
-		selectedDate: string;
-		recentActivity: import('$lib/db-rust').AttendanceEvent[];
-		studentById: Map<string, Student>;
 		classById: Map<string, import('$lib/db-rust').Class>;
 		recordedCount: number;
 		pendingCount: number;
@@ -51,13 +46,11 @@
 		onRosterQueryChange: (value: string) => void;
 		onGetNextAttendanceType: (student: Student) => AttendanceType | null;
 		onGetStudentStatus: (student: Student) => { label: string; tone: string };
+		dateNav?: Snippet;
 	} = $props();
 </script>
 
-<div
-	class="flex min-h-0 flex-1 flex-col gap-5 xl:grid xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
->
-	<div class="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
+<div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card">
 		<div class="shrink-0 border-b border-border p-5">
 			<div class="flex flex-wrap items-start justify-between gap-4">
 				<div>
@@ -76,6 +69,9 @@
 		</div>
 
 		<div class="flex shrink-0 flex-wrap items-center gap-3 border-b border-border p-4">
+			{#if dateNav}
+				{@render dateNav()}
+			{/if}
 			<div class="relative min-w-64 flex-1">
 				<Search
 					class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -303,56 +299,8 @@
 					</ul>
 				</div>
 			{/if}
-		</div>
-	</div>
-
-	<div class="flex min-h-0 flex-col rounded-2xl border border-border bg-card p-5">
-		<div class="mb-4 flex shrink-0 items-start justify-between gap-3">
-			<div>
-				<h3 class="text-lg font-medium">Recent activity</h3>
-				<span class="label-mono text-xs opacity-60">{selectedDate}</span>
-			</div>
-			<span class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]">
-				{recentActivity.length} events
-			</span>
-		</div>
-
-		<div class="min-h-0 flex-1 overflow-y-auto">
-			{#if recentActivity.length === 0}
-				<div
-					class="flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
-				>
-					No attendance has been recorded for {selectedDateLabel}.
-				</div>
-			{:else}
-				<ul class="divide-y divide-border">
-					{#each recentActivity as event (event.id)}
-						<li class="flex items-center justify-between gap-3 py-3">
-							<div class="min-w-0 flex-1">
-								<div class="leading-snug font-medium break-words">
-									{studentName(event.studentId, studentById)}
-								</div>
-								<div class="label-mono">{fmtTime(event.timestamp)}</div>
-							</div>
-							{@render pill(event.type)}
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		</div>
 	</div>
 </div>
-
-{#snippet pill(type: AttendanceType | 'error')}
-	<span
-		class="shrink-0 rounded-pill px-2 py-1 font-mono text-[10px] font-bold
-			{type === 'in'
-			? 'bg-primary text-primary-foreground'
-			: 'bg-destructive text-destructive-foreground'}"
-	>
-		{type === 'in' ? 'IN' : 'ERROR'}
-	</span>
-{/snippet}
 
 {#snippet manualStat(label: string, value: number)}
 	<div class="min-w-20 px-4 py-3 text-center">

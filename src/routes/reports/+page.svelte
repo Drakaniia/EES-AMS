@@ -3,7 +3,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-	import PageHeader from '$lib/components/layout/PageHeader.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
@@ -15,6 +14,7 @@
 		getSf2ExportPreview,
 		getSf2WorkbookSettings,
 		listClasses,
+		presentAllSf2PreviewAttendance,
 		setSf2ReportMonth,
 		syncAndOpenSf2Workbook,
 		syncSf2Roster,
@@ -39,13 +39,11 @@
 		CheckCircle2,
 		CircleX,
 		ExternalLink,
-		Maximize2,
 		Pencil,
 		RefreshCw,
 		Save,
 		Settings2,
-		UserX,
-		X
+		UserX
 	} from 'lucide-svelte';
 	import {
 		buildMatrixWeekGroups,
@@ -66,6 +64,23 @@
 		'Double-checking everything is in order…',
 		'Just a moment longer!'
 	] as const;
+
+	// ── Preview cache: eliminates redundant backend calls on month switch ───
+	// When switching to a month that's already been loaded, returns instantly.
+	// Key format: `${classId}:${reportMonth}`
+	const previewCache = new Map<string, Sf2ExportPreview>();
+
+	function cacheKey(classId: string, reportMonth: string): string {
+		return `${classId}:${reportMonth}`;
+	}
+
+	function invalidateCacheForMonth(classId: string, reportMonth: string) {
+		previewCache.delete(cacheKey(classId, reportMonth));
+	}
+
+	function invalidateAllCache() {
+		previewCache.clear();
+	}
 
 	// ── Progress state for the SF2 open dialog ──────────────────────────────
 	type Sf2OpenStatus = 'idle' | 'syncing' | 'success' | 'error';
@@ -94,6 +109,7 @@
 	let genderFilter = $state<'all' | 'male' | 'female'>('all');
 	let exporting = $state(false);
 	let syncingRoster = $state(false);
+	let presentingAll = $state(false);
 	let savingDetails = $state(false);
 	let correctingCellKey = $state<string | null>(null);
 	let exportDialogOpen = $state(false);
@@ -294,9 +310,15 @@
 		loadError = null;
 		try {
 			classes = await listClasses();
+			// Fetch initial preview and cache it
 			const current = await getSf2ExportPreview();
 			preview = current;
 			selectedClassId = current.classId ?? classes[0]?.id ?? '';
+
+			// Cache the initial preview if we have a class + report month
+			if (current.classId && current.template?.reportMonth) {
+				previewCache.set(cacheKey(current.classId, current.template.reportMonth), current);
+			}
 
 			if (selectedClassId && selectedClassId !== current.classId) {
 				await loadReport(selectedClassId);
@@ -312,11 +334,48 @@
 		}
 	}
 
+	/// Load preview + workbook settings, checking cache first and parallelizing IPC.
+	/// - Checks client-side cache keyed by (classId, reportMonth) to skip backend calls
+	/// - Fetches preview and workbook settings in parallel via Promise.all
+	/// - Caches the preview result for instant re-visits to the same month
 	async function loadReport(classId?: string) {
-		const nextPreview = await getSf2ExportPreview(classId);
+		const cid = classId || selectedClassId || preview?.classId || preview?.template?.classId || '';
+		if (!cid) return;
+
+		const reportMonth = activeReportMonth;
+		const key = cacheKey(cid, reportMonth);
+
+		// Check cache first — instant return on repeat month switches
+		const cached = previewCache.get(key);
+		if (cached) {
+			preview = cached;
+			if (cached.classId) selectedClassId = cached.classId;
+			await loadWorkbookSettings(cached.classId ?? cid);
+			return;
+		}
+
+		// Parallel fetch: both preview and settings are independent
+		const [nextPreview, settings] = await Promise.all([
+			getSf2ExportPreview(classId),
+			cid ? getSf2WorkbookSettings(cid).catch(() => null) : Promise.resolve(null)
+		]);
+
 		preview = nextPreview;
 		if (nextPreview.classId) selectedClassId = nextPreview.classId;
-		await loadWorkbookSettings(nextPreview.classId ?? classId);
+
+		// Cache the preview keyed by class + report month
+		const cacheMonth = nextPreview.template?.reportMonth || reportMonth;
+		if (cacheMonth) {
+			previewCache.set(cacheKey(cid, cacheMonth), nextPreview);
+		}
+
+		if (settings) {
+			workbookSettings = settings;
+			hydrateDraft(settings);
+		} else {
+			workbookSettings = null;
+			clearDraft();
+		}
 	}
 
 	async function loadWorkbookSettings(classId?: string) {
@@ -338,11 +397,36 @@
 
 
 
+	const hasAbsentCells = $derived(
+		(preview?.absentList.length ?? 0) > 0
+	);
+
+	async function onPresentAll() {
+		if (!activeClassId || !preview?.template || presentingAll) return;
+		presentingAll = true;
+		try {
+			const count = await presentAllSf2PreviewAttendance(activeClassId);
+			// Invalidate cache since attendance data changed
+			invalidateCacheForMonth(activeClassId, activeReportMonth);
+			reportDialogs?.showToast(
+				`All students cleared to Present (${count} marks cleared)`
+			);
+			await loadReport(activeClassId);
+		} catch (error) {
+			const msg = errorMessage(error, 'Present All failed');
+			reportDialogs?.showToast(`Could not mark all present: ${msg}`, false);
+		} finally {
+			presentingAll = false;
+		}
+	}
+
 	async function onSyncRoster() {
 		if (!activeClassId || !preview?.template || syncingRoster) return;
 		syncingRoster = true;
 		try {
 			await syncSf2Roster(activeClassId);
+			// Roster changed — invalidate ALL cached months
+			invalidateAllCache();
 			reportDialogs?.showToast('Roster synced! All students mapped to SF2 workbook.');
 			await loadReport(activeClassId);
 		} catch (error) {
@@ -380,6 +464,8 @@
 		exportLoadingOpen = true;
 		try {
 			const result = await exportSf2Workbook(activeClassId);
+			// Export may have written marks — invalidate cache for current month
+			invalidateCacheForMonth(activeClassId, activeReportMonth);
 			reportDialogs?.showToast(`SF2 exported and opened: ${result.outputPath}`);
 			await loadReport(activeClassId);
 		} catch (error) {
@@ -399,6 +485,8 @@
 		modalSaving = true;
 		try {
 			await updateSf2WorkbookSettings(draft);
+			// Workbook settings affect all months — invalidate entire cache
+			invalidateAllCache();
 			if (successMessage) reportDialogs?.showToast(successMessage);
 			await loadReport(draft.classId);
 			return true;
@@ -426,6 +514,10 @@
 			draftReportMonth = previousReportMonth;
 			return;
 		}
+
+		// Invalidate the OLD month's cache before switching so we don't serve
+		// stale preview data when switching back to it.
+		invalidateCacheForMonth(activeClassId, previousReportMonth);
 
 		monthSwitchLoading = true;
 		monthSwitchError = null;
@@ -459,12 +551,18 @@
 	async function toggleAttendance(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
 		if (!preview?.classId || !row.mapped || !cell.editable || correctingCellKey) return;
 		const key = cellKey(row.studentId, cell.date);
-		const markPresent = cell.status !== 'present';
+		// Clicking Present (empty) or Open (-) should mark as Absent (X).
+		// Clicking Absent (X) should mark as Present (empty).
+		const markPresent = cell.status === 'absent';
 		correctingCellKey = key;
 		try {
 			// Lightweight DB-only toggle — no Excel I/O.
 			// Open SF2 will sync attendance before opening the workbook.
 			await toggleSf2PreviewAttendance(preview.classId, row.studentId, cell.date, markPresent);
+			// Invalidate cache for current month since attendance changed
+			invalidateCacheForMonth(preview.classId, activeReportMonth);
+			// Reload preview from DB so the grid reflects the change instantly
+			await loadReport(activeClassId);
 			reportDialogs?.showToast(
 				`${row.studentName} marked ${markPresent ? 'present' : 'absent'} for ${formatDate(cell.date)}`
 			);
@@ -578,57 +676,7 @@
 <svelte:window onkeydown={onWindowKeydown} />
 
 <div class="flex h-full flex-col overflow-hidden">
-	<PageHeader
-		category="Reports"
-		title="SF2 Workbook Pre-export Review"
-		description="Review workbook details, mapped dates, absences, and learner row mappings before exporting the official SF2 copy."
-	>
-		{#snippet actions()}
-			<div class="flex flex-wrap items-center gap-2">
-				<button
-					type="button"
-					onclick={onSyncRoster}
-					disabled={!preview?.template || syncingRoster || !activeClassId}
-					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-					aria-label="Sync class roster to SF2 workbook"
-				>
-					{#if syncingRoster}
-						<Spinner />
-					{:else}
-						<RefreshCw class="size-4" aria-hidden="true" />
-					{/if}
-					{syncingRoster ? 'Syncing...' : 'Sync Roster'}
-				</button>
-				<button
-					type="button"
-					onclick={onOpenSf2}
-					disabled={!preview?.template || sf2OpenStatus === 'syncing' || !activeClassId}
-					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					<ExternalLink class="size-4" aria-hidden="true" />
-					{sf2OpenStatus === 'syncing' ? 'Opening...' : 'Open SF2'}
-				</button>
-				<button
-					type="button"
-					onclick={() => (fullReviewOpen = true)}
-					disabled={!preview?.template}
-					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					<Maximize2 class="size-4" aria-hidden="true" />
-					View Full Review
-				</button>
-				<button
-					type="button"
-					onclick={requestExport}
-					disabled={exportDisabled}
-					class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					<Save class="size-4" aria-hidden="true" />
-					{exporting ? 'Exporting...' : 'Review Export'}
-				</button>
-			</div>
-		{/snippet}
-	</PageHeader>
+
 
 	{#if loading}
 		<div class="px-4 py-5 md:px-8 lg:px-10">
@@ -679,12 +727,54 @@
 					{matrixStudents}
 					{correctingCellKey}
 					fullReview={false}
+					{presentingAll}
+					{hasAbsentCells}
 					onToggleAttendance={toggleAttendance}
+					onPresentAll={onPresentAll}
+					onFullReviewOpen={() => (fullReviewOpen = true)}
 					onGenderFilterChange={(value) => (genderFilter = value)}
 				/>
 			</div>
 
 			<aside class="min-h-0 space-y-5 overflow-auto">
+				<div class="rounded-2xl border border-border bg-surface p-5">
+					<div class="label-mono text-primary mb-4">Actions</div>
+					<div class="flex flex-col gap-2">
+						<button
+							type="button"
+							onclick={onOpenSf2}
+							disabled={!preview?.template || sf2OpenStatus === 'syncing' || !activeClassId}
+							class="control-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50 w-full"
+						>
+							<ExternalLink class="size-4" aria-hidden="true" />
+							{sf2OpenStatus === 'syncing' ? 'Opening...' : 'Open SF2'}
+						</button>
+						<button
+							type="button"
+							onclick={onSyncRoster}
+							disabled={!preview?.template || syncingRoster || !activeClassId}
+							class="control-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50 w-full"
+							aria-label="Sync class roster to SF2 workbook"
+						>
+							{#if syncingRoster}
+								<Spinner />
+							{:else}
+								<RefreshCw class="size-4" aria-hidden="true" />
+							{/if}
+							{syncingRoster ? 'Syncing...' : 'Sync Roster'}
+						</button>
+						<button
+							type="button"
+							onclick={requestExport}
+							disabled={exportDisabled}
+							class="control-ring inline-flex h-10 items-center justify-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 w-full"
+						>
+							<Save class="size-4" aria-hidden="true" />
+							{exporting ? 'Exporting...' : 'Review Export'}
+						</button>
+					</div>
+				</div>
+
 				<div class="rounded-2xl border border-border bg-surface p-5">
 					<div class="flex items-start justify-between gap-3">
 						<div class="label-mono text-primary">Workbook identity</div>
@@ -847,7 +937,11 @@
 						{matrixStudents}
 						{correctingCellKey}
 						fullReview={true}
+						{presentingAll}
+						{hasAbsentCells}
 						onToggleAttendance={toggleAttendance}
+						onPresentAll={onPresentAll}
+						onFullReviewOpen={() => (fullReviewOpen = true)}
 						onGenderFilterChange={(value) => (genderFilter = value)}
 					/>
 				</div>

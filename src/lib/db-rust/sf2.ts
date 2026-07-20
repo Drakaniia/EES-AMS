@@ -111,6 +111,16 @@ export async function openSf2Workbook(classId?: string): Promise<string> {
 }
 
 /**
+ * Mark ALL mapped students as present for the current report month.
+ * Creates "in" events for every absent student on every day where
+ * attendance was taken. Open days (no attendance taken) are left as-is.
+ * Returns the number of attendance events created.
+ */
+export async function presentAllSf2PreviewAttendance(classId: string): Promise<number> {
+	return await invoke('present_all_sf2_preview_attendance', { classId });
+}
+
+/**
  * Sync attendance to SF2 workbook AND open it in Excel, with real progress
  * events emitted from the Rust backend for a determinate progress bar.
  * The progression goes through 10 steps (1-10).
