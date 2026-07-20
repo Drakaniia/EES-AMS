@@ -95,9 +95,12 @@ class Sf2State {
 		],
 		create: [
 			'Setting up the bundled template…',
-			'Writing student names…',
-			'Configuring attendance columns…',
-			'Almost there…'
+			'Copying the workbook from the template…',
+			'Writing student names into the workbook…',
+			'Configuring attendance date columns…',
+			'Saving the working copy…',
+			'Almost there…',
+			'Finalizing your SF2 workbook…'
 		],
 		update: ['Updating workbook settings…', 'Reconfiguring calendar…', 'Writing changes…']
 	};

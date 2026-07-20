@@ -6,7 +6,7 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
-	import ReportFilters from './report-filters.svelte';
+
 	import ReportTable from './report-table.svelte';
 	import ReportExportDialogs from './report-export-dialogs.svelte';
 	import {
@@ -34,7 +34,6 @@
 	} from '$lib/features/settings/sf2-workbook';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import {
-		ArrowLeft,
 		Calendar,
 		Check,
 		CheckCircle2,
@@ -43,7 +42,6 @@
 		Pencil,
 		RefreshCw,
 		Save,
-		Settings2,
 		UserX
 	} from 'lucide-svelte';
 	import {
@@ -116,11 +114,11 @@
 	let exportDialogOpen = $state(false);
 	let exportLoadingOpen = $state(false);
 	let fullReviewOpen = $state(false);
-	let fullReviewHeaderVisible = $state(false);
 	let workbookDetailsOpen = $state(false);
 	let monthPickerOpen = $state(false);
 	let monthSwitchLoading = $state(false);
 	let monthSwitchError = $state<string | null>(null);
+	let monthSwitchMessage = $state('');
 	let modalSaving = $state(false);
 	let reportDialogs: ReportExportDialogs;
 
@@ -496,6 +494,31 @@
 		}
 	}
 
+	// ── Cycle friendly messages during month switch ────────────────
+	// Shows a new message every ~3s to make the loading feel responsive.
+	// The effect starts when monthSwitchLoading becomes true and cleans
+	// up when the switch completes (state flips back to false).
+	const MONTH_SWITCH_MESSAGES = [
+		'Preparing your attendance report…',
+		'Updating the workbook calendar…',
+		'Applying attendance records…',
+		'Almost there…',
+		'Finalizing changes…'
+	] as const;
+
+	$effect(() => {
+		if (monthSwitchLoading) {
+			let index = -1;
+			const advance = () => {
+				index = (index + 1) % MONTH_SWITCH_MESSAGES.length;
+				monthSwitchMessage = MONTH_SWITCH_MESSAGES[index];
+			};
+			advance();
+			const timer = setInterval(advance, 3000);
+			return () => clearInterval(timer);
+		}
+	});
+
 	async function onReportMonthChange() {
 		const previousReportMonth =
 			workbookSettings?.reportMonth || preview?.template?.reportMonth || '';
@@ -536,6 +559,10 @@
 			}
 			monthSwitchLoading = false;
 		}
+	}
+
+	function onToggleFullReview() {
+		fullReviewOpen = !fullReviewOpen;
 	}
 
 	function onWindowKeydown(event: KeyboardEvent) {
@@ -708,6 +735,26 @@
 				{/snippet}
 			</EmptyState>
 		</div>
+	{:else if fullReviewOpen}
+		<section class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 md:px-8 lg:px-10">
+			<div class="flex min-h-0 flex-1 flex-col">
+				<ReportTable
+					previewTemplateGradeLevel={preview.template.gradeLevel}
+					previewTemplateSection={preview.template.section}
+					{genderFilter}
+					{matrixWeekGroups}
+					{matrixStudents}
+					{correctingCellKey}
+					fullReview={true}
+					{presentingAll}
+					{hasAbsentCells}
+					onToggleAttendance={toggleAttendance}
+					{onPresentAll}
+					onFullReviewOpen={onToggleFullReview}
+					onGenderFilterChange={(value) => (genderFilter = value)}
+				/>
+			</div>
+		</section>
 	{:else}
 		<section
 			class="grid min-h-0 flex-1 gap-5 overflow-hidden px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px]"
@@ -725,7 +772,7 @@
 					{hasAbsentCells}
 					onToggleAttendance={toggleAttendance}
 					{onPresentAll}
-					onFullReviewOpen={() => (fullReviewOpen = true)}
+					onFullReviewOpen={onToggleFullReview}
 					onGenderFilterChange={(value) => (genderFilter = value)}
 				/>
 			</div>
@@ -870,80 +917,6 @@
 	{/if}
 </div>
 
-{#if fullReviewOpen && preview?.template}
-	<div
-		role="dialog"
-		aria-modal="true"
-		aria-label="Full SF2 review"
-		class="fixed inset-x-0 top-8 bottom-0 z-[65] bg-background text-foreground"
-	>
-		<div class="flex h-full min-h-0 flex-col overflow-hidden">
-			<div
-				class="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 py-3 md:px-6"
-			>
-				<button
-					type="button"
-					onclick={() => (fullReviewOpen = false)}
-					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface"
-				>
-					<ArrowLeft class="size-4" aria-hidden="true" />
-					Back
-				</button>
-				<div class="min-w-0 text-right">
-					<div class="label-mono text-primary">Full review</div>
-					<div class="truncate text-sm font-semibold">
-						{draftSchoolName || preview.template.schoolName || 'SF2 Workbook'}
-					</div>
-				</div>
-				<button
-					type="button"
-					onclick={() => (fullReviewHeaderVisible = !fullReviewHeaderVisible)}
-					class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface"
-				>
-					<Settings2 class="size-4" aria-hidden="true" />
-					{fullReviewHeaderVisible ? 'Hide Details' : 'Show Details'}
-				</button>
-			</div>
-
-			<div class="min-h-0 flex-1 overflow-hidden px-4 py-4 md:px-6">
-				<div class="flex h-full min-h-0 flex-col gap-4">
-					{#if fullReviewHeaderVisible}
-						<ReportFilters
-							{preview}
-							fullReview={true}
-							{fullReviewHeaderVisible}
-							{workbookSettings}
-							{draftSchoolId}
-							{draftSchoolName}
-							{draftSchoolYear}
-							{draftReportMonth}
-							{draftGradeLevel}
-							{draftSection}
-							{draftAdviserName}
-							{draftSchoolHeadName}
-						/>
-					{/if}
-					<ReportTable
-						previewTemplateGradeLevel={preview.template.gradeLevel}
-						previewTemplateSection={preview.template.section}
-						{genderFilter}
-						{matrixWeekGroups}
-						{matrixStudents}
-						{correctingCellKey}
-						fullReview={true}
-						{presentingAll}
-						{hasAbsentCells}
-						onToggleAttendance={toggleAttendance}
-						{onPresentAll}
-						onFullReviewOpen={() => (fullReviewOpen = true)}
-						onGenderFilterChange={(value) => (genderFilter = value)}
-					/>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
-
 <ReportExportDialogs
 	bind:this={reportDialogs}
 	bind:exportDialogOpen
@@ -1056,10 +1029,23 @@
 			role="status"
 			aria-live="polite"
 		>
-			<Spinner />
+			<!-- Animated bouncing dots -->
+			<div class="flex items-center gap-1" aria-hidden="true">
+				<span class="loading-dot size-2.5 rounded-full bg-primary"></span>
+				<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 200ms"
+				></span>
+				<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 400ms"
+				></span>
+			</div>
+
+			<!-- Rotating friendly message -->
 			<div class="space-y-1">
-				<p class="text-sm font-semibold text-foreground">Switching report month…</p>
-				<p class="text-xs text-muted-foreground">Updating workbook calendar and attendance marks</p>
+				<p class="text-sm font-semibold text-foreground transition-all duration-500 ease-out">
+					{monthSwitchMessage}
+				</p>
+				<p class="text-xs text-muted-foreground transition-opacity duration-300">
+					Updating workbook calendar and attendance marks
+				</p>
 			</div>
 		</div>
 	</div>
@@ -1178,9 +1164,18 @@
 				role="status"
 				aria-live="polite"
 			>
+				<!-- Animated bouncing dots -->
+				<div class="flex items-center gap-1" aria-hidden="true">
+					<span class="loading-dot size-2.5 rounded-full bg-primary"></span>
+					<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 200ms"
+					></span>
+					<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 400ms"
+					></span>
+				</div>
+
 				<!-- Current friendly message -->
 				<div class="space-y-1">
-					<p class="text-sm font-semibold text-foreground transition-all duration-300">
+					<p class="text-sm font-semibold text-foreground transition-all duration-500 ease-out">
 						{sf2OpenDisplayMessage}
 					</p>
 				</div>
@@ -1218,3 +1213,22 @@
 		<dd class="font-medium">{value}</dd>
 	</div>
 {/snippet}
+
+<style>
+	.loading-dot {
+		animation: dot-bounce 1.4s ease-in-out infinite both;
+	}
+
+	@keyframes dot-bounce {
+		0%,
+		80%,
+		100% {
+			transform: scale(0.4);
+			opacity: 0.3;
+		}
+		40% {
+			transform: scale(1);
+			opacity: 1;
+		}
+	}
+</style>

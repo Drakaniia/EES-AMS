@@ -125,9 +125,18 @@
 			role="status"
 			aria-live="polite"
 		>
+			<!-- Animated bouncing dots -->
+			<div class="flex items-center gap-1" aria-hidden="true">
+				<span class="loading-dot size-2.5 rounded-full bg-primary"></span>
+				<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 200ms"
+				></span>
+				<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 400ms"
+				></span>
+			</div>
+
 			<!-- Current message -->
 			<div class="space-y-1">
-				<p class="text-sm font-semibold text-foreground transition-all duration-300">
+				<p class="text-sm font-semibold text-foreground transition-all duration-500 ease-out">
 					{sf2State.sf2ProgressDisplayMessage ||
 						(sf2State.sf2ProgressTask === 'import'
 							? 'Importing SF2 workbook…'
@@ -236,6 +245,23 @@
 		}
 		100% {
 			transform: translateX(350%);
+		}
+	}
+
+	.loading-dot {
+		animation: dot-bounce 1.4s ease-in-out infinite both;
+	}
+
+	@keyframes dot-bounce {
+		0%,
+		80%,
+		100% {
+			transform: scale(0.4);
+			opacity: 0.3;
+		}
+		40% {
+			transform: scale(1);
+			opacity: 1;
 		}
 	}
 </style>

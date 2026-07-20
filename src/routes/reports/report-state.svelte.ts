@@ -67,23 +67,24 @@ export function cellKey(studentId: string, date: string) {
 }
 
 export function cellLabel(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
-	const state = cell.status === 'present' ? 'present' : 'absent';
+	const state = cell.status === 'absent' ? 'absent' : 'present';
 	return `${row.studentName}, ${matrixDateLabel(cell.date)}: ${state}`;
 }
 
-export function cellForDate(row: MatrixStudentRow, date: string) {
-	return row.cellsByDate.get(date);
-}
-
-export function unmappedCellLabel(row: Sf2PreviewStudentRow, date: string) {
-	return `${row.studentName}, ${matrixDateLabel(date)}: no SF2 column mapped`;
+/**
+ * Returns the cell for a given date key, or null if no cell exists (weekend/blank slot).
+ * Since the backend now includes ALL weekdays in the preview dates, every weekday
+ * should have a corresponding cell in the student row.
+ */
+export function cellForDate(row: MatrixStudentRow, date: string | null) {
+	if (!date) return null;
+	return row.cellsByDate.get(date) ?? null;
 }
 
 export function cellClass(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
 	if (!row.mapped) return 'border-border bg-surface text-muted-foreground';
-	// Present = visually empty (no green background, no checkmark)
-	if (cell.status === 'present') return 'border-border bg-background text-muted-foreground';
 	if (cell.status === 'absent') return 'border-red-500/35 bg-red-50 text-red-700';
+	// Present/Open = visually empty (no green background, no checkmark)
 	return 'border-border bg-background text-muted-foreground';
 }
 
