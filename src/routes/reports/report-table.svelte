@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { AlertTriangle, X, CheckCheck, Maximize2 } from 'lucide-svelte';
+	import { AlertTriangle, X, CheckCheck, Maximize2, Minimize2 } from 'lucide-svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import type { Sf2PreviewStudentRow, Sf2PreviewCell } from '$lib/db-rust';
 	import type { MatrixWeekGroup, MatrixStudentRow } from './report-state.svelte';
@@ -9,7 +9,6 @@
 		weekRangeLabel,
 		cellForDate,
 		cellLabel,
-		unmappedCellLabel,
 		cellClass,
 		cellKey
 	} from './report-state.svelte';
@@ -121,10 +120,15 @@
 				type="button"
 				onclick={onFullReviewOpen}
 				class="control-ring inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-surface"
-				title="Open full review"
+				title={fullReview ? 'Exit full preview' : 'Open full preview'}
 			>
-				<Maximize2 class="size-3.5" aria-hidden="true" />
-				Full Preview
+				{#if fullReview}
+					<Minimize2 class="size-3.5" aria-hidden="true" />
+					Exit Full Preview
+				{:else}
+					<Maximize2 class="size-3.5" aria-hidden="true" />
+					Full Preview
+				{/if}
 			</button>
 		</div>
 	</div>
@@ -160,11 +164,9 @@
 								0
 									? 'border-l-2 border-l-primary/45'
 									: 'border-l border-l-border/60'}"
-								title={slot.date
-									? `${matrixDateLabel(slot.date.date)} ${slot.date.columnLetter}${slot.date.columnIndex}`
-									: slot.dateKey
-										? `${matrixDateLabel(slot.dateKey)}, no SF2 column mapped`
-										: `${slot.weekday}, no class day in this month`}
+								title={slot.dateKey
+									? `${matrixDateLabel(slot.dateKey)}${slot.date ? ` ${slot.date.columnLetter}${slot.date.columnIndex}` : ''}`
+									: `${slot.weekday}, no class day in this month`}
 							>
 								<div class="font-mono text-sm leading-none font-bold">
 									{slot.dateKey ? formatDayNumber(slot.dateKey) : ''}
@@ -201,7 +203,7 @@
 						</th>
 						{#each matrixWeekGroups as week (week.key)}
 							{#each week.slots as slot, dateIndex (slot.key)}
-								{@const cell = slot.dateKey ? cellForDate(row, slot.dateKey) : null}
+								{@const cell = cellForDate(row, slot.dateKey)}
 								<td
 									class="border-b border-border/80 px-1.5 py-1.5 text-center {dateIndex === 0
 										? 'border-l-2 border-l-primary/30 bg-primary/5'
@@ -221,23 +223,12 @@
 										>
 											{#if correctingCellKey === cellKey(row.studentId, cell.date)}
 												<span class="font-mono text-[10px]">...</span>
-											{:else if cell.status === 'present'}
-												<!-- Empty = Present (per spec: no visual mark needed) -->
 											{:else if cell.status === 'absent'}
 												<X class="size-4" aria-hidden="true" />
 											{:else}
-												<span aria-hidden="true">-</span>
+												<!-- Empty = Present/Open (clickable, no visual mark) -->
 											{/if}
 										</button>
-									{:else if slot.dateKey}
-										<span
-											role="img"
-											aria-label={unmappedCellLabel(row, slot.dateKey)}
-											title={unmappedCellLabel(row, slot.dateKey)}
-											class="inline-grid size-9 place-items-center rounded-md border border-dashed border-border bg-background text-xs font-bold text-muted-foreground"
-										>
-											-
-										</span>
 									{:else}
 										<span
 											aria-hidden="true"
