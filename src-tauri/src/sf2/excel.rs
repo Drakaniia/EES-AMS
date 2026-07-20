@@ -19,11 +19,7 @@ pub struct WorkbookSession;
 /// then saves (if `save_on_close`) and closes.
 ///
 /// This is the Phase 1 batching API — call once instead of 9 separate times.
-pub fn batch_operations<T, F>(
-    path: &Path,
-    save_on_close: bool,
-    action: F,
-) -> Result<T>
+pub fn batch_operations<T, F>(path: &Path, save_on_close: bool, action: F) -> Result<T>
 where
     T: Send + 'static,
     F: FnOnce(&WorkbookSession) -> Result<T> + Send + 'static,
@@ -82,7 +78,12 @@ pub fn hide_empty_learner_rows(
     female_total_row: u32,
     occupied_rows: &HashSet<u32>,
 ) -> Result<()> {
-    hide_empty_learner_rows_impl(workbook_path, male_total_row, female_total_row, occupied_rows)
+    hide_empty_learner_rows_impl(
+        workbook_path,
+        male_total_row,
+        female_total_row,
+        occupied_rows,
+    )
 }
 
 pub fn expand_roster_rows(
@@ -92,7 +93,13 @@ pub fn expand_roster_rows(
     male_total_row: Option<u32>,
     female_total_row: Option<u32>,
 ) -> Result<()> {
-    expand_roster_rows_impl(workbook_path, extra_male_rows, extra_female_rows, male_total_row, female_total_row)
+    expand_roster_rows_impl(
+        workbook_path,
+        extra_male_rows,
+        extra_female_rows,
+        male_total_row,
+        female_total_row,
+    )
 }
 
 pub fn write_metadata(workbook_path: &Path, metadata: &Sf2WorkbookMetadata) -> Result<()> {
@@ -100,11 +107,7 @@ pub fn write_metadata(workbook_path: &Path, metadata: &Sf2WorkbookMetadata) -> R
 }
 
 #[cfg(target_os = "windows")]
-fn batch_operations_impl<T, F>(
-    path: &Path,
-    save_on_close: bool,
-    action: F,
-) -> Result<T>
+fn batch_operations_impl<T, F>(path: &Path, save_on_close: bool, action: F) -> Result<T>
 where
     T: Send + 'static,
     F: FnOnce(&super::excel_com::WorkbookSession) -> Result<T> + Send + 'static,
@@ -113,11 +116,7 @@ where
 }
 
 #[cfg(not(target_os = "windows"))]
-fn batch_operations_impl<T, F>(
-    _path: &Path,
-    _save_on_close: bool,
-    _action: F,
-) -> Result<T>
+fn batch_operations_impl<T, F>(_path: &Path, _save_on_close: bool, _action: F) -> Result<T>
 where
     T: Send + 'static,
     F: FnOnce(&WorkbookSession) -> Result<T> + Send + 'static,
@@ -156,22 +155,55 @@ fn write_marks_impl(_workbook_path: &Path, _marks: &[Sf2CellMark]) -> Result<()>
 }
 
 #[cfg(target_os = "windows")]
-fn hide_empty_learner_rows_impl(workbook_path: &Path, male_total_row: u32, female_total_row: u32, occupied_rows: &HashSet<u32>) -> Result<()> {
-    super::excel_com::hide_empty_learner_rows(workbook_path, male_total_row, female_total_row, occupied_rows)
+fn hide_empty_learner_rows_impl(
+    workbook_path: &Path,
+    male_total_row: u32,
+    female_total_row: u32,
+    occupied_rows: &HashSet<u32>,
+) -> Result<()> {
+    super::excel_com::hide_empty_learner_rows(
+        workbook_path,
+        male_total_row,
+        female_total_row,
+        occupied_rows,
+    )
 }
 
 #[cfg(not(target_os = "windows"))]
-fn hide_empty_learner_rows_impl(_workbook_path: &Path, _male_total_row: u32, _female_total_row: u32, _occupied_rows: &HashSet<u32>) -> Result<()> {
+fn hide_empty_learner_rows_impl(
+    _workbook_path: &Path,
+    _male_total_row: u32,
+    _female_total_row: u32,
+    _occupied_rows: &HashSet<u32>,
+) -> Result<()> {
     Err(unsupported_excel_automation())
 }
 
 #[cfg(target_os = "windows")]
-fn expand_roster_rows_impl(workbook_path: &Path, extra_male_rows: u32, extra_female_rows: u32, male_total_row: Option<u32>, female_total_row: Option<u32>) -> Result<()> {
-    super::excel_com::expand_roster_rows(workbook_path, extra_male_rows, extra_female_rows, male_total_row, female_total_row)
+fn expand_roster_rows_impl(
+    workbook_path: &Path,
+    extra_male_rows: u32,
+    extra_female_rows: u32,
+    male_total_row: Option<u32>,
+    female_total_row: Option<u32>,
+) -> Result<()> {
+    super::excel_com::expand_roster_rows(
+        workbook_path,
+        extra_male_rows,
+        extra_female_rows,
+        male_total_row,
+        female_total_row,
+    )
 }
 
 #[cfg(not(target_os = "windows"))]
-fn expand_roster_rows_impl(_workbook_path: &Path, _extra_male_rows: u32, _extra_female_rows: u32, _male_total_row: Option<u32>, _female_total_row: Option<u32>) -> Result<()> {
+fn expand_roster_rows_impl(
+    _workbook_path: &Path,
+    _extra_male_rows: u32,
+    _extra_female_rows: u32,
+    _male_total_row: Option<u32>,
+    _female_total_row: Option<u32>,
+) -> Result<()> {
     Err(unsupported_excel_automation())
 }
 

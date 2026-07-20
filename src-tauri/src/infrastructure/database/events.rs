@@ -58,9 +58,7 @@ impl EventRepository {
         let end_naive = NaiveDate::parse_from_str(end_date, "%Y-%m-%d")
             .map_err(|error| AppError::InvalidInput(format!("invalid end date: {error}")))?;
         // End date inclusive: add one day to cover the full end day
-        let end_naive_exclusive = end_naive
-            .succ_opt()
-            .unwrap_or(end_naive);
+        let end_naive_exclusive = end_naive.succ_opt().unwrap_or(end_naive);
 
         let start_local = Local
             .from_local_datetime(&start_naive.and_hms_opt(0, 0, 0).unwrap())

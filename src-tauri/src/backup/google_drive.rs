@@ -171,8 +171,7 @@ fn google_client_id() -> Result<String> {
 // ── OAuth Flow ────────────────────────────────────────────────────────
 
 fn authorize_google_drive(client_id: &str) -> Result<OAuthTokenResponse> {
-    let listener =
-        TcpListener::bind("127.0.0.1:0").context("failed to start OAuth callback")?;
+    let listener = TcpListener::bind("127.0.0.1:0").context("failed to start OAuth callback")?;
     listener
         .set_nonblocking(true)
         .context("failed to configure OAuth callback")?;

@@ -1,13 +1,11 @@
 use crate::domain::error::{AppError, Result};
 use crate::domain::models::{
-    Class, CreateClassRequest, CreateStudentRequest, Settings, Student, StudentGender,
-    StudentId, UpdateStudentRequest,
+    Class, CreateClassRequest, CreateStudentRequest, Settings, Student, StudentGender, StudentId,
+    UpdateStudentRequest,
 };
 use crate::infrastructure::database::{ClassRepository, StudentRepository};
 use crate::sf2::logic::{is_learner_name, normalize_learner_name, Sf2CellMark};
-use crate::sf2::models::{
-    Sf2StudentMappingRecord, Sf2WorkbookAnalysis, Sf2WorkbookLearner,
-};
+use crate::sf2::models::{Sf2StudentMappingRecord, Sf2WorkbookAnalysis, Sf2WorkbookLearner};
 
 use std::collections::{HashMap, HashSet};
 
@@ -67,7 +65,10 @@ pub(crate) fn template_owns_roster(template: &crate::sf2::models::Sf2TemplateRec
 ///
 /// Returns slot definitions with dynamically calculated row indices based on how many
 /// extra rows would need to be inserted before the MALE TOTAL and FEMALE TOTAL rows.
-pub(crate) fn expanded_roster_slots(male_count: usize, female_count: usize) -> Vec<TemplateRosterSlot> {
+pub(crate) fn expanded_roster_slots(
+    male_count: usize,
+    female_count: usize,
+) -> Vec<TemplateRosterSlot> {
     let extra_male = male_count.saturating_sub(21) as u32;
     let mut slots = Vec::with_capacity(male_count + female_count);
 
@@ -124,7 +125,10 @@ pub(crate) fn roster_expansion_needed(male_count: usize, female_count: usize) ->
 /// but derived from the first-slot positions (8 for male, 30 for female) rather
 /// than hardcoded result values, making it self-documenting and robust against
 /// layout changes.
-pub(crate) fn bundled_template_total_rows(male_count: usize, female_count: usize) -> (u32, u32, u32) {
+pub(crate) fn bundled_template_total_rows(
+    male_count: usize,
+    female_count: usize,
+) -> (u32, u32, u32) {
     let male_capacity = male_count.max(21) as u32;
     let female_capacity = female_count.max(19) as u32;
     let extra_male = male_capacity.saturating_sub(21u32);
@@ -181,7 +185,10 @@ mod tests {
         // 21 male, 0 female → minimum 19 female slots
         let (m, f, c) = bundled_template_total_rows(21, 0);
         assert_eq!(m, 29, "male total");
-        assert_eq!(f, 49, "female total: even with 0 students, 19 slots minimum");
+        assert_eq!(
+            f, 49,
+            "female total: even with 0 students, 19 slots minimum"
+        );
         assert_eq!(c, 50, "combined total");
     }
 
@@ -199,7 +206,11 @@ mod tests {
         // 40 male, 35 female → extreme case
         let (m, f, c) = bundled_template_total_rows(40, 35);
         assert_eq!(m, 48, "male total: 8 + 40 = 48");
-        assert_eq!(f, 30 + 19 + 35, "female total: 30 + extra_male(19) + 35 = 84");
+        assert_eq!(
+            f,
+            30 + 19 + 35,
+            "female total: 30 + extra_male(19) + 35 = 84"
+        );
         assert_eq!(c, 30 + 19 + 35 + 1, "combined total: 85");
     }
 }
@@ -229,7 +240,8 @@ pub(crate) fn template_roster_assignments(
     }
 
     // Use expanded slots if student count exceeds standard capacity
-    let (extra_male, extra_female) = roster_expansion_needed(male_students.len(), female_students.len());
+    let (extra_male, extra_female) =
+        roster_expansion_needed(male_students.len(), female_students.len());
     let row_slots = if extra_male > 0 || extra_female > 0 {
         expanded_roster_slots(male_students.len(), female_students.len())
     } else {
@@ -462,10 +474,8 @@ pub(crate) fn sync_workbook_learner_mappings_with_old(
         .collect();
 
     // Build a row index → old mapping lookup for re-import name updates
-    let old_by_row: HashMap<u32, &Sf2StudentMappingRecord> = old_mappings
-        .iter()
-        .map(|m| (m.row_index, m))
-        .collect();
+    let old_by_row: HashMap<u32, &Sf2StudentMappingRecord> =
+        old_mappings.iter().map(|m| (m.row_index, m)).collect();
 
     let mut seen_names = HashSet::new();
     let mut student_mappings = Vec::new();
@@ -604,7 +614,9 @@ pub(crate) fn clear_unused_learner_marks(
         .map(|sheet| sheet.name.clone())
         .collect();
 
-    let all_possible_rows = if let (Some(male_count), Some(female_count)) = (expanded_male_count, expanded_female_count) {
+    let all_possible_rows = if let (Some(male_count), Some(female_count)) =
+        (expanded_male_count, expanded_female_count)
+    {
         // Expanded bundled template: use dynamic row range
         let extra_male = male_count.saturating_sub(21) as u32;
         let mut rows = Vec::new();
@@ -621,13 +633,17 @@ pub(crate) fn clear_unused_learner_marks(
     };
 
     let mapped: HashSet<u32> = mapped_rows.iter().copied().collect();
-    let unused_rows: Vec<&u32> = all_possible_rows.iter().filter(|r| !mapped.contains(r)).collect();
+    let unused_rows: Vec<&u32> = all_possible_rows
+        .iter()
+        .filter(|r| !mapped.contains(r))
+        .collect();
 
     if unused_rows.is_empty() {
         return Vec::new();
     }
 
-    let mut marks = Vec::with_capacity(sheet_names.len() * unused_rows.len() * SF2_LEARNER_INFO_COLUMNS.len());
+    let mut marks =
+        Vec::with_capacity(sheet_names.len() * unused_rows.len() * SF2_LEARNER_INFO_COLUMNS.len());
     for sheet_name in sheet_names {
         for col in &SF2_LEARNER_INFO_COLUMNS {
             for row in &unused_rows {

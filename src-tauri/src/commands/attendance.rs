@@ -52,10 +52,7 @@ pub fn add_event(
         let pool = pool.inner().clone();
         let class_id = class_id.clone();
         std::thread::spawn(move || {
-            if let Err(e) = crate::sf2::service::sync_attendance_to_sf2_workbook(
-                pool,
-                &class_id,
-            ) {
+            if let Err(e) = crate::sf2::service::sync_attendance_to_sf2_workbook(pool, &class_id) {
                 log::warn!("SF2 workbook sync failed after adding attendance event: {e}");
             }
         });
@@ -80,10 +77,7 @@ pub fn add_events(
         let pool = pool.inner().clone();
         let class_id = class_id.to_string();
         std::thread::spawn(move || {
-            if let Err(e) = crate::sf2::service::sync_attendance_to_sf2_workbook(
-                pool,
-                &class_id,
-            ) {
+            if let Err(e) = crate::sf2::service::sync_attendance_to_sf2_workbook(pool, &class_id) {
                 log::warn!("SF2 workbook sync failed after adding batch attendance events: {e}");
             }
         });
@@ -118,10 +112,7 @@ pub fn delete_events(
     for class_id in class_ids {
         let pool = pool.inner().clone();
         std::thread::spawn(move || {
-            if let Err(e) = crate::sf2::service::sync_attendance_to_sf2_workbook(
-                pool,
-                &class_id,
-            ) {
+            if let Err(e) = crate::sf2::service::sync_attendance_to_sf2_workbook(pool, &class_id) {
                 log::warn!("SF2 workbook sync failed after deleting attendance events: {e}");
             }
         });
@@ -149,10 +140,7 @@ pub fn delete_event(
         let pool = pool.inner().clone();
         let class_id = class_id.clone();
         std::thread::spawn(move || {
-            if let Err(e) = crate::sf2::service::sync_attendance_to_sf2_workbook(
-                pool,
-                &class_id,
-            ) {
+            if let Err(e) = crate::sf2::service::sync_attendance_to_sf2_workbook(pool, &class_id) {
                 log::warn!("SF2 workbook sync failed after deleting attendance event: {e}");
             }
         });

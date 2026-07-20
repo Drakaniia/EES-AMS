@@ -262,8 +262,9 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            id: "app".to_string(),			day_start: "08:00".to_string(),
-			day_end: "15:00".to_string(),
+            id: "app".to_string(),
+            day_start: "08:00".to_string(),
+            day_end: "15:00".to_string(),
             late_after: "08:45".to_string(),
             quarter: "1st Quarter".to_string(),
             attendance_mode: AttendanceMode::Manual,

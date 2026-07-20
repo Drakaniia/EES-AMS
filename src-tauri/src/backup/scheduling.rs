@@ -28,19 +28,13 @@ pub fn ensure_daily_backup(pool: &DbPool, app_dir: &Path) -> Result<()> {
     ensure_daily_backup_at(pool, app_dir, now).map(|_| ())
 }
 
-pub fn ensure_daily_backup_at(
-    pool: &DbPool,
-    app_dir: &Path,
-    now: DateTime<Local>,
-) -> Result<()> {
+pub fn ensure_daily_backup_at(pool: &DbPool, app_dir: &Path, now: DateTime<Local>) -> Result<()> {
     let today = now.date_naive();
-    let has_backup_today = backup_service::list_backups(app_dir)?
-        .iter()
-        .any(|backup| {
-            chrono::DateTime::from_timestamp(backup.created_at, 0)
-                .map(|timestamp| timestamp.with_timezone(&Local).date_naive() == today)
-                .unwrap_or(false)
-        });
+    let has_backup_today = backup_service::list_backups(app_dir)?.iter().any(|backup| {
+        chrono::DateTime::from_timestamp(backup.created_at, 0)
+            .map(|timestamp| timestamp.with_timezone(&Local).date_naive() == today)
+            .unwrap_or(false)
+    });
 
     if has_backup_today {
         return Ok(());

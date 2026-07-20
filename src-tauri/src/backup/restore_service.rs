@@ -8,13 +8,9 @@ use std::path::Path;
 
 pub fn restore_backup(pool: &DbPool, app_dir: &Path, source_path: &Path) -> Result<RestoreResult> {
     let preview = preview_backup(source_path)?;
-    let pre_restore_backup = backup_service::create_backup_at(
-        pool,
-        app_dir,
-        BackupKind::PreRestore,
-        Local::now(),
-    )
-    .context("failed to create pre-restore safety backup")?;
+    let pre_restore_backup =
+        backup_service::create_backup_at(pool, app_dir, BackupKind::PreRestore, Local::now())
+            .context("failed to create pre-restore safety backup")?;
 
     let mut pooled = pool.get().context("failed to get database connection")?;
     let conn: &mut Connection = &mut pooled;

@@ -1,5 +1,7 @@
 use crate::domain::error::{AppError, Result};
-use crate::infrastructure::database::{ClassRepository, DbPool, EventRepository, StudentRepository};
+use crate::infrastructure::database::{
+    ClassRepository, DbPool, EventRepository, StudentRepository,
+};
 use crate::sf2::calendar::{
     sf2_date_mappings_for_report_month, sf2_metadata_warnings, template_metadata,
 };
@@ -70,7 +72,9 @@ pub fn open_workbook(pool: DbPool, class_id: Option<String>) -> Result<String> {
 pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2ExportReadiness> {
     let sf2_repo = Sf2Repository::new(pool.clone());
     let template = match class_id {
-        Some(ref class_id) if !class_id.is_empty() => sf2_repo.latest_template_for_class(class_id)?,
+        Some(ref class_id) if !class_id.is_empty() => {
+            sf2_repo.latest_template_for_class(class_id)?
+        }
         _ => sf2_repo
             .list_templates()?
             .into_iter()
@@ -119,7 +123,8 @@ pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2Exp
 
     let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
     let mapped_students = student_mappings.len();
-    let unmapped_students = unmapped_roster_student_names(pool.clone(), template, &student_mappings)?;
+    let unmapped_students =
+        unmapped_roster_student_names(pool.clone(), template, &student_mappings)?;
     if !unmapped_students.is_empty() {
         issues.push(unmapped_roster_issue(&unmapped_students));
     }
@@ -234,8 +239,8 @@ pub fn export_preview(pool: DbPool, class_id: Option<String>) -> Result<Sf2Expor
     }
 
     // Unmapped students
-    let class_students = StudentRepository::new(pool.clone())
-        .list_by_class(Some(&template.active_class_id))?;
+    let class_students =
+        StudentRepository::new(pool.clone()).list_by_class(Some(&template.active_class_id))?;
     let mapped_student_ids: HashSet<String> = student_mappings
         .iter()
         .map(|m| m.student_id.clone())
@@ -282,20 +287,19 @@ pub fn export_preview(pool: DbPool, class_id: Option<String>) -> Result<Sf2Expor
     // Class name
     let class_repo = ClassRepository::new(pool.clone());
     let class = class_repo.get(&template.active_class_id)?;
-    let class_name = class
-        .map(|c| c.name)
-        .unwrap_or_else(|| crate::sf2::naming::class_name(&template.grade_level, &template.section));
+    let class_name = class.map(|c| c.name).unwrap_or_else(|| {
+        crate::sf2::naming::class_name(&template.grade_level, &template.section)
+    });
 
     // ── Filtered events (only for this class + this month) ────────────────
     let events = if !date_mappings.is_empty() {
         let first_date = &date_mappings[0].date;
         let last_date = &date_mappings[date_mappings.len() - 1].date;
-        EventRepository::new(pool.clone())
-            .list_for_class_and_date_range(
-                &template.active_class_id,
-                first_date,
-                last_date,
-            )?
+        EventRepository::new(pool.clone()).list_for_class_and_date_range(
+            &template.active_class_id,
+            first_date,
+            last_date,
+        )?
     } else {
         Vec::new()
     };
@@ -332,7 +336,8 @@ pub fn export_workbook(
             AppError::InvalidInput("No SF2 template imported for this class".to_string())
         })?;
     let template = refresh_template_calendar_from_saved_month(pool.clone(), &template)?;
-    let template = super::calendar_service::sync_template_roster_from_class(pool.clone(), &template)?;
+    let template =
+        super::calendar_service::sync_template_roster_from_class(pool.clone(), &template)?;
 
     let working_copy_path = PathBuf::from(&template.source_path);
     if !working_copy_path.exists() {
@@ -351,7 +356,10 @@ pub fn export_workbook(
             "No attendance dates are mapped to this SF2 report month.".to_string(),
         ));
     }
-    let report_dates = mapped_dates.iter().map(|m| m.date.clone()).collect::<Vec<_>>();
+    let report_dates = mapped_dates
+        .iter()
+        .map(|m| m.date.clone())
+        .collect::<Vec<_>>();
 
     let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
     let unmapped_students =
@@ -371,7 +379,9 @@ pub fn export_workbook(
     }
 
     let marks_written = super::attendance_service::write_template_marks_for_days(
-        pool.clone(), &template, &report_dates,
+        pool.clone(),
+        &template,
+        &report_dates,
     )?;
 
     let metadata = template_metadata(&template);
@@ -426,11 +436,78 @@ pub(super) fn refresh_template_calendar_from_saved_month(
             .map(|mapping| mapping.date.as_str()),
     )?);
 
-    // Refactored: batch write_metadata + analyze into a single Excel session
+    // Pre-compute values needed inside the move closure — avoids capturing
+    // student_mappings (needed again after the closure) while still having
+    // ownership of the data the closure needs.
+    let owns_roster = crate::sf2::roster_parser::template_owns_roster(template);
+    let male_count = student_mappings
+        .iter()
+        .filter(|m| m.gender_block.as_deref() == Some("MALE"))
+        .count();
+    let female_count = student_mappings
+        .iter()
+        .filter(|m| m.gender_block.as_deref() == Some("FEMALE"))
+        .count();
+    let template_id_for_closure = template.id.clone();
+    let student_mappings_for_update = student_mappings.clone();
+
     let metadata_for_excel = metadata.clone();
     let analysis = excel::batch_operations(&workbook_path, true, move |session| {
         session.write_metadata(&metadata_for_excel)?;
-        session.analyze()
+        let analysis = session.analyze()?;
+
+        // Regenerate TOTAL Per Day formulas for bundled templates when switching
+        // months. The calendar dates change, so stale static values inherited from
+        // the original template must be cleared first, then new formulas written.
+        if owns_roster {
+            let (male_total_row, female_total_row, combined_total_row) =
+                crate::sf2::roster_parser::bundled_template_total_rows(male_count, female_count);
+            let inner_date_mappings =
+                date_mappings_from_analysis(&template_id_for_closure, &analysis);
+
+            // Clear stale template defaults from all weekday columns (6–38)
+            // so columns without dates in this month show nothing.
+            let clear_marks = super::attendance_service::clear_total_cell_marks(
+                male_total_row,
+                female_total_row,
+                combined_total_row,
+                &inner_date_mappings,
+            );
+            if !clear_marks.is_empty() {
+                session.write_marks_force(&clear_marks)?;
+            }
+
+            // Write fresh formulas only for columns that have valid dates.
+            let formula_marks = super::attendance_service::total_formula_marks(
+                male_count,
+                female_count,
+                male_total_row,
+                female_total_row,
+                combined_total_row,
+                &inner_date_mappings,
+            );
+            if !formula_marks.is_empty() {
+                session.write_formulas(&formula_marks)?;
+            }
+
+            // Rewrite summary section (Enrolment, Registered Learners, ADA, etc.)
+            // to match current student counts.
+            let total = male_count + female_count;
+            let (summary_formulas, summary_static) =
+                super::attendance_service::summary_formula_marks(
+                    male_count,
+                    female_count,
+                    total,
+                    male_total_row,
+                    female_total_row,
+                    combined_total_row,
+                    &inner_date_mappings,
+                );
+            session.write_formulas(&summary_formulas)?;
+            session.write_marks_force(&summary_static)?;
+        }
+
+        Ok(analysis)
     })?;
     let refreshed_template = Sf2TemplateRecord {
         id: template.id.clone(),
@@ -452,7 +529,7 @@ pub(super) fn refresh_template_calendar_from_saved_month(
     let refreshed_date_mappings = date_mappings_from_analysis(&template.id, &analysis);
     sf2_repo.update_template_with_mappings(
         &refreshed_template,
-        &student_mappings,
+        &student_mappings_for_update,
         &refreshed_date_mappings,
     )?;
 

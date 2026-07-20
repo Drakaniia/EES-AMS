@@ -1,21 +1,23 @@
 use crate::domain::error::{AppError, Result};
 use crate::domain::models::{Class, Settings, StudentGender};
-use crate::infrastructure::database::{ClassRepository, DbPool, StudentRepository, SettingsRepository};
+use crate::infrastructure::database::{
+    ClassRepository, DbPool, SettingsRepository, StudentRepository,
+};
 use crate::sf2::calendar::{
     date_mappings_from_analysis, metadata_from_draft, sf2_date_mappings_for_report_month,
     validate_configured_calendar,
 };
 use crate::sf2::excel;
 use crate::sf2::models::{
-    Sf2StudentMappingRecord, Sf2TemplateDraft, Sf2TemplateRecord, Sf2ImportSummary,
+    Sf2ImportSummary, Sf2StudentMappingRecord, Sf2TemplateDraft, Sf2TemplateRecord,
 };
 use crate::sf2::naming::class_name;
 use crate::sf2::repository::Sf2Repository;
 use crate::sf2::roster::{
     bundled_template_total_rows, clear_unused_learner_marks, reject_duplicate_roster_names,
     roster_expansion_needed, roster_name_marks, roster_students_for_draft,
-    student_mappings_from_roster_assignments, sync_workbook_learner_mappings,
-    template_owns_roster, template_roster_assignments,
+    student_mappings_from_roster_assignments, sync_workbook_learner_mappings, template_owns_roster,
+    template_roster_assignments,
 };
 use crate::sf2::workbook_files::{
     hash_bytes, layout_fingerprint, sf2_workbook_dir, write_bundled_template_to_dir,
@@ -68,8 +70,14 @@ fn create_workbook_from_template_in_dir(
 
     // Calculate expansion needed BEFORE writing to Excel
     let roster_assignments = template_roster_assignments(&students)?;
-    let male_count = students.iter().filter(|s| s.gender == Some(StudentGender::Male)).count();
-    let female_count = students.iter().filter(|s| s.gender == Some(StudentGender::Female)).count();
+    let male_count = students
+        .iter()
+        .filter(|s| s.gender == Some(StudentGender::Male))
+        .count();
+    let female_count = students
+        .iter()
+        .filter(|s| s.gender == Some(StudentGender::Female))
+        .count();
     let (extra_male, extra_female) = roster_expansion_needed(male_count, female_count);
 
     let temp_template_path =
@@ -118,8 +126,12 @@ fn create_workbook_from_template_in_dir(
 
     // ── Phase 1: Batch all 7 Excel operations into ONE session ────────
     // Was previously 7 separate Excel startups (steps 2-7 + 9).
-    let (male_total, female_total, combined_total) = bundled_template_total_rows(male_count, female_count);
-    let mapped_rows: Vec<u32> = roster_assignments.iter().map(|a| a.slot.row_index).collect();
+    let (male_total, female_total, combined_total) =
+        bundled_template_total_rows(male_count, female_count);
+    let mapped_rows: Vec<u32> = roster_assignments
+        .iter()
+        .map(|a| a.slot.row_index)
+        .collect();
     let expanded_counts = if extra_male > 0 || extra_female > 0 {
         (Some(male_count), Some(female_count))
     } else {
@@ -128,77 +140,88 @@ fn create_workbook_from_template_in_dir(
     let metadata_for_excel = metadata.clone();
     let template_id_for_excel = template_id.clone();
 
-    let (analysis, date_mappings) = excel::batch_operations(&working_copy_path, true, move |session| {
-        // Step 2: Write metadata
-        session.write_metadata(&metadata_for_excel)?;
+    let (analysis, date_mappings) =
+        excel::batch_operations(&working_copy_path, true, move |session| {
+            // Step 2: Write metadata
+            session.write_metadata(&metadata_for_excel)?;
 
-        // Step 3: Expand roster if needed
-        if extra_male > 0 || extra_female > 0 {
-            session.expand_roster_rows(extra_male, extra_female, None, None)?;
-        }
+            // Step 3: Expand roster if needed
+            if extra_male > 0 || extra_female > 0 {
+                session.expand_roster_rows(extra_male, extra_female, None, None)?;
+            }
 
-        // Step 4: Analyze
-        let analysis = session.analyze()?;
+            // Step 4: Analyze
+            let analysis = session.analyze()?;
 
-        // Compute roster marks from analysis (pure Rust, inside closure)
-        let roster_marks = roster_name_marks(&analysis, &roster_assignments);
-        session.write_marks(&roster_marks)?;
+            // Compute roster marks from analysis (pure Rust, inside closure)
+            let roster_marks = roster_name_marks(&analysis, &roster_assignments);
+            session.write_marks(&roster_marks)?;
 
-        // Step 6: Clear unused marks
-        let clear_marks = clear_unused_learner_marks(
-            &analysis, &mapped_rows, expanded_counts.0, expanded_counts.1,
-        );
-        if !clear_marks.is_empty() {
-            session.write_marks(&clear_marks)?;
-        }
+            // Step 6: Clear unused marks
+            let clear_marks = clear_unused_learner_marks(
+                &analysis,
+                &mapped_rows,
+                expanded_counts.0,
+                expanded_counts.1,
+            );
+            if !clear_marks.is_empty() {
+                session.write_marks(&clear_marks)?;
+            }
 
-        // Step 7: Hide empty learner rows
-        let occupied: HashSet<u32> = roster_assignments.iter().map(|a| a.slot.row_index).collect();
-        session.hide_empty_learner_rows(male_total, female_total, &occupied)?;
+            // Step 7: Hide empty learner rows
+            let occupied: HashSet<u32> = roster_assignments
+                .iter()
+                .map(|a| a.slot.row_index)
+                .collect();
+            session.hide_empty_learner_rows(male_total, female_total, &occupied)?;
 
-        // Compute date_mappings + formulas from analysis
-        let date_mappings = date_mappings_from_analysis(&template_id_for_excel, &analysis);
+            // Compute date_mappings + formulas from analysis
+            let date_mappings = date_mappings_from_analysis(&template_id_for_excel, &analysis);
 
-        // Clear stale template values from TOTAL cells for columns without
-        // dates (e.g. Mon/Tue in a week where the month starts on Wed).
-        let clear_total_cells = super::attendance_service::clear_total_cell_marks(
-            male_total, female_total, combined_total, &date_mappings,
-        );
-        if !clear_total_cells.is_empty() {
-            session.write_marks_force(&clear_total_cells)?;
-        }
+            // Clear stale template values from TOTAL cells for columns without
+            // dates (e.g. Mon/Tue in a week where the month starts on Wed).
+            let clear_total_cells = super::attendance_service::clear_total_cell_marks(
+                male_total,
+                female_total,
+                combined_total,
+                &date_mappings,
+            );
+            if !clear_total_cells.is_empty() {
+                session.write_marks_force(&clear_total_cells)?;
+            }
 
-        // Step 9: Write MALE/FEMALE/Combined TOTAL formulas
-        // Row positions derived from slot layout via bundled_template_total_rows()
-        let male_total_row_inner = male_total;
-        let female_total_row_inner = female_total;
-        let combined_total_row_inner = combined_total;
-        let formula_marks = super::attendance_service::total_formula_marks(
-            male_count,
-            female_count,
-            male_total_row_inner,
-            female_total_row_inner,
-            combined_total_row_inner,
-            &date_mappings,
-        );
-        session.write_formulas(&formula_marks)?;
+            // Step 9: Write MALE/FEMALE/Combined TOTAL formulas
+            // Row positions derived from slot layout via bundled_template_total_rows()
+            let male_total_row_inner = male_total;
+            let female_total_row_inner = female_total;
+            let combined_total_row_inner = combined_total;
+            let formula_marks = super::attendance_service::total_formula_marks(
+                male_count,
+                female_count,
+                male_total_row_inner,
+                female_total_row_inner,
+                combined_total_row_inner,
+                &date_mappings,
+            );
+            session.write_formulas(&formula_marks)?;
 
-        // Step 10: Write summary section formulas (rows 53-65: Enrolment, Registered Learners, % of Enrolment, ADA, % of Attendance)
-        let total_inner = male_count + female_count;
-        let (summary_marks_inner, summary_static_inner) = super::attendance_service::summary_formula_marks(
-            male_count,
-            female_count,
-            total_inner,
-            male_total_row_inner,
-            female_total_row_inner,
-            combined_total_row_inner,
-            &date_mappings,
-        );
-        session.write_formulas(&summary_marks_inner)?;
-        session.write_marks_force(&summary_static_inner)?;
+            // Step 10: Write summary section formulas (rows 53-65: Enrolment, Registered Learners, % of Enrolment, ADA, % of Attendance)
+            let total_inner = male_count + female_count;
+            let (summary_marks_inner, summary_static_inner) =
+                super::attendance_service::summary_formula_marks(
+                    male_count,
+                    female_count,
+                    total_inner,
+                    male_total_row_inner,
+                    female_total_row_inner,
+                    combined_total_row_inner,
+                    &date_mappings,
+                );
+            session.write_formulas(&summary_marks_inner)?;
+            session.write_marks_force(&summary_static_inner)?;
 
-        Ok((analysis, date_mappings))
-    })?;
+            Ok((analysis, date_mappings))
+        })?;
 
     validate_configured_calendar(&analysis, &metadata)?;
     let layout_fingerprint = layout_fingerprint(&analysis);
@@ -227,9 +250,11 @@ fn create_workbook_from_template_in_dir(
         .map(|m| m.date.clone())
         .collect::<Vec<_>>();
 
-    if let Err(error) =
-        super::attendance_service::write_template_marks_for_days(pool.clone(), &template, &report_dates)
-    {
+    if let Err(error) = super::attendance_service::write_template_marks_for_days(
+        pool.clone(),
+        &template,
+        &report_dates,
+    ) {
         log::warn!("failed to backfill created SF2 workbook marks: {error}");
     }
 
@@ -250,10 +275,7 @@ fn create_workbook_from_template_in_dir(
 }
 
 /// Update an existing workbook's settings, optionally recreating the roster
-pub fn update_workbook_settings(
-    pool: DbPool,
-    draft: Sf2TemplateDraft,
-) -> Result<Sf2ImportSummary> {
+pub fn update_workbook_settings(pool: DbPool, draft: Sf2TemplateDraft) -> Result<Sf2ImportSummary> {
     let metadata = metadata_from_draft(&draft)?;
     let sf2_repo = Sf2Repository::new(pool.clone());
     let class_id = draft
@@ -290,101 +312,149 @@ pub fn update_workbook_settings(
     let class_id_owned = class_id.to_string();
     let learner_names_owned = draft.learner_names.clone();
 
-    let (analysis, student_mappings, students_created, students_reused, learners_found, layout_fingerprint_value) =
-        excel::batch_operations(&workbook_path, true, move |session| {
-            // Common: write metadata and analyze
-            session.write_metadata(&metadata_for_excel)?;
-            let mut analysis = session.analyze()?;
+    let (
+        analysis,
+        student_mappings,
+        students_created,
+        students_reused,
+        learners_found,
+        layout_fingerprint_value,
+    ) = excel::batch_operations(&workbook_path, true, move |session| {
+        // Common: write metadata and analyze
+        session.write_metadata(&metadata_for_excel)?;
+        let mut analysis = session.analyze()?;
 
-            if template_owns {
-                // ── Branch 1: Bundled template (template owns roster) ─────
-                let student_repo_inner = StudentRepository::new(pool_for_batch.clone());
-                let (students, created, reused) = roster_students_for_draft(
-                    &student_repo_inner, &class_id_owned, &learner_names_owned,
+        if template_owns {
+            // ── Branch 1: Bundled template (template owns roster) ─────
+            let student_repo_inner = StudentRepository::new(pool_for_batch.clone());
+            let (students, created, reused) = roster_students_for_draft(
+                &student_repo_inner,
+                &class_id_owned,
+                &learner_names_owned,
+            )?;
+            let roster_assignments = template_roster_assignments(&students)?;
+            let male_count = students
+                .iter()
+                .filter(|s| s.gender == Some(StudentGender::Male))
+                .count();
+            let female_count = students
+                .iter()
+                .filter(|s| s.gender == Some(StudentGender::Female))
+                .count();
+
+            // Existing mappings for expansion calculation
+            let sf2_repo_inner = Sf2Repository::new(pool_for_batch.clone());
+            let existing_mappings =
+                sf2_repo_inner.student_mappings_for_template(&existing_id_for_excel)?;
+            let existing_male_mapped = existing_mappings
+                .iter()
+                .filter(|m| m.gender_block.as_deref() == Some("MALE"))
+                .count();
+            let existing_female_mapped = existing_mappings
+                .iter()
+                .filter(|m| m.gender_block.as_deref() == Some("FEMALE"))
+                .count();
+            let extra_male = (male_count.saturating_sub(existing_male_mapped.max(21))) as u32;
+            let extra_female = (female_count.saturating_sub(existing_female_mapped.max(19))) as u32;
+
+            // Row positions derived from the slot layout — adapts to any expansion.
+            let (male_total_row, female_total_row, combined_total_row) =
+                bundled_template_total_rows(male_count, female_count);
+
+            let current_male_capacity = existing_male_mapped.max(21) as u32;
+            let current_extra_male = current_male_capacity.saturating_sub(21);
+            let current_female_capacity = existing_female_mapped.max(19) as u32;
+            let current_male_total = 8u32 + current_male_capacity;
+            let current_female_total = 30u32 + current_extra_male + current_female_capacity;
+
+            // Expand if needed
+            if extra_male > 0 || extra_female > 0 {
+                session.expand_roster_rows(
+                    extra_male,
+                    extra_female,
+                    existing_mappings
+                        .is_empty()
+                        .then_some(29)
+                        .or(Some(current_male_total)),
+                    existing_mappings
+                        .is_empty()
+                        .then_some(49)
+                        .or(Some(current_female_total)),
                 )?;
-                let roster_assignments = template_roster_assignments(&students)?;
-                let male_count = students.iter()
-                    .filter(|s| s.gender == Some(StudentGender::Male)).count();
-                let female_count = students.iter()
-                    .filter(|s| s.gender == Some(StudentGender::Female)).count();
+                analysis = session.analyze()?;
+            }
 
-                // Existing mappings for expansion calculation
-                let sf2_repo_inner = Sf2Repository::new(pool_for_batch.clone());
-                let existing_mappings = sf2_repo_inner
-                    .student_mappings_for_template(&existing_id_for_excel)?;
-                let existing_male_mapped = existing_mappings.iter()
-                    .filter(|m| m.gender_block.as_deref() == Some("MALE")).count();
-                let existing_female_mapped = existing_mappings.iter()
-                    .filter(|m| m.gender_block.as_deref() == Some("FEMALE")).count();
-                let extra_male = (male_count.saturating_sub(existing_male_mapped.max(21))) as u32;
-                let extra_female = (female_count.saturating_sub(existing_female_mapped.max(19))) as u32;
+            // Write roster name marks
+            let roster_marks = roster_name_marks(&analysis, &roster_assignments);
+            session.write_marks(&roster_marks)?;
 
-                // Row positions derived from the slot layout — adapts to any expansion.
-                let (male_total_row, female_total_row, combined_total_row) = bundled_template_total_rows(male_count, female_count);
+            // Clear unused learner marks
+            let mapped_rows: Vec<u32> = roster_assignments
+                .iter()
+                .map(|a| a.slot.row_index)
+                .collect();
+            let expanded_counts = if extra_male > 0 || extra_female > 0 {
+                (Some(male_count), Some(female_count))
+            } else {
+                (None, None)
+            };
+            let clear_marks = clear_unused_learner_marks(
+                &analysis,
+                &mapped_rows,
+                expanded_counts.0,
+                expanded_counts.1,
+            );
+            if !clear_marks.is_empty() {
+                session.write_marks(&clear_marks)?;
+            }
 
-                let current_male_capacity = existing_male_mapped.max(21) as u32;
-                let current_extra_male = current_male_capacity.saturating_sub(21);
-                let current_female_capacity = existing_female_mapped.max(19) as u32;
-                let current_male_total = 8u32 + current_male_capacity;
-                let current_female_total = 30u32 + current_extra_male + current_female_capacity;
+            // Hide empty learner rows
+            let occupied: HashSet<u32> = roster_assignments
+                .iter()
+                .map(|a| a.slot.row_index)
+                .collect();
+            session.hide_empty_learner_rows(male_total_row, female_total_row, &occupied)?;
 
-                // Expand if needed
-                if extra_male > 0 || extra_female > 0 {
-                    session.expand_roster_rows(
-                        extra_male, extra_female,
-                        existing_mappings.is_empty().then_some(29).or(Some(current_male_total)),
-                        existing_mappings.is_empty().then_some(49).or(Some(current_female_total)),
-                    )?;
-                    analysis = session.analyze()?;
-                }
+            // Prepare date mappings and TOTAL row positions (needed for both
+            // the clear step and the formula writes that follow).
+            let bundle_date_mappings =
+                date_mappings_from_analysis(&existing_id_for_excel, &analysis);
+            let bundle_male_total_row = male_total_row;
+            let bundle_female_total_row = female_total_row;
+            let bundle_combined_total_row = combined_total_row;
 
-                // Write roster name marks
-                let roster_marks = roster_name_marks(&analysis, &roster_assignments);
-                session.write_marks(&roster_marks)?;
+            // Clear stale TOTAL cell values from all weekday columns (6–38)
+            // so columns without dates in this month end up clean/empty rather
+            // than showing a stale value inherited from the bundled template.
+            let clear_marks = super::attendance_service::clear_total_cell_marks(
+                bundle_male_total_row,
+                bundle_female_total_row,
+                bundle_combined_total_row,
+                &bundle_date_mappings,
+            );
+            if !clear_marks.is_empty() {
+                session.write_marks_force(&clear_marks)?;
+            }
 
-                // Clear unused learner marks
-                let mapped_rows: Vec<u32> = roster_assignments.iter()
-                    .map(|a| a.slot.row_index).collect();
-                let expanded_counts = if extra_male > 0 || extra_female > 0 {
-                    (Some(male_count), Some(female_count))
-                } else {
-                    (None, None)
-                };
-                let clear_marks = clear_unused_learner_marks(
-                    &analysis, &mapped_rows, expanded_counts.0, expanded_counts.1,
-                );
-                if !clear_marks.is_empty() {
-                    session.write_marks(&clear_marks)?;
-                }
+            // Write TOTAL formulas
+            let formula_marks = super::attendance_service::total_formula_marks(
+                male_count,
+                female_count,
+                bundle_male_total_row,
+                bundle_female_total_row,
+                bundle_combined_total_row,
+                &bundle_date_mappings,
+            );
+            // Preserve best-effort semantics: formula write failures should not
+            // abort the entire batch (original code used `if let Err` + warn).
+            if let Err(error) = session.write_formulas(&formula_marks) {
+                log::warn!("failed to write TOTAL formula marks: {error}");
+            }
 
-                // Hide empty learner rows
-                let occupied: HashSet<u32> = roster_assignments.iter()
-                    .map(|a| a.slot.row_index).collect();
-                session.hide_empty_learner_rows(
-                    male_total_row, female_total_row, &occupied,
-                )?;
-
-                // Write TOTAL formulas
-                let bundle_date_mappings = date_mappings_from_analysis(
-                    &existing_id_for_excel, &analysis,
-                );
-                let bundle_male_total_row = male_total_row;
-                let bundle_female_total_row = female_total_row;
-                let bundle_combined_total_row = combined_total_row;
-                let formula_marks = super::attendance_service::total_formula_marks(
-                    male_count, female_count,
-                    bundle_male_total_row, bundle_female_total_row, bundle_combined_total_row,
-                    &bundle_date_mappings,
-                );
-                // Preserve best-effort semantics: formula write failures should not
-                // abort the entire batch (original code used `if let Err` + warn).
-                if let Err(error) = session.write_formulas(&formula_marks) {
-                    log::warn!("failed to write TOTAL formula marks: {error}");
-                }
-
-                // Write summary section formulas (rows 53-65: Enrolment, Registered Learners, % of Enrolment, ADA, % of Attendance)
-                let total_bundle = male_count + female_count;
-                let (summary_marks_bundle, summary_static_bundle) = super::attendance_service::summary_formula_marks(
+            // Write summary section formulas (rows 53-65: Enrolment, Registered Learners, % of Enrolment, ADA, % of Attendance)
+            let total_bundle = male_count + female_count;
+            let (summary_marks_bundle, summary_static_bundle) =
+                super::attendance_service::summary_formula_marks(
                     male_count,
                     female_count,
                     total_bundle,
@@ -393,57 +463,69 @@ pub fn update_workbook_settings(
                     bundle_combined_total_row,
                     &bundle_date_mappings,
                 );
-                if let Err(error) = session.write_formulas(&summary_marks_bundle) {
-                    log::warn!("failed to write summary formula marks: {error}");
-                }
-                if let Err(error) = session.write_marks_force(&summary_static_bundle) {
-                    log::warn!("failed to write summary static marks: {error}");
-                }
-
-                let mappings = student_mappings_from_roster_assignments(
-                    &existing_id_for_excel, &roster_assignments,
-                );
-                let layout_fp = layout_fingerprint(&analysis);
-
-                Ok((analysis, mappings, created, reused, students.len(), layout_fp))
-            } else {
-                // ── Branch 2: Imported workbook (template does NOT own roster) ─
-                let student_repo_inner = StudentRepository::new(pool_for_batch.clone());
-                let learner_sync = sync_workbook_learner_mappings(
-                    &student_repo_inner,
-                    &class_id_owned,
-                    &existing_id_for_excel,
-                    &analysis.learners,
-                )?;
-
-                // Clear unused learner rows
-                let mapped_rows: Vec<u32> = learner_sync
-                    .student_mappings.iter().map(|m| m.row_index).collect();
-                let clear_marks = clear_unused_learner_marks(
-                    &analysis, &mapped_rows, None, None,
-                );
-                if !clear_marks.is_empty() {
-                    session.write_marks(&clear_marks)?;
-                }
-
-                // Hide empty learner rows
-                let occupied: HashSet<u32> =
-                    learner_sync.student_mappings.iter().map(|m| m.row_index).collect();
-                session.hide_empty_learner_rows(29u32, 49u32, &occupied)?;
-
-                let learners_found = learner_sync.student_mappings.len();
-                let layout_fp = layout_fingerprint(&analysis);
-
-                Ok((
-                    analysis,
-                    learner_sync.student_mappings,
-                    learner_sync.students_created,
-                    learner_sync.students_reused,
-                    learners_found,
-                    layout_fp,
-                ))
+            if let Err(error) = session.write_formulas(&summary_marks_bundle) {
+                log::warn!("failed to write summary formula marks: {error}");
             }
-        })?;
+            if let Err(error) = session.write_marks_force(&summary_static_bundle) {
+                log::warn!("failed to write summary static marks: {error}");
+            }
+
+            let mappings = student_mappings_from_roster_assignments(
+                &existing_id_for_excel,
+                &roster_assignments,
+            );
+            let layout_fp = layout_fingerprint(&analysis);
+
+            Ok((
+                analysis,
+                mappings,
+                created,
+                reused,
+                students.len(),
+                layout_fp,
+            ))
+        } else {
+            // ── Branch 2: Imported workbook (template does NOT own roster) ─
+            let student_repo_inner = StudentRepository::new(pool_for_batch.clone());
+            let learner_sync = sync_workbook_learner_mappings(
+                &student_repo_inner,
+                &class_id_owned,
+                &existing_id_for_excel,
+                &analysis.learners,
+            )?;
+
+            // Clear unused learner rows
+            let mapped_rows: Vec<u32> = learner_sync
+                .student_mappings
+                .iter()
+                .map(|m| m.row_index)
+                .collect();
+            let clear_marks = clear_unused_learner_marks(&analysis, &mapped_rows, None, None);
+            if !clear_marks.is_empty() {
+                session.write_marks(&clear_marks)?;
+            }
+
+            // Hide empty learner rows
+            let occupied: HashSet<u32> = learner_sync
+                .student_mappings
+                .iter()
+                .map(|m| m.row_index)
+                .collect();
+            session.hide_empty_learner_rows(29u32, 49u32, &occupied)?;
+
+            let learners_found = learner_sync.student_mappings.len();
+            let layout_fp = layout_fingerprint(&analysis);
+
+            Ok((
+                analysis,
+                learner_sync.student_mappings,
+                learner_sync.students_created,
+                learner_sync.students_reused,
+                learners_found,
+                layout_fp,
+            ))
+        }
+    })?;
 
     validate_configured_calendar(&analysis, &metadata)?;
 
@@ -514,7 +596,9 @@ pub fn update_workbook_settings(
 /// roster metadata, student name sync, and row expansion).
 pub fn set_report_month(pool: DbPool, class_id: &str, report_month: &str) -> Result<()> {
     if report_month.trim().is_empty() {
-        return Err(AppError::InvalidInput("Report month is required".to_string()));
+        return Err(AppError::InvalidInput(
+            "Report month is required".to_string(),
+        ));
     }
 
     let sf2_repo = Sf2Repository::new(pool.clone());
@@ -532,9 +616,7 @@ pub fn set_report_month(pool: DbPool, class_id: &str, report_month: &str) -> Res
     let updated_template = sf2_repo
         .latest_template_for_class(class_id)?
         .ok_or_else(|| {
-            AppError::InvalidInput(
-                "SF2 workbook was removed while switching month".to_string(),
-            )
+            AppError::InvalidInput("SF2 workbook was removed while switching month".to_string())
         })?;
 
     // 3. Let the existing refresh function handle the heavy lifting:
@@ -554,14 +636,10 @@ pub fn set_report_month(pool: DbPool, class_id: &str, report_month: &str) -> Res
     //    Skipping marks here makes month switching fast (no Excel I/O) and
     //    prevents potential data loss from clearing marks on other months.
     let date_mappings = sf2_repo.date_mappings_for_template(&refreshed.id)?;
-    let report_mappings = crate::sf2::calendar::sf2_date_mappings_for_report_month(
-        &refreshed,
-        &date_mappings,
-    );
+    let report_mappings =
+        crate::sf2::calendar::sf2_date_mappings_for_report_month(&refreshed, &date_mappings);
     if report_mappings.is_empty() {
-        log::warn!(
-            "No date mappings found for report month {report_month} (class {class_id})"
-        );
+        log::warn!("No date mappings found for report month {report_month} (class {class_id})");
     }
 
     Ok(())
