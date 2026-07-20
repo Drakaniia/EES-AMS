@@ -20,6 +20,7 @@ This fix is needed in **three flows**:
 ## Template Layout (Verified via xlrd)
 
 The template has **6 sheets**:
+
 - JUNE 2025 (83 rows × 51 cols)
 - JULY 2025 (84 rows × 51 cols)
 - AUGUST 2025 (83 rows × 51 cols)
@@ -31,44 +32,44 @@ All sheets share an **identical layout** for the summary section. The `write_met
 
 ### Columns
 
-| Column letter | 0-index | 1-index | Content        |
-|---------------|---------|---------|----------------|
-| AM            | 38      | 39      | Field labels   |
-| AN            | 39      | 40      | (empty in template) |
-| AO            | 40      | 41      | (empty in template) |
+| Column letter | 0-index | 1-index | Content                                           |
+| ------------- | ------- | ------- | ------------------------------------------------- |
+| AM            | 38      | 39      | Field labels                                      |
+| AN            | 39      | 40      | (empty in template)                               |
+| AO            | 40      | 41      | (empty in template)                               |
 | AP            | 41      | 42      | Extended labels (e.g., "No. of Days of Classes:") |
-| AQ            | 42      | 43      | (empty in template) |
-| **AR**        | **43**  | **44**  | **Male (M)**   |
-| **AS**        | **44**  | **45**  | **Female (F)** |
-| **AT**        | **45**  | **46**  | **Total**      |
+| AQ            | 42      | 43      | (empty in template)                               |
+| **AR**        | **43**  | **44**  | **Male (M)**                                      |
+| **AS**        | **44**  | **45**  | **Female (F)**                                    |
+| **AT**        | **45**  | **46**  | **Total**                                         |
 
 ### Verified Rows (xlrd cell dump)
 
-| Row 1-idx | AM (col 38) Label | AR (M) | AS (F) | AT (TOTAL) | Notes |
-|-----------|-------------------|--------|--------|-------------|-------|
-| 51 | `Month :` / `No. of Days of Classes:` / `Summary` | `Summary` (TEXT) | — | — | Label area. Month value needs location check |
-| 52 | (guidelines text in col A) | `M` (TEXT) | `F` (TEXT) | `TOTAL` (TEXT) | Column headers |
-| **53** | `* Enrolment as of (1st Friday of the SY)` | **12.0** | **14.0** | **26.0** | **Static demo value — REPLACE with total students** |
-| 54 | — | — | — | — | Blank separator |
-| **55** | `Late enrolment` | **0.0** | **0.0** | **0.0** | **Manual entry — leave as 0** |
-| 56 | (guidelines in col B: `a. Percentage of Enrolment =`) | — | — | — | Instructional text |
-| 57 | `(beyond cut-off)` | — | — | — | Sub-label for row 55 |
-| 58 | (guidelines in col G: `Enrolment as of 1st Friday...`) | — | — | — | Instructional text |
-| **59** | `Registered Learners as of` | **12.0** | **14.0** | **26.0** | **Static demo — REPLACE with formula** |
-| 60 | `end of month` | — | — | — | Continuation of row 59 label |
-| **61** | `Percentage of Enrolment as of` | **100.0** | **100.0** | **100.0** | **Static demo — REPLACE with formula** |
-| 62 | `end of month` | — | — | — | Continuation |
-| **63** | `Average Daily Attendance` | **11.545** | **13.272** | **24.818** | **Static demo — REPLACE with formula** |
-| 64 | (guidelines text in col A) | — | — | — | Guidelines |
-| **65** | `Percentage of Attendance for the month` | **96.212** | **94.805** | **95.454** | **Static demo — REPLACE with formula** |
-| **66** | `Number of students absent for 5 consecutive days` | **0.0** | **0.0** | **0.0** | **SKIP — TODO** |
-| **67** | `NLS` | **0.0** | **0.0** | **0.0** | **Leave as-is** |
-| 68 | (note text in col B) | — | — | — | Note |
-| **69** | `Transferred out` | **0.0** | **0.0** | **0.0** | **Manual entry** |
-| 70 | (guidelines in col Z) | — | — | — | Guidelines column |
-| **71** | `Transferred in` | **0.0** | **0.0** | **0.0** | **Manual entry** |
-| 72 | — | — | — | — | Blank |
-| 74 | — | `I certify...` in AM | — | — | Signature area |
+| Row 1-idx | AM (col 38) Label                                      | AR (M)               | AS (F)     | AT (TOTAL)     | Notes                                               |
+| --------- | ------------------------------------------------------ | -------------------- | ---------- | -------------- | --------------------------------------------------- |
+| 51        | `Month :` / `No. of Days of Classes:` / `Summary`      | `Summary` (TEXT)     | —          | —              | Label area. Month value needs location check        |
+| 52        | (guidelines text in col A)                             | `M` (TEXT)           | `F` (TEXT) | `TOTAL` (TEXT) | Column headers                                      |
+| **53**    | `* Enrolment as of (1st Friday of the SY)`             | **12.0**             | **14.0**   | **26.0**       | **Static demo value — REPLACE with total students** |
+| 54        | —                                                      | —                    | —          | —              | Blank separator                                     |
+| **55**    | `Late enrolment`                                       | **0.0**              | **0.0**    | **0.0**        | **Manual entry — leave as 0**                       |
+| 56        | (guidelines in col B: `a. Percentage of Enrolment =`)  | —                    | —          | —              | Instructional text                                  |
+| 57        | `(beyond cut-off)`                                     | —                    | —          | —              | Sub-label for row 55                                |
+| 58        | (guidelines in col G: `Enrolment as of 1st Friday...`) | —                    | —          | —              | Instructional text                                  |
+| **59**    | `Registered Learners as of`                            | **12.0**             | **14.0**   | **26.0**       | **Static demo — REPLACE with formula**              |
+| 60        | `end of month`                                         | —                    | —          | —              | Continuation of row 59 label                        |
+| **61**    | `Percentage of Enrolment as of`                        | **100.0**            | **100.0**  | **100.0**      | **Static demo — REPLACE with formula**              |
+| 62        | `end of month`                                         | —                    | —          | —              | Continuation                                        |
+| **63**    | `Average Daily Attendance`                             | **11.545**           | **13.272** | **24.818**     | **Static demo — REPLACE with formula**              |
+| 64        | (guidelines text in col A)                             | —                    | —          | —              | Guidelines                                          |
+| **65**    | `Percentage of Attendance for the month`               | **96.212**           | **94.805** | **95.454**     | **Static demo — REPLACE with formula**              |
+| **66**    | `Number of students absent for 5 consecutive days`     | **0.0**              | **0.0**    | **0.0**        | **SKIP — TODO**                                     |
+| **67**    | `NLS`                                                  | **0.0**              | **0.0**    | **0.0**        | **Leave as-is**                                     |
+| 68        | (note text in col B)                                   | —                    | —          | —              | Note                                                |
+| **69**    | `Transferred out`                                      | **0.0**              | **0.0**    | **0.0**        | **Manual entry**                                    |
+| 70        | (guidelines in col Z)                                  | —                    | —          | —              | Guidelines column                                   |
+| **71**    | `Transferred in`                                       | **0.0**              | **0.0**    | **0.0**        | **Manual entry**                                    |
+| 72        | —                                                      | —                    | —          | —              | Blank                                               |
+| 74        | —                                                      | `I certify...` in AM | —          | —              | Signature area                                      |
 
 **Key finding:** xlrd shows all summary data cells with `ctype=2 (NUMBER)`. Since xlrd cannot distinguish static numbers from formula cached results, but no formula records are found internally, these are **all static placeholder values** that need to be replaced with formulas or computed values by the app.
 
@@ -116,6 +117,7 @@ AT53 = total_students       (integer)
 #### Row 59 — Registered Learners as of end of month
 
 Excel formula:
+
 ```
 AR59: =AR53+AR55-AR67-AR69+AR71
 AS59: =AS53+AS55-AS67-AS69+AS71
@@ -128,6 +130,7 @@ If manual fields are empty (0), it defaults to just the enrolment value.
 #### Row 61 — Percentage of Enrolment
 
 Excel formula:
+
 ```
 AR61: =IF(AR53>0,AR59/AR53*100,0)
 AS61: =IF(AS53>0,AS59/AS53*100,0)
@@ -145,6 +148,7 @@ AT63: =IFERROR(AVERAGE(F{combined_total_row}:AL{combined_total_row}),0)
 ```
 
 Using the range `F{row}:AL{row}` works because:
+
 - Columns without a day number (row 6 empty) contain 0 or are empty
 - `AVERAGE` ignores empty cells and treats 0 as 0
 - `IFERROR` handles the edge case of zero school days
@@ -152,6 +156,7 @@ Using the range `F{row}:AL{row}` works because:
 #### Row 65 — Percentage of Attendance for the month
 
 Excel formula:
+
 ```
 AR65: =IF(AR59>0,AR63/AR59*100,0)
 AS65: =IF(AS59>0,AS63/AS59*100,0)
@@ -171,17 +176,19 @@ AT65: =IF(AT59>0,AT63/AT59*100,0)
 ## Month and Days of Classes (Row 51)
 
 Row 51 currently has:
+
 - AM51: `Month :` (label)
 - AP51: `No. of Days of Classes:` (label)
 - AR51: `Summary` (header text)
 
-The Month value and Days count need to be written to specific cells. *These cells need to be identified from the template.*
+The Month value and Days count need to be written to specific cells. _These cells need to be identified from the template._
 
 **Options:**
+
 - Write report month to a cell adjacent to the `Month :` label (e.g., AN51 or AO51)
 - Write the count of date_mappings to a cell adjacent to `No. of Days of Classes:` (e.g., AQ51)
 
-*Determine exact target cells from template inspection.*
+_Determine exact target cells from template inspection._
 
 ---
 
@@ -209,6 +216,7 @@ pub fn summary_formula_marks(
 ```
 
 This function returns two mark lists:
+
 1. `formula_marks` — Excel formulas written via `set_sf2_formula` (rows 59, 61, 63, 65)
 2. `static_marks` — Static values written via `set_sf2_mark_force` (row 53, plus month/day cells)
 
@@ -223,7 +231,9 @@ Use `session.write_marks_force(&static_marks)` for row 53 enrolment values.
 ### 4. Integration points
 
 #### a. `create_workbook_from_template_in_dir` (template_ops.rs)
+
 Inside the batch closure, after `session.write_formulas(&formula_marks)`:
+
 ```rust
 let (summary_marks, static_marks) = summary_formula_marks(
     male_count, female_count, students.len(),
@@ -235,7 +245,9 @@ session.write_marks_force(&static_marks)?;
 ```
 
 #### b. `import_workbook_with_analysis` (validation_service.rs)
+
 After `excel::write_formulas(...)` on line ~259, add:
+
 ```rust
 let (summary_marks, static_marks) = summary_formula_marks(...);
 excel::write_formulas(&working_copy_path, &summary_marks)?;
@@ -243,7 +255,9 @@ excel::write_marks_force(&working_copy_path, &static_marks)?;
 ```
 
 #### c. `update_workbook_settings` bundled branch (template_ops.rs)
+
 Inside the batch closure, after `session.write_formulas(&formula_marks)`:
+
 ```rust
 let (summary_marks, static_marks) = summary_formula_marks(...);
 session.write_formulas(&summary_marks)?;
