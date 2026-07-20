@@ -1,5 +1,5 @@
 use crate::domain::error::{AppError, Result};
-use crate::infrastructure::database::{ClassRepository, DbPool, StudentRepository};
+use crate::infrastructure::database::{ClassRepository, DbPool, EventRepository, StudentRepository};
 use crate::sf2::calendar::{
     sf2_date_mappings_for_report_month, sf2_metadata_warnings, template_metadata,
 };
@@ -160,8 +160,164 @@ pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2Exp
 }
 
 pub fn export_preview(pool: DbPool, class_id: Option<String>) -> Result<Sf2ExportPreview> {
-    let readiness = export_readiness(pool.clone(), class_id)?;
-    preview::export_preview(pool, readiness)
+    let sf2_repo = Sf2Repository::new(pool.clone());
+
+    // Query template and associated data ONCE — no duplicate round-trips.
+    let template = match class_id {
+        Some(ref class_id) if !class_id.is_empty() => {
+            sf2_repo.latest_template_for_class(class_id)?
+        }
+        _ => sf2_repo
+            .list_templates()?
+            .into_iter()
+            .next()
+            .map(|summary| {
+                // Promote summary to a full record; the extra fields are filled
+                // with defaults since they aren't critical for the preview.
+                Sf2TemplateRecord {
+                    id: summary.id,
+                    source_path: summary.source_path,
+                    source_hash: String::new(),
+                    school_id: summary.school_id,
+                    school_name: summary.school_name,
+                    school_year: summary.school_year,
+                    report_month: summary.report_month,
+                    grade_level: summary.grade_level,
+                    section: summary.section,
+                    adviser_name: summary.adviser_name,
+                    school_head_name: summary.school_head_name,
+                    layout_fingerprint: String::new(),
+                    active_class_id: summary.class_id,
+                    imported_at: summary.imported_at,
+                    last_synced_at: None,
+                }
+            }),
+    };
+
+    let Some(template) = template else {
+        // No template at all — return empty preview with no-template message.
+        return Ok(Sf2ExportPreview {
+            template: None,
+            class_id: None,
+            class_name: String::new(),
+            source_path: None,
+            dates: Vec::new(),
+            students: Vec::new(),
+            absent_list: Vec::new(),
+            mapped_students: 0,
+            mapped_dates: 0,
+            present_count: 0,
+            absence_count: 0,
+            unmapped_student_count: 0,
+            can_export: false,
+            issues: vec![
+                "Import an SF2 workbook or create one from the bundled template before exporting."
+                    .to_string(),
+            ],
+            warnings: Vec::new(),
+        });
+    };
+
+    // ── Query supporting data (no redundant queries) ──────────────────────
+    let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
+    let all_date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
+    let date_mappings =
+        crate::sf2::calendar::sf2_date_mappings_for_report_month(&template, &all_date_mappings);
+
+    // Build readiness-like checks from already-queried data (no re-querying)
+    let mut issues: Vec<String> = Vec::new();
+    if !Path::new(&template.source_path).exists() {
+        issues.push(
+            "The app SF2 working workbook no longer exists. Import the SF2 workbook again."
+                .to_string(),
+        );
+    }
+
+    // Unmapped students
+    let class_students = StudentRepository::new(pool.clone())
+        .list_by_class(Some(&template.active_class_id))?;
+    let mapped_student_ids: HashSet<String> = student_mappings
+        .iter()
+        .map(|m| m.student_id.clone())
+        .collect();
+    let unmapped_names: Vec<String> = class_students
+        .iter()
+        .filter(|s| !mapped_student_ids.contains(&s.id.to_string()))
+        .map(|s| s.name.clone())
+        .collect();
+    if !unmapped_names.is_empty() {
+        let shown = unmapped_names
+            .iter()
+            .take(5)
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let more = unmapped_names.len().saturating_sub(5);
+        let suffix = if more > 0 {
+            format!(", and {more} more")
+        } else {
+            String::new()
+        };
+        issues.push(format!(
+            "{}{} {} not mapped to an SF2 learner row. Sync the SF2 workbook roster before exporting.",
+            shown,
+            suffix,
+            if unmapped_names.len() == 1 { "is" } else { "are" }
+        ));
+    }
+
+    // Date check
+    if date_mappings.is_empty() {
+        issues.push("No attendance dates are mapped to this SF2 report month.".to_string());
+    }
+
+    let warnings = crate::sf2::calendar::sf2_metadata_warnings(
+        &crate::sf2::calendar::template_metadata(&template),
+    );
+    let mapped_students = student_mappings.len();
+    let mapped_dates = date_mappings.len();
+
+    let can_export = issues.is_empty();
+
+    // Class name
+    let class_repo = ClassRepository::new(pool.clone());
+    let class = class_repo.get(&template.active_class_id)?;
+    let class_name = class
+        .map(|c| c.name)
+        .unwrap_or_else(|| crate::sf2::naming::class_name(&template.grade_level, &template.section));
+
+    // ── Filtered events (only for this class + this month) ────────────────
+    let events = if !date_mappings.is_empty() {
+        let first_date = &date_mappings[0].date;
+        let last_date = &date_mappings[date_mappings.len() - 1].date;
+        EventRepository::new(pool.clone())
+            .list_for_class_and_date_range(
+                &template.active_class_id,
+                first_date,
+                last_date,
+            )?
+    } else {
+        Vec::new()
+    };
+
+    let readiness = Sf2ExportReadiness {
+        template: Some(crate::sf2::repository::template_summary(template.clone())),
+        mapped_students,
+        mapped_dates,
+        can_export,
+        issues,
+        warnings,
+    };
+
+    preview::export_preview(
+        &template,
+        &student_mappings,
+        &date_mappings,
+        &class_name,
+        &class_students,
+        &events,
+        readiness,
+    )
 }
 
 pub fn export_workbook(
@@ -237,7 +393,7 @@ pub(super) fn refresh_template_calendar_from_saved_month(
 ) -> Result<Sf2TemplateRecord> {
     use crate::sf2::calendar::{
         date_mappings_are_current_for_report_month, date_mappings_from_analysis,
-        first_school_day_for_report_month, sf2_month_number, validate_configured_calendar,
+        first_school_day_for_report_month, sf2_month_number,
     };
     use crate::sf2::workbook_files::layout_fingerprint;
 
@@ -276,8 +432,6 @@ pub(super) fn refresh_template_calendar_from_saved_month(
         session.write_metadata(&metadata_for_excel)?;
         session.analyze()
     })?;
-    validate_configured_calendar(&analysis, &metadata)?;
-
     let refreshed_template = Sf2TemplateRecord {
         id: template.id.clone(),
         source_path: template.source_path.clone(),
@@ -381,67 +535,5 @@ fn unmapped_roster_issue(student_names: &[String]) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── unmapped_roster_issue ─────────────────────────────────────────────
-
-    #[test]
-    fn unmapped_roster_issue_single_student() {
-        let names = vec!["Juan".to_string()];
-        let msg = unmapped_roster_issue(&names);
-        assert!(msg.contains("Juan"));
-        assert!(msg.contains("is"));
-        assert!(msg.contains("not mapped"));
-    }
-
-    #[test]
-    fn unmapped_roster_issue_two_students() {
-        let names = vec!["Juan".to_string(), "Maria".to_string()];
-        let msg = unmapped_roster_issue(&names);
-        assert!(msg.contains("Juan"));
-        assert!(msg.contains("Maria"));
-        assert!(msg.contains("are"));
-        assert!(msg.contains("not mapped"));
-    }
-
-    #[test]
-    fn unmapped_roster_issue_shows_first_five() {
-        let names = (1..=7)
-            .map(|i| format!("Student{i}"))
-            .collect::<Vec<_>>();
-        let msg = unmapped_roster_issue(&names);
-        assert!(msg.contains("Student1"));
-        assert!(msg.contains("Student5"));
-        assert!(msg.contains(", and 2 more"));
-        assert!(msg.contains("are"));
-    }
-
-    #[test]
-    fn unmapped_roster_issue_exactly_five() {
-        let names = (1..=5)
-            .map(|i| format!("Student{i}"))
-            .collect::<Vec<_>>();
-        let msg = unmapped_roster_issue(&names);
-        assert!(msg.contains("Student5"));
-        assert!(!msg.contains("more"), "should not have 'more' suffix");
-        assert!(msg.contains("are"));
-    }
-
-    #[test]
-    fn unmapped_roster_issue_zero_students() {
-        let names: Vec<String> = vec![];
-        let msg = unmapped_roster_issue(&names);
-        assert!(msg.starts_with(" are"));
-        assert!(msg.contains("not mapped"));
-    }
-
-    #[test]
-    fn unmapped_roster_issue_exactly_one_more_after_five() {
-        let names = (1..=6)
-            .map(|i| format!("Student{i}"))
-            .collect::<Vec<_>>();
-        let msg = unmapped_roster_issue(&names);
-        assert!(msg.contains(", and 1 more"));
-    }
-}
+#[path = "__tests__/excel_service_tests.rs"]
+mod tests;

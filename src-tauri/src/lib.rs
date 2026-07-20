@@ -55,6 +55,7 @@ use commands::{
     list_students,
     open_backup_folder,
     open_sf2_workbook,
+    present_all_sf2_preview_attendance,
     restore_backup,
     save_settings,
     set_sf2_preview_attendance,
@@ -139,6 +140,7 @@ pub fn run() {
             sync_and_open_sf2_workbook,
             sync_sf2_attendance,
             sync_sf2_roster,
+            present_all_sf2_preview_attendance,
             export_sf2_workbook,
             open_sf2_workbook,
             // Updater commands

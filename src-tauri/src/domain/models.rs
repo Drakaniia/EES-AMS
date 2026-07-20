@@ -237,8 +237,8 @@ pub struct AuditEvent {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub id: String,
-    pub day_start: String,  // "08:30"
-    pub day_end: String,    // "15:30"
+    pub day_start: String,  // "08:00"
+    pub day_end: String,    // "15:00"
     pub late_after: String, // "08:45"
     pub quarter: String,    // "1st Quarter"
     #[serde(default)]
@@ -262,9 +262,8 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            id: "app".to_string(),
-            day_start: "08:30".to_string(),
-            day_end: "15:30".to_string(),
+            id: "app".to_string(),			day_start: "08:00".to_string(),
+			day_end: "15:00".to_string(),
             late_after: "08:45".to_string(),
             quarter: "1st Quarter".to_string(),
             attendance_mode: AttendanceMode::Manual,

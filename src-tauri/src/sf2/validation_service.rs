@@ -3,7 +3,7 @@ use crate::domain::models::StudentGender;
 use crate::infrastructure::database::{ClassRepository, DbPool};
 use crate::sf2::calendar::{
     date_mappings_from_analysis, metadata_from_import_analysis,
-    sf2_date_mappings_for_report_month, validate_configured_calendar,
+    sf2_date_mappings_for_report_month,
 };
 use crate::sf2::excel;
 use crate::sf2::models::{
@@ -13,8 +13,9 @@ use crate::sf2::models::{
 use crate::sf2::naming::class_name;
 use crate::sf2::repository::Sf2Repository;
 use crate::sf2::roster::{
-    clear_unused_learner_marks, reject_duplicate_roster_names, roster_expansion_needed,
-    roster_name_marks, template_roster_assignments, unique_normalized_name,
+    bundled_template_total_rows, clear_unused_learner_marks, reject_duplicate_roster_names,
+    roster_expansion_needed, roster_name_marks, template_roster_assignments,
+    unique_normalized_name,
 };
 use crate::sf2::validation::{ensure_import_validation_allows, import_validation_from_analysis};
 use crate::sf2::workbook_files::{
@@ -162,7 +163,6 @@ fn import_workbook_with_analysis(
 
     // Step 7: Analyze the bundled template to get its sheet layout
     let analysis = excel::analyze_workbook(&working_copy_path)?;
-    validate_configured_calendar(&analysis, &metadata)?;
     let fingerprint = layout_fingerprint(&analysis);
 
     // Step 8: Write student names into the bundled template
@@ -245,9 +245,19 @@ fn import_workbook_with_analysis(
     };
 
     // Step 14: Write Excel formulas for MALE TOTAL, FEMALE TOTAL, Combined TOTAL
-    let male_total_row = 29u32 + extra_male;
-    let female_total_row = 49u32 + extra_male + extra_female;
-    let combined_total_row = female_total_row + 1;
+    // Row positions derived from slot layout — adapts to any expansion automatically.
+    let (male_total_row, female_total_row, combined_total_row) = bundled_template_total_rows(male_count, female_count);
+
+    // Clear stale template values from TOTAL cells for columns without dates.
+    let clear_total_marks = super::attendance_service::clear_total_cell_marks(
+        male_total_row, female_total_row, combined_total_row, &date_mappings,
+    );
+    if !clear_total_marks.is_empty() {
+        if let Err(error) = excel::write_marks_force(&working_copy_path, &clear_total_marks) {
+            log::warn!("failed to clear stale TOTAL formula cells: {error}");
+        }
+    }
+
     let formula_marks = super::attendance_service::total_formula_marks(
         male_count,
         female_count,
@@ -258,6 +268,24 @@ fn import_workbook_with_analysis(
     );
     if let Err(error) = excel::write_formulas(&working_copy_path, &formula_marks) {
         log::warn!("failed to write TOTAL formula marks: {error}");
+    }
+
+    // Write summary formulas for rows 53-65 (Enrolment, Registered Learners, % of Enrolment, ADA, % of Attendance)
+    let total_students = male_count + female_count;
+    let (summary_marks, summary_static_marks) = super::attendance_service::summary_formula_marks(
+        male_count,
+        female_count,
+        total_students,
+        male_total_row,
+        female_total_row,
+        combined_total_row,
+        &date_mappings,
+    );
+    if let Err(error) = excel::write_formulas(&working_copy_path, &summary_marks) {
+        log::warn!("failed to write summary formula marks: {error}");
+    }
+    if let Err(error) = excel::write_marks_force(&working_copy_path, &summary_static_marks) {
+        log::warn!("failed to write summary static marks: {error}");
     }
 
     // Step 15: Backfill attendance marks and persist to DB
