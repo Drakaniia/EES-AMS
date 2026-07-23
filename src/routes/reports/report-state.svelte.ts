@@ -131,28 +131,38 @@ export function buildMatrixWeekGroups(
 	dates: Sf2PreviewDate[],
 	reportMonth: string
 ): MatrixWeekGroup[] {
-	const groups: MatrixWeekGroup[] = [];
 	const month = sf2MonthByValue(reportMonth);
+
+	// Pre-index dates by dateKey for O(1) lookup instead of O(n) Array.find per slot
+	const datesByKey = new Map<string, Sf2PreviewDate>();
+	for (const d of dates) {
+		datesByKey.set(d.date, d);
+	}
 
 	if (month) {
 		const year = new SvelteDate().getFullYear();
 		const dayCount = new SvelteDate(year, month.monthIndex + 1, 0).getDate();
+		// Index groups by week key for O(1) lookup
+		const groupsByKey = new Map<string, MatrixWeekGroup>();
+		const groups: MatrixWeekGroup[] = [];
 
 		for (let day = 1; day <= dayCount; day += 1) {
 			const dateKey = localDateKey(new SvelteDate(year, month.monthIndex, day));
 			const weekdayIndexVal = weekdayIndexForDate(dateKey);
 			if (weekdayIndexVal < 0 || weekdayIndexVal > 4) continue;
 
-			let group = groups.find((item) => item.key === mondayDateKey(dateKey));
+			const weekKey = mondayDateKey(dateKey);
+			let group = groupsByKey.get(weekKey);
 			if (!group) {
-				group = createMatrixWeekGroup(mondayDateKey(dateKey));
+				group = createMatrixWeekGroup(weekKey);
+				groupsByKey.set(weekKey, group);
 				groups.push(group);
 			}
 
 			group.slots[weekdayIndexVal] = {
 				key: dateKey,
 				weekday: MATRIX_WEEKDAYS[weekdayIndexVal],
-				date: dates.find((d) => d.date === dateKey) ?? null,
+				date: datesByKey.get(dateKey) ?? null,
 				dateKey
 			};
 		}
@@ -163,15 +173,20 @@ export function buildMatrixWeekGroups(
 		}));
 	}
 
+	// Fallback: when no month match, build from the dates array directly
+	const groupsByKey = new Map<string, MatrixWeekGroup>();
+	const groups: MatrixWeekGroup[] = [];
+
 	for (const dt of dates) {
 		const weekdayIndexVal = weekdayIndexForDate(dt.date);
 		if (weekdayIndexVal < 0 || weekdayIndexVal > 4) continue;
 
 		const key = mondayDateKey(dt.date);
-		let group = groups.find((item) => item.key === key);
+		let group = groupsByKey.get(key);
 
 		if (!group) {
 			group = createMatrixWeekGroup(key);
+			groupsByKey.set(key, group);
 			groups.push(group);
 		}
 

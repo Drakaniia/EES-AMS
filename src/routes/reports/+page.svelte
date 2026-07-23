@@ -301,7 +301,9 @@
 			.filter((row) => genderFilter === 'all' || row.gender?.toLowerCase() === genderFilter)
 			.map((row) => ({
 				...row,
-				cellsByDate: new SvelteMap(row.cells.map((cell) => [cell.date, cell]))
+				// Plain Map is sufficient — cellsByDate is read-only after creation,
+				// never mutated. SvelteMap's reactivity tracking is unnecessary overhead.
+				cellsByDate: new Map(row.cells.map((cell) => [cell.date, cell]))
 			}))
 	);
 
@@ -359,6 +361,11 @@
 			getSf2ExportPreview(classId),
 			cid ? getSf2WorkbookSettings(cid).catch(() => null) : Promise.resolve(null)
 		]);
+
+		// Yield to browser event loop so the loading overlay is fully painted
+		// before we trigger the expensive $derived computation (matrixWeekGroups,
+		// matrixStudents) that blocks the main thread on preview assignment.
+		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		preview = nextPreview;
 		if (nextPreview.classId) selectedClassId = nextPreview.classId;
@@ -540,6 +547,12 @@
 
 		monthSwitchLoading = true;
 		monthSwitchError = null;
+
+		// Yield to the browser event loop so it can paint the loading overlay
+		// before we start any blocking work (IPC calls + derived computation).
+		// This prevents the Windows loading cursor / white-screen hang.
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
 		const switchStartTime = Date.now();
 		try {
 			await setSf2ReportMonth(activeClassId, nextMonth);
@@ -998,7 +1011,15 @@
 			<button
 				type="button"
 				onclick={async () => {
-					draftReportMonth = month.value;
+					const nextMonth = month.value;
+					const prevMonth = workbookSettings?.reportMonth || preview?.template?.reportMonth || '';
+					// Early-exit for no-op clicks (already on this month, no class, etc.)
+					if (!nextMonth || nextMonth === prevMonth || !activeClassId) return;
+
+					draftReportMonth = nextMonth;
+					// Show loading overlay BEFORE closing modal so the browser
+					// paints them together in one frame — no white-screen gap.
+					monthSwitchLoading = true;
 					monthPickerOpen = false;
 					await onReportMonthChange();
 				}}

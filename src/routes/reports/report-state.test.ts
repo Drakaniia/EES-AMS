@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { Sf2PreviewDate } from '$lib/types';
 import {
 	buildMatrixWeekGroups,
 	weekdayIndexForDate,
@@ -74,6 +75,33 @@ describe('buildMatrixWeekGroups', () => {
 		const slotsWithDate = allSlots.filter((s) => s.date !== null);
 		expect(slotsWithDate.length).toBe(1);
 		expect(slotsWithDate[0].dateKey).toBe('2026-01-05');
+	});
+
+	it('completes under 50ms for worst-case dataset (all school months + full dates)', () => {
+		// Generate a full year of date mappings (worst case: every schoolday mapped)
+		const dateMappings: Sf2PreviewDate[] = [];
+		const months = [
+			'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
+			'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE'
+		];
+		for (const monthName of months) {
+			// Add ~22 weekdays per month (realistic full mapping)
+			for (let day = 1; day <= 22; day++) {
+				dateMappings.push({
+					date: `2026-${String(months.indexOf(monthName) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+					sheetName: monthName,
+					columnLetter: String.fromCharCode(65 + day),
+					columnIndex: day
+				});
+			}
+		}
+
+		const start = performance.now();
+		const groups = buildMatrixWeekGroups(dateMappings, 'JANUARY');
+		const elapsed = performance.now() - start;
+
+		expect(elapsed).toBeLessThan(50);
+		expect(groups.length).toBeGreaterThan(0);
 	});
 });
 
