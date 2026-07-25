@@ -452,7 +452,7 @@ fn migrate_to_v8(conn: &rusqlite::Connection) -> Result<()> {
 
 /// Migrate database to version 9 (add DepEd SF2 workbook mappings)
 fn migrate_to_v9(conn: &rusqlite::Connection) -> Result<()> {
-    conn.execute_batch(include_str!("../../../sql/sf2/migrate_to_v9.sql"))?;
+    conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v9.sql"))?;
     Ok(())
 }
 
@@ -495,36 +495,36 @@ fn migrate_to_v10(conn: &rusqlite::Connection) -> Result<()> {
 
 /// Migrate database to version 11 (single IN attendance and no external student number)
 fn migrate_to_v11(conn: &rusqlite::Connection) -> Result<()> {
-    conn.execute_batch(include_str!("../../../sql/migrate_to_v11.sql"))?;
+    conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v11.sql"))?;
     Ok(())
 }
 
 /// Migrate database to version 12 (store SF2 metadata per workbook template)
 fn migrate_to_v12(conn: &rusqlite::Connection) -> Result<()> {
-    conn.execute_batch(include_str!("../../../sql/sf2/migrate_to_v12.sql"))?;
+    conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v12.sql"))?;
     Ok(())
 }
 
 /// Migrate database to version 13 (add student gender for SF2 roster sections)
 fn migrate_to_v13(conn: &rusqlite::Connection) -> Result<()> {
-    conn.execute_batch(include_str!("../../../sql/migrate_to_v13.sql"))?;
+    conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v13.sql"))?;
     Ok(())
 }
 
 /// Migrate database to version 14 (attendance exception workflow)
 fn migrate_to_v14(conn: &rusqlite::Connection) -> Result<()> {
-    conn.execute_batch(include_str!("../../../sql/migrate_to_v14.sql"))?;
+    conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v14.sql"))?;
     Ok(())
 }
 
 /// Migrate database to version 15 (general audit trail)
 fn migrate_to_v15(conn: &rusqlite::Connection) -> Result<()> {
-    conn.execute_batch(include_str!("../../../sql/migrate_to_v15.sql"))?;
+    conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v15.sql"))?;
     Ok(())
 }
 
 /// Migrate database to version 16 (track last SF2 attendance sync timestamp)
 fn migrate_to_v16(conn: &rusqlite::Connection) -> Result<()> {
-    conn.execute_batch(include_str!("../../../sql/sf2/migrate_to_v16.sql"))?;
+    conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v16.sql"))?;
     Ok(())
 }

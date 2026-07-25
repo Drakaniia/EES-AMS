@@ -5,20 +5,20 @@ use crate::sf2::models::{
 };
 use rusqlite::{params, OptionalExtension};
 
-const FIND_TEMPLATE_SQL: &str = include_str!("../../sql/sf2/find_template.sql");
-const UPSERT_TEMPLATE_SQL: &str = include_str!("../../sql/sf2/upsert_template.sql");
-const UPDATE_TEMPLATE_SQL: &str = include_str!("../../sql/sf2/update_template.sql");
-const DELETE_STUDENT_MAPPINGS_SQL: &str = include_str!("../../sql/sf2/delete_student_mappings.sql");
-const DELETE_DATE_MAPPINGS_SQL: &str = include_str!("../../sql/sf2/delete_date_mappings.sql");
-const INSERT_STUDENT_MAPPING_SQL: &str = include_str!("../../sql/sf2/insert_student_mapping.sql");
-const INSERT_DATE_MAPPING_SQL: &str = include_str!("../../sql/sf2/insert_date_mapping.sql");
-const LIST_TEMPLATES_SQL: &str = include_str!("../../sql/sf2/list_templates.sql");
+const FIND_TEMPLATE_SQL: &str = include_str!("./sql/find_template.sql");
+const UPSERT_TEMPLATE_SQL: &str = include_str!("./sql/upsert_template.sql");
+const UPDATE_TEMPLATE_SQL: &str = include_str!("./sql/update_template.sql");
+const DELETE_STUDENT_MAPPINGS_SQL: &str = include_str!("./sql/delete_student_mappings.sql");
+const DELETE_DATE_MAPPINGS_SQL: &str = include_str!("./sql/delete_date_mappings.sql");
+const INSERT_STUDENT_MAPPING_SQL: &str = include_str!("./sql/insert_student_mapping.sql");
+const INSERT_DATE_MAPPING_SQL: &str = include_str!("./sql/insert_date_mapping.sql");
+const LIST_TEMPLATES_SQL: &str = include_str!("./sql/list_templates.sql");
 const LATEST_TEMPLATE_FOR_CLASS_SQL: &str =
-    include_str!("../../sql/sf2/latest_template_for_class.sql");
+    include_str!("./sql/latest_template_for_class.sql");
 const STUDENT_MAPPINGS_FOR_TEMPLATE_SQL: &str =
-    include_str!("../../sql/sf2/student_mappings_for_template.sql");
+    include_str!("./sql/student_mappings_for_template.sql");
 const DATE_MAPPINGS_FOR_TEMPLATE_SQL: &str =
-    include_str!("../../sql/sf2/date_mappings_for_template.sql");
+    include_str!("./sql/date_mappings_for_template.sql");
 
 pub struct Sf2Repository {
     pool: DbPool,
