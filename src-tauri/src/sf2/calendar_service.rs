@@ -20,4 +20,5 @@ pub(crate) use super::roster_sync::{
     sync_workbook_roster_for_class,
 };
 
-pub(crate) use super::template_ops::{create_workbook_from_template, update_workbook_settings};
+pub(crate) use super::template_ops::create_workbook_from_template;
+pub(crate) use super::template_update::update_workbook_settings;

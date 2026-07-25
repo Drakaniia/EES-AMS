@@ -1,5 +1,5 @@
 use crate::domain::error::Result;
-use crate::sf2::excel_com::workbook::ComObject;
+use crate::sf2::excel_com::com_session::ComObject;
 use crate::sf2::excel_com::worksheet::cell_text;
 use crate::sf2::models::Sf2WorkbookLearner;
 

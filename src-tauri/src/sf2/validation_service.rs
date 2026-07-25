@@ -1,7 +1,7 @@
 use crate::domain::error::Result;
 use crate::domain::models::StudentGender;
 use crate::infrastructure::database::{ClassRepository, DbPool};
-use crate::sf2::calendar::{
+use crate::sf2::sf2_metadata::{
     date_mappings_from_analysis, metadata_from_import_analysis, sf2_date_mappings_for_report_month,
 };
 use crate::sf2::excel;
@@ -27,11 +27,11 @@ pub fn validate_workbook_import(
     app: tauri::AppHandle,
     pool: DbPool,
 ) -> Result<Sf2ImportValidation> {
-    super::attendance_service::emit_sf2_progress(&app, "import", 1, 7, "Choosing SF2 workbook");
+    super::progress::emit_sf2_progress(&app, "import", 1, 7, "Choosing SF2 workbook");
     let workbook_path = pick_workbook_path(&app)?;
-    super::attendance_service::emit_sf2_progress(&app, "import", 2, 7, "Reading SF2 workbook");
+    super::progress::emit_sf2_progress(&app, "import", 2, 7, "Reading SF2 workbook");
     let source_analysis = excel::analyze_workbook(&workbook_path)?;
-    super::attendance_service::emit_sf2_progress(&app, "import", 3, 7, "Validating learner list");
+    super::progress::emit_sf2_progress(&app, "import", 3, 7, "Validating learner list");
 
     import_validation_from_analysis(pool, &workbook_path, &source_analysis)
 }
@@ -42,7 +42,7 @@ pub fn import_workbook(
     source_path: String,
     proceed_anyway: bool,
 ) -> Result<Sf2ImportSummary> {
-    super::attendance_service::emit_sf2_progress(&app, "import", 4, 7, "Preparing workbook import");
+    super::progress::emit_sf2_progress(&app, "import", 4, 7, "Preparing workbook import");
     let workbook_path = PathBuf::from(source_path);
     let source_analysis = excel::analyze_workbook(&workbook_path)?;
     let validation =
@@ -57,7 +57,7 @@ fn import_workbook_with_analysis(
     pool: DbPool,
     source_analysis: Sf2WorkbookAnalysis,
 ) -> Result<Sf2ImportSummary> {
-    super::attendance_service::emit_sf2_progress(
+    super::progress::emit_sf2_progress(
         &app,
         "import",
         5,
@@ -120,7 +120,7 @@ fn import_workbook_with_analysis(
     let (extra_male, extra_female) = roster_expansion_needed(male_count, female_count);
 
     // Step 4: Create fresh working copy from the bundled automated template
-    super::attendance_service::emit_sf2_progress(
+    super::progress::emit_sf2_progress(
         &app,
         "import",
         5,
@@ -133,7 +133,7 @@ fn import_workbook_with_analysis(
 
     // Step 5: Write metadata from imported file into the bundled template
     let metadata = metadata_from_import_analysis(&source_analysis)?;
-    super::attendance_service::emit_sf2_progress(
+    super::progress::emit_sf2_progress(
         &app,
         "import",
         6,
@@ -244,7 +244,7 @@ fn import_workbook_with_analysis(
         bundled_template_total_rows(male_count, female_count);
 
     // Clear stale template values from TOTAL cells for columns without dates.
-    let clear_total_marks = super::attendance_service::clear_total_cell_marks(
+    let clear_total_marks = super::attendance_marks::clear_total_cell_marks(
         male_total_row,
         female_total_row,
         combined_total_row,
@@ -256,7 +256,7 @@ fn import_workbook_with_analysis(
         }
     }
 
-    let formula_marks = super::attendance_service::total_formula_marks(
+    let formula_marks = super::attendance_marks::total_formula_marks(
         male_count,
         female_count,
         male_total_row,
@@ -270,7 +270,7 @@ fn import_workbook_with_analysis(
 
     // Write summary formulas for rows 53-65 (Enrolment, Registered Learners, % of Enrolment, ADA, % of Attendance)
     let total_students = male_count + female_count;
-    let (summary_marks, summary_static_marks) = super::attendance_service::summary_formula_marks(
+    let (summary_marks, summary_static_marks) = super::attendance_marks::summary_formula_marks(
         male_count,
         female_count,
         total_students,
@@ -294,7 +294,7 @@ fn import_workbook_with_analysis(
         .map(|m| m.date.clone())
         .collect::<Vec<_>>();
 
-    if let Err(error) = super::attendance_service::write_template_marks_for_days(
+    if let Err(error) = super::progress::write_template_marks_for_days(
         pool.clone(),
         &template,
         &report_dates,
@@ -302,7 +302,7 @@ fn import_workbook_with_analysis(
         log::warn!("failed to backfill imported workbook marks: {error}");
     }
 
-    super::attendance_service::emit_sf2_progress(&app, "import", 7, 7, "SF2 import complete");
+    super::progress::emit_sf2_progress(&app, "import", 7, 7, "SF2 import complete");
 
     Ok(Sf2ImportSummary {
         template_id,
