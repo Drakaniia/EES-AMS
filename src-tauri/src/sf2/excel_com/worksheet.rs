@@ -1,5 +1,5 @@
 use crate::domain::error::{AppError, Result};
-use crate::sf2::excel_com::workbook::ComObject;
+use crate::sf2::excel_com::com_session::ComObject;
 
 /// Get a worksheet cell by row and column.
 pub fn worksheet_cell(sheet: &ComObject, row: i32, column: i32) -> Result<ComObject> {
@@ -7,8 +7,8 @@ pub fn worksheet_cell(sheet: &ComObject, row: i32, column: i32) -> Result<ComObj
     cells.get_object_with_args(
         "Item",
         vec![
-            crate::sf2::excel_com::workbook::ComVariant::i4(row),
-            crate::sf2::excel_com::workbook::ComVariant::i4(column),
+            crate::sf2::excel_com::com_session::ComVariant::i4(row),
+            crate::sf2::excel_com::com_session::ComVariant::i4(column),
         ],
     )
 }
@@ -40,7 +40,7 @@ pub fn set_sf2_cell(
 pub fn set_sf2_mark_force(sheet: &ComObject, cell_address: &str, value: &str) -> Result<()> {
     let cell = sheet.get_object_with_args(
         "Range",
-        vec![crate::sf2::excel_com::workbook::ComVariant::bstr(
+        vec![crate::sf2::excel_com::com_session::ComVariant::bstr(
             cell_address,
         )],
     )?;
@@ -52,7 +52,7 @@ pub fn set_sf2_mark_force(sheet: &ComObject, cell_address: &str, value: &str) ->
 pub fn set_sf2_formula(sheet: &ComObject, cell_address: &str, formula: &str) -> Result<()> {
     let cell = sheet.get_object_with_args(
         "Range",
-        vec![crate::sf2::excel_com::workbook::ComVariant::bstr(
+        vec![crate::sf2::excel_com::com_session::ComVariant::bstr(
             cell_address,
         )],
     )?;
@@ -64,7 +64,7 @@ pub fn set_sf2_formula(sheet: &ComObject, cell_address: &str, formula: &str) -> 
 pub fn set_sf2_mark(sheet: &ComObject, cell_address: &str, value: &str) -> Result<()> {
     let cell = sheet.get_object_with_args(
         "Range",
-        vec![crate::sf2::excel_com::workbook::ComVariant::bstr(
+        vec![crate::sf2::excel_com::com_session::ComVariant::bstr(
             cell_address,
         )],
     )?;
@@ -84,8 +84,8 @@ pub fn merged_target(cell: &ComObject) -> Result<ComObject> {
     cells.get_object_with_args(
         "Item",
         vec![
-            crate::sf2::excel_com::workbook::ComVariant::i4(1),
-            crate::sf2::excel_com::workbook::ComVariant::i4(1),
+            crate::sf2::excel_com::com_session::ComVariant::i4(1),
+            crate::sf2::excel_com::com_session::ComVariant::i4(1),
         ],
     )
 }
@@ -103,8 +103,8 @@ fn ensure_not_formula(sheet: &ComObject, target: &ComObject) -> Result<()> {
         .get_with_args(
             "Address",
             vec![
-                crate::sf2::excel_com::workbook::ComVariant::bool(false),
-                crate::sf2::excel_com::workbook::ComVariant::bool(false),
+                crate::sf2::excel_com::com_session::ComVariant::bool(false),
+                crate::sf2::excel_com::com_session::ComVariant::bool(false),
             ],
         )
         .map(|value| value.to_string_value())
@@ -119,7 +119,7 @@ fn put_cell_value(cell: &ComObject, value: &str) -> Result<()> {
     if value.is_empty() {
         cell.put_variant(
             "Value2",
-            crate::sf2::excel_com::workbook::ComVariant::empty(),
+            crate::sf2::excel_com::com_session::ComVariant::empty(),
         )
     } else {
         cell.put_string("Value2", value)
@@ -133,12 +133,12 @@ fn put_cell_value_numeric(cell: &ComObject, value: &str) -> Result<()> {
     if value.is_empty() {
         cell.put_variant(
             "Value2",
-            crate::sf2::excel_com::workbook::ComVariant::empty(),
+            crate::sf2::excel_com::com_session::ComVariant::empty(),
         )
     } else if let Ok(num) = value.parse::<i32>() {
         cell.put_variant(
             "Value2",
-            crate::sf2::excel_com::workbook::ComVariant::i4(num),
+            crate::sf2::excel_com::com_session::ComVariant::i4(num),
         )
     } else {
         cell.put_string("Value2", value)
