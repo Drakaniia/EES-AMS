@@ -105,6 +105,29 @@ pub(super) fn pick_folder(app: &tauri::AppHandle) -> std::result::Result<Option<
         .transpose()
 }
 
+pub(super) fn save_file_dialog(
+    app: &tauri::AppHandle,
+    filter_name: &str,
+    extensions: &[&str],
+    default_name: String,
+) -> std::result::Result<PathBuf, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.dialog()
+        .file()
+        .add_filter(filter_name, extensions)
+        .set_file_name(default_name)
+        .save_file(move |result| {
+            let _ = tx.send(result);
+        });
+
+    let file_path = rx
+        .recv()
+        .map_err(|e| format!("Failed to receive file path: {}", e))?
+        .ok_or_else(|| "User cancelled save dialog".to_string())?;
+
+    dialog_file_path_to_path_buf(file_path)
+}
+
 pub(super) fn pick_database_file(
     app: &tauri::AppHandle,
 ) -> std::result::Result<Option<PathBuf>, String> {
