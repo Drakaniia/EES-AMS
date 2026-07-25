@@ -1,6 +1,5 @@
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { sf2ValidationReportText } from '$lib/features/settings/sf2-validation';
 import {
 	newSf2WorkbookDraftFields,
@@ -24,6 +23,7 @@ import {
 	type Sf2TemplateDraft,
 	type Sf2WorkbookSettings
 } from '$lib/features/settings/native';
+import { Sf2ProgressManager } from './sf2-progress.svelte';
 import type { Ctx } from './state-context';
 
 /**
@@ -52,24 +52,8 @@ class Sf2State {
 	sf2TemplateDialogMode = $state<'create' | 'edit'>('create');
 	sf2TemplateDialogNotice = $state<string | null>(null);
 
-	// ── SF2 Progress (Phase 2) ────────────────────────────────────────────────
-	/** Current progress event listener (cleaned up on completion). */
-	private sf2ProgressUnlisten: UnlistenFn | null = null;
-	/** The active task name ('import' | 'create' | 'update' | ''). */
-	sf2ProgressTask = $state('');
-	/** Current progress step (1-based). */
-	sf2ProgressCurrent = $state(0);
-	/** Total progress steps. */
-	sf2ProgressTotal = $state(0);
-	/** The progress overlay is visible. */
-	sf2ProgressVisible = $state(false);
-	/** The current display message shown in the overlay. */
-	sf2ProgressDisplayMessage = $state('');
-	/** Whether the backend sent a message that should be shown (timed). */
-	private sf2ProgressLastBackendMsg = $state('');
-	private sf2ProgressLastBackendTime = $state(0);
-	/** Timer for fallback cycling messages when backend is quiet. */
-	private sf2ProgressCycleTimer: ReturnType<typeof setInterval> | null = null;
+	// ── Progress ────────────────────────────────────────────────────────────────
+	sf2Progress = new Sf2ProgressManager();
 
 	// ── Draft fields ───────────────────────────────────────────────────────────
 	sf2DraftSchoolId = $state('');
@@ -81,141 +65,6 @@ class Sf2State {
 	sf2DraftAdviserName = $state('');
 	sf2DraftSchoolHeadName = $state('');
 	sf2DraftFirstSchoolDay = $state(1);
-
-	// ── SF2 Progress Helpers ────────────────────────────────────────────────────
-
-	/** Friendly fallback messages that cycle when the backend is quiet. */
-	private static SF2_PROGRESS_MESSAGES: Record<string, string[]> = {
-		import: [
-			'Reading the SF2 workbook…',
-			'Validating student data…',
-			'Creating student mappings…',
-			'Still working on it…',
-			'Just a moment longer…'
-		],
-		create: [
-			'Setting up the bundled template…',
-			'Copying the workbook from the template…',
-			'Writing student names into the workbook…',
-			'Configuring attendance date columns…',
-			'Saving the working copy…',
-			'Almost there…',
-			'Finalizing your SF2 workbook…'
-		],
-		update: ['Updating workbook settings…', 'Reconfiguring calendar…', 'Writing changes…']
-	};
-
-	private sf2ProgressCycleIndex = 0;
-
-	async sf2SetupProgressListener(task: string) {
-		this.sf2CleanupProgress();
-		this.sf2ProgressTask = task;
-		this.sf2ProgressCurrent = 0;
-		this.sf2ProgressTotal = 0;
-		this.sf2ProgressVisible = true;
-		this.sf2ProgressDisplayMessage = '';
-		this.sf2ProgressLastBackendMsg = '';
-		this.sf2ProgressLastBackendTime = 0;
-		this.sf2ProgressCycleIndex = 0;
-
-		try {
-			this.sf2ProgressUnlisten = await listen<{
-				task: string;
-				current: number;
-				total: number;
-				message: string;
-			}>('sf2-progress', (event) => {
-				// Only process events matching the active task
-				if (event.payload.task === this.sf2ProgressTask) {
-					this.sf2ProgressCurrent = event.payload.current;
-					this.sf2ProgressTotal = event.payload.total;
-					if (event.payload.message) {
-						this.sf2ProgressLastBackendMsg = event.payload.message;
-						this.sf2ProgressLastBackendTime = Date.now();
-					}
-					this.sf2UpdateProgressMessage();
-				}
-			});
-		} catch {
-			// Listener setup failed — continue without it (no progress updates)
-		}
-
-		// Start cycling fallback messages
-		this.sf2StartProgressCycle();
-	}
-
-	private sf2StartProgressCycle() {
-		this.sf2StopProgressCycle();
-		this.sf2UpdateProgressMessage();
-		this.sf2ProgressCycleTimer = setInterval(() => {
-			const now = Date.now();
-			// Only advance cycle if no backend message arrived in the last 3s
-			if (now - this.sf2ProgressLastBackendTime > 3000) {
-				const messages =
-					Sf2State.SF2_PROGRESS_MESSAGES[this.sf2ProgressTask] ??
-					Sf2State.SF2_PROGRESS_MESSAGES.import;
-				this.sf2ProgressCycleIndex = (this.sf2ProgressCycleIndex + 1) % messages.length;
-			}
-			this.sf2UpdateProgressMessage();
-		}, 2500);
-	}
-
-	private sf2StopProgressCycle() {
-		if (this.sf2ProgressCycleTimer !== null) {
-			clearInterval(this.sf2ProgressCycleTimer);
-			this.sf2ProgressCycleTimer = null;
-		}
-	}
-
-	private sf2UpdateProgressMessage() {
-		// Backend message has priority for 4 seconds
-		if (this.sf2ProgressLastBackendMsg && Date.now() - this.sf2ProgressLastBackendTime < 4000) {
-			this.sf2ProgressDisplayMessage = this.sf2ProgressLastBackendMsg;
-			return;
-		}
-		// Map progress steps to messages when no backend message
-		if (this.sf2ProgressCurrent > 0 && this.sf2ProgressTotal > 0) {
-			const stepMessages: Record<string, Record<number, string>> = {
-				import: {
-					1: 'Analyzing workbook structure…',
-					2: 'Finding class for imported workbook…',
-					3: 'Processing student data…',
-					4: 'Validating learner roster…',
-					5: 'Creating date mappings…',
-					6: 'Creating working copy…',
-					7: 'Finalizing workbook…'
-				},
-				create: {
-					1: 'Creating SF2 working workbook…',
-					2: 'Finalizing workbook…'
-				}
-			};
-			const taskMessages = stepMessages[this.sf2ProgressTask];
-			const stepMessage = taskMessages?.[this.sf2ProgressCurrent];
-			if (stepMessage) {
-				this.sf2ProgressDisplayMessage = stepMessage;
-				return;
-			}
-		}
-		// Fallback to cycling messages
-		const messages =
-			Sf2State.SF2_PROGRESS_MESSAGES[this.sf2ProgressTask] ?? Sf2State.SF2_PROGRESS_MESSAGES.import;
-		this.sf2ProgressDisplayMessage = messages[this.sf2ProgressCycleIndex % messages.length];
-	}
-
-	sf2CleanupProgress() {
-		this.sf2StopProgressCycle();
-		if (this.sf2ProgressUnlisten) {
-			this.sf2ProgressUnlisten();
-			this.sf2ProgressUnlisten = null;
-		}
-	}
-
-	private sf2HideProgress() {
-		this.sf2CleanupProgress();
-		this.sf2ProgressVisible = false;
-		this.sf2ProgressTask = '';
-	}
 
 	// ── Helpers ─────────────────────────────────────────────────────────────────
 	private errorMessage(error: unknown, fallback: string): string {
@@ -230,14 +79,14 @@ class Sf2State {
 		this.sf2Importing = true;
 
 		// Show progress overlay before the validation dialog
-		await this.sf2SetupProgressListener('import');
+		await this.sf2Progress.setup('import');
 
 		try {
 			const validation = await validateSf2WorkbookImport();
 			this.sf2Validation = validation;
 
 			if (validation.hasDiscrepancies) {
-				this.sf2HideProgress();
+				this.sf2Progress.hide();
 				this.sf2ValidationDialogOpen = true;
 				this.sf2ValidationDetailsOpen = false;
 				this.ctx.toast('Student list mismatch detected. Review the SF2 validation report.', false);
@@ -250,7 +99,7 @@ class Sf2State {
 			this.ctx.toast(`SF2 import failed: ${msg}`, false);
 		} finally {
 			this.sf2Importing = false;
-			this.sf2HideProgress();
+			this.sf2Progress.hide();
 		}
 	}
 
@@ -291,7 +140,7 @@ class Sf2State {
 		this.sf2Importing = true;
 
 		// Set up progress for the actual import (validation dialog is hidden now)
-		await this.sf2SetupProgressListener('import');
+		await this.sf2Progress.setup('import');
 
 		try {
 			await this.runSf2Import(this.sf2Validation, true);
@@ -300,7 +149,7 @@ class Sf2State {
 			this.ctx.toast(`SF2 import failed: ${msg}`, false);
 		} finally {
 			this.sf2Importing = false;
-			this.sf2HideProgress();
+			this.sf2Progress.hide();
 		}
 	}
 
@@ -416,7 +265,7 @@ class Sf2State {
 
 		// Show progress overlay for create (2 backend steps)
 		if (creating) {
-			await this.sf2SetupProgressListener('create');
+			await this.sf2Progress.setup('create');
 		}
 
 		try {
@@ -443,7 +292,7 @@ class Sf2State {
 			this.sf2TemplateCreating = false;
 			this.sf2SettingsSaving = false;
 			if (creating) {
-				this.sf2HideProgress();
+				this.sf2Progress.hide();
 			}
 		}
 	}

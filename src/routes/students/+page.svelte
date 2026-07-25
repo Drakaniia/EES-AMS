@@ -6,384 +6,16 @@
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 	import StudentAttendanceModal from '$lib/components/students/StudentAttendanceModal.svelte';
+	import StudentCardPairDialog from '$lib/components/students/StudentCardPairDialog.svelte';
 	import StudentList from './student-list.svelte';
 	import StudentForm from './student-form.svelte';
 	import StudentDeleteDialog from './student-delete-dialog.svelte';
-	import {
-		listStudents,
-		saveStudent,
-		createStudents,
-		deleteStudent,
-		listClasses,
-		getSf2ExportReadiness,
-		type Student,
-		type StudentGender,
-		type CreateStudentRequest,
-		type Class,
-		type Sf2ExportReadiness
-	} from '$lib/db-rust';
 	import { resolve } from '$app/paths';
-	import { parseStudentNames, type EntryMode } from './student-state.svelte';
+	import { studentPage } from './student-page-state.svelte';
 
-	// ── State ────────────────────────────────────────────────────────────────
-	let students = $state<Student[]>([]);
-	let classes = $state<Class[]>([]);
-	let sf2Readiness = $state<Sf2ExportReadiness | null>(null);
-	let searchTerms = $state('');
-	let genderFilter = $state<'all' | 'male' | 'female'>('all');
-	let sortBy = $state<'name' | 'date'>('name');
-	let sortOrder = $state<'asc' | 'desc'>('asc');
-	let loading = $state(true);
-	let loadError = $state<string | null>(null);
-	let savingStudent = $state(false);
-
-	let dialogOpen = $state(false);
-	let attendanceModalOpen = $state(false);
-	let viewingStudent = $state<Student | null>(null);
-	let editing = $state<Student | null>(null);
-	let scanFor = $state<Student | null>(null);
-
-	let entryMode = $state<EntryMode>('single');
-	let formName = $state('');
-	let formGender = $state<StudentGender>('male');
-	let formCardSerial = $state('');
-	let formClassId = $state('');
-	let bulkMaleStudentNames = $state('');
-	let bulkFemaleStudentNames = $state('');
-
-	let deleteTarget = $state<Student | null>(null);
-
-	let cardSerial = $state('');
-	let cardSerialInput = $state<HTMLInputElement | null>(null);
-
-	let toastMessage = $state<string | null>(null);
-	let toastTimer: ReturnType<typeof setTimeout> | null = null;
-
-	// Pagination
-	let currentPage = $state(1);
-	let availableHeight = $state(0);
-	const itemsPerPage = $derived.by(() => {
-		if (availableHeight === 0) return 10;
-		const rowHeight = 60;
-		const headerHeight = 48;
-		const verticalBuffer = 120;
-		const calculated = Math.floor((availableHeight - headerHeight - verticalBuffer) / rowHeight);
-		return Math.max(1, calculated);
-	});
-
-	$effect(() => {
-		if (currentPage > totalPages && totalPages > 0) {
-			currentPage = totalPages;
-		}
-	});
-
-	$effect(() => {
-		// Reset to first page when gender filter changes (results may be fewer)
-		void genderFilter;
-		currentPage = 1;
-	});
-
-	// ── Helpers ──────────────────────────────────────────────────────────────
-	function toast(msg: string) {
-		toastMessage = msg;
-		if (toastTimer) clearTimeout(toastTimer);
-		toastTimer = setTimeout(() => (toastMessage = null), 3000);
-	}
-
-	function setEntryMode(mode: EntryMode) {
-		if (entryMode === mode) return;
-		entryMode = mode;
-	}
-
-	// Computed filtered and sorted students
-	const filteredStudents = $derived.by(() => {
-		let result = students;
-
-		if (searchTerms.trim()) {
-			const term = searchTerms.toLowerCase();
-			result = result.filter((s) => s.name.toLowerCase().includes(term));
-		}
-
-		if (genderFilter !== 'all') {
-			result = result.filter((s) => s.gender === genderFilter);
-		}
-
-		result = [...result].sort((a, b) => {
-			let valA: string | number = '';
-			let valB: string | number = '';
-
-			if (sortBy === 'name') {
-				valA = a.name;
-				valB = b.name;
-			} else if (sortBy === 'date') {
-				valA = a.createdAt;
-				valB = b.createdAt;
-			}
-
-			if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-			if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-			return 0;
-		});
-
-		return result;
-	});
-
-	const totalPages = $derived(Math.ceil(filteredStudents.length / itemsPerPage));
-	const paginatedStudents = $derived.by(() => {
-		const start = (currentPage - 1) * itemsPerPage;
-		const end = start + itemsPerPage;
-		return filteredStudents.slice(start, end);
-	});
-	const bulkMaleNames = $derived.by(() => parseStudentNames(bulkMaleStudentNames));
-	const bulkFemaleNames = $derived.by(() => parseStudentNames(bulkFemaleStudentNames));
-	const bulkStudentCount = $derived(bulkMaleNames.length + bulkFemaleNames.length);
-	const maleStudentCount = $derived(
-		filteredStudents.filter((student) => student.gender === 'male').length
-	);
-	const femaleStudentCount = $derived(
-		filteredStudents.filter((student) => student.gender === 'female').length
-	);
-	const sf2Template = $derived(sf2Readiness?.template ?? null);
-	const assignedClass = $derived.by(() => {
-		const sf2ClassId = sf2Template?.classId;
-		return sf2ClassId ? (classes.find((classItem) => classItem.id === sf2ClassId) ?? null) : null;
-	});
-	const canCreateStudents = $derived(Boolean(sf2Template && assignedClass));
-	const studentCreationBlockedMessage = $derived(
-		sf2Template
-			? 'The SF2 workbook class is unavailable. Recreate or import the SF2 workbook before adding students.'
-			: 'Create an SF2 workbook before adding students.'
-	);
-	const assignedClassLabel = $derived(
-		assignedClass?.name ?? (sf2Template ? 'Class unavailable' : 'No SF2 workbook created')
-	);
-
-	function handlePageChange(page: number) {
-		currentPage = page;
-	}
-
-	function toggleSort(field: typeof sortBy) {
-		if (sortBy === field) {
-			sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
-		} else {
-			sortBy = field;
-			sortOrder = 'asc';
-		}
-	}
-
-	async function reload() {
-		loading = true;
-		loadError = null;
-		try {
-			const [s, c, readiness] = await Promise.all([
-				listStudents(),
-				listClasses(),
-				getSf2ExportReadiness()
-			]);
-			students = s;
-			classes = c;
-			sf2Readiness = readiness;
-			currentPage = 1;
-		} catch (err: unknown) {
-			const msg = err instanceof Error ? err.message : 'Database error';
-			loadError = msg;
-			toast(`Failed to load students: ${msg}`);
-		} finally {
-			loading = false;
-		}
-	}
-
-	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
-		reload();
+		void studentPage.init();
 	});
-
-	$effect(() => {
-		if (scanFor && cardSerialInput) {
-			cardSerial = scanFor.cardSerial ?? '';
-			cardSerialInput.focus();
-		}
-	});
-
-	$effect(() => {
-		if (dialogOpen && assignedClass && formClassId !== assignedClass.id) {
-			formClassId = assignedClass.id;
-		}
-	});
-
-	// ── Dialog helpers ───────────────────────────────────────────────────────
-	function openAdd() {
-		if (!canCreateStudents) {
-			toast(studentCreationBlockedMessage);
-			return;
-		}
-
-		editing = null;
-		entryMode = 'single';
-		formName = '';
-		formGender = 'male';
-		formCardSerial = '';
-		formClassId = assignedClass?.id ?? '';
-		bulkMaleStudentNames = '';
-		bulkFemaleStudentNames = '';
-		dialogOpen = true;
-	}
-
-	function openEdit(s: Student) {
-		editing = s;
-		entryMode = 'single';
-		formName = s.name;
-		formGender = s.gender ?? 'male';
-		formCardSerial = s.cardSerial ?? '';
-		formClassId = assignedClass?.id ?? s.classId ?? '';
-		bulkMaleStudentNames = '';
-		bulkFemaleStudentNames = '';
-		dialogOpen = true;
-	}
-
-	function openAttendance(s: Student) {
-		viewingStudent = s;
-		attendanceModalOpen = true;
-	}
-
-	function closeDialog() {
-		dialogOpen = false;
-		editing = null;
-	}
-
-	function openScan(s: Student) {
-		scanFor = s;
-	}
-
-	function createStudent(
-		name: string,
-		gender: StudentGender,
-		classId: string,
-		cardSerial?: string
-	): Student {
-		return {
-			id: '',
-			createdAt: new Date().toISOString(),
-			name,
-			gender,
-			cardSerial: cardSerial || undefined,
-			classId: classId || undefined
-		};
-	}
-
-	async function onSubmit(e: SubmitEvent) {
-		e.preventDefault();
-		if (savingStudent) return;
-		const name = formName.trim().toUpperCase();
-		const serial = formCardSerial.trim().toLowerCase();
-		const classId = formClassId || assignedClass?.id || '';
-
-		if (!editing && !canCreateStudents) {
-			toast(studentCreationBlockedMessage);
-			return;
-		}
-
-		if (!editing && entryMode === 'bulk') {
-			if (bulkStudentCount === 0) {
-				toast('Paste or type at least one student name');
-				return;
-			}
-
-			try {
-				savingStudent = true;
-				const studentRequests: CreateStudentRequest[] = [
-					...bulkMaleNames.map((bulkName) => ({
-						name: bulkName,
-						gender: 'male' as const,
-						classId: classId || undefined
-					})),
-					...bulkFemaleNames.map((bulkName) => ({
-						name: bulkName,
-						gender: 'female' as const,
-						classId: classId || undefined
-					}))
-				];
-				const createdStudents = await createStudents(studentRequests);
-				students = [...createdStudents, ...students];
-				toast(`${bulkStudentCount} ${bulkStudentCount === 1 ? 'student' : 'students'} added`);
-				closeDialog();
-			} catch (error) {
-				const msg = error instanceof Error ? error.message : 'Failed to add students';
-				toast(`Error: ${msg}`);
-			} finally {
-				savingStudent = false;
-			}
-			return;
-		}
-
-		if (!name) {
-			toast('Please enter a student name');
-			return;
-		}
-		try {
-			savingStudent = true;
-			const studentData: Student = editing
-				? {
-						...editing,
-						name,
-						gender: formGender,
-						cardSerial: serial,
-						classId
-					}
-				: createStudent(name, formGender, classId, serial);
-
-			const savedStudent = await saveStudent(studentData);
-			students = editing
-				? students.map((student) => (student.id === savedStudent.id ? savedStudent : student))
-				: [savedStudent, ...students];
-			toast(editing ? 'Student updated' : 'Student added');
-			closeDialog();
-		} catch (error) {
-			console.error('Error saving student:', error);
-			const msg = error instanceof Error ? error.message : 'Failed to save student';
-
-			if (msg.includes('UNIQUE constraint failed') && msg.includes('card_serial')) {
-				toast('Card serial already registered to another student.');
-			} else {
-				toast(`Error: ${msg}`);
-			}
-		} finally {
-			savingStudent = false;
-		}
-	}
-
-	async function confirmDelete(target = deleteTarget) {
-		if (!target) return;
-		await deleteStudent(target.id);
-		students = students.filter((student) => student.id !== target.id);
-		toast('Deleted');
-		deleteTarget = null;
-	}
-
-	function onDelete(event: MouseEvent, student: Student) {
-		if (event.shiftKey) {
-			void confirmDelete(student);
-			return;
-		}
-		deleteTarget = student;
-	}
-
-	async function onSaveCard() {
-		const serial = cardSerial.trim().toLowerCase();
-		if (!scanFor || !serial) return;
-		try {
-			const savedStudent = await saveStudent({ ...scanFor, cardSerial: serial });
-			students = students.map((student) =>
-				student.id === savedStudent.id ? savedStudent : student
-			);
-			toast(`Card paired to ${scanFor.name}`);
-			scanFor = null;
-			cardSerial = '';
-		} catch (error) {
-			const msg = error instanceof Error ? error.message : 'Failed to pair card';
-			toast(`Card pairing failed: ${msg}`);
-		}
-	}
 </script>
 
 <svelte:head>
@@ -423,9 +55,9 @@
 
 				<button
 					type="button"
-					onclick={openAdd}
-					disabled={!canCreateStudents}
-					title={canCreateStudents ? 'Add student' : studentCreationBlockedMessage}
+					onclick={studentPage.openAdd}
+					disabled={!studentPage.canCreateStudents}
+					title={studentPage.canCreateStudents ? 'Add student' : studentPage.studentCreationBlockedMessage}
 					class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-6 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					<svg
@@ -445,17 +77,17 @@
 		{/snippet}
 	</PageHeader>
 
-	{#if loading}
+	{#if studentPage.loading}
 		<div class="px-4 py-5 md:px-8 lg:px-10">
 			<LoadingBlock rows={4} label="Loading class list" />
 		</div>
-	{:else if loadError}
+	{:else if studentPage.loadError}
 		<div class="px-4 py-5 md:px-8 lg:px-10">
-			<EmptyState tone="warning" title="Class list is unavailable" description={loadError}>
+			<EmptyState tone="warning" title="Class list is unavailable" description={studentPage.loadError}>
 				{#snippet actions()}
 					<button
 						type="button"
-						onclick={reload}
+						onclick={() => void studentPage.reload()}
 						class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
 					>
 						Retry
@@ -465,123 +97,76 @@
 		</div>
 	{:else}
 		<StudentList
-			{students}
-			{paginatedStudents}
-			{searchTerms}
-			{genderFilter}
-			{sortBy}
-			{sortOrder}
-			{currentPage}
-			{totalPages}
-			{maleStudentCount}
-			{femaleStudentCount}
-			{filteredStudents}
-			{assignedClassLabel}
-			{canCreateStudents}
-			{studentCreationBlockedMessage}
-			onSearchChange={(value) => (searchTerms = value)}
-			onGenderFilterChange={(value) => (genderFilter = value)}
-			onToggleSort={toggleSort}
-			onPageChange={handlePageChange}
-			onOpenAttendance={openAttendance}
-			onOpenEdit={openEdit}
-			onOpenScan={openScan}
-			{onDelete}
-			bind:availableHeight
+			students={studentPage.students}
+			paginatedStudents={studentPage.paginatedStudents}
+			searchTerms={studentPage.searchTerms}
+			genderFilter={studentPage.genderFilter}
+			sortBy={studentPage.sortBy}
+			sortOrder={studentPage.sortOrder}
+			currentPage={studentPage.currentPage}
+			totalPages={studentPage.totalPages}
+			maleStudentCount={studentPage.maleStudentCount}
+			femaleStudentCount={studentPage.femaleStudentCount}
+			filteredStudents={studentPage.filteredStudents}
+			assignedClassLabel={studentPage.assignedClassLabel}
+			canCreateStudents={studentPage.canCreateStudents}
+			studentCreationBlockedMessage={studentPage.studentCreationBlockedMessage}
+			onSearchChange={(value) => (studentPage.searchTerms = value)}
+			onGenderFilterChange={(value) => (studentPage.genderFilter = value)}
+			onToggleSort={(field) => studentPage.toggleSort(field)}
+			onPageChange={(page) => studentPage.handlePageChange(page)}
+			onOpenAttendance={(s) => studentPage.openAttendance(s)}
+			onOpenEdit={(s) => studentPage.openEdit(s)}
+			onOpenScan={(s) => studentPage.openScan(s)}
+			onDelete={(e, s) => studentPage.onDelete(e, s)}
+			bind:availableHeight={studentPage.availableHeight}
 		/>
 	{/if}
 </div>
 
 <StudentAttendanceModal
-	open={attendanceModalOpen}
-	student={viewingStudent}
-	onClose={() => (attendanceModalOpen = false)}
+	open={studentPage.attendanceModalOpen}
+	student={studentPage.viewingStudent}
+	onClose={() => (studentPage.attendanceModalOpen = false)}
 />
 
 <StudentForm
-	open={dialogOpen}
-	{editing}
-	{entryMode}
-	{formName}
-	{formGender}
-	{formCardSerial}
-	{bulkMaleStudentNames}
-	{bulkFemaleStudentNames}
-	{assignedClassLabel}
-	{canCreateStudents}
-	{savingStudent}
-	{bulkMaleNames}
-	{bulkFemaleNames}
-	{bulkStudentCount}
-	onClose={closeDialog}
-	{onSubmit}
-	onSetEntryMode={setEntryMode}
-	onFormNameChange={(value) => (formName = value)}
-	onFormGenderChange={(value) => (formGender = value)}
-	onFormCardSerialChange={(value) => (formCardSerial = value)}
-	onBulkMaleChange={(value) => (bulkMaleStudentNames = value)}
-	onBulkFemaleChange={(value) => (bulkFemaleStudentNames = value)}
+	open={studentPage.dialogOpen}
+	editing={studentPage.editing}
+	entryMode={studentPage.entryMode}
+	formName={studentPage.formName}
+	formGender={studentPage.formGender}
+	formCardSerial={studentPage.formCardSerial}
+	bulkMaleStudentNames={studentPage.bulkMaleStudentNames}
+	bulkFemaleStudentNames={studentPage.bulkFemaleStudentNames}
+	assignedClassLabel={studentPage.assignedClassLabel}
+	canCreateStudents={studentPage.canCreateStudents}
+	savingStudent={studentPage.savingStudent}
+	bulkMaleNames={studentPage.bulkMaleNames}
+	bulkFemaleNames={studentPage.bulkFemaleNames}
+	bulkStudentCount={studentPage.bulkStudentCount}
+	onClose={() => studentPage.closeDialog()}
+	onSubmit={(e) => studentPage.onSubmit(e)}
+	onSetEntryMode={(m) => studentPage.setEntryMode(m)}
+	onFormNameChange={(value) => (studentPage.formName = value)}
+	onFormGenderChange={(value) => (studentPage.formGender = value)}
+	onFormCardSerialChange={(value) => (studentPage.formCardSerial = value)}
+	onBulkMaleChange={(value) => (studentPage.bulkMaleStudentNames = value)}
+	onBulkFemaleChange={(value) => (studentPage.bulkFemaleStudentNames = value)}
 />
 
-<!-- ── Register card dialog ───────────────────────────────────────────────── -->
-{#if scanFor}
-	<div
-		class="fixed inset-0 z-40 bg-black/50"
-		role="presentation"
-		onclick={() => (scanFor = null)}
-		onkeydown={(e) => e.key === 'Escape' && (scanFor = null)}
-	></div>
-
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="card-dialog-title"
-	>
-		<div class="w-full max-w-md space-y-5 rounded-2xl border border-border bg-background p-6">
-			<div>
-				<h2 id="card-dialog-title" class="text-lg font-semibold">Pair card</h2>
-				<p class="mt-1 text-sm text-muted-foreground">Enter the card serial for {scanFor.name}.</p>
-			</div>
-
-			<div class="space-y-4">
-				<div class="space-y-1.5">
-					<label for="manual-serial" class="label-mono">Card serial</label>
-					<input
-						id="manual-serial"
-						bind:this={cardSerialInput}
-						bind:value={cardSerial}
-						placeholder="Tap card on reader or type serial…"
-						autocomplete="off"
-						spellcheck="false"
-						class="control-ring w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm"
-					/>
-				</div>
-			</div>
-
-			<div class="flex justify-end gap-2">
-				<button
-					onclick={() => (scanFor = null)}
-					class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
-				>
-					Cancel
-				</button>
-				<button
-					onclick={onSaveCard}
-					disabled={!cardSerial}
-					class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					Save
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<StudentCardPairDialog
+	open={studentPage.scanFor !== null}
+	student={studentPage.scanFor}
+	bind:cardSerial={studentPage.cardSerial}
+	onSave={() => studentPage.onSaveCard()}
+	onClose={() => (studentPage.scanFor = null)}
+/>
 
 <StudentDeleteDialog
-	{deleteTarget}
-	onConfirm={() => confirmDelete()}
-	onCancel={() => (deleteTarget = null)}
+	deleteTarget={studentPage.deleteTarget}
+	onConfirm={() => studentPage.confirmDelete()}
+	onCancel={() => (studentPage.deleteTarget = null)}
 />
 
-<FeedbackToast message={toastMessage} onClose={() => (toastMessage = null)} />
+<FeedbackToast message={studentPage.toastMessage} onClose={() => (studentPage.toastMessage = null)} />

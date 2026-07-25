@@ -106,10 +106,15 @@ export function sf2ReportYear(
 	schoolYear: string,
 	fallbackYear = new Date().getFullYear()
 ) {
-	void schoolYear;
 	const month = sf2MonthByValue(monthValue);
 	if (!month) return fallbackYear;
-	return fallbackYear;
+
+	const years = schoolYearYears(schoolYear);
+	if (!years) return fallbackYear;
+
+	// School year spans June-May. Month indices: June=5...December=11, January=0...May=4.
+	// Months >= 5 (June onwards) use the start year; months < 5 use the end year.
+	return month.monthIndex >= 5 ? years[0] : years[1];
 }
 
 export function defaultSf2FirstSchoolDay(monthValue: string, schoolYear: string) {

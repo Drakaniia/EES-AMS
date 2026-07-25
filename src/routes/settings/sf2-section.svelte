@@ -112,11 +112,11 @@
 	{/if}
 </section>
 
-{#if sf2State.sf2ProgressVisible}
+{#if sf2State.sf2Progress.visible}
 	<div
 		role="dialog"
 		aria-modal="true"
-		aria-label="SF2 {sf2State.sf2ProgressTask} in progress"
+		aria-label="SF2 {sf2State.sf2Progress.task} in progress"
 		class="fixed inset-0 z-[70] flex items-center justify-center bg-background/40 backdrop-blur-[2px]"
 		tabindex="-1"
 	>
@@ -137,33 +137,33 @@
 			<!-- Current message -->
 			<div class="space-y-1">
 				<p class="text-sm font-semibold text-foreground transition-all duration-500 ease-out">
-					{sf2State.sf2ProgressDisplayMessage ||
-						(sf2State.sf2ProgressTask === 'import'
+					{sf2State.sf2Progress.displayMessage ||
+						(sf2State.sf2Progress.task === 'import'
 							? 'Importing SF2 workbook…'
 							: 'Creating SF2 workbook…')}
 				</p>
 			</div>
 
 			<!-- Determinate progress bar -->
-			{#if sf2State.sf2ProgressTotal > 0}
+			{#if sf2State.sf2Progress.total > 0}
 				<div class="w-full space-y-2">
 					<div
 						class="h-3 w-full overflow-hidden rounded-pill border border-primary/20 bg-background"
 						role="progressbar"
 						aria-valuemin="0"
-						aria-valuemax={sf2State.sf2ProgressTotal}
-						aria-valuenow={sf2State.sf2ProgressCurrent}
-						aria-valuetext={`{Math.round((sf2State.sf2ProgressCurrent / sf2State.sf2ProgressTotal) * 100)} percent`}
+						aria-valuemax={sf2State.sf2Progress.total}
+						aria-valuenow={sf2State.sf2Progress.current}
+						aria-valuetext={`{Math.round((sf2State.sf2Progress.current / sf2State.sf2Progress.total) * 100)} percent`}
 					>
 						<div
 							class="h-full rounded-pill bg-primary transition-all duration-400 ease-out"
-							style="width: {sf2State.sf2ProgressTotal > 0
-								? Math.round((sf2State.sf2ProgressCurrent / sf2State.sf2ProgressTotal) * 100)
+							style="width: {sf2State.sf2Progress.total > 0
+								? Math.round((sf2State.sf2Progress.current / sf2State.sf2Progress.total) * 100)
 								: 0}%"
 						></div>
 					</div>
 					<div class="label-mono text-xs text-primary">
-						Step {sf2State.sf2ProgressCurrent} of {sf2State.sf2ProgressTotal}
+						Step {sf2State.sf2Progress.current} of {sf2State.sf2Progress.total}
 					</div>
 				</div>
 			{:else}
@@ -179,7 +179,7 @@
 				</div>
 			{/if}
 
-			{#if sf2State.sf2ProgressCurrent === sf2State.sf2ProgressTotal && sf2State.sf2ProgressTotal > 0}
+			{#if sf2State.sf2Progress.current === sf2State.sf2Progress.total && sf2State.sf2Progress.total > 0}
 				<p class="text-xs text-muted-foreground">Finalizing…</p>
 			{/if}
 		</div>

@@ -5,7 +5,7 @@ import type { Sf2PreviewCell, Sf2PreviewStudentRow } from '$lib/db-rust';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export const MATRIX_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const;
+export const MATRIX_WEEKDAYS = ['M', 'T', 'W', 'TH', 'F'] as const;
 
 export type MatrixWeekday = (typeof MATRIX_WEEKDAYS)[number];
 
@@ -140,7 +140,9 @@ export function buildMatrixWeekGroups(
 	}
 
 	if (month) {
-		const year = new SvelteDate().getFullYear();
+		const year = dates.length > 0
+			? Number(dates[0].date.split('-')[0])
+			: new SvelteDate().getFullYear();
 		const dayCount = new SvelteDate(year, month.monthIndex + 1, 0).getDate();
 		// Index groups by week key for O(1) lookup
 		const groupsByKey = new Map<string, MatrixWeekGroup>();
