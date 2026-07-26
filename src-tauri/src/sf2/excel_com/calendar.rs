@@ -3,7 +3,7 @@ use crate::sf2::excel_com::learners::best_sf2_monthly_sheet;
 use crate::sf2::excel_com::com_session::ComObject;
 use crate::sf2::excel_com::workbook_utils::{month_name, month_number, report_year};
 use crate::sf2::excel_com::worksheet::{
-    rename_sheet_unique, set_sf2_cell, worksheet_cell,
+    cell_text, rename_sheet_unique, set_sf2_cell, worksheet_cell,
 };
 use crate::sf2::models::Sf2WorkbookMetadata;
 use chrono::{Datelike, NaiveDate};
@@ -114,7 +114,6 @@ fn set_sf2_month_dates(
         }
 
         set_sf2_date_cell(sheet, slot.column, &value)?;
-        set_sf2_cell(sheet, 7, slot.column, &slot.label, true)?;
     }
 
     Ok(())
@@ -127,33 +126,49 @@ fn clear_sf2_month_dates(sheet: &ComObject) -> Result<()> {
     Ok(())
 }
 
-fn sf2_weekday_slots(_sheet: &ComObject) -> Result<Vec<Sf2WeekdaySlot>> {
-    // Compute weekday slots directly from column indices (6-38) using the
-    // standard DepEd SF2 layout: 7 weeks × 5 weekdays (Mon-Fri) = 35 columns.
-    //
-    // Previously this function read weekday labels from row 7 of the workbook
-    // and matched them against specific values ("M", "T", "W", "TH", "F").
-    // That approach failed when the imported workbook used different label
-    // formats (e.g., "MON" instead of "M"), causing ALL slots to be skipped
-    // → no dates written → empty date mappings for the month.
-    //
-    // Hardcoding from the column index is safe because the DepEd SF2 standard
-    // mandates that columns F-AL (6-38) are weekday columns in M-F repetition.
-    // After writing dates, the correct labels are written back to row 7
-    // (inside set_sf2_month_dates), so subsequent label-based reads work too.
-    let mut slots = Vec::with_capacity(33);
+fn sf2_weekday_slots(sheet: &ComObject) -> Result<Vec<Sf2WeekdaySlot>> {
+    // Read weekday labels from row 7 of the sheet. The template has merged
+    // column pairs (e.g., F7:G7 = Mon), so merged sub-cells have no label
+    // and must be skipped. Non-weekday labels ("ABSENT", "PRESENT") are
+    // also skipped.
+    let mut slots = Vec::new();
     for column in 6..=38 {
-        let relative = (column - 6) as usize;
-        let week_index = (relative / 5) as i32;
-        let weekday_index = (relative % 5) as i64;
+        let label = cell_text(sheet, 7, column)?;
+        if label.trim().is_empty() {
+            continue;
+        }
+        let Some(weekday_index) = parse_weekday_label(&label) else {
+            continue;
+        };
+        let week_index = (slots.len() / 5) as i32;
         slots.push(Sf2WeekdaySlot {
             column,
             week_index,
             weekday_index,
-            label: weekday_label(weekday_index).to_string(),
         });
     }
     Ok(slots)
+}
+
+/// Parse a weekday label from row 7 into a 0-based index (0=Mon..4=Fri).
+/// Handles common DepEd SF2 formats: "M", "MON", "MONDAY", "T", "TUE", "TH", etc.
+fn parse_weekday_label(label: &str) -> Option<i64> {
+    let upper = label.trim().to_uppercase();
+    let first = upper.chars().next()?;
+    match first {
+        'M' => Some(0),
+        'T' => {
+            // "TH" (Thursday) vs "T" (Tuesday)
+            if upper.starts_with("TH") {
+                Some(3)
+            } else {
+                Some(1)
+            }
+        }
+        'W' => Some(2),
+        'F' => Some(4),
+        _ => None,
+    }
 }
 
 fn set_sf2_date_cell(sheet: &ComObject, column: i32, value: &str) -> Result<()> {
@@ -183,17 +198,6 @@ fn date_weekday_index(date: NaiveDate) -> Option<i64> {
     }
 }
 
-fn weekday_label(index: i64) -> &'static str {
-    match index {
-        0 => "M",
-        1 => "T",
-        2 => "W",
-        3 => "TH",
-        4 => "F",
-        _ => "",
-    }
-}
-
 fn days_in_month(year: i32, month: u32) -> u32 {
     let (next_year, next_month) = if month == 12 {
         (year + 1, 1)
@@ -209,5 +213,4 @@ struct Sf2WeekdaySlot {
     column: i32,
     week_index: i32,
     weekday_index: i64,
-    label: String,
 }
