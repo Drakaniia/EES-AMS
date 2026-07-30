@@ -161,12 +161,19 @@ impl Sf2Repository {
         }
 
         {
-            // Preserve date mappings from all months by using INSERT OR REPLACE.
-            // The PRIMARY KEY(template_id, date) constraint ensures that mappings
-            // for the same date are replaced, while mappings for different months
-            // (different dates) are preserved. This means date mappings are cached
-            // across month switches: once a month's mappings are computed via Excel,
-            // they persist in the DB and subsequent switches to that month skip Excel.
+            // Delete ALL existing date mappings for this template before inserting
+            // the new ones.  This is required because date mappings from a previous
+            // import or analysis may have dates with a DIFFERENT year (e.g.
+            // "2025-07-01" from the original 2025 template vs "2026-07-01" from the
+            // current school year).  INSERT OR REPLACE with a PRIMARY KEY of
+            // (template_id, date) would NOT replace the old row because the date
+            // values differ by year, causing DUPLICATE rows for the same normalized
+            // date when `sf2_date_mappings_for_report_month` normalises all dates to
+            // the current school year.  Those duplicates can have different
+            // column_letters (e.g. 2025-Jul-1 is Tuesday → col H, 2026-Jul-1 is
+            // Wednesday → col I), which corrupts attendance-mark placement.
+            transaction.execute(DELETE_DATE_MAPPINGS_SQL, params![template.id])?;
+
             let mut statement = transaction.prepare(INSERT_DATE_MAPPING_SQL)?;
             for date in dates {
                 statement.execute(params![
