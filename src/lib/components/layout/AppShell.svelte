@@ -7,8 +7,6 @@
 		import { onMount } from 'svelte';
 		import {
 			FileSpreadsheet,
-			FileText,
-			LayoutDashboard,
 			PanelLeft,
 			ScanLine,
 			Settings,
@@ -28,10 +26,6 @@
 			{ href: '/attendance', label: 'Attendance', icon: ScanLine },
 			{ type: 'divider' as const },
 			{ href: '/students', label: 'Class List', icon: UsersRound },
-			{ href: '/records', label: 'Attendance Logs', icon: FileText },
-			{ type: 'divider' as const },
-			{ href: '/overview', label: 'Overview', icon: LayoutDashboard },
-			{ href: '/settings', label: 'Configuration', icon: Settings }
 		] as const;
 
 	const attendanceNavLabel = $derived(
@@ -124,7 +118,7 @@
 						></div>
 						<div class="mx-1 w-px bg-border md:hidden" role="separator" aria-hidden="true"></div>
 					{:else}
-						{@const navItem = item as { href: string; label: string; icon: typeof LayoutDashboard }}
+						{@const navItem = item as { href: string; label: string; icon: typeof FileSpreadsheet }}
 						{@const active = isActive(navItem.href, page.url.pathname)}
 						{@const Icon = navItem.icon}
 						<a
@@ -154,18 +148,41 @@
 
 		<!-- Footer -->
 		<div
-			class="sidebar-footer border-t border-border px-4 py-3 {isCollapsed
+			class="sidebar-footer border-t border-border {isCollapsed
 				? 'hidden'
 				: 'max-md:hidden md:block'}"
 		>
-			<div class="flex items-center justify-between gap-2">
-				<div class="min-w-0">
-					<div class="truncate text-xs font-semibold text-muted-foreground">{todayLabel}</div>
-				</div>
-				<span class="status-indicator" title={isOnline ? 'Online' : 'Offline'}>
-					<span class="status-dot {isOnline ? '' : 'status-dot-muted'}" aria-hidden="true"></span>
-					<span class="sr-only">{isOnline ? 'Online' : 'Offline'}</span>
+			<!-- Settings link at bottom of sidebar -->
+			{#if true}
+			{@const settingsActive = page.url.pathname.startsWith('/settings')}
+			<a
+				href={`${base}/settings`}
+				aria-current={settingsActive ? 'page' : undefined}
+				class="flex h-9 items-center gap-3 px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-surface/70 hover:text-foreground {settingsActive
+					? 'bg-primary/10 text-foreground'
+					: ''}"
+			>
+				<span
+					class="nav-icon grid size-7 shrink-0 place-items-center rounded-lg transition-all {settingsActive
+						? 'bg-primary text-primary-foreground shadow-sm'
+						: 'text-muted-foreground'}"
+				>
+					<Settings class="size-4" aria-hidden="true" />
 				</span>
+				<span class="truncate">Settings</span>
+			</a>
+			{/if}
+
+			<div class="border-t border-border px-4 py-3">
+				<div class="flex items-center justify-between gap-2">
+					<div class="min-w-0">
+						<div class="truncate text-xs font-semibold text-muted-foreground">{todayLabel}</div>
+					</div>
+					<span class="status-indicator" title={isOnline ? 'Online' : 'Offline'}>
+						<span class="status-dot {isOnline ? '' : 'status-dot-muted'}" aria-hidden="true"></span>
+						<span class="sr-only">{isOnline ? 'Online' : 'Offline'}</span>
+					</span>
+				</div>
 			</div>
 		</div>
 		</aside>
