@@ -131,69 +131,8 @@ fn import_workbook_with_analysis(
     let working_copy_path =
         write_bundled_template_to_dir(&workbook_dir, &template_id, &grade_level, &section)?;
 
-    // Step 5: Write metadata from imported file into the bundled template
-    let metadata = metadata_from_import_analysis(&source_analysis)?;
-    super::progress::emit_sf2_progress(
-        &app,
-        "import",
-        6,
-        7,
-        "Writing SF2 details and date layout",
-    );
-    excel::write_metadata(&working_copy_path, &metadata)?;
-
-    // Step 6: Expand the workbook if more than 21 male / 19 female students
-    if extra_male > 0 || extra_female > 0 {
-        excel::expand_roster_rows(&working_copy_path, extra_male, extra_female, None, None)?;
-    }
-
-    // Step 7: Analyze the bundled template to get its sheet layout
-    let analysis = excel::analyze_workbook(&working_copy_path)?;
-    let fingerprint = layout_fingerprint(&analysis);
-
-    // Step 8: Write student names into the bundled template
-    let roster_marks = roster_name_marks(&analysis, &roster_assignments);
-    if !roster_marks.is_empty() {
-        excel::write_marks(&working_copy_path, &roster_marks)?;
-    }
-
-    // Step 9: Clear unused learner rows in the template
-    let mapped_rows: Vec<u32> = roster_assignments
-        .iter()
-        .map(|a| a.slot.row_index)
-        .collect();
-    let expanded_counts = if extra_male > 0 || extra_female > 0 {
-        (Some(male_count), Some(female_count))
-    } else {
-        (None, None)
-    };
-    let clear_marks = clear_unused_learner_marks(
-        &analysis,
-        &mapped_rows,
-        expanded_counts.0,
-        expanded_counts.1,
-    );
-    if !clear_marks.is_empty() {
-        excel::write_marks(&working_copy_path, &clear_marks)?;
-    }
-
-    // Step 10: Hide empty learner rows — only rows with students should be visible.
-    let occupied: HashSet<u32> = roster_assignments
-        .iter()
-        .map(|a| a.slot.row_index)
-        .collect();
-    let extra_male_hide = (male_count as u32).saturating_sub(21);
-    let extra_female_hide = (female_count as u32).saturating_sub(19);
-    let hide_male_total = 29u32 + extra_male_hide;
-    let hide_female_total = 49u32 + extra_male_hide + extra_female_hide;
-    excel::hide_empty_learner_rows(
-        &working_copy_path,
-        hide_male_total,
-        hide_female_total,
-        &occupied,
-    )?;
-
     // Step 11: Create student mappings for bundled template slots
+    // (Computed BEFORE the batch so roster_assignments is available for the closure)
     let mut seen_normalized_names = HashSet::new();
     let student_mappings: Vec<Sf2StudentMappingRecord> = roster_assignments
         .iter()
@@ -216,8 +155,123 @@ fn import_workbook_with_analysis(
         })
         .collect();
 
-    // Step 12: Date mappings from the bundled template
-    let date_mappings = date_mappings_from_analysis(&template_id, &analysis);
+    let metadata = metadata_from_import_analysis(&source_analysis)?;
+    super::progress::emit_sf2_progress(
+        &app,
+        "import",
+        6,
+        7,
+        "Writing SF2 details and date layout",
+    );
+
+    // ── Phase 1: Batch all 10 Excel operations into ONE session ────────
+    // Was previously up to 10 separate COM sessions (Steps 5-14).
+    // Pre-compute values that don't need the analysis result:
+    let (male_total_row, female_total_row, combined_total_row) =
+        bundled_template_total_rows(male_count, female_count);
+    let mapped_rows: Vec<u32> = roster_assignments
+        .iter()
+        .map(|a| a.slot.row_index)
+        .collect();
+    let occupied: HashSet<u32> = roster_assignments
+        .iter()
+        .map(|a| a.slot.row_index)
+        .collect();
+    let expanded_counts = if extra_male > 0 || extra_female > 0 {
+        (Some(male_count), Some(female_count))
+    } else {
+        (None, None)
+    };
+    let extra_male_hide = (male_count as u32).saturating_sub(21);
+    let extra_female_hide = (female_count as u32).saturating_sub(19);
+    let hide_male_total = 29u32 + extra_male_hide;
+    let hide_female_total = 49u32 + extra_male_hide + extra_female_hide;
+    let female_count_i = female_count;
+    let male_count_i = male_count;
+    let metadata_for_excel = metadata.clone();
+    let template_id_for_excel = template_id.clone();
+
+    let (analysis, date_mappings) =
+        excel::batch_operations(&working_copy_path, true, move |session| {
+            // Step 5: Write metadata from imported file into the bundled template
+            session.write_metadata(&metadata_for_excel)?;
+
+            // Step 6: Expand the workbook if more than 21 male / 19 female students
+            if extra_male > 0 || extra_female > 0 {
+                session.expand_roster_rows(extra_male, extra_female, None, None)?;
+            }
+
+            // Step 7: Analyze the bundled template to get its sheet layout
+            let analysis = session.analyze()?;
+
+            // Step 8: Write student names into the bundled template
+            let roster_marks = roster_name_marks(&analysis, &roster_assignments);
+            if !roster_marks.is_empty() {
+                session.write_marks(&roster_marks)?;
+            }
+
+            // Step 9: Clear unused learner rows in the template
+            let clear_marks = clear_unused_learner_marks(
+                &analysis,
+                &mapped_rows,
+                expanded_counts.0,
+                expanded_counts.1,
+            );
+            if !clear_marks.is_empty() {
+                session.write_marks(&clear_marks)?;
+            }
+
+            // Step 10: Hide empty learner rows
+            session.hide_empty_learner_rows(
+                hide_male_total,
+                hide_female_total,
+                &occupied,
+            )?;
+
+            // Step 12: Date mappings from the bundled template
+            // (Moved before formulas since formulas depend on date_mappings)
+            let date_mappings =
+                date_mappings_from_analysis(&template_id_for_excel, &analysis);
+
+            // Step 14: Write Excel formulas for MALE TOTAL, FEMALE TOTAL, Combined TOTAL
+            let clear_total = super::attendance_marks::clear_total_cell_marks(
+                male_total_row,
+                female_total_row,
+                combined_total_row,
+                &date_mappings,
+            );
+            if !clear_total.is_empty() {
+                session.write_marks_force(&clear_total)?;
+            }
+
+            let formula_marks = super::attendance_marks::total_formula_marks(
+                male_count_i,
+                female_count_i,
+                male_total_row,
+                female_total_row,
+                combined_total_row,
+                &date_mappings,
+            );
+            session.write_formulas(&formula_marks)?;
+
+            // Write summary formulas for rows 53-65
+            let total_students = male_count_i + female_count_i;
+            let (summary_marks, summary_static) =
+                super::attendance_marks::summary_formula_marks(
+                    male_count_i,
+                    female_count_i,
+                    total_students,
+                    male_total_row,
+                    female_total_row,
+                    combined_total_row,
+                    &date_mappings,
+                );
+            session.write_formulas(&summary_marks)?;
+            session.write_marks_force(&summary_static)?;
+
+            Ok((analysis, date_mappings))
+        })?;
+    let fingerprint = layout_fingerprint(&analysis);
 
     // Step 13: Create template record pointing to the bundled-template working copy
     let template = Sf2TemplateRecord {
@@ -237,54 +291,6 @@ fn import_workbook_with_analysis(
         imported_at: chrono::Utc::now().timestamp(),
         last_synced_at: None,
     };
-
-    // Step 14: Write Excel formulas for MALE TOTAL, FEMALE TOTAL, Combined TOTAL
-    // Row positions derived from slot layout — adapts to any expansion automatically.
-    let (male_total_row, female_total_row, combined_total_row) =
-        bundled_template_total_rows(male_count, female_count);
-
-    // Clear stale template values from TOTAL cells for columns without dates.
-    let clear_total_marks = super::attendance_marks::clear_total_cell_marks(
-        male_total_row,
-        female_total_row,
-        combined_total_row,
-        &date_mappings,
-    );
-    if !clear_total_marks.is_empty() {
-        if let Err(error) = excel::write_marks_force(&working_copy_path, &clear_total_marks) {
-            log::warn!("failed to clear stale TOTAL formula cells: {error}");
-        }
-    }
-
-    let formula_marks = super::attendance_marks::total_formula_marks(
-        male_count,
-        female_count,
-        male_total_row,
-        female_total_row,
-        combined_total_row,
-        &date_mappings,
-    );
-    if let Err(error) = excel::write_formulas(&working_copy_path, &formula_marks) {
-        log::warn!("failed to write TOTAL formula marks: {error}");
-    }
-
-    // Write summary formulas for rows 53-65 (Enrolment, Registered Learners, % of Enrolment, ADA, % of Attendance)
-    let total_students = male_count + female_count;
-    let (summary_marks, summary_static_marks) = super::attendance_marks::summary_formula_marks(
-        male_count,
-        female_count,
-        total_students,
-        male_total_row,
-        female_total_row,
-        combined_total_row,
-        &date_mappings,
-    );
-    if let Err(error) = excel::write_formulas(&working_copy_path, &summary_marks) {
-        log::warn!("failed to write summary formula marks: {error}");
-    }
-    if let Err(error) = excel::write_marks_force(&working_copy_path, &summary_static_marks) {
-        log::warn!("failed to write summary static marks: {error}");
-    }
 
     // Step 15: Backfill attendance marks and persist to DB
     sf2_repo.upsert_template_with_mappings(&template, &student_mappings, &date_mappings)?;
@@ -319,3 +325,7 @@ fn import_workbook_with_analysis(
         dates_mapped: date_mappings.len(),
     })
 }
+
+#[cfg(test)]
+#[path = "__tests__/validation_service_tests.rs"]
+mod tests;

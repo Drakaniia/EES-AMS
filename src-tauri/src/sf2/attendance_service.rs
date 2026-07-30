@@ -1,6 +1,18 @@
 use crate::domain::error::{AppError, Result};
 
 use crate::infrastructure::database::{ClassRepository, DbPool, EventRepository, StudentRepository};
+
+#[cfg(test)]
+use crate::sf2::attendance_events::parse_clock;
+#[cfg(test)]
+use crate::sf2::attendance_marks::{
+    attendance_grid_rows, clear_attendance_marks_for_records, mapped_attendance_rows,
+    summary_formula_marks, total_formula_marks,
+};
+#[cfg(test)]
+use crate::sf2::logic::Sf2CellMark;
+#[cfg(test)]
+use crate::sf2::models::{Sf2DateMappingRecord, Sf2StudentMappingRecord, Sf2TemplateRecord};
 use crate::sf2::attendance::present_events_for_day;
 use crate::sf2::attendance_events;
 use crate::sf2::calendar::attendance_changed_since;

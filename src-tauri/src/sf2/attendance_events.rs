@@ -116,7 +116,7 @@ fn local_timestamp(date: NaiveDate, hour: u32, minute: u32) -> Result<i64> {
     Ok(local_time.with_timezone(&Utc).timestamp())
 }
 
-fn parse_clock(value: &str) -> Option<(u32, u32)> {
+pub(super) fn parse_clock(value: &str) -> Option<(u32, u32)> {
     let (hour, minute) = value.trim().split_once(':')?;
     let hour = hour.parse::<u32>().ok()?;
     let minute = minute.parse::<u32>().ok()?;

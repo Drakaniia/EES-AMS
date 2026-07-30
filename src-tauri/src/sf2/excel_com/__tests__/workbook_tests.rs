@@ -1,4 +1,11 @@
 use super::*;
+use super::super::workbook_utils::{
+    column_number_to_letter, contains_ignore_ascii_case, month_number, sheet_is_analysis_candidate,
+    year_from_sheet_name,
+};
+use super::super::com_session::run_excel_task;
+use super::super::{batch_operations, write_marks, write_marks_force};
+use crate::sf2::logic::Sf2CellMark;
 
 // ── month_number ──────────────────────────────────────────────────────
 
@@ -276,7 +283,7 @@ fn batch_operations_analyze_succeeds() {
     assert!(setup.is_ok(), "workbook setup should succeed");
 
     // TEST: batch_operations should be able to analyze the workbook
-    let result = super::batch_operations(&workbook_path, false, |session| {
+    let result = batch_operations(&workbook_path, false, |session| {
         let analysis = session.analyze()?;
         assert!(!analysis.sheets.is_empty(), "should have at least 1 sheet");
         assert!(
@@ -341,7 +348,7 @@ fn batch_operations_multiple_ops_succeed() {
         value: "Test".to_string(),
     }];
 
-    let result = super::batch_operations(&workbook_path, true, move |session| {
+    let result = batch_operations(&workbook_path, true, move |session| {
         // Operation 1: analyze
         let analysis = session.analyze()?;
         assert!(!analysis.sheets.is_empty(), "analyze must return sheets");
@@ -530,7 +537,7 @@ fn write_marks_rejects_formula_cells_but_write_marks_force_accepts() {
     }];
 
     // write_marks should FAIL — this is the BUG in the current backfill
-    let write_result = super::write_marks(&workbook_path, &marks);
+    let write_result = write_marks(&workbook_path, &marks);
     assert!(
         write_result.is_err(),
         "write_marks MUST fail on formula cells — THIS IS THE BUG"
@@ -542,7 +549,7 @@ fn write_marks_rejects_formula_cells_but_write_marks_force_accepts() {
     );
 
     // Step 3: Test write_marks_force on the same mark — should SUCCEED
-    let force_result = super::write_marks_force(&workbook_path, &marks);
+    let force_result = write_marks_force(&workbook_path, &marks);
     assert!(
         force_result.is_ok(),
         "write_marks_force MUST succeed on formula cells — THIS IS THE FIX"

@@ -343,7 +343,7 @@ pub(super) fn clear_total_cell_marks(
     marks
 }
 
-fn attendance_grid_rows<I>(
+pub(super) fn attendance_grid_rows<I>(
     row_slots: &[super::calendar_service::TemplateRosterSlot],
     extra_rows: I,
 ) -> Vec<u32>
@@ -360,7 +360,7 @@ where
     rows
 }
 
-fn mapped_attendance_rows<I>(rows: I) -> Vec<u32>
+pub(super) fn mapped_attendance_rows<I>(rows: I) -> Vec<u32>
 where
     I: IntoIterator<Item = u32>,
 {
