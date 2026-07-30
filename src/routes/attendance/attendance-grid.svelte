@@ -198,7 +198,7 @@
 				<p class="font-medium text-foreground">Not a scheduled class day</p>
 				<p class="mt-1 text-sm text-muted-foreground">
 					Attendance can only be recorded on class days configured in Settings. View or edit the
-					schedule for this class on the Configuration page.
+					schedule for this class on the Settings page.
 				</p>
 			</div>
 		{:else if manualStudents.length === 0}

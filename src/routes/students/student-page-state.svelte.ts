@@ -125,22 +125,24 @@ class StudentPageState {
 
 	// ── Constructor (effects) ────────────────────────────────────────────────
 	constructor() {
-		$effect(() => {
-			if (this.currentPage > this.totalPages && this.totalPages > 0) {
-				this.currentPage = this.totalPages;
-			}
-		});
+		$effect.root(() => {
+			$effect(() => {
+				if (this.currentPage > this.totalPages && this.totalPages > 0) {
+					this.currentPage = this.totalPages;
+				}
+			});
 
-		$effect(() => {
-			// Reset to first page when gender filter changes (results may be fewer)
-			void this.genderFilter;
-			this.currentPage = 1;
-		});
+			$effect(() => {
+				// Reset to first page when gender filter changes (results may be fewer)
+				void this.genderFilter;
+				this.currentPage = 1;
+			});
 
-		$effect(() => {
-			if (this.dialogOpen && this.assignedClass && this.formClassId !== this.assignedClass.id) {
-				this.formClassId = this.assignedClass.id;
-			}
+			$effect(() => {
+				if (this.dialogOpen && this.assignedClass && this.formClassId !== this.assignedClass.id) {
+					this.formClassId = this.assignedClass.id;
+				}
+			});
 		});
 	}
 

@@ -241,7 +241,7 @@
 							<td class="px-4 py-3 text-right">
 								<div class="inline-flex gap-1">
 									<a
-										href={resolve(`/records?studentId=${s.id}`)}
+										href={resolve(`/attendance/logs?studentId=${s.id}`)}
 										class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
 										title="View attendance records"
 									>

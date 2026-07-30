@@ -11,7 +11,7 @@
 	class="space-y-5 rounded-2xl border border-border bg-card p-6"
 >
 	<div class="space-y-1">
-		<h3 class="text-lg font-medium">Global Configuration</h3>
+		<h3 class="text-lg font-medium">Global Settings</h3>
 		<p class="text-xs text-muted-foreground">
 			Controls attendance flow and defaults for new classes.
 		</p>
@@ -113,7 +113,7 @@
 		{#if settingsState.globalSettingsSaving}
 			<Spinner />
 		{/if}
-		{settingsState.globalSettingsSaving ? 'Saving...' : 'Save Configuration'}
+		{settingsState.globalSettingsSaving ? 'Saving...' : 'Save Settings'}
 	</button>
 </form>
 
@@ -132,7 +132,7 @@
 <Dialog
 	open={settingsState.unsavedGlobalDialogOpen}
 	title="Unsaved Global Settings"
-	description="You have unsaved changes in Global Configuration."
+	description="You have unsaved changes in Global Settings."
 	onClose={() => settingsState.keepEditingGlobalSettings()}
 >
 	<div class="space-y-5">

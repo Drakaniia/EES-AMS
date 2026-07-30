@@ -160,17 +160,19 @@ class AttendancePageState {
 
 	// ── Lifecycle ──────────────────────────────────────────────────────────────
 	constructor() {
-		$effect(() => {
-			if (
-				this.isCardReaderMode &&
-				!this.pickerOpen &&
-				!this.datePickerOpen &&
-				this.cardInputElement &&
-				!this.loading &&
-				!this.loadError
-			) {
-				this.cardInputElement.focus();
-			}
+		$effect.root(() => {
+			$effect(() => {
+				if (
+					this.isCardReaderMode &&
+					!this.pickerOpen &&
+					!this.datePickerOpen &&
+					this.cardInputElement &&
+					!this.loading &&
+					!this.loadError
+				) {
+					this.cardInputElement.focus();
+				}
+			});
 		});
 	}
 

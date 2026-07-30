@@ -32,7 +32,7 @@
 		{#snippet actions()}
 			<div class="flex items-center gap-3">
 				<a
-					href={resolve('/records')}
+					href={resolve('/attendance/logs')}
 					class="inline-flex h-10 items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
 				>
 					<svg
