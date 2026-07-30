@@ -5,7 +5,7 @@
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 
 	onMount(() => {
-		goto(resolve('/'), { replaceState: true });
+		goto(resolve('/reports'), { replaceState: true });
 	});
 </script>
 

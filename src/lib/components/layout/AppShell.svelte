@@ -1,37 +1,38 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { base } from '$app/paths';
-	import logo from '$lib/assets/logo-seal.png';
-	import { settingsStore } from '$lib/stores/settings.svelte';
-	import { onMount } from 'svelte';
-	import {
-		FileSpreadsheet,
-		FileText,
-		LayoutDashboard,
-		PanelLeft,
-		ScanLine,
-		Settings,
-		UsersRound
-	} from 'lucide-svelte';
-
-	let { children } = $props();
-	let isCollapsed = $state(false);
-	let isOnline = $state(true);
-
-	function toggleCollapse() {
-		isCollapsed = !isCollapsed;
-	}
-
-	const navItems = [
-		{ href: '/', label: 'Overview', icon: LayoutDashboard },
-		{ href: '/attendance', label: 'Attendance', icon: ScanLine },
-		{ type: 'divider' as const },
-		{ href: '/students', label: 'Class List', icon: UsersRound },
-		{ href: '/records', label: 'Attendance Logs', icon: FileText },
-		{ type: 'divider' as const },
-		{ href: '/reports', label: 'SF2 Reports', icon: FileSpreadsheet },
-		{ href: '/settings', label: 'Configuration', icon: Settings }
-	] as const;
+		import { base } from '$app/paths';
+		import logo from '$lib/assets/logo-seal.png';
+		import { settingsStore } from '$lib/stores/settings.svelte';
+		import { fullPreviewStore } from '$lib/stores/full-preview.svelte';
+		import { onMount } from 'svelte';
+		import {
+			FileSpreadsheet,
+			FileText,
+			LayoutDashboard,
+			PanelLeft,
+			ScanLine,
+			Settings,
+			UsersRound
+		} from 'lucide-svelte';
+	
+		let { children } = $props();
+		let isCollapsed = $state(false);
+		let isOnline = $state(true);
+	
+		function toggleCollapse() {
+			isCollapsed = !isCollapsed;
+		}
+	
+		const navItems = [
+			{ href: '/reports', label: 'SF2 Reports', icon: FileSpreadsheet },
+			{ href: '/attendance', label: 'Attendance', icon: ScanLine },
+			{ type: 'divider' as const },
+			{ href: '/students', label: 'Class List', icon: UsersRound },
+			{ href: '/records', label: 'Attendance Logs', icon: FileText },
+			{ type: 'divider' as const },
+			{ href: '/overview', label: 'Overview', icon: LayoutDashboard },
+			{ href: '/settings', label: 'Configuration', icon: Settings }
+		] as const;
 
 	const attendanceNavLabel = $derived(
 		settingsStore.settings?.attendanceMode === 'card_reader' ? 'Live Session' : 'Attendance'
@@ -72,12 +73,13 @@
 		Skip to content
 	</a>
 
-	<aside
-		class="sidebar flex shrink-0 flex-col border-b border-border bg-background transition-all duration-300 md:min-h-0 md:border-r md:border-b-0 {isCollapsed
-			? 'collapsed md:w-16'
-			: 'md:w-64'}"
-		aria-label="Primary navigation"
-	>
+		{#if !fullPreviewStore.isActive}
+			<aside
+				class="sidebar flex shrink-0 flex-col border-b border-border bg-background transition-all duration-300 md:min-h-0 md:border-r md:border-b-0 {isCollapsed
+					? 'collapsed md:w-16'
+					: 'md:w-64'}"
+				aria-label="Primary navigation"
+			>
 		<!-- Header -->
 		<div class="flex items-center gap-3 px-4 py-3 md:px-4 md:pt-5 md:pb-4">
 			<button
@@ -166,13 +168,14 @@
 				</span>
 			</div>
 		</div>
-	</aside>
+		</aside>
+		{/if}
 
-	<main
-		id="main-content"
-		class="min-h-0 min-w-0 flex-1 overflow-auto focus:outline-none"
-		tabindex="-1"
-	>
-		{@render children()}
-	</main>
+		<main
+			id="main-content"
+			class="min-h-0 min-w-0 flex-1 overflow-auto focus:outline-none"
+			tabindex="-1"
+		>
+			{@render children()}
+		</main>
 </div>

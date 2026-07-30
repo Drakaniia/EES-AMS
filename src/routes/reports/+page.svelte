@@ -1,16 +1,26 @@
-<script lang="ts">
-	import ReportTable from './report-table.svelte';
-	import ReportExportDialogs from './report-export-dialogs.svelte';
-	import ReportMonthPicker from './report-month-picker.svelte';
-	import ReportSf2Progress from './report-sf2-progress.svelte';
-	import ReportSidebar from './ReportSidebar.svelte';
-	import ReportWorkbookDetailsDialog from './ReportWorkbookDetailsDialog.svelte';
-	import ReportMonthSwitchOverlay from './ReportMonthSwitchOverlay.svelte';
-	import ReportLoadingStates from './ReportLoadingStates.svelte';
-	import { createReportPageState } from './report-page-state.svelte';
+	<script lang="ts">
+		import { onDestroy } from 'svelte';
+		import { fullPreviewStore } from '$lib/stores/full-preview.svelte';
+		import ReportTable from './report-table.svelte';
+		import ReportExportDialogs from './report-export-dialogs.svelte';
+		import ReportMonthPicker from './report-month-picker.svelte';
+		import ReportSf2Progress from './report-sf2-progress.svelte';
+		import ReportSidebar from './ReportSidebar.svelte';
+		import ReportWorkbookDetailsDialog from './ReportWorkbookDetailsDialog.svelte';
+		import ReportMonthSwitchOverlay from './ReportMonthSwitchOverlay.svelte';
+		import ReportLoadingStates from './ReportLoadingStates.svelte';
+		import { createReportPageState } from './report-page-state.svelte';
 
-	const page = createReportPageState();
-</script>
+		const page = createReportPageState();
+
+		$effect(() => {
+			fullPreviewStore.isActive = page.fullReviewOpen;
+		});
+
+		onDestroy(() => {
+			fullPreviewStore.isActive = false;
+		});
+	</script>
 
 <svelte:head>
 	<title>Reports - Attendance System</title>
