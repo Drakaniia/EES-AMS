@@ -29,21 +29,33 @@ pub async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, Stri
             });
         }
     };
-    match updater.check().await.map_err(|e| e.to_string())? {
-        Some(update) => Ok(UpdateInfo {
+    match updater.check().await {
+        Ok(Some(update)) => Ok(UpdateInfo {
             available: true,
             version: Some(update.version.clone()),
             notes: update.body.clone(),
             pub_date: update.date.map(|d| d.to_string()),
             current_version,
         }),
-        None => Ok(UpdateInfo {
+        Ok(None) => Ok(UpdateInfo {
             available: false,
             version: None,
             notes: None,
             pub_date: None,
             current_version,
         }),
+        Err(error) => {
+            // No published release, unreachable endpoint, or network failure:
+            // report "no update available" instead of surfacing an error.
+            log::debug!("update check failed: {error}");
+            Ok(UpdateInfo {
+                available: false,
+                version: None,
+                notes: None,
+                pub_date: None,
+                current_version,
+            })
+        }
     }
 }
 
