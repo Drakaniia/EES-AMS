@@ -33,3 +33,7 @@ vite.config.ts.timestamp-*
 .opencode/plugins/emdash-notifications.js
 .antigravitycli/
 .claude/settings.local.json
+
+# Agent scratch
+.superpowers/
+

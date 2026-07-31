@@ -109,6 +109,7 @@
 			onRosterQueryChange={(value) => (attendanceState.rosterQuery = value)}
 			onGetNextAttendanceType={(student) => attendanceState.getNextAttendanceType(student)}
 			onGetStudentStatus={(student) => attendanceState.getStudentStatus(student)}
+			onMarkAbsent={(student: Student) => void attendanceState.markAbsent(student)}
 		>
 			{#snippet dateNav()}
 				<AttendanceDateNav
@@ -136,6 +137,7 @@
 	getStudentStatus={(student) => attendanceState.getStudentStatus(student)}
 	markStudent={(student: Student, action: AttendanceType | null, closePicker = false) =>
 		attendanceState.markStudent(student, action, closePicker)}
+	onMarkAbsent={(student: Student) => void attendanceState.markAbsent(student)}
 />
 
 <AttendanceLog
