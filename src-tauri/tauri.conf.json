@@ -1,7 +1,7 @@
 {
 	"$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
 	"productName": "ees_ams",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"identifier": "com.ees.ams",
 	"build": {
 		"frontendDist": "../build",
@@ -29,7 +29,7 @@
 	"plugins": {
 		"updater": {
 			"endpoints": ["https://github.com/Drakaniia/EES-AMS/releases/latest/download/latest.json"],
-			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI0NEJFQjk5M0YyOTEzMwpSV1F6a2ZLVHViNUVDL1FzUkQrWjNYV0xJOGozZlRCa0U1cmRPLzRxMFRyencybXg2R3lkL1Fodwo=",
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM5OTc0MjQ4NzU0QkZDQkUKUldTKy9FdDFTRUtYT2E3SmpKREhSUlE0bVNaVmZPcTdyenh0OVN5bzJCa2FnRnovUEdyZ3daU28K",
 			"windows": {
 				"installMode": "passive"
 			}
