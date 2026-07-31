@@ -24,9 +24,11 @@
 ### Task 0: Commit pre-existing present-by-default baseline
 
 **Files:**
+
 - Commit: `src/routes/attendance/+page.svelte`, `src/routes/attendance/attendance-grid.svelte`, `src/routes/attendance/attendance-manual-log-dialog.svelte`, `src/routes/attendance/attendance-page-state.svelte.ts`, `src/routes/attendance/attendance-state.svelte.ts`, `src/routes/attendance/day-overview/+page.svelte`
 
 **Interfaces:**
+
 - Consumes: the current (already modified) working tree.
 - Produces: a clean baseline where `AttendancePageState` exposes `absentStudentIds: SvelteSet<string>`, `getStudentStatus()` returning `present | absent | pending` tones, `presentCount`/`absentCount`/`pendingCount`, `matchesSelectedClass(student)`, `getLastEventForSession(student)`, and `LogOptions.suppressLate`. Later tasks edit on top of these.
 
@@ -52,10 +54,12 @@ git commit -m "feat(attendance): present-by-default marking baseline"
 ### Task 1: `LogOptions.message` — custom toast on attendance removal
 
 **Files:**
+
 - Modify: `src/routes/attendance/attendance-state.svelte.ts:16-20` (LogOptions type)
 - Modify: `src/routes/attendance/attendance-page-state.svelte.ts` — `logForStudent` delete branch (the `if (type === null && last)` block)
 
 **Interfaces:**
+
 - Consumes: existing `LogOptions` type with `timestamp?` and `suppressLate?`.
 - Produces: `LogOptions.message?: string` — when present, overrides the `{name} - Attendance removed` toast in the delete-record branch. Task 2 passes it.
 
@@ -88,26 +92,26 @@ export type LogOptions = {
 In `src/routes/attendance/attendance-page-state.svelte.ts`, inside `logForStudent`, find the delete branch:
 
 ```typescript
-		if (type === null && last) {
-			try {
-				await deleteEvent(last.id, 'Toggled off by user');
-				this.events = this.events.filter((e) => e.id !== last.id);
-				this.attendanceLog?.removeLogEntry(last.id);
-				this.attendanceLog?.showToast(`${student.name} - Attendance removed`);
-				this.attendanceLog?.resetUndo();
-				this.absentStudentIds.add(student.id);
-				return;
-			} catch {
-				this.attendanceLog?.showToast('Failed to remove attendance', false);
-				return;
-			}
-		}
+if (type === null && last) {
+	try {
+		await deleteEvent(last.id, 'Toggled off by user');
+		this.events = this.events.filter((e) => e.id !== last.id);
+		this.attendanceLog?.removeLogEntry(last.id);
+		this.attendanceLog?.showToast(`${student.name} - Attendance removed`);
+		this.attendanceLog?.resetUndo();
+		this.absentStudentIds.add(student.id);
+		return;
+	} catch {
+		this.attendanceLog?.showToast('Failed to remove attendance', false);
+		return;
+	}
+}
 ```
 
 Replace the `showToast` line (keep everything else identical):
 
 ```typescript
-				this.attendanceLog?.showToast(options.message ?? `${student.name} - Attendance removed`);
+this.attendanceLog?.showToast(options.message ?? `${student.name} - Attendance removed`);
 ```
 
 - [ ] **Step 3: Verify**
@@ -127,9 +131,11 @@ git commit -m "feat(attendance): support custom toast message on attendance remo
 ### Task 2: `markAbsent()` method on `AttendancePageState`
 
 **Files:**
+
 - Modify: `src/routes/attendance/attendance-page-state.svelte.ts` — insert after `markStudent` (which ends around line 503)
 
 **Interfaces:**
+
 - Consumes: `LogOptions.message` (Task 1), `getLastEventForSession(student)`, `absentStudentIds`, `logForStudent`, `attendanceLog`, `isProcessing`, `dateLoading`.
 - Produces: `async markAbsent(student: Student): Promise<void>` — public method Task 6 wires to the UI props.
 
@@ -182,9 +188,11 @@ git commit -m "feat(attendance): add markAbsent shortcut state method"
 ### Task 3: "Present all" skips absent-marked students
 
 **Files:**
+
 - Modify: `src/routes/attendance/attendance-page-state.svelte.ts` — `presentAllStudents()` (three edits)
 
 **Interfaces:**
+
 - Consumes: `absentStudentIds` (baseline), existing `studentsToMark` pipeline.
 - Produces: `presentAllStudents()` behavior — records every unrecorded student EXCEPT `absentStudentIds` members; absent highlights are kept; toasts include the kept-absent count and the all-recorded-or-absent edge case. Task 6 manually verifies.
 
@@ -193,23 +201,22 @@ git commit -m "feat(attendance): add markAbsent shortcut state method"
 In `presentAllStudents()`, change:
 
 ```typescript
-		const studentsToMark = this.students
-			.filter((student) => this.matchesSelectedClass(student))
-			.sort((a, b) => a.name.localeCompare(b.name))
-			.filter((student) => this.getNextAttendanceType(student) === 'in');
+const studentsToMark = this.students
+	.filter((student) => this.matchesSelectedClass(student))
+	.sort((a, b) => a.name.localeCompare(b.name))
+	.filter((student) => this.getNextAttendanceType(student) === 'in');
 ```
 
 to:
 
 ```typescript
-		const studentsToMark = this.students
-			.filter((student) => this.matchesSelectedClass(student))
-			.sort((a, b) => a.name.localeCompare(b.name))
-			.filter(
-				(student) =>
-					this.getNextAttendanceType(student) === 'in' &&
-					!this.absentStudentIds.has(student.id)
-			);
+const studentsToMark = this.students
+	.filter((student) => this.matchesSelectedClass(student))
+	.sort((a, b) => a.name.localeCompare(b.name))
+	.filter(
+		(student) =>
+			this.getNextAttendanceType(student) === 'in' && !this.absentStudentIds.has(student.id)
+	);
 ```
 
 - [ ] **Step 2: Distinguish the empty-result toast**
@@ -217,23 +224,23 @@ to:
 Change:
 
 ```typescript
-		if (studentsToMark.length === 0) {
-			this.attendanceLog?.showToast('All students are already recorded');
-			return;
-		}
+if (studentsToMark.length === 0) {
+	this.attendanceLog?.showToast('All students are already recorded');
+	return;
+}
 ```
 
 to:
 
 ```typescript
-		if (studentsToMark.length === 0) {
-			this.attendanceLog?.showToast(
-				this.absentStudentIds.size > 0
-					? 'All students are already recorded or marked absent'
-					: 'All students are already recorded'
-			);
-			return;
-		}
+if (studentsToMark.length === 0) {
+	this.attendanceLog?.showToast(
+		this.absentStudentIds.size > 0
+			? 'All students are already recorded or marked absent'
+			: 'All students are already recorded'
+	);
+	return;
+}
 ```
 
 - [ ] **Step 3: Keep absent highlights and report them**
@@ -241,25 +248,23 @@ to:
 Change:
 
 ```typescript
-			// Everyone is present again - the session absent highlight no longer applies.
-			this.absentStudentIds.clear();
+// Everyone is present again - the session absent highlight no longer applies.
+this.absentStudentIds.clear();
 
-			this.attendanceLog?.showToast(
-				`${createdEvents.length} ${createdEvents.length === 1 ? 'student' : 'students'} marked present`
-			);
+this.attendanceLog?.showToast(
+	`${createdEvents.length} ${createdEvents.length === 1 ? 'student' : 'students'} marked present`
+);
 ```
 
 to (delete the `clear()` call entirely):
 
 ```typescript
-			// Absent-marked students were skipped and keep their highlight.
-			const absentKept =
-				this.absentStudentIds.size > 0
-					? ` · ${this.absentStudentIds.size} kept absent`
-					: '';
-			this.attendanceLog?.showToast(
-				`${createdEvents.length} ${createdEvents.length === 1 ? 'student' : 'students'} marked present${absentKept}`
-			);
+// Absent-marked students were skipped and keep their highlight.
+const absentKept =
+	this.absentStudentIds.size > 0 ? ` · ${this.absentStudentIds.size} kept absent` : '';
+this.attendanceLog?.showToast(
+	`${createdEvents.length} ${createdEvents.length === 1 ? 'student' : 'students'} marked present${absentKept}`
+);
 ```
 
 - [ ] **Step 4: Verify**
@@ -279,9 +284,11 @@ git commit -m "feat(attendance): present-all skips absent-marked students"
 ### Task 4: Right-click on student boxes and list rows (AttendanceGrid)
 
 **Files:**
+
 - Modify: `src/routes/attendance/attendance-grid.svelte` (props destructure + type, boxes view button, list view row)
 
 **Interfaces:**
+
 - Consumes: `markAbsent` behavior (Task 2, via the new prop).
 - Produces: `AttendanceGrid` prop `onMarkAbsent: (student: Student) => void` — required (no default). Task 6 passes it.
 
@@ -290,18 +297,13 @@ git commit -m "feat(attendance): present-all skips absent-marked students"
 In the props destructure, change:
 
 ```typescript
-		onGetNextAttendanceType,
-		onGetStudentStatus,
-		dateNav
+(onGetNextAttendanceType, onGetStudentStatus, dateNav);
 ```
 
 to:
 
 ```typescript
-		onGetNextAttendanceType,
-		onGetStudentStatus,
-		onMarkAbsent,
-		dateNav
+(onGetNextAttendanceType, onGetStudentStatus, onMarkAbsent, dateNav);
 ```
 
 In the props type block, change:
@@ -384,9 +386,11 @@ git commit -m "feat(attendance): right-click marks absent in grid views"
 ### Task 5: Right-click in the Manual log dialog
 
 **Files:**
+
 - Modify: `src/routes/attendance/attendance-manual-log-dialog.svelte` (props destructure + type, picker row)
 
 **Interfaces:**
+
 - Consumes: `markAbsent` behavior (Task 2, via the new prop).
 - Produces: `AttendanceManualLogDialog` prop `onMarkAbsent: (student: Student) => void` — required. Task 6 passes it. Dialog stays open after right-click (no `closePicker`).
 
@@ -395,14 +399,13 @@ git commit -m "feat(attendance): right-click marks absent in grid views"
 In the props destructure, change:
 
 ```typescript
-		markStudent = async () => {}
+markStudent = async () => {};
 ```
 
 to:
 
 ```typescript
-		markStudent = async () => {},
-		onMarkAbsent = () => {}
+((markStudent = async () => {}), (onMarkAbsent = () => {}));
 ```
 
 In the props type block, change:
@@ -470,9 +473,11 @@ git commit -m "feat(attendance): right-click marks absent in manual log dialog"
 ### Task 6: Wire `onMarkAbsent` in `+page.svelte` + full verification
 
 **Files:**
+
 - Modify: `src/routes/attendance/+page.svelte` (both component usages)
 
 **Interfaces:**
+
 - Consumes: `attendanceState.markAbsent` (Task 2), `onMarkAbsent` props (Tasks 4 & 5).
 - Produces: the fully wired feature.
 
@@ -481,9 +486,9 @@ git commit -m "feat(attendance): right-click marks absent in manual log dialog"
 Change:
 
 ```svelte
-			onGetNextAttendanceType={(student) => attendanceState.getNextAttendanceType(student)}
-			onGetStudentStatus={(student) => attendanceState.getStudentStatus(student)}
-		>
+onGetNextAttendanceType={(student) => attendanceState.getNextAttendanceType(student)}
+onGetStudentStatus={(student) => attendanceState.getStudentStatus(student)}
+>
 ```
 
 to:

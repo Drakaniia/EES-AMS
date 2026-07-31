@@ -12,6 +12,7 @@ Complete the remaining items from the ees-ams audit report. The audit identified
 ### 1. Split `workbook.rs` (925 lines → target: ≤400)
 
 Current structure under `excel_com/`:
+
 - `workbook.rs` (925) — high-level API, still too large
 - `workbook_utils.rs` — already extracted
 - `com_session.rs` — already extracted
@@ -20,6 +21,7 @@ Current structure under `excel_com/`:
 - `calendar.rs` — already extracted
 
 **Approach:** Extract remaining COM infrastructure and I/O operations into:
+
 - `workbook_com.rs` — ComObject, ComVariant, ExcelSession, ComApartment
 - `workbook_io.rs` — read/write marks, formulas, batch operations
 

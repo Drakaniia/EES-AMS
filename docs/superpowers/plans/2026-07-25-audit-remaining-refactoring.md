@@ -22,6 +22,7 @@
 ### Task 1: Split `workbook.rs` (925 → ≤400 lines)
 
 **Files:**
+
 - Modify: `src-tauri/src/sf2/excel_com/workbook.rs`
 - Create: `src-tauri/src/sf2/excel_com/workbook_analysis.rs` — analyze() method
 - Create: `src-tauri/src/sf2/excel_com/workbook_io.rs` — write_marks, write_marks_force, write_formulas, write_metadata
@@ -29,6 +30,7 @@
 - Modify: `src-tauri/src/sf2/excel_com/mod.rs` — add new modules
 
 **Interfaces:**
+
 - Consumes: `WorkbookSession` struct (stays in workbook.rs), `ComObject`, `ExcelSession`, helpers from `workbook_utils.rs`
 - Produces: `WorkbookSession` methods moved to new files via `impl` blocks in the same crate
 
@@ -45,10 +47,12 @@
 ### Task 2: Split `attendance_service.rs` (503 → ≤400 lines)
 
 **Files:**
+
 - Modify: `src-tauri/src/sf2/attendance_service.rs`
 - Modify: `src-tauri/src/sf2/mod.rs`
 
 **Interfaces:**
+
 - Consumes: Sf2Repository, excel helpers, progress types
 - Produces: smaller attendance_service.rs
 
@@ -63,6 +67,7 @@
 ### Task 3: Split `excel_service.rs` (455 → ≤400 lines)
 
 **Files:**
+
 - Modify: `src-tauri/src/sf2/excel_service.rs`
 - Modify: `src-tauri/src/sf2/mod.rs`
 
@@ -76,6 +81,7 @@
 ### Task 4: Split `roster_parser.rs` (484 → ≤400 lines)
 
 **Files:**
+
 - Modify: `src-tauri/src/sf2/roster_parser.rs`
 - Modify: `src-tauri/src/sf2/mod.rs`
 
@@ -89,6 +95,7 @@
 ### Task 5: Split `data_transfer.rs` (436 → ≤400 lines)
 
 **Files:**
+
 - Modify: `src-tauri/src/commands/data_transfer.rs`
 - Consider: extracting business logic into `src-tauri/src/sf2/` domain layer
 
@@ -101,6 +108,7 @@
 ### Task 6: Split `roster_sync.rs` (470 → ≤400 lines)
 
 **Files:**
+
 - Modify: `src-tauri/src/sf2/roster_sync.rs`
 - Modify: `src-tauri/src/sf2/mod.rs`
 
@@ -114,6 +122,7 @@
 ### Task 7: Reduce `reports/+page.svelte` (534 → ≤400 lines)
 
 **Files:**
+
 - Modify: `src/routes/reports/+page.svelte`
 - Potentially: create new child components
 
@@ -126,6 +135,7 @@
 ### Task 8: Refactor `app.css` (619 lines)
 
 **Files:**
+
 - Modify: `src/app.css`
 - Potentially: create `src/lib/components/*/*.css` per-component files
 

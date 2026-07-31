@@ -50,12 +50,14 @@ _Low effort, safe changes — can be done without touching business logic._
 - [ ] **Move sample Excel files into a dedicated `docs/samples/` subdirectory** — `docs/SAMPLE_AUTOMATED SF 2 2025-2026.xls` (note the spaces in the filename — also rename to kebab-case like `sf2-sample-2025-2026.xls`).
 
   **Before:**
+
   ```
   docs/
   ├── SAMPLE_AUTOMATED SF 2 2025-2026.xls   ← (spaces in name, inconsistent)
   ```
 
   **After:**
+
   ```
   docs/
   ├── samples/
@@ -84,6 +86,7 @@ _Medium effort — split oversized Rust files and reduce code duplication._
   - Batch operations session management
 
   **Proposed split:**
+
   ```mermaid
   flowchart LR
     A[workbook.rs<br/>1548 lines] --> B[workbook.rs<br/>~400 lines: high-level API]
@@ -93,6 +96,7 @@ _Medium effort — split oversized Rust files and reduce code duplication._
   ```
 
   **Target structure:**
+
   ```
   src-tauri/src/sf2/excel_com/
   ├── mod.rs              (re-exports from sub-modules)
@@ -107,6 +111,7 @@ _Medium effort — split oversized Rust files and reduce code duplication._
   Contains both the attendance syncing logic and the progress-emitting orchestration. Extract the progress emission and the actual mark-writing logic.
 
   **Proposed split:**
+
   ```
   src-tauri/src/sf2/
   ├── attendance_service.rs    (~400 lines: main sync + open logic)
@@ -154,6 +159,7 @@ _Medium effort — split oversized Rust files and reduce code duplication._
   - Business logic moved to the state module (`report-state.svelte.ts`)
 
   **Before:**
+
   ```mermaid
   flowchart LR
     A[+page.svelte<br/>1255 lines] --> B[UI markup]
@@ -163,6 +169,7 @@ _Medium effort — split oversized Rust files and reduce code duplication._
   ```
 
   **After (proposed):**
+
   ```
   src/routes/reports/
   ├── +page.svelte           (~150 lines: page layout composition)
@@ -175,6 +182,7 @@ _Medium effort — split oversized Rust files and reduce code duplication._
 - [ ] **Refactor `src/routes/attendance/+page.svelte`** — 803 lines (threshold: ≤400)
 
   Extract into smaller components:
+
   ```
   src/routes/attendance/
   ├── +page.svelte           (~150 lines: page layout)
@@ -203,6 +211,7 @@ _Medium effort — split oversized Rust files and reduce code duplication._
 ### Phase 2: Test File Note
 
 Test files have high line counts but this is less of a concern:
+
 - `src-tauri/src/sf2/__tests__/attendance_service_tests.rs` — 1175 lines 🟢
 - `src-tauri/src/sf2/__tests__/roster_tests.rs` — 931 lines 🟢
 - `src-tauri/src/sf2/excel_com/__tests__/workbook_tests.rs` — 550 lines 🟢
@@ -218,6 +227,7 @@ _Higher effort — reorganize folders, consolidate naming._
 #### 3A: Consolidate AGENTS.md Files
 
 - [ ] **Consolidate AGENTS.md files into `docs/`** — 5 AGENTS.md files scattered:
+
   ```
   ./
   ├── AGENTS.md                          ← (root - project overview)
@@ -232,6 +242,7 @@ _Higher effort — reorganize folders, consolidate naming._
   **Alternative:** Keep the scattered approach but ensure they are referenced from a central `docs/AGENTS.md` index.
 
   **Current approach diagram:**
+
   ```mermaid
   flowchart LR
     A["Root AGENTS.md<br/>(project KB)"] --> B["src/AGENTS.md<br/>(frontend)"]
@@ -245,6 +256,7 @@ _Higher effort — reorganize folders, consolidate naming._
 - [ ] **Consider moving SQL files from `src-tauri/sql/sf2/` into `src-tauri/src/sf2/`** — 16 SQL files live outside the source tree in a `sql/` directory. Since these are embedded SQL queries (not database migrations), they should live closer to the Rust modules that use them.
 
   **Before:**
+
   ```
   src-tauri/
   ├── sql/
@@ -254,6 +266,7 @@ _Higher effort — reorganize folders, consolidate naming._
   ```
 
   **After (proposed):**
+
   ```
   src-tauri/src/sf2/
   ├── sql/               ← 16 SQL files co-located with the SF2 module
@@ -288,12 +301,14 @@ _Higher effort — reorganize folders, consolidate naming._
 Use this checklist to track completion. Mark `[x]` when a task is done:
 
 **Phase 1: Quick Cleanup** — `[ ] / 4 completed`
+
 - `[ ]` Remove empty `.vibe/` directory
 - `[ ]` Remove/relocate orphaned work-in-progress files (`working_copy_do_not_commit.xls`, `test.md`)
 - `[ ]` Move sample Excel files to `docs/samples/`
 - `[ ]` Standardize `docs/readme.md` naming
 
 **Phase 2: File Refactoring** — `[ ] / 14 completed`
+
 - `[ ]` Split `workbook.rs` (1548 lines)
 - `[ ]` Split `attendance_service.rs` (966 lines)
 - `[ ]` Split `excel_service.rs` (700 lines)
@@ -310,6 +325,7 @@ Use this checklist to track completion. Mark `[x]` when a task is done:
 - `[ ]` Refactor `DateRangePicker.svelte` (426 lines)
 
 **Phase 3: Structural Refactoring** — `[ ] / 4 completed`
+
 - `[ ]` Consolidate AGENTS.md files
 - `[ ]` Move SQL files into source tree
 - `[ ]` Review/refactor `app.css` (619 lines)
@@ -319,38 +335,41 @@ Use this checklist to track completion. Mark `[x]` when a task is done:
 
 ## Key Structural Statistics
 
-| Metric | Measured | Threshold | Status |
-|--------|----------|-----------|--------|
-| Total source files | 173 | — | 🟢 |
-| Dir with most files | `src-tauri/src/sf2` (21 files) | ≤30 | 🟢 OK |
-| Largest file | `workbook.rs` (1548 lines) | ≤400 | 🔴 EXCEEDS |
-| Files >400 lines (source) | 19 | — | 🔴 19 offenders |
-| Max nesting depth (src/) | 3 levels | ≤4 | 🟢 OK |
-| Max nesting depth (src-tauri/) | 4 levels | ≤4 | 🟡 At threshold |
-| Max nesting depth (docs/) | 5 levels | ≤4 | 🟡 EXCEEDS |
-| Empty directories | 1 (`.vibe/`) | 0 | 🟢 Suggestion |
-| Test files (frontend) | 2 | — | 🟢 Low count |
-| Test files (backend) | 8 | — | 🟢 |
-| MD files in docs/ | 10 | — | 🟢 Well organized |
-| AGENTS.md files | 5 (scattered) | — | 🟢 Suggestion |
+| Metric                         | Measured                       | Threshold | Status            |
+| ------------------------------ | ------------------------------ | --------- | ----------------- |
+| Total source files             | 173                            | —         | 🟢                |
+| Dir with most files            | `src-tauri/src/sf2` (21 files) | ≤30       | 🟢 OK             |
+| Largest file                   | `workbook.rs` (1548 lines)     | ≤400      | 🔴 EXCEEDS        |
+| Files >400 lines (source)      | 19                             | —         | 🔴 19 offenders   |
+| Max nesting depth (src/)       | 3 levels                       | ≤4        | 🟢 OK             |
+| Max nesting depth (src-tauri/) | 4 levels                       | ≤4        | 🟡 At threshold   |
+| Max nesting depth (docs/)      | 5 levels                       | ≤4        | 🟡 EXCEEDS        |
+| Empty directories              | 1 (`.vibe/`)                   | 0         | 🟢 Suggestion     |
+| Test files (frontend)          | 2                              | —         | 🟢 Low count      |
+| Test files (backend)           | 8                              | —         | 🟢                |
+| MD files in docs/              | 10                             | —         | 🟢 Well organized |
+| AGENTS.md files                | 5 (scattered)                  | —         | 🟢 Suggestion     |
 
 ---
 
 ## Recommendations Summary by Effort
 
 ### Low Effort (Phase 1)
+
 1. Delete `.vibe/` empty directory
 2. Remove/relocate `docs/working_copy_do_not_commit.xls` and `docs/test.md`
 3. Move sample XLS to `docs/samples/` with proper naming
 4. Rename `docs/readme.md` to clarify purpose
 
 ### Medium Effort (Phase 2)
+
 5. Split 10 oversized Rust files (starting with the biggest: `workbook.rs` at 1548 lines)
 6. Split 3 oversized Svelte route pages
 7. Split the largest state file (`sf2-state.svelte.ts` at 457 lines)
 8. Reduce `DateRangePicker.svelte` or `app.css`
 
 ### Higher Effort (Phase 3)
+
 9. Consolidate AGENTS.md knowledge base
 10. Move `sql/sf2/` into source tree
 11. Address nesting depth in `docs/superpowers/specs/`
@@ -360,4 +379,3 @@ Use this checklist to track completion. Mark `[x]` when a task is done:
 > **⚠️ Before implementing any refactoring that splits or moves code, write tests for existing behavior first, then refactor. This ensures refactored code preserves all functionality and catches regressions early.**
 
 > **⚠️ The `sf2/` module is the most complex subsystem. Splitting these files should be done carefully, with particular attention to the COM automation and Excel I/O code paths, which are hard to test in CI.**
-

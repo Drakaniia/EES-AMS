@@ -13,9 +13,9 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"typecheck": "svelte-check --tsconfig ./tsconfig.json",
-		"tauri": "tauri",
+		"tauri": "bun --env-file=.env x tauri",
 		"tauri:dev": "tauri dev",
-		"tauri:build": "tauri build",
+		"tauri:build": "bun --env-file=.env run tauri build",
 		"test": "vitest run",
 		"test:watch": "vitest"
 	},

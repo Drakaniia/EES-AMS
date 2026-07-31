@@ -12,6 +12,7 @@ This is the single authoritative AGENTS.md for the EES-AMS project. It consolida
 EES-AMS: cross-platform Tauri v2 desktop app for elementary school attendance management with ID card reader support. SvelteKit 5 + TypeScript + TailwindCSS 4 frontend, Rust with rusqlite + r2d2 backend, SQLite database. Offline-first, Windows-primary.
 
 ### Key Facts
+
 - Card reader = USB HID keyboard wedge mode (emulated keystrokes)
 - No auth — single-teacher desktop use case
 - Windows NSIS installer via Tauri bundler
@@ -37,34 +38,34 @@ ees_ams/
 
 ## 3. WHERE TO LOOK
 
-| Task | Location | Notes |
-|------|----------|-------|
-| Frontend pages | `src/routes/` | SvelteKit file-based routing per feature |
-| Shared UI primitives | `src/lib/components/ui/` | Dialog, Toast, Pagination, etc. |
-| Tauri command wrappers | `src/lib/db-rust/` | Frontend→Rust invoke bridge |
-| Feature business logic | `src/lib/features/` | Per-feature TS workflows (only settings currently) |
-| Types | `src/lib/types.ts` | Shared TS interfaces |
-| Rust Tauri commands | `src-tauri/src/commands/` | `#[tauri::command]` handlers |
-| Domain models + schema | `src-tauri/src/domain/` | Business logic, DB schema, migrations |
-| Database repos | `src-tauri/src/infrastructure/database/` | Pool + repository pattern |
-| SF2 Excel automation | `src-tauri/src/sf2/` | COM-based Excel workbook I/O |
-| Backup system | `src-tauri/src/backup/` | Local + Google Drive sync |
-| Shared Rust utilities | `src-tauri/src/shared/` | Cross-cutting helpers |
+| Task                   | Location                                 | Notes                                              |
+| ---------------------- | ---------------------------------------- | -------------------------------------------------- |
+| Frontend pages         | `src/routes/`                            | SvelteKit file-based routing per feature           |
+| Shared UI primitives   | `src/lib/components/ui/`                 | Dialog, Toast, Pagination, etc.                    |
+| Tauri command wrappers | `src/lib/db-rust/`                       | Frontend→Rust invoke bridge                        |
+| Feature business logic | `src/lib/features/`                      | Per-feature TS workflows (only settings currently) |
+| Types                  | `src/lib/types.ts`                       | Shared TS interfaces                               |
+| Rust Tauri commands    | `src-tauri/src/commands/`                | `#[tauri::command]` handlers                       |
+| Domain models + schema | `src-tauri/src/domain/`                  | Business logic, DB schema, migrations              |
+| Database repos         | `src-tauri/src/infrastructure/database/` | Pool + repository pattern                          |
+| SF2 Excel automation   | `src-tauri/src/sf2/`                     | COM-based Excel workbook I/O                       |
+| Backup system          | `src-tauri/src/backup/`                  | Local + Google Drive sync                          |
+| Shared Rust utilities  | `src-tauri/src/shared/`                  | Cross-cutting helpers                              |
 
 ---
 
 ## 4. CODE MAP
 
-| Symbol | Type | Location | Role |
-|--------|------|----------|------|
-| `app_lib::run` | fn | `src-tauri/src/lib.rs` | Tauri app bootstrap |
-| `commands::*` | fns | `src-tauri/src/commands/` | All Tauri command handlers |
-| `domain::models` | types | `src-tauri/src/domain/models.rs` | Core domain types (StudentId, EventId, models) |
-| `infrastructure::database` | module | `src-tauri/src/infrastructure/database/` | Pool managers + repos |
-| `sf2::*` | module | `src-tauri/src/sf2/` | Excel import/export |
-| `backup::*` | module | `src-tauri/src/backup/` | Backup + restore logic |
-| `db-rust/*` | TS modules | `src/lib/db-rust/` | Frontend→Rust API layer |
-| `features/settings/*` | TS modules | `src/lib/features/settings/` | Settings workflow logic |
+| Symbol                     | Type       | Location                                 | Role                                           |
+| -------------------------- | ---------- | ---------------------------------------- | ---------------------------------------------- |
+| `app_lib::run`             | fn         | `src-tauri/src/lib.rs`                   | Tauri app bootstrap                            |
+| `commands::*`              | fns        | `src-tauri/src/commands/`                | All Tauri command handlers                     |
+| `domain::models`           | types      | `src-tauri/src/domain/models.rs`         | Core domain types (StudentId, EventId, models) |
+| `infrastructure::database` | module     | `src-tauri/src/infrastructure/database/` | Pool managers + repos                          |
+| `sf2::*`                   | module     | `src-tauri/src/sf2/`                     | Excel import/export                            |
+| `backup::*`                | module     | `src-tauri/src/backup/`                  | Backup + restore logic                         |
+| `db-rust/*`                | TS modules | `src/lib/db-rust/`                       | Frontend→Rust API layer                        |
+| `features/settings/*`      | TS modules | `src/lib/features/settings/`             | Settings workflow logic                        |
 
 ---
 
@@ -108,63 +109,71 @@ cargo build --release    # Release build
 ### 6.2 Frontend / SvelteKit 5
 
 #### File Conventions
+
 - `+page.svelte` = single file per route, but extract heavy logic to `*-state.svelte.ts` when >400 lines
 - `$lib/` aliases to `src/lib/` (do not use relative `../../` for shared code)
 - Route state lives in `src/routes/<route>/<route>-state.svelte.ts`
 - Feature logic lives in `src/lib/features/<feature>/`
 
 #### Data Loading
+
 - Route pages use `<script lang="ts">` with explicit `$state` for reactive data
 - No `+page.server.ts` or `+page.ts` load functions — all data fetched via `invoke()` inside `$effect` or `onMount`
 - `onMount` runs once; `$effect` tracks dependencies for re-fetch
 
 #### TypeScript
+
 - Prefer `$derived` over manual recomputation
 - Use `$derived.by(() => { ... })` for multi-step derivations
 - No `any` types — use `unknown` + type guards
 - Event handlers get `(e: Event)` not `(e: any)`
 
 #### UI Components
+
 - Scoped styles in `<style>` blocks (no global leakage)
 - No CSS preprocessors — raw CSS + TailwindCSS 4 (v4, not v3 — `@import 'tailwindcss'`, no `@tailwind` directives)
 - All shared UI in `src/lib/components/ui/`
 - Components receive props via `interface Props` + `$props()` destructuring
 
 #### State Pattern
+
 - `*-state.svelte.ts` exports a class with `$state`/`$derived`/`$effect` fields
 - Methods are arrow function properties or regular functions called with the instance
 - Constructor runs `$effect` blocks for reactive side effects
 - Usage in route: `let state = new XxxPageState();` then `state.method()` in template
 
 #### Key Files
-| File | Purpose |
-|------|---------|
-| `src/lib/types.ts` | All shared TS interfaces |
-| `src/lib/db-rust/students.ts` | Student CRUD wrappers |
-| `src/lib/db-rust/classes.ts` | Class CRUD wrappers |
-| `src/lib/db-rust/attendance.ts` | Event CRUD wrappers |
-| `src/lib/db-rust/settings.ts` | Settings + SF2 wrappers |
-| `src/lib/stores/settings.svelte.ts` | Global settings singleton |
-| `src/lib/features/settings/native.ts` | Native (Rust) API for settings |
+
+| File                                        | Purpose                            |
+| ------------------------------------------- | ---------------------------------- |
+| `src/lib/types.ts`                          | All shared TS interfaces           |
+| `src/lib/db-rust/students.ts`               | Student CRUD wrappers              |
+| `src/lib/db-rust/classes.ts`                | Class CRUD wrappers                |
+| `src/lib/db-rust/attendance.ts`             | Event CRUD wrappers                |
+| `src/lib/db-rust/settings.ts`               | Settings + SF2 wrappers            |
+| `src/lib/stores/settings.svelte.ts`         | Global settings singleton          |
+| `src/lib/features/settings/native.ts`       | Native (Rust) API for settings     |
 | `src/lib/features/settings/sf2-workbook.ts` | SF2 workbook pure helper functions |
-| `src/lib/student-analytics.ts` | Attendance analytics |
-| `src/lib/components/ui/Dialog.svelte` | Reusable dialog |
-| `src/lib/components/ui/Toast.svelte` | Toast notifications |
+| `src/lib/student-analytics.ts`              | Attendance analytics               |
+| `src/lib/components/ui/Dialog.svelte`       | Reusable dialog                    |
+| `src/lib/components/ui/Toast.svelte`        | Toast notifications                |
 
 #### Route Key Files
-| File | Purpose |
-|------|---------|
+
+| File                        | Purpose                         |
+| --------------------------- | ------------------------------- |
 | `src/routes/+layout.svelte` | Root layout (AppShell, favicon) |
-| `src/routes/+layout.ts` | CSR-only (no SSR) |
-| `src/routes/layout.css` | Imports `../app.css` |
-| `src/routes/dashboard/` | Home/dashboard page |
-| `src/routes/students/` | Student list + CRUD |
-| `src/routes/attendance/` | Daily attendance |
-| `src/routes/reports/` | Reports and analytics |
-| `src/routes/settings/` | Settings + SF2 workbook |
-| `src/routes/records/` | Audit records |
+| `src/routes/+layout.ts`     | CSR-only (no SSR)               |
+| `src/routes/layout.css`     | Imports `../app.css`            |
+| `src/routes/dashboard/`     | Home/dashboard page             |
+| `src/routes/students/`      | Student list + CRUD             |
+| `src/routes/attendance/`    | Daily attendance                |
+| `src/routes/reports/`       | Reports and analytics           |
+| `src/routes/settings/`      | Settings + SF2 workbook         |
+| `src/routes/records/`       | Audit records                   |
 
 #### Pre-PR Checks (Frontend)
+
 1. `bun run check` — type checks (0 errors)
 2. `bun run lint` — lint clean
 3. Verify `invoke()` error paths handled (try/catch, user-visible message)
@@ -174,6 +183,7 @@ cargo build --release    # Release build
 ### 6.3 Backend / Rust
 
 #### Tauri Commands
+
 - All commands in `src-tauri/src/commands/`
 - NEW commands → new `.rs` file in `commands/`
 - Register in `commands/mod.rs` — add `pub mod XxxCommand;` and `handlers! { XxxCommand::execute }`
@@ -182,6 +192,7 @@ cargo build --release    # Release build
 - `execute()` is the entry point — parse args, call service layer, map errors to strings
 
 #### Module Organization
+
 - `src-tauri/src/domain/` — models, schema, SQL migrations
 - `src-tauri/src/infrastructure/database/` — connection pool, repos
 - `src-tauri/src/commands/` — Tauri command handlers
@@ -191,6 +202,7 @@ cargo build --release    # Release build
 - `src-tauri/src/shared/` — cross-cutting helpers
 
 #### Database / SQLite
+
 - Always use `r2d2::Pool` for connections — never manual SQLite handles
 - Repos in `infrastructure/database/repos/` — each repo is a struct with a `new(pool)` constructor
 - Queries: use SQL files in `src-tauri/src/sf2/sql/` with `include_str!()` for SF2 module; for non-SF2 repos, inline SQL in repo methods is acceptable
@@ -198,11 +210,13 @@ cargo build --release    # Release build
 - Migrations: idempotent ALTER TABLE IF NOT EXISTS in `migrate()` per schema
 
 #### Testing
+
 - Colocated `__tests__/` dirs under the module being tested
 - Tests use `#[ctor]` for one-time setup (create temp DB, init pool)
 - DB-dependent tests: create temp file DB via `Database`, test via repo, clean up after
 
 #### Gotchas
+
 - `rusqlite::Connection` is !Send — wrap in `Mutex` or use `r2d2` pool
 - Tauri's `app_handle` is not available at startup for dialog commands — use `mpsc` channels
 - Schema trait is NOT automatically called — `app_lib::run` must call `schema.create_table()` explicitly
@@ -210,6 +224,7 @@ cargo build --release    # Release build
 ### 6.4 SF2 Excel COM Automation Module
 
 #### Architecture
+
 - Location: `src-tauri/src/sf2/`
 - COM automation via `interoptoke` crate — Windows-only
 - Entry point: `sf2.rs` — re-exports, `get_sf2_root_path()`
@@ -218,29 +233,32 @@ cargo build --release    # Release build
 - Tests: colocated `__tests__/` per submodule
 
 #### Key Files
-| File | Purpose |
-|------|---------|
-| `excel_com/workbook.rs` | Workbook analysis, writing, batch operations |
-| `excel_com/worksheet.rs` | Individual worksheet I/O |
-| `excel_com/learners.rs` | Learner roster operations |
-| `excel_com/calendar.rs` | Calendar/day mapping operations |
-| `excel_com/com_session.rs` | COM object wrappers (ComObject, ComVariant, ExcelSession) |
-| `excel_dialog.rs` | File dialog + template path logic |
-| `roster/roster_parser.rs` | Parse SF2 roster exports |
-| `roster/excel_service.rs` | Excel roster service |
-| `roster/template_ops.rs` | Template operations |
-| `roster/data_transfer.rs` | Data transfer operations |
-| `roster/roster_sync.rs` | Roster sync logic |
-| `backup/attendance_service.rs` | Attendance backup/restore |
-| `sql/` | SQL query files (separated from Rust code) |
+
+| File                           | Purpose                                                   |
+| ------------------------------ | --------------------------------------------------------- |
+| `excel_com/workbook.rs`        | Workbook analysis, writing, batch operations              |
+| `excel_com/worksheet.rs`       | Individual worksheet I/O                                  |
+| `excel_com/learners.rs`        | Learner roster operations                                 |
+| `excel_com/calendar.rs`        | Calendar/day mapping operations                           |
+| `excel_com/com_session.rs`     | COM object wrappers (ComObject, ComVariant, ExcelSession) |
+| `excel_dialog.rs`              | File dialog + template path logic                         |
+| `roster/roster_parser.rs`      | Parse SF2 roster exports                                  |
+| `roster/excel_service.rs`      | Excel roster service                                      |
+| `roster/template_ops.rs`       | Template operations                                       |
+| `roster/data_transfer.rs`      | Data transfer operations                                  |
+| `roster/roster_sync.rs`        | Roster sync logic                                         |
+| `backup/attendance_service.rs` | Attendance backup/restore                                 |
+| `sql/`                         | SQL query files (separated from Rust code)                |
 
 #### Test Conventions
+
 - Each submodule has `__tests__/` with integration tests
 - `sf2_integration_test.rs` in `src-tauri/src/sf2/__tests__/`
 - Tests use `#[ctor]` for setup, run sequentially to avoid COM apartment conflicts
 - COM tests need Windows + Excel installed — skipped on non-Windows CI
 
 #### Anti-Patterns (SF2)
+
 - No blocking main thread during COM calls — background thread via `run_excel_task`
 - No inline SQL in `.rs` files — use `include_str!()` with `.sql` files
 - No manual `unsafe` for COM — use `interoptoke` bindings
@@ -283,6 +301,7 @@ The root `/AGENTS.md` previously said "Tauri commands: async if I/O." However, t
 ## 10. PER-DIRECTORY FILES REMOVED IN CONSOLIDATION
 
 This single file replaces the following per-directory AGENTS.md files (all deleted in the consolidation):
+
 - `/AGENTS.md` (root — now a short cross-reference)
 - `src/AGENTS.md`
 - `src/routes/AGENTS.md`

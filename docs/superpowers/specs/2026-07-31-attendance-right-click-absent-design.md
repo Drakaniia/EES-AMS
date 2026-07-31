@@ -18,7 +18,7 @@ In the manual grid ("Student boxes") / list view, left-click cycles a student th
 - **Present** (has an `in` record) → marks **absent** (deletes the `in` record + adds session absent highlight)
 - **Absent** (no record, absent-marked) → marks **present** again
 
-Absence is represented by the *absence of an `in` record*. The `absentStudentIds`
+Absence is represented by the _absence of an `in` record_. The `absentStudentIds`
 `SvelteSet` on `AttendancePageState` is a **session-only UI highlight** (drives box
 styling and the Absent stat). It is reset on date change, class change, "Clear all",
 and previously on "Present all".
