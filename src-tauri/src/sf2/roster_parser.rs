@@ -1,7 +1,5 @@
 use crate::domain::error::{AppError, Result};
-use crate::domain::models::{
-    Student, StudentGender,
-};
+use crate::domain::models::{Student, StudentGender};
 use crate::sf2::logic::{normalize_learner_name, Sf2CellMark};
 use crate::sf2::models::{Sf2StudentMappingRecord, Sf2WorkbookAnalysis};
 
@@ -136,81 +134,6 @@ pub(crate) fn bundled_template_total_rows(
     let combined_total_row = female_total_row + 1;
 
     (male_total_row, female_total_row, combined_total_row)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bundled_total_rows_standard_21_19() {
-        // 21 male, 19 female → no expansion needed
-        let (m, f, c) = bundled_template_total_rows(21, 19);
-        assert_eq!(m, 29, "male total");
-        assert_eq!(f, 49, "female total");
-        assert_eq!(c, 50, "combined total");
-    }
-
-    #[test]
-    fn bundled_total_rows_under_capacity() {
-        // 14 male, 10 female → still uses standard 21/19 slots
-        let (m, f, c) = bundled_template_total_rows(14, 10);
-        assert_eq!(m, 29, "male total should be 29 even with 14 students");
-        assert_eq!(f, 49, "female total should be 49 even with 10 students");
-        assert_eq!(c, 50, "combined total");
-    }
-
-    #[test]
-    fn bundled_total_rows_expanded_male_only() {
-        // 25 male, 19 female → 4 extra male rows
-        let (m, f, c) = bundled_template_total_rows(25, 19);
-        assert_eq!(m, 33, "male total: 8 + 25 = 33");
-        assert_eq!(f, 53, "female total: 30 + 4 + 19 = 53");
-        assert_eq!(c, 54, "combined total");
-    }
-
-    #[test]
-    fn bundled_total_rows_expanded_both() {
-        // 30 male, 30 female → 9 extra male, 11 extra female
-        let (m, f, c) = bundled_template_total_rows(30, 30);
-        assert_eq!(m, 38, "male total: 8 + 30 = 38");
-        assert_eq!(f, 69, "female total: 30 + 9 + 30 = 69");
-        assert_eq!(c, 70, "combined total");
-    }
-
-    #[test]
-    fn bundled_total_rows_no_female() {
-        // 21 male, 0 female → minimum 19 female slots
-        let (m, f, c) = bundled_template_total_rows(21, 0);
-        assert_eq!(m, 29, "male total");
-        assert_eq!(
-            f, 49,
-            "female total: even with 0 students, 19 slots minimum"
-        );
-        assert_eq!(c, 50, "combined total");
-    }
-
-    #[test]
-    fn bundled_total_rows_no_male() {
-        // 0 male, 19 female → minimum 21 male slots
-        let (m, f, c) = bundled_template_total_rows(0, 19);
-        assert_eq!(m, 29, "male total: even with 0 students, 21 slots minimum");
-        assert_eq!(f, 49, "female total");
-        assert_eq!(c, 50, "combined total");
-    }
-
-    #[test]
-    fn bundled_total_rows_max_expansion() {
-        // 40 male, 35 female → extreme case
-        let (m, f, c) = bundled_template_total_rows(40, 35);
-        assert_eq!(m, 48, "male total: 8 + 40 = 48");
-        assert_eq!(
-            f,
-            30 + 19 + 35,
-            "female total: 30 + extra_male(19) + 35 = 84"
-        );
-        assert_eq!(c, 30 + 19 + 35 + 1, "combined total: 85");
-    }
 }
 
 // ── Roster assignment ─────────────────────────────────────────────────────────
@@ -379,6 +302,79 @@ pub(crate) fn roster_name_marks(
 }
 
 // Re-export helper functions extracted to roster_helpers.rs
-pub(crate) use super::roster_helpers::{
-    clear_unused_learner_marks, find_or_create_class,
-};
+pub(crate) use super::roster_helpers::{clear_unused_learner_marks, find_or_create_class};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_total_rows_standard_21_19() {
+        // 21 male, 19 female → no expansion needed
+        let (m, f, c) = bundled_template_total_rows(21, 19);
+        assert_eq!(m, 29, "male total");
+        assert_eq!(f, 49, "female total");
+        assert_eq!(c, 50, "combined total");
+    }
+
+    #[test]
+    fn bundled_total_rows_under_capacity() {
+        // 14 male, 10 female → still uses standard 21/19 slots
+        let (m, f, c) = bundled_template_total_rows(14, 10);
+        assert_eq!(m, 29, "male total should be 29 even with 14 students");
+        assert_eq!(f, 49, "female total should be 49 even with 10 students");
+        assert_eq!(c, 50, "combined total");
+    }
+
+    #[test]
+    fn bundled_total_rows_expanded_male_only() {
+        // 25 male, 19 female → 4 extra male rows
+        let (m, f, c) = bundled_template_total_rows(25, 19);
+        assert_eq!(m, 33, "male total: 8 + 25 = 33");
+        assert_eq!(f, 53, "female total: 30 + 4 + 19 = 53");
+        assert_eq!(c, 54, "combined total");
+    }
+
+    #[test]
+    fn bundled_total_rows_expanded_both() {
+        // 30 male, 30 female → 9 extra male, 11 extra female
+        let (m, f, c) = bundled_template_total_rows(30, 30);
+        assert_eq!(m, 38, "male total: 8 + 30 = 38");
+        assert_eq!(f, 69, "female total: 30 + 9 + 30 = 69");
+        assert_eq!(c, 70, "combined total");
+    }
+
+    #[test]
+    fn bundled_total_rows_no_female() {
+        // 21 male, 0 female → minimum 19 female slots
+        let (m, f, c) = bundled_template_total_rows(21, 0);
+        assert_eq!(m, 29, "male total");
+        assert_eq!(
+            f, 49,
+            "female total: even with 0 students, 19 slots minimum"
+        );
+        assert_eq!(c, 50, "combined total");
+    }
+
+    #[test]
+    fn bundled_total_rows_no_male() {
+        // 0 male, 19 female → minimum 21 male slots
+        let (m, f, c) = bundled_template_total_rows(0, 19);
+        assert_eq!(m, 29, "male total: even with 0 students, 21 slots minimum");
+        assert_eq!(f, 49, "female total");
+        assert_eq!(c, 50, "combined total");
+    }
+
+    #[test]
+    fn bundled_total_rows_max_expansion() {
+        // 40 male, 35 female → extreme case
+        let (m, f, c) = bundled_template_total_rows(40, 35);
+        assert_eq!(m, 48, "male total: 8 + 40 = 48");
+        assert_eq!(
+            f,
+            30 + 19 + 35,
+            "female total: 30 + extra_male(19) + 35 = 84"
+        );
+        assert_eq!(c, 30 + 19 + 35 + 1, "combined total: 85");
+    }
+}

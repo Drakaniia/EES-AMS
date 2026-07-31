@@ -1,11 +1,9 @@
 use crate::domain::error::Result;
-use crate::sf2::excel_com::com_session::{
-    run_excel_task, with_workbook, ComObject, ComVariant,
-};
+use crate::sf2::excel_com::com_session::{run_excel_task, with_workbook, ComObject, ComVariant};
 use crate::sf2::excel_com::learners::{sf2_sheet_quality, workbook_learners, Sf2SheetQuality};
 use crate::sf2::excel_com::workbook::WorkbookSession;
-use crate::sf2::excel_com::worksheet::cell_text;
 use crate::sf2::excel_com::workbook_utils::*;
+use crate::sf2::excel_com::worksheet::cell_text;
 use crate::sf2::models::{Sf2WorkbookAnalysis, Sf2WorkbookDate};
 use chrono::NaiveDate;
 use std::path::Path;

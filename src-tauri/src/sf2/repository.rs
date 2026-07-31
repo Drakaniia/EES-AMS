@@ -13,12 +13,10 @@ const DELETE_DATE_MAPPINGS_SQL: &str = include_str!("./sql/delete_date_mappings.
 const INSERT_STUDENT_MAPPING_SQL: &str = include_str!("./sql/insert_student_mapping.sql");
 const INSERT_DATE_MAPPING_SQL: &str = include_str!("./sql/insert_date_mapping.sql");
 const LIST_TEMPLATES_SQL: &str = include_str!("./sql/list_templates.sql");
-const LATEST_TEMPLATE_FOR_CLASS_SQL: &str =
-    include_str!("./sql/latest_template_for_class.sql");
+const LATEST_TEMPLATE_FOR_CLASS_SQL: &str = include_str!("./sql/latest_template_for_class.sql");
 const STUDENT_MAPPINGS_FOR_TEMPLATE_SQL: &str =
     include_str!("./sql/student_mappings_for_template.sql");
-const DATE_MAPPINGS_FOR_TEMPLATE_SQL: &str =
-    include_str!("./sql/date_mappings_for_template.sql");
+const DATE_MAPPINGS_FOR_TEMPLATE_SQL: &str = include_str!("./sql/date_mappings_for_template.sql");
 
 pub struct Sf2Repository {
     pool: DbPool,

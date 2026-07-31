@@ -1,27 +1,22 @@
 use crate::domain::error::{AppError, Result};
-use crate::domain::models::{StudentGender};
-use crate::infrastructure::database::{
-    ClassRepository, DbPool, StudentRepository,
+use crate::domain::models::StudentGender;
+use crate::infrastructure::database::{ClassRepository, DbPool, StudentRepository};
+use crate::sf2::attendance_marks::{
+    clear_total_cell_marks, summary_formula_marks, total_formula_marks,
 };
-use crate::sf2::attendance_marks::{clear_total_cell_marks, summary_formula_marks, total_formula_marks};
 use crate::sf2::calendar::validate_configured_calendar;
-use crate::sf2::sf2_metadata::{
-    date_mappings_from_analysis, metadata_from_draft, sf2_date_mappings_for_report_month,
-};
 use crate::sf2::excel;
-use crate::sf2::models::{
-    Sf2ImportSummary, Sf2TemplateDraft, Sf2TemplateRecord,
-};
+use crate::sf2::models::{Sf2ImportSummary, Sf2TemplateDraft, Sf2TemplateRecord};
 use crate::sf2::repository::Sf2Repository;
 use crate::sf2::roster::{
     bundled_template_total_rows, clear_unused_learner_marks, roster_name_marks,
-    roster_students_for_draft, sync_workbook_learner_mappings,
-    template_owns_roster, template_roster_assignments,
-    student_mappings_from_roster_assignments,
+    roster_students_for_draft, student_mappings_from_roster_assignments,
+    sync_workbook_learner_mappings, template_owns_roster, template_roster_assignments,
 };
-use crate::sf2::workbook_files::{
-    layout_fingerprint,
+use crate::sf2::sf2_metadata::{
+    date_mappings_from_analysis, metadata_from_draft, sf2_date_mappings_for_report_month,
 };
+use crate::sf2::workbook_files::layout_fingerprint;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -204,16 +199,15 @@ pub fn update_workbook_settings(pool: DbPool, draft: Sf2TemplateDraft) -> Result
 
             // Write summary section formulas (rows 53-65: Enrolment, Registered Learners, % of Enrolment, ADA, % of Attendance)
             let total_bundle = male_count + female_count;
-            let (summary_marks_bundle, summary_static_bundle) =
-                summary_formula_marks(
-                    male_count,
-                    female_count,
-                    total_bundle,
-                    bundle_male_total_row,
-                    bundle_female_total_row,
-                    bundle_combined_total_row,
-                    &bundle_date_mappings,
-                );
+            let (summary_marks_bundle, summary_static_bundle) = summary_formula_marks(
+                male_count,
+                female_count,
+                total_bundle,
+                bundle_male_total_row,
+                bundle_female_total_row,
+                bundle_combined_total_row,
+                &bundle_date_mappings,
+            );
             if let Err(error) = session.write_formulas(&summary_marks_bundle) {
                 log::warn!("failed to write summary formula marks: {error}");
             }

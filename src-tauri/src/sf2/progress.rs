@@ -92,9 +92,11 @@ pub(super) fn write_template_marks_for_mappings(
         sf2_date_mappings_for_report_month(template, &all_date_mappings)
     };
 
-    let mut marks =
-        attendance_marks::clear_attendance_marks_for_records(template, &clear_date_mappings, 
-student_mappings);
+    let mut marks = attendance_marks::clear_attendance_marks_for_records(
+        template,
+        &clear_date_mappings,
+        student_mappings,
+    );
     let attendance_marks = if export_days.is_empty() || student_mappings.is_empty() {
         Vec::new()
     } else {

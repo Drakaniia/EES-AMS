@@ -1,9 +1,6 @@
 use crate::domain::error::Result;
 use crate::domain::models::StudentGender;
 use crate::infrastructure::database::{ClassRepository, DbPool};
-use crate::sf2::sf2_metadata::{
-    date_mappings_from_analysis, metadata_from_import_analysis, sf2_date_mappings_for_report_month,
-};
 use crate::sf2::excel;
 use crate::sf2::models::{
     Sf2ImportSummary, Sf2ImportValidation, Sf2StudentMappingRecord, Sf2TemplateRecord,
@@ -15,6 +12,9 @@ use crate::sf2::roster::{
     bundled_template_total_rows, clear_unused_learner_marks, reject_duplicate_roster_names,
     roster_expansion_needed, roster_name_marks, template_roster_assignments,
     unique_normalized_name,
+};
+use crate::sf2::sf2_metadata::{
+    date_mappings_from_analysis, metadata_from_import_analysis, sf2_date_mappings_for_report_month,
 };
 use crate::sf2::validation::{ensure_import_validation_allows, import_validation_from_analysis};
 use crate::sf2::workbook_files::{
@@ -156,13 +156,7 @@ fn import_workbook_with_analysis(
         .collect();
 
     let metadata = metadata_from_import_analysis(&source_analysis)?;
-    super::progress::emit_sf2_progress(
-        &app,
-        "import",
-        6,
-        7,
-        "Writing SF2 details and date layout",
-    );
+    super::progress::emit_sf2_progress(&app, "import", 6, 7, "Writing SF2 details and date layout");
 
     // ── Phase 1: Batch all 10 Excel operations into ONE session ────────
     // Was previously up to 10 separate COM sessions (Steps 5-14).
@@ -222,16 +216,11 @@ fn import_workbook_with_analysis(
             }
 
             // Step 10: Hide empty learner rows
-            session.hide_empty_learner_rows(
-                hide_male_total,
-                hide_female_total,
-                &occupied,
-            )?;
+            session.hide_empty_learner_rows(hide_male_total, hide_female_total, &occupied)?;
 
             // Step 12: Date mappings from the bundled template
             // (Moved before formulas since formulas depend on date_mappings)
-            let date_mappings =
-                date_mappings_from_analysis(&template_id_for_excel, &analysis);
+            let date_mappings = date_mappings_from_analysis(&template_id_for_excel, &analysis);
 
             // Step 14: Write Excel formulas for MALE TOTAL, FEMALE TOTAL, Combined TOTAL
             let clear_total = super::attendance_marks::clear_total_cell_marks(
@@ -256,16 +245,15 @@ fn import_workbook_with_analysis(
 
             // Write summary formulas for rows 53-65
             let total_students = male_count_i + female_count_i;
-            let (summary_marks, summary_static) =
-                super::attendance_marks::summary_formula_marks(
-                    male_count_i,
-                    female_count_i,
-                    total_students,
-                    male_total_row,
-                    female_total_row,
-                    combined_total_row,
-                    &date_mappings,
-                );
+            let (summary_marks, summary_static) = super::attendance_marks::summary_formula_marks(
+                male_count_i,
+                female_count_i,
+                total_students,
+                male_total_row,
+                female_total_row,
+                combined_total_row,
+                &date_mappings,
+            );
             session.write_formulas(&summary_marks)?;
             session.write_marks_force(&summary_static)?;
 
@@ -300,11 +288,9 @@ fn import_workbook_with_analysis(
         .map(|m| m.date.clone())
         .collect::<Vec<_>>();
 
-    if let Err(error) = super::progress::write_template_marks_for_days(
-        pool.clone(),
-        &template,
-        &report_dates,
-    ) {
+    if let Err(error) =
+        super::progress::write_template_marks_for_days(pool.clone(), &template, &report_dates)
+    {
         log::warn!("failed to backfill imported workbook marks: {error}");
     }
 

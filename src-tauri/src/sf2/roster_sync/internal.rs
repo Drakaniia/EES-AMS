@@ -2,20 +2,18 @@ use crate::domain::error::{AppError, Result};
 use crate::domain::models::{Student, StudentGender};
 use crate::infrastructure::database::DbPool;
 use crate::sf2::attendance_marks::clear_total_cell_marks;
-use crate::sf2::sf2_metadata::{date_mappings_from_analysis, sf2_date_mappings_for_report_month};
 use crate::sf2::excel;
 use crate::sf2::excel_com::workbook_utils::month_number;
 use crate::sf2::logic::{normalize_learner_name, Sf2CellMark};
-use crate::sf2::models::{
-    Sf2StudentMappingRecord, Sf2TemplateRecord, Sf2WorkbookLearner,
-};
+use crate::sf2::models::{Sf2StudentMappingRecord, Sf2TemplateRecord, Sf2WorkbookLearner};
 use crate::sf2::repository::Sf2Repository;
 use crate::sf2::roster::{
     bundled_template_total_rows, clear_unused_learner_marks, roster_name_marks,
     student_mappings_from_roster_assignments, template_roster_assignments,
 };
-use crate::sf2::workbook_files::layout_fingerprint;
 use crate::sf2::roster_sync::roster_sync_formula_marks;
+use crate::sf2::sf2_metadata::{date_mappings_from_analysis, sf2_date_mappings_for_report_month};
+use crate::sf2::workbook_files::layout_fingerprint;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -191,8 +189,7 @@ pub(super) fn sync_imported_workbook_roster(
     let sf2_repo = Sf2Repository::new(pool.clone());
     let analysis = excel::analyze_workbook(&workbook_path)?;
 
-    let mapped_row_set: HashSet<u32> =
-        existing_mappings.iter().map(|m| m.row_index).collect();
+    let mapped_row_set: HashSet<u32> = existing_mappings.iter().map(|m| m.row_index).collect();
 
     let unmapped_male_learner_rows: Vec<&Sf2WorkbookLearner> = analysis
         .learners
@@ -258,14 +255,22 @@ pub(super) fn sync_imported_workbook_roster(
     let new_female_count = new_female_students.len();
 
     assign_students_to_rows(
-        &analysis, &template, &mut seen_normalized_names,
-        new_male_students, unmapped_male_learner_rows,
-        &mut new_mappings, &mut name_marks,
+        &analysis,
+        template,
+        &mut seen_normalized_names,
+        new_male_students,
+        unmapped_male_learner_rows,
+        &mut new_mappings,
+        &mut name_marks,
     )?;
     assign_students_to_rows(
-        &analysis, &template, &mut seen_normalized_names,
-        new_female_students, unmapped_female_learner_rows,
-        &mut new_mappings, &mut name_marks,
+        &analysis,
+        template,
+        &mut seen_normalized_names,
+        new_female_students,
+        unmapped_female_learner_rows,
+        &mut new_mappings,
+        &mut name_marks,
     )?;
 
     if !name_marks.is_empty() {
@@ -293,14 +298,21 @@ pub(super) fn sync_imported_workbook_roster(
         .collect::<Vec<_>>();
 
     if let Err(error) = super::super::progress::write_template_marks_for_mappings(
-        pool, &synced_template, &report_dates, &all_mappings, &date_mappings,
+        pool,
+        &synced_template,
+        &report_dates,
+        &all_mappings,
+        &date_mappings,
     ) {
         log::warn!("failed to backfill synced imported workbook marks: {error}");
     }
 
     log::info!(
         "Roster sync for imported workbook '{}': added {} new student(s) ({} male, {} female)",
-        template.id, total_new, new_male_count, new_female_count
+        template.id,
+        total_new,
+        new_male_count,
+        new_female_count
     );
 
     Ok(synced_template)
@@ -335,8 +347,12 @@ fn assign_students_to_rows(
         });
 
         for sheet in &analysis.sheets {
-            if sheet.visible == 0 { continue; }
-            if month_number(&sheet.name) == 0 { continue; }
+            if sheet.visible == 0 {
+                continue;
+            }
+            if month_number(&sheet.name) == 0 {
+                continue;
+            }
             name_marks.push(Sf2CellMark {
                 sheet_name: sheet.name.clone(),
                 cell_address: format!("C{}", learner_row.row_index),

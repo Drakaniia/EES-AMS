@@ -1,12 +1,14 @@
 use crate::domain::error::{AppError, Result};
 use crate::infrastructure::database::{ClassRepository, DbPool};
-use crate::sf2::sf2_metadata::{sf2_date_mappings_for_report_month, sf2_metadata_warnings, template_metadata};
 use crate::sf2::excel;
 use crate::sf2::models::{
     Sf2ExportReadiness, Sf2ExportResult, Sf2TemplateRecord, Sf2WorkbookSettings,
 };
 use crate::sf2::naming::class_name;
 use crate::sf2::repository::{template_summary, Sf2Repository};
+use crate::sf2::sf2_metadata::{
+    sf2_date_mappings_for_report_month, sf2_metadata_warnings, template_metadata,
+};
 use crate::sf2::workbook_files::{open_path_in_default_app, save_workbook_path};
 use std::path::{Path, PathBuf};
 
@@ -211,11 +213,8 @@ pub fn export_workbook(
         ));
     }
 
-    let marks_written = super::progress::write_template_marks_for_days(
-        pool.clone(),
-        &template,
-        &report_dates,
-    )?;
+    let marks_written =
+        super::progress::write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
 
     let metadata = template_metadata(&template);
     excel::write_metadata(&working_copy_path, &metadata)?;
@@ -235,11 +234,11 @@ pub(super) fn refresh_template_calendar_from_saved_month(
     template: &Sf2TemplateRecord,
     force_refresh: bool,
 ) -> Result<Sf2TemplateRecord> {
-use crate::sf2::attendance_marks;
-use crate::sf2::calendar::{first_school_day_for_report_month, sf2_month_number};
-use crate::sf2::sf2_metadata::{
-    date_mappings_are_current_for_report_month, date_mappings_from_analysis,
-};
+    use crate::sf2::attendance_marks;
+    use crate::sf2::calendar::{first_school_day_for_report_month, sf2_month_number};
+    use crate::sf2::sf2_metadata::{
+        date_mappings_are_current_for_report_month, date_mappings_from_analysis,
+    };
     use crate::sf2::workbook_files::layout_fingerprint;
 
     let Some(_) = sf2_month_number(&template.report_month) else {
@@ -330,16 +329,15 @@ use crate::sf2::sf2_metadata::{
             // Rewrite summary section (Enrolment, Registered Learners, ADA, etc.)
             // to match current student counts.
             let total = male_count + female_count;
-            let (summary_formulas, summary_static) =
-                attendance_marks::summary_formula_marks(
-                    male_count,
-                    female_count,
-                    total,
-                    male_total_row,
-                    female_total_row,
-                    combined_total_row,
-                    &inner_date_mappings,
-                );
+            let (summary_formulas, summary_static) = attendance_marks::summary_formula_marks(
+                male_count,
+                female_count,
+                total,
+                male_total_row,
+                female_total_row,
+                combined_total_row,
+                &inner_date_mappings,
+            );
             session.write_formulas(&summary_formulas)?;
             session.write_marks_force(&summary_static)?;
         }

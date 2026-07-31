@@ -4,7 +4,6 @@ pub(crate) mod attendance_marks;
 pub(crate) mod attendance_service;
 mod calendar;
 pub(crate) mod calendar_service;
-pub(crate) mod sf2_metadata;
 pub mod excel;
 #[cfg(target_os = "windows")]
 mod excel_com;
@@ -23,6 +22,7 @@ pub(crate) mod roster_parser;
 pub(crate) mod roster_sync;
 pub(crate) mod roster_sync_learner;
 pub mod service;
+pub(crate) mod sf2_metadata;
 pub(crate) mod template_create;
 pub(crate) mod template_ops;
 pub(crate) mod template_update;

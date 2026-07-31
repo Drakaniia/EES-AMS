@@ -3,15 +3,12 @@ use crate::domain::models::{Class, Settings, StudentGender};
 use crate::infrastructure::database::{
     ClassRepository, DbPool, SettingsRepository, StudentRepository,
 };
-use crate::sf2::attendance_marks::{clear_total_cell_marks, summary_formula_marks, total_formula_marks};
+use crate::sf2::attendance_marks::{
+    clear_total_cell_marks, summary_formula_marks, total_formula_marks,
+};
 use crate::sf2::calendar::validate_configured_calendar;
-use crate::sf2::sf2_metadata::{
-    date_mappings_from_analysis, metadata_from_draft, sf2_date_mappings_for_report_month,
-};
 use crate::sf2::excel;
-use crate::sf2::models::{
-    Sf2ImportSummary, Sf2StudentMappingRecord, Sf2TemplateRecord,
-};
+use crate::sf2::models::{Sf2ImportSummary, Sf2StudentMappingRecord, Sf2TemplateRecord};
 use crate::sf2::naming::class_name;
 use crate::sf2::repository::Sf2Repository;
 use crate::sf2::roster::{
@@ -19,9 +16,12 @@ use crate::sf2::roster::{
     roster_expansion_needed, roster_name_marks, roster_students_for_draft,
     template_roster_assignments,
 };
+use crate::sf2::sf2_metadata::{
+    date_mappings_from_analysis, metadata_from_draft, sf2_date_mappings_for_report_month,
+};
 use crate::sf2::workbook_files::{
-    hash_bytes, layout_fingerprint, write_bundled_template_to_dir,
-    write_temp_binary_file, BUNDLED_TEMPLATE_BYTES,
+    hash_bytes, layout_fingerprint, write_bundled_template_to_dir, write_temp_binary_file,
+    BUNDLED_TEMPLATE_BYTES,
 };
 use std::collections::HashSet;
 use std::path::Path;
@@ -161,12 +161,8 @@ pub(super) fn create_workbook_from_template_in_dir(
 
             // Clear stale template values from TOTAL cells for columns without
             // dates (e.g. Mon/Tue in a week where the month starts on Wed).
-            let clear_total_cells = clear_total_cell_marks(
-                male_total,
-                female_total,
-                combined_total,
-                &date_mappings,
-            );
+            let clear_total_cells =
+                clear_total_cell_marks(male_total, female_total, combined_total, &date_mappings);
             if !clear_total_cells.is_empty() {
                 session.write_marks_force(&clear_total_cells)?;
             }
@@ -188,16 +184,15 @@ pub(super) fn create_workbook_from_template_in_dir(
 
             // Step 10: Write summary section formulas (rows 53-65: Enrolment, Registered Learners, % of Enrolment, ADA, % of Attendance)
             let total_inner = male_count + female_count;
-            let (summary_marks_inner, summary_static_inner) =
-                summary_formula_marks(
-                    male_count,
-                    female_count,
-                    total_inner,
-                    male_total_row_inner,
-                    female_total_row_inner,
-                    combined_total_row_inner,
-                    &date_mappings,
-                );
+            let (summary_marks_inner, summary_static_inner) = summary_formula_marks(
+                male_count,
+                female_count,
+                total_inner,
+                male_total_row_inner,
+                female_total_row_inner,
+                combined_total_row_inner,
+                &date_mappings,
+            );
             session.write_formulas(&summary_marks_inner)?;
             session.write_marks_force(&summary_static_inner)?;
 
@@ -231,11 +226,9 @@ pub(super) fn create_workbook_from_template_in_dir(
         .map(|m| m.date.clone())
         .collect::<Vec<_>>();
 
-    if let Err(error) = super::progress::write_template_marks_for_days(
-        pool.clone(),
-        &template,
-        &report_dates,
-    ) {
+    if let Err(error) =
+        super::progress::write_template_marks_for_days(pool.clone(), &template, &report_dates)
+    {
         log::warn!("failed to backfill created SF2 workbook marks: {error}");
     }
 

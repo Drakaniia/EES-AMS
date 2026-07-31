@@ -110,11 +110,11 @@ fn template_roster_slots_last_female() {
 #[test]
 fn template_roster_slots_all_male_before_female() {
     let slots = template_roster_slots();
-    for i in 0..21 {
-        assert_eq!(slots[i].gender_block, "MALE", "slot {i} should be MALE");
+    for (i, slot) in slots.iter().enumerate().take(21) {
+        assert_eq!(slot.gender_block, "MALE", "slot {i} should be MALE");
     }
-    for i in 21..40 {
-        assert_eq!(slots[i].gender_block, "FEMALE", "slot {i} should be FEMALE");
+    for (i, slot) in slots.iter().enumerate().skip(21) {
+        assert_eq!(slot.gender_block, "FEMALE", "slot {i} should be FEMALE");
     }
 }
 
@@ -407,15 +407,15 @@ fn template_roster_assignments_exceeds_both_expands_rows() {
     assert_eq!(assignments.len(), 47);
     // 25 males expand rows: 8..=32, then MALE TOTAL at 33 (was 29 + 4 extra)
     // Female start = 30 + 4 (extra male) = 34
-    for i in 0..25 {
+    for (i, assignment) in assignments.iter().enumerate().take(25) {
         assert_eq!(
-            assignments[i].slot.gender_block, "MALE",
+            assignment.slot.gender_block, "MALE",
             "assignment {i} should be MALE"
         );
     }
-    for i in 25..47 {
+    for (i, assignment) in assignments.iter().enumerate().skip(25) {
         assert_eq!(
-            assignments[i].slot.gender_block, "FEMALE",
+            assignment.slot.gender_block, "FEMALE",
             "assignment {i} should be FEMALE"
         );
     }
@@ -500,15 +500,15 @@ fn template_roster_assignments_mixed_full_roster() {
     }
     let result = template_roster_assignments(&students).unwrap();
     assert_eq!(result.len(), 27);
-    for i in 0..15 {
+    for (i, assignment) in result.iter().enumerate().take(15) {
         assert_eq!(
-            result[i].slot.gender_block, "MALE",
+            assignment.slot.gender_block, "MALE",
             "assignment {i} should be MALE"
         );
     }
-    for i in 15..27 {
+    for (i, assignment) in result.iter().enumerate().skip(15) {
         assert_eq!(
-            result[i].slot.gender_block, "FEMALE",
+            assignment.slot.gender_block, "FEMALE",
             "assignment {i} should be FEMALE"
         );
     }
@@ -638,7 +638,7 @@ fn clear_unused_learner_marks_no_mapped_rows_clears_all_learner_slots() {
     // Verify all learner rows are present (male 8-28, female 30-48)
     let mut cleared_rows: Vec<u32> = marks
         .iter()
-        .filter_map(|m| Some(m.cell_address.trim_start_matches(['A', 'B', 'C'])))
+        .map(|m| m.cell_address.trim_start_matches(['A', 'B', 'C']))
         .filter_map(|s| s.parse::<u32>().ok())
         .collect::<std::collections::HashSet<_>>()
         .into_iter()

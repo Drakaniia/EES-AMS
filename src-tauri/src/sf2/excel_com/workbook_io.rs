@@ -2,8 +2,10 @@ use crate::domain::error::Result;
 use crate::sf2::excel_com::calendar::configure_sf2_calendar;
 use crate::sf2::excel_com::com_session::{run_excel_task, with_workbook, ComVariant};
 use crate::sf2::excel_com::workbook::WorkbookSession;
-use crate::sf2::excel_com::worksheet::{cell_text, set_sf2_cell, set_sf2_formula, set_sf2_mark, set_sf2_mark_force};
 use crate::sf2::excel_com::workbook_utils::*;
+use crate::sf2::excel_com::worksheet::{
+    cell_text, set_sf2_cell, set_sf2_formula, set_sf2_mark, set_sf2_mark_force,
+};
 use crate::sf2::logic::Sf2CellMark;
 use crate::sf2::models::Sf2WorkbookMetadata;
 use std::path::Path;

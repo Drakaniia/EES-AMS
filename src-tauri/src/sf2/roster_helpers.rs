@@ -1,7 +1,7 @@
 use crate::domain::error::Result;
 use crate::domain::models::{Class, CreateClassRequest, Settings};
 use crate::infrastructure::database::ClassRepository;
-use crate::sf2::logic::{Sf2CellMark};
+use crate::sf2::logic::Sf2CellMark;
 use crate::sf2::models::Sf2WorkbookAnalysis;
 use std::collections::HashSet;
 

@@ -1,10 +1,10 @@
-use super::*;
+use super::super::com_session::run_excel_task;
 use super::super::workbook_utils::{
     column_number_to_letter, contains_ignore_ascii_case, month_number, sheet_is_analysis_candidate,
     year_from_sheet_name,
 };
-use super::super::com_session::run_excel_task;
 use super::super::{batch_operations, write_marks, write_marks_force};
+use super::*;
 use crate::sf2::logic::Sf2CellMark;
 
 // ── month_number ──────────────────────────────────────────────────────
@@ -287,7 +287,7 @@ fn batch_operations_analyze_succeeds() {
         let analysis = session.analyze()?;
         assert!(!analysis.sheets.is_empty(), "should have at least 1 sheet");
         assert!(
-            !analysis.learners.is_empty() || analysis.sheets.len() >= 1,
+            !analysis.learners.is_empty() || !analysis.sheets.is_empty(),
             "analysis should return sheet info"
         );
         Ok(())

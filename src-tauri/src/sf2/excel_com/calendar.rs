@@ -1,6 +1,6 @@
 use crate::domain::error::{AppError, Result};
-use crate::sf2::excel_com::learners::best_sf2_monthly_sheet;
 use crate::sf2::excel_com::com_session::ComObject;
+use crate::sf2::excel_com::learners::best_sf2_monthly_sheet;
 use crate::sf2::excel_com::workbook_utils::{month_name, month_number, report_year};
 use crate::sf2::excel_com::worksheet::{
     cell_text, rename_sheet_unique, set_sf2_cell, worksheet_cell,
@@ -56,7 +56,9 @@ pub fn configure_sf2_calendar(
 
         clear_sf2_month_dates(sheet)?;
         let sheet_name = sheet.get_string("Name")?;
-        if month_number(&sheet_name) > 0 && super::workbook_utils::year_from_sheet_name(&sheet_name) > 0 {
+        if month_number(&sheet_name) > 0
+            && super::workbook_utils::year_from_sheet_name(&sheet_name) > 0
+        {
             rename_sheet_unique(sheet, &format!("__SF2_HIDDEN_{hidden_index}"))?;
         }
         sheet.put_i4("Visible", EXCEL_SHEET_HIDDEN)?;

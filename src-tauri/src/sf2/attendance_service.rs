@@ -1,7 +1,11 @@
 use crate::domain::error::{AppError, Result};
 
-use crate::infrastructure::database::{ClassRepository, DbPool, EventRepository, StudentRepository};
+use crate::infrastructure::database::{
+    ClassRepository, DbPool, EventRepository, StudentRepository,
+};
 
+use crate::sf2::attendance::present_events_for_day;
+use crate::sf2::attendance_events;
 #[cfg(test)]
 use crate::sf2::attendance_events::parse_clock;
 #[cfg(test)]
@@ -9,17 +13,15 @@ use crate::sf2::attendance_marks::{
     attendance_grid_rows, clear_attendance_marks_for_records, mapped_attendance_rows,
     summary_formula_marks, total_formula_marks,
 };
+use crate::sf2::calendar::attendance_changed_since;
+use crate::sf2::logic::day_has_attendance_taken;
 #[cfg(test)]
 use crate::sf2::logic::Sf2CellMark;
 #[cfg(test)]
 use crate::sf2::models::{Sf2DateMappingRecord, Sf2StudentMappingRecord, Sf2TemplateRecord};
-use crate::sf2::attendance::present_events_for_day;
-use crate::sf2::attendance_events;
-use crate::sf2::calendar::attendance_changed_since;
-use crate::sf2::sf2_metadata::sf2_date_mappings_for_report_month;
-use crate::sf2::logic::day_has_attendance_taken;
 use crate::sf2::progress::{emit_sf2_progress, write_template_marks_for_days};
 use crate::sf2::repository::Sf2Repository;
+use crate::sf2::sf2_metadata::sf2_date_mappings_for_report_month;
 
 use std::collections::HashSet;
 

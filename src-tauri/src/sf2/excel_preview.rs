@@ -1,21 +1,23 @@
 use crate::domain::error::Result;
 use crate::infrastructure::database::{ClassRepository, EventRepository, StudentRepository};
 use crate::sf2::calendar::{last_day_of_month, sf2_month_number, sf2_report_year};
-use crate::sf2::sf2_metadata::{
-    sf2_date_mappings_for_report_month, sf2_metadata_warnings, template_metadata,
-};
 use crate::sf2::models::{
-    Sf2DateMappingRecord, Sf2ExportPreview, Sf2ExportReadiness, Sf2PreviewDate,
-    Sf2TemplateRecord,
+    Sf2DateMappingRecord, Sf2ExportPreview, Sf2ExportReadiness, Sf2PreviewDate, Sf2TemplateRecord,
 };
 use crate::sf2::preview;
 use crate::sf2::repository::template_summary;
+use crate::sf2::sf2_metadata::{
+    sf2_date_mappings_for_report_month, sf2_metadata_warnings, template_metadata,
+};
 
 use chrono::{Datelike, NaiveDate};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-pub fn export_preview(pool: crate::infrastructure::database::DbPool, class_id: Option<String>) -> Result<Sf2ExportPreview> {
+pub fn export_preview(
+    pool: crate::infrastructure::database::DbPool,
+    class_id: Option<String>,
+) -> Result<Sf2ExportPreview> {
     let sf2_repo = crate::sf2::repository::Sf2Repository::new(pool.clone());
 
     // Query template and associated data ONCE — no duplicate round-trips.
@@ -27,24 +29,22 @@ pub fn export_preview(pool: crate::infrastructure::database::DbPool, class_id: O
             .list_templates()?
             .into_iter()
             .next()
-            .map(|summary| {
-                Sf2TemplateRecord {
-                    id: summary.id,
-                    source_path: summary.source_path,
-                    source_hash: String::new(),
-                    school_id: summary.school_id,
-                    school_name: summary.school_name,
-                    school_year: summary.school_year,
-                    report_month: summary.report_month,
-                    grade_level: summary.grade_level,
-                    section: summary.section,
-                    adviser_name: summary.adviser_name,
-                    school_head_name: summary.school_head_name,
-                    layout_fingerprint: String::new(),
-                    active_class_id: summary.class_id,
-                    imported_at: summary.imported_at,
-                    last_synced_at: None,
-                }
+            .map(|summary| Sf2TemplateRecord {
+                id: summary.id,
+                source_path: summary.source_path,
+                source_hash: String::new(),
+                school_id: summary.school_id,
+                school_name: summary.school_name,
+                school_year: summary.school_year,
+                report_month: summary.report_month,
+                grade_level: summary.grade_level,
+                section: summary.section,
+                adviser_name: summary.adviser_name,
+                school_head_name: summary.school_head_name,
+                layout_fingerprint: String::new(),
+                active_class_id: summary.class_id,
+                imported_at: summary.imported_at,
+                last_synced_at: None,
             }),
     };
 
@@ -74,8 +74,7 @@ pub fn export_preview(pool: crate::infrastructure::database::DbPool, class_id: O
     // ── Query supporting data (no redundant queries) ──────────────────────
     let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
     let all_date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
-    let date_mappings =
-        sf2_date_mappings_for_report_month(&template, &all_date_mappings);
+    let date_mappings = sf2_date_mappings_for_report_month(&template, &all_date_mappings);
 
     // Expand preview dates to ALL weekdays of the report month, not just
     // mapped SF2 columns.
@@ -128,9 +127,7 @@ pub fn export_preview(pool: crate::infrastructure::database::DbPool, class_id: O
         issues.push("No attendance dates are mapped to this SF2 report month.".to_string());
     }
 
-    let warnings = sf2_metadata_warnings(
-        &template_metadata(&template),
-    );
+    let warnings = sf2_metadata_warnings(&template_metadata(&template));
     let mapped_students = student_mappings.len();
     let mapped_dates = date_mappings.len();
 
@@ -205,10 +202,8 @@ fn expand_to_all_weekdays(
     let last_day = last_day_of_month(year, month);
 
     // Build a lookup from date string to existing mapping
-    let mapping_by_date: HashMap<&str, &Sf2DateMappingRecord> = date_mappings
-        .iter()
-        .map(|m| (m.date.as_str(), m))
-        .collect();
+    let mapping_by_date: HashMap<&str, &Sf2DateMappingRecord> =
+        date_mappings.iter().map(|m| (m.date.as_str(), m)).collect();
 
     let mut preview_dates = Vec::with_capacity(last_day as usize);
     for day in 1..=last_day {
@@ -245,5 +240,3 @@ fn expand_to_all_weekdays(
 
     preview_dates
 }
-
-

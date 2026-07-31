@@ -1,4 +1,3 @@
-use super::{DuplicateAttendancePolicy, EventRepository};
 use super::super::{
     audit::{insert_audit_event, AuditEventDraft},
     rows::{
@@ -6,6 +5,7 @@ use super::super::{
         normalize_optional_text, serialize_audit_event, serialize_audit_payload,
     },
 };
+use super::{DuplicateAttendancePolicy, EventRepository};
 use crate::domain::{
     error::{AppError, Result},
     models::*,
@@ -381,8 +381,9 @@ impl EventRepository {
                 entries
             }
             (Some(event_id), None) => {
-                let mut stmt =
-                    conn.prepare(&format!("{sql} WHERE event_id = ?1 ORDER BY created_at DESC"))?;
+                let mut stmt = conn.prepare(&format!(
+                    "{sql} WHERE event_id = ?1 ORDER BY created_at DESC"
+                ))?;
                 let entries = stmt
                     .query_map(
                         params![event_id.0.to_string()],

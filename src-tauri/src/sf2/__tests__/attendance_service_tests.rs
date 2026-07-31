@@ -82,37 +82,37 @@ fn parse_clock_invalid_minute_type() {
 #[test]
 fn mapped_attendance_rows_empty() {
     let rows: Vec<u32> = vec![];
-    let result = mapped_attendance_rows(rows.into_iter());
+    let result = mapped_attendance_rows(rows);
     assert!(result.is_empty());
 }
 
 #[test]
 fn mapped_attendance_rows_single() {
-    let result = mapped_attendance_rows(vec![10].into_iter());
+    let result = mapped_attendance_rows(vec![10]);
     assert_eq!(result, vec![10]);
 }
 
 #[test]
 fn mapped_attendance_rows_sorts() {
-    let result = mapped_attendance_rows(vec![30, 10, 20].into_iter());
+    let result = mapped_attendance_rows(vec![30, 10, 20]);
     assert_eq!(result, vec![10, 20, 30]);
 }
 
 #[test]
 fn mapped_attendance_rows_dedupes() {
-    let result = mapped_attendance_rows(vec![5, 5, 10, 10].into_iter());
+    let result = mapped_attendance_rows(vec![5, 5, 10, 10]);
     assert_eq!(result, vec![5, 10]);
 }
 
 #[test]
 fn mapped_attendance_rows_filters_zero() {
-    let result = mapped_attendance_rows(vec![0, 5, 0, 10].into_iter());
+    let result = mapped_attendance_rows(vec![0, 5, 0, 10]);
     assert_eq!(result, vec![5, 10]);
 }
 
 #[test]
 fn mapped_attendance_rows_all_zero() {
-    let result = mapped_attendance_rows(vec![0, 0].into_iter());
+    let result = mapped_attendance_rows(vec![0, 0]);
     assert!(result.is_empty());
 }
 
@@ -131,7 +131,7 @@ fn attendance_grid_rows_includes_slot_rows() {
             gender_block: "FEMALE",
         },
     ];
-    let result = attendance_grid_rows(&slots, vec![].into_iter());
+    let result = attendance_grid_rows(&slots, vec![]);
     assert_eq!(result, vec![8, 10]);
 }
 
@@ -142,7 +142,7 @@ fn attendance_grid_rows_includes_extra_rows() {
         row_index: 8,
         gender_block: "MALE",
     }];
-    let result = attendance_grid_rows(&slots, vec![12, 14].into_iter());
+    let result = attendance_grid_rows(&slots, vec![12, 14]);
     assert_eq!(result, vec![8, 12, 14]);
 }
 
@@ -159,7 +159,7 @@ fn attendance_grid_rows_sorts_and_dedupes() {
             gender_block: "MALE",
         },
     ];
-    let result = attendance_grid_rows(&slots, vec![10, 12].into_iter());
+    let result = attendance_grid_rows(&slots, vec![10, 12]);
     assert_eq!(result, vec![8, 10, 12]);
 }
 
@@ -176,7 +176,7 @@ fn attendance_grid_rows_no_extra_rows() {
             gender_block: "MALE",
         },
     ];
-    let result = attendance_grid_rows(&slots, vec![].into_iter());
+    let result = attendance_grid_rows(&slots, vec![]);
     assert_eq!(result, vec![8, 9]);
 }
 
@@ -418,10 +418,6 @@ fn sync_and_open_workbook_errors_when_no_template() {
     // We mock this by looking at the error type, but the real test requires a pool.
     // Simplified: just verify the function compiles and returns correct types.
     let _result: crate::domain::error::Result<String> = Ok(String::new());
-    assert!(
-        true,
-        "Compile-time check passed — function signature is correct"
-    );
 }
 
 // ── summary_formula_marks ────────────────────────────────────────────────

@@ -3,9 +3,8 @@ use crate::domain::models::{AttendanceEvent, Student, StudentGender};
 use crate::sf2::attendance::present_student_ids;
 use crate::sf2::logic::normalize_learner_name;
 use crate::sf2::models::{
-    Sf2ExportPreview, Sf2ExportReadiness, Sf2PreviewAbsence, Sf2PreviewCell,
-    Sf2PreviewCellStatus, Sf2PreviewDate, Sf2PreviewStudentRow, Sf2StudentMappingRecord,
-    Sf2TemplateRecord,
+    Sf2ExportPreview, Sf2ExportReadiness, Sf2PreviewAbsence, Sf2PreviewCell, Sf2PreviewCellStatus,
+    Sf2PreviewDate, Sf2PreviewStudentRow, Sf2StudentMappingRecord, Sf2TemplateRecord,
 };
 use crate::sf2::repository::template_summary;
 use std::collections::{HashMap, HashSet};
