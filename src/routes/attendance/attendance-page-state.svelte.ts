@@ -1,7 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { page } from '$app/state';
 import {
-	getSf2WorkbookSettings,
 	listStudents,
 	listClasses,
 	listEventsForDate,
@@ -16,7 +15,6 @@ import {
 	type Student,
 	type Class
 } from '$lib/db-rust';
-import { sf2MonthByValue, defaultSf2FirstSchoolDay } from '$lib/features/settings/sf2-workbook';
 import { fmtDate, fmtTime } from '$lib/csv';
 import { settingsStore } from '$lib/stores/settings.svelte';
 import {
@@ -197,32 +195,6 @@ class AttendancePageState {
 			} else {
 				const active = getActiveClass(this.classes);
 				this.selectedClassId = active?.id ?? this.classes[0]?.id ?? '';
-			}
-
-			// Sync the attendance page date with the current SF2 report month
-			try {
-				if (this.selectedClassId) {
-					const sf2Settings = await getSf2WorkbookSettings(this.selectedClassId);
-					if (sf2Settings?.reportMonth) {
-						const sf2Month = sf2MonthByValue(sf2Settings.reportMonth);
-						if (sf2Month) {
-							const firstSchoolDay = defaultSf2FirstSchoolDay(
-								sf2Settings.reportMonth,
-								sf2Settings.schoolYear
-							);
-							const year = new Date().getFullYear();
-							const adjustedDate = fmtDate(
-								new Date(year, sf2Month.monthIndex, firstSchoolDay).getTime()
-							);
-							if (adjustedDate !== this.selectedDate) {
-								this.selectedDate = adjustedDate;
-								this.events = await listEventsForDate(this.selectedDate);
-							}
-						}
-					}
-				}
-			} catch {
-				// SF2 not configured — keep the default today date
 			}
 
 			if (page.url.searchParams.get('manual') === 'true') {
