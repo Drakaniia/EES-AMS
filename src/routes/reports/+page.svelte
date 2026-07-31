@@ -1,26 +1,26 @@
-	<script lang="ts">
-		import { onDestroy } from 'svelte';
-		import { fullPreviewStore } from '$lib/stores/full-preview.svelte';
-		import ReportTable from './report-table.svelte';
-		import ReportExportDialogs from './report-export-dialogs.svelte';
-		import ReportMonthPicker from './report-month-picker.svelte';
-		import ReportSf2Progress from './report-sf2-progress.svelte';
-		import ReportSidebar from './ReportSidebar.svelte';
-		import ReportWorkbookDetailsDialog from './ReportWorkbookDetailsDialog.svelte';
-		import ReportMonthSwitchOverlay from './ReportMonthSwitchOverlay.svelte';
-		import ReportLoadingStates from './ReportLoadingStates.svelte';
-		import { createReportPageState } from './report-page-state.svelte';
+<script lang="ts">
+	import { onDestroy } from 'svelte';
+	import { fullPreviewStore } from '$lib/stores/full-preview.svelte';
+	import ReportTable from './report-table.svelte';
+	import ReportExportDialogs from './report-export-dialogs.svelte';
+	import ReportMonthPicker from './report-month-picker.svelte';
+	import ReportSf2Progress from './report-sf2-progress.svelte';
+	import ReportSidebar from './ReportSidebar.svelte';
+	import ReportWorkbookDetailsDialog from './ReportWorkbookDetailsDialog.svelte';
+	import ReportMonthSwitchOverlay from './ReportMonthSwitchOverlay.svelte';
+	import ReportLoadingStates from './ReportLoadingStates.svelte';
+	import { createReportPageState } from './report-page-state.svelte';
 
-		const page = createReportPageState();
+	const page = createReportPageState();
 
-		$effect(() => {
-			fullPreviewStore.isActive = page.fullReviewOpen;
-		});
+	$effect(() => {
+		fullPreviewStore.isActive = page.fullReviewOpen;
+	});
 
-		onDestroy(() => {
-			fullPreviewStore.isActive = false;
-		});
-	</script>
+	onDestroy(() => {
+		fullPreviewStore.isActive = false;
+	});
+</script>
 
 <svelte:head>
 	<title>Reports - Attendance System</title>
@@ -30,7 +30,12 @@
 <svelte:window onkeydown={page.onWindowKeydown} />
 
 <div class="flex h-full flex-col overflow-hidden">
-	<ReportLoadingStates loading={page.loading} loadError={page.loadError} preview={page.preview} onRetry={page.loadInitial} />
+	<ReportLoadingStates
+		loading={page.loading}
+		loadError={page.loadError}
+		preview={page.preview}
+		onRetry={page.loadInitial}
+	/>
 
 	{#if !page.loading && !page.loadError && page.preview?.template}
 		{#if page.fullReviewOpen}
@@ -79,7 +84,6 @@
 					preview={page.preview}
 					selectedClass={page.selectedClass}
 					draftSchoolId={page.draft.schoolId}
-					draftSchoolName={page.draft.schoolName}
 					draftSchoolYear={page.draft.schoolYear}
 					draftReportMonth={page.draft.reportMonth}
 					draftGradeLevel={page.draft.gradeLevel}

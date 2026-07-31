@@ -88,8 +88,7 @@ export function createSf2OpenState() {
 				9: 'Opening in Excel…',
 				10: 'Done!'
 			};
-			displayMessage =
-				progressMessages[progressCurrent] || SF2_OPEN_MESSAGES[cycleIndex];
+			displayMessage = progressMessages[progressCurrent] || SF2_OPEN_MESSAGES[cycleIndex];
 			return;
 		}
 		displayMessage = SF2_OPEN_MESSAGES[cycleIndex];
@@ -151,15 +150,13 @@ export function createSf2OpenState() {
 		}
 	}
 
-	// The open function is hoisted so retry can reference it regardless of
+	// open is initialized before retry so retry can call it regardless of
 	// declaration order in the return object.
-	let open: (
+	const open: (
 		activeClassId: string,
 		preview: Sf2ExportPreview | null,
 		showToast: ShowToastFn
-	) => Promise<void>;
-
-	open = async (activeClassId, preview, showToast) => {
+	) => Promise<void> = async (activeClassId, preview, showToast) => {
 		if (!activeClassId || !preview?.template || status === 'syncing') return;
 
 		// Reset progress state

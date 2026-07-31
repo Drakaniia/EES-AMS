@@ -98,11 +98,7 @@ export function createWorkbookDetailsDraft() {
 			section,
 			adviserName,
 			schoolHeadName,
-			firstSchoolDay: normalizedSf2FirstSchoolDay(
-				reportMonth,
-				schoolYear,
-				settings.firstSchoolDay
-			),
+			firstSchoolDay: normalizedSf2FirstSchoolDay(reportMonth, schoolYear, settings.firstSchoolDay),
 			learnerNames: []
 		};
 	}

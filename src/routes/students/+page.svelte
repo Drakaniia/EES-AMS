@@ -57,7 +57,9 @@
 					type="button"
 					onclick={studentPage.openAdd}
 					disabled={!studentPage.canCreateStudents}
-					title={studentPage.canCreateStudents ? 'Add student' : studentPage.studentCreationBlockedMessage}
+					title={studentPage.canCreateStudents
+						? 'Add student'
+						: studentPage.studentCreationBlockedMessage}
 					class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-6 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					<svg
@@ -83,7 +85,11 @@
 		</div>
 	{:else if studentPage.loadError}
 		<div class="px-4 py-5 md:px-8 lg:px-10">
-			<EmptyState tone="warning" title="Class list is unavailable" description={studentPage.loadError}>
+			<EmptyState
+				tone="warning"
+				title="Class list is unavailable"
+				description={studentPage.loadError}
+			>
 				{#snippet actions()}
 					<button
 						type="button"
@@ -169,4 +175,7 @@
 	onCancel={() => (studentPage.deleteTarget = null)}
 />
 
-<FeedbackToast message={studentPage.toastMessage} onClose={() => (studentPage.toastMessage = null)} />
+<FeedbackToast
+	message={studentPage.toastMessage}
+	onClose={() => (studentPage.toastMessage = null)}
+/>

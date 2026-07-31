@@ -57,7 +57,9 @@ class StudentPageState {
 		const rowHeight = 60;
 		const headerHeight = 48;
 		const verticalBuffer = 120;
-		const calculated = Math.floor((this.availableHeight - headerHeight - verticalBuffer) / rowHeight);
+		const calculated = Math.floor(
+			(this.availableHeight - headerHeight - verticalBuffer) / rowHeight
+		);
 		return Math.max(1, calculated);
 	});
 
@@ -111,7 +113,9 @@ class StudentPageState {
 	sf2Template = $derived(this.sf2Readiness?.template ?? null);
 	assignedClass = $derived.by(() => {
 		const sf2ClassId = this.sf2Template?.classId;
-		return sf2ClassId ? (this.classes.find((classItem) => classItem.id === sf2ClassId) ?? null) : null;
+		return sf2ClassId
+			? (this.classes.find((classItem) => classItem.id === sf2ClassId) ?? null)
+			: null;
 	});
 	canCreateStudents = $derived(Boolean(this.sf2Template && this.assignedClass));
 	studentCreationBlockedMessage = $derived(
@@ -278,7 +282,9 @@ class StudentPageState {
 				];
 				const createdStudents = await createStudents(studentRequests);
 				this.students = [...createdStudents, ...this.students];
-				this.toast(`${this.bulkStudentCount} ${this.bulkStudentCount === 1 ? 'student' : 'students'} added`);
+				this.toast(
+					`${this.bulkStudentCount} ${this.bulkStudentCount === 1 ? 'student' : 'students'} added`
+				);
 				this.closeDialog();
 			} catch (error) {
 				const msg = error instanceof Error ? error.message : 'Failed to add students';

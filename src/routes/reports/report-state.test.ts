@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Sf2PreviewDate } from '$lib/types';
-import {
-	buildMatrixWeekGroups,
-	weekdayIndexForDate,
-	matrixDateLabel
-} from './report-state.svelte';
+import { buildMatrixWeekGroups, weekdayIndexForDate, matrixDateLabel } from './report-state.svelte';
 
 describe('buildMatrixWeekGroups', () => {
 	it('creates dateKey slots for ALL weekdays even with empty dates array', () => {
@@ -81,8 +77,17 @@ describe('buildMatrixWeekGroups', () => {
 		// Generate a full year of date mappings (worst case: every schoolday mapped)
 		const dateMappings: Sf2PreviewDate[] = [];
 		const months = [
-			'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
-			'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE'
+			'AUGUST',
+			'SEPTEMBER',
+			'OCTOBER',
+			'NOVEMBER',
+			'DECEMBER',
+			'JANUARY',
+			'FEBRUARY',
+			'MARCH',
+			'APRIL',
+			'MAY',
+			'JUNE'
 		];
 		for (const monthName of months) {
 			// Add ~22 weekdays per month (realistic full mapping)

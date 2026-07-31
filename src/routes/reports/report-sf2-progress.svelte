@@ -14,15 +14,8 @@
 		onClose?: () => void;
 	};
 
-	let {
-		status,
-		error,
-		resultPath,
-		displayMessage,
-		progressPercent,
-		onRetry,
-		onClose
-	}: Props = $props();
+	let { status, error, resultPath, displayMessage, progressPercent, onRetry, onClose }: Props =
+		$props();
 </script>
 
 {#if status !== 'idle'}
@@ -95,8 +88,10 @@
 				<!-- Animated bouncing dots -->
 				<div class="flex items-center gap-1" aria-hidden="true">
 					<span class="loading-dot size-2.5 rounded-full bg-primary"></span>
-					<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 200ms"></span>
-					<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 400ms"></span>
+					<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 200ms"
+					></span>
+					<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 400ms"
+					></span>
 				</div>
 
 				<!-- Current friendly message -->

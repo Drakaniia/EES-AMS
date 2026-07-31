@@ -18,17 +18,22 @@
 	} from '$lib/db-rust';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { settingsStore } from '$lib/stores/settings.svelte';
-import {
-	ArrowUpRight,
-	CalendarClock,
-	CalendarDays,
-	CheckCircle2,
-	History,
-	ScanLine,
-	UsersRound
-} from 'lucide-svelte';
-	import { getActiveClass, eventTime, initials, attendanceHref } from '../../dashboard-state.svelte';
-import { formatAttendanceDate } from '../attendance-state.svelte';
+	import {
+		ArrowUpRight,
+		CalendarClock,
+		CalendarDays,
+		CheckCircle2,
+		History,
+		ScanLine,
+		UsersRound
+	} from 'lucide-svelte';
+	import {
+		getActiveClass,
+		eventTime,
+		initials,
+		attendanceHref
+	} from '../../dashboard-state.svelte';
+	import { formatAttendanceDate } from '../attendance-state.svelte';
 
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
@@ -161,11 +166,7 @@ import { formatAttendanceDate } from '../attendance-state.svelte';
 	<meta name="description" content="Today's attendance at a glance." />
 </svelte:head>
 
-<PageHeader
-	category="Attendance"
-	title={dynamicTitle}
-	description={dynamicDescription}
->
+<PageHeader category="Attendance" title={dynamicTitle} description={dynamicDescription}>
 	{#snippet actions()}
 		<span
 			class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 text-sm font-semibold"

@@ -9,7 +9,6 @@
 		preview: Sf2ExportPreview | null;
 		selectedClass: Class | null | undefined;
 		draftSchoolId: string;
-		draftSchoolName: string;
 		draftSchoolYear: string;
 		draftReportMonth: string;
 		draftGradeLevel: string;
@@ -34,7 +33,6 @@
 		preview,
 		selectedClass,
 		draftSchoolId,
-		draftSchoolName,
 		draftSchoolYear,
 		draftReportMonth,
 		draftGradeLevel,

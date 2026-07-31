@@ -1,5 +1,7 @@
 @keyframes skeleton-sweep {
-	100% { transform: translateX(100%); }
+	100% {
+		transform: translateX(100%);
+	}
 }
 
 .font-mono {
@@ -23,10 +25,15 @@
 	font-size: clamp(32px, 4vw, 56px);
 }
 
-.app-surface { background: var(--color-background); }
+.app-surface {
+	background: var(--color-background);
+}
 
 .control-ring {
-	transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+	transition:
+		border-color 150ms ease,
+		background-color 150ms ease,
+		color 150ms ease;
 }
 
 .control-ring:hover {
@@ -35,7 +42,9 @@
 
 .control-ring:focus-visible {
 	outline: none;
-	box-shadow: 0 0 0 2px var(--color-background), 0 0 0 4px color-mix(in oklab, var(--color-ring) 58%, transparent);
+	box-shadow:
+		0 0 0 2px var(--color-background),
+		0 0 0 4px color-mix(in oklab, var(--color-ring) 58%, transparent);
 }
 
 .page-frame {
@@ -45,8 +54,16 @@
 	padding: clamp(1rem, 2vw, 1.5rem);
 }
 
-@media (min-width: 768px) { .page-frame { padding-inline: 2rem; } }
-@media (min-width: 1024px) { .page-frame { padding-inline: 2.5rem; } }
+@media (min-width: 768px) {
+	.page-frame {
+		padding-inline: 2rem;
+	}
+}
+@media (min-width: 1024px) {
+	.page-frame {
+		padding-inline: 2.5rem;
+	}
+}
 
 .surface-panel {
 	border: 1px solid var(--color-border);
@@ -64,7 +81,9 @@
 	border-bottom: 1px solid var(--color-border);
 }
 
-.panel-body { padding: 1rem; }
+.panel-body {
+	padding: 1rem;
+}
 
 .btn {
 	display: inline-flex;
@@ -80,10 +99,17 @@
 	line-height: 1.25rem;
 	text-decoration: none;
 	white-space: nowrap;
-	transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+	transition:
+		background-color 150ms ease,
+		border-color 150ms ease,
+		color 150ms ease;
 }
 
-.btn:disabled, .btn[aria-disabled='true'] { cursor: not-allowed; opacity: 0.55; }
+.btn:disabled,
+.btn[aria-disabled='true'] {
+	cursor: not-allowed;
+	opacity: 0.55;
+}
 
 .btn-primary {
 	border-color: color-mix(in oklab, var(--color-primary) 78%, var(--color-border));
@@ -91,7 +117,9 @@
 	color: var(--color-primary-foreground);
 }
 
-.btn-primary:hover { background: var(--color-accent); }
+.btn-primary:hover {
+	background: var(--color-accent);
+}
 
 .btn-secondary {
 	border-color: var(--color-border);
@@ -110,9 +138,13 @@
 	color: var(--color-muted-foreground);
 }
 
-.btn-ghost:hover { background: var(--surface-soft); color: var(--color-foreground); }
+.btn-ghost:hover {
+	background: var(--surface-soft);
+	color: var(--color-foreground);
+}
 
-.field, .select-field {
+.field,
+.select-field {
 	min-height: 2.5rem;
 	width: 100%;
 	border: 1px solid var(--color-border);
@@ -120,17 +152,25 @@
 	background: color-mix(in oklab, var(--color-background) 91%, white);
 	color: var(--color-foreground);
 	font-size: 0.875rem;
-	transition: border-color 150ms ease, background-color 150ms ease;
+	transition:
+		border-color 150ms ease,
+		background-color 150ms ease;
 }
 
-.field { padding: 0.5rem 0.75rem; }
-.select-field { padding-inline: 0.875rem 2.25rem; }
+.field {
+	padding: 0.5rem 0.75rem;
+}
+.select-field {
+	padding-inline: 0.875rem 2.25rem;
+}
 
-.field:hover, .select-field:hover {
+.field:hover,
+.select-field:hover {
 	border-color: color-mix(in oklab, var(--color-primary) 34%, var(--color-border));
 }
 
-.field:focus, .select-field:focus {
+.field:focus,
+.select-field:focus {
 	outline: none;
 	border-color: color-mix(in oklab, var(--color-primary) 72%, var(--color-border));
 	box-shadow: var(--shadow-focus);
@@ -213,7 +253,9 @@
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius-xl);
 	background: color-mix(in oklab, var(--color-background) 92%, white);
-	transition: border-color 150ms ease, background-color 150ms ease;
+	transition:
+		border-color 150ms ease,
+		background-color 150ms ease;
 }
 
 .list-row:hover {
@@ -234,7 +276,11 @@
 	background: var(--color-card);
 }
 
-.table-wrap table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.table-wrap table {
+	width: 100%;
+	border-collapse: separate;
+	border-spacing: 0;
+}
 
 .table-wrap thead {
 	position: sticky;
@@ -243,7 +289,10 @@
 	background: color-mix(in oklab, var(--color-surface) 82%, var(--color-background));
 }
 
-.text-balance-safe { overflow-wrap: anywhere; word-break: normal; }
+.text-balance-safe {
+	overflow-wrap: anywhere;
+	word-break: normal;
+}
 
 .skeleton {
 	position: relative;
@@ -260,10 +309,15 @@
 	animation: skeleton-sweep 1.4s ease-in-out infinite;
 }
 
-.loading-overlay { background-color: var(--color-background); color: var(--color-foreground); }
+.loading-overlay {
+	background-color: var(--color-background);
+	color: var(--color-foreground);
+}
 
 @media (prefers-reduced-motion: reduce) {
-	*, *::before, *::after {
+	*,
+	*::before,
+	*::after {
 		scroll-behavior: auto !important;
 		animation-duration: 0.01ms !important;
 		animation-iteration-count: 1 !important;

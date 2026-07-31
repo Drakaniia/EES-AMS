@@ -1,4 +1,4 @@
-import { SvelteDate } from 'svelte/reactivity';
+import { SvelteDate, SvelteMap } from 'svelte/reactivity';
 import type { Sf2PreviewDate } from '$lib/types';
 import { sf2MonthByValue, sf2ReportMonthLabel } from '$lib/features/settings/sf2-workbook';
 import type { Sf2PreviewCell, Sf2PreviewStudentRow } from '$lib/db-rust';
@@ -134,18 +134,17 @@ export function buildMatrixWeekGroups(
 	const month = sf2MonthByValue(reportMonth);
 
 	// Pre-index dates by dateKey for O(1) lookup instead of O(n) Array.find per slot
-	const datesByKey = new Map<string, Sf2PreviewDate>();
+	const datesByKey = new SvelteMap<string, Sf2PreviewDate>();
 	for (const d of dates) {
 		datesByKey.set(d.date, d);
 	}
 
 	if (month) {
-		const year = dates.length > 0
-			? Number(dates[0].date.split('-')[0])
-			: new SvelteDate().getFullYear();
+		const year =
+			dates.length > 0 ? Number(dates[0].date.split('-')[0]) : new SvelteDate().getFullYear();
 		const dayCount = new SvelteDate(year, month.monthIndex + 1, 0).getDate();
 		// Index groups by week key for O(1) lookup
-		const groupsByKey = new Map<string, MatrixWeekGroup>();
+		const groupsByKey = new SvelteMap<string, MatrixWeekGroup>();
 		const groups: MatrixWeekGroup[] = [];
 
 		for (let day = 1; day <= dayCount; day += 1) {
@@ -176,7 +175,7 @@ export function buildMatrixWeekGroups(
 	}
 
 	// Fallback: when no month match, build from the dates array directly
-	const groupsByKey = new Map<string, MatrixWeekGroup>();
+	const groupsByKey = new SvelteMap<string, MatrixWeekGroup>();
 	const groups: MatrixWeekGroup[] = [];
 
 	for (const dt of dates) {

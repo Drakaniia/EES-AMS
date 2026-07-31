@@ -14,7 +14,7 @@
 	let { open, currentMonth, activeClassId, onSelect, onClose }: Props = $props();
 </script>
 
-<Dialog {open} title="Switch SF2 Report Month" onClose={onClose}>
+<Dialog {open} title="Switch SF2 Report Month" {onClose}>
 	<div class="grid grid-cols-2 gap-2">
 		{#each SF2_SCHOOL_MONTHS as month (month.value)}
 			<button

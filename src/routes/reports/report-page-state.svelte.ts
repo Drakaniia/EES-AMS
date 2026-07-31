@@ -1,4 +1,5 @@
 import { onMount, onDestroy } from 'svelte';
+import { SvelteMap } from 'svelte/reactivity';
 
 import {
 	exportSf2Workbook,
@@ -14,7 +15,7 @@ import {
 	type Sf2ExportPreview,
 	type Sf2PreviewCell,
 	type Sf2PreviewStudentRow,
-	type Sf2WorkbookSettings,
+	type Sf2WorkbookSettings
 } from '$lib/db-rust';
 
 import {
@@ -23,7 +24,7 @@ import {
 	errorMessage,
 	formatDate,
 	reportMonthLabel,
-	type MatrixStudentRow,
+	type MatrixStudentRow
 } from './report-state.svelte';
 
 import {
@@ -31,7 +32,7 @@ import {
 	cacheKey,
 	getPreviewCache,
 	invalidateCacheForMonth,
-	invalidateAllCache,
+	invalidateAllCache
 } from './report-sf2-open.svelte';
 
 import { createWorkbookDetailsDraft } from './report-workbook-details.svelte';
@@ -62,7 +63,7 @@ export function createReportPageState() {
 	let monthSwitchError = $state<string | null>(null);
 	let monthSwitchMessage = $state('');
 	let modalSaving = $state(false);
-	let reportDialogs: ReportExportDialogs;
+	let reportDialogs = $state<ReportExportDialogs | undefined>();
 
 	const activeClassId = $derived(
 		selectedClassId || preview?.classId || preview?.template?.classId || ''
@@ -78,14 +79,18 @@ export function createReportPageState() {
 			.filter((row) => genderFilter === 'all' || row.gender?.toLowerCase() === genderFilter)
 			.map((row) => ({
 				...row,
-				cellsByDate: new Map(row.cells.map((cell) => [cell.date, cell]))
+				cellsByDate: new SvelteMap(row.cells.map((cell) => [cell.date, cell]))
 			}))
 	);
 	const hasAbsentCells = $derived((preview?.absentList.length ?? 0) > 0);
 	const hasModalDraftChanges = $derived(draft.hasChanges(workbookSettings));
 
-	onMount(() => { loadInitial(); });
-	onDestroy(() => { sf2Open.cleanup(); });
+	onMount(() => {
+		loadInitial();
+	});
+	onDestroy(() => {
+		sf2Open.cleanup();
+	});
 
 	async function loadInitial() {
 		loading = true;
@@ -210,7 +215,8 @@ export function createReportPageState() {
 		const missingFields = draft.blankFields();
 		if (missingFields.length > 0) {
 			reportDialogs?.showToast(
-				`Fill required SF2 header fields before exporting: ${missingFields.join(', ')}.`, false
+				`Fill required SF2 header fields before exporting: ${missingFields.join(', ')}.`,
+				false
 			);
 			return;
 		}
@@ -267,7 +273,7 @@ export function createReportPageState() {
 		'Updating the workbook calendar…',
 		'Applying attendance records…',
 		'Almost there…',
-		'Finalizing changes…',
+		'Finalizing changes…'
 	] as const;
 
 	$effect(() => {
@@ -291,7 +297,8 @@ export function createReportPageState() {
 	}
 
 	async function onReportMonthChange() {
-		const previousReportMonth = workbookSettings?.reportMonth || preview?.template?.reportMonth || '';
+		const previousReportMonth =
+			workbookSettings?.reportMonth || preview?.template?.reportMonth || '';
 		const nextMonth = draft.reportMonth;
 		if (!nextMonth || nextMonth === previousReportMonth) return;
 		if (!activeClassId) {
@@ -323,7 +330,9 @@ export function createReportPageState() {
 		}
 	}
 
-	function onToggleFullReview() { fullReviewOpen = !fullReviewOpen; }
+	function onToggleFullReview() {
+		fullReviewOpen = !fullReviewOpen;
+	}
 
 	function onWindowKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape' && fullReviewOpen) fullReviewOpen = false;
@@ -350,63 +359,178 @@ export function createReportPageState() {
 	}
 
 	return {
-		sf2Open, draft,
-		get classes() { return classes; },
-		set classes(v) { classes = v; },
-		get selectedClassId() { return selectedClassId; },
-		set selectedClassId(v) { selectedClassId = v; },
-		get preview() { return preview; },
-		set preview(v) { preview = v; },
-		get workbookSettings() { return workbookSettings; },
-		set workbookSettings(v) { workbookSettings = v; },
-		get loading() { return loading; },
-		set loading(v) { loading = v; },
-		get loadError() { return loadError; },
-		set loadError(v) { loadError = v; },
-		get genderFilter() { return genderFilter; },
-		set genderFilter(v) { genderFilter = v; },
-		get exporting() { return exporting; },
-		set exporting(v) { exporting = v; },
-		get syncingRoster() { return syncingRoster; },
-		set syncingRoster(v) { syncingRoster = v; },
-		get presentingAll() { return presentingAll; },
-		set presentingAll(v) { presentingAll = v; },
-		get savingDetails() { return savingDetails; },
-		set savingDetails(v) { savingDetails = v; },
-		get correctingCellKey() { return correctingCellKey; },
-		set correctingCellKey(v) { correctingCellKey = v; },
-		get exportDialogOpen() { return exportDialogOpen; },
-		set exportDialogOpen(v) { exportDialogOpen = v; },
-		get exportLoadingOpen() { return exportLoadingOpen; },
-		set exportLoadingOpen(v) { exportLoadingOpen = v; },
-		get fullReviewOpen() { return fullReviewOpen; },
-		set fullReviewOpen(v) { fullReviewOpen = v; },
-		get workbookDetailsOpen() { return workbookDetailsOpen; },
-		set workbookDetailsOpen(v) { workbookDetailsOpen = v; },
-		get monthPickerOpen() { return monthPickerOpen; },
-		set monthPickerOpen(v) { monthPickerOpen = v; },
-		get monthSwitchLoading() { return monthSwitchLoading; },
-		set monthSwitchLoading(v) { monthSwitchLoading = v; },
-		get monthSwitchError() { return monthSwitchError; },
-		set monthSwitchError(v) { monthSwitchError = v; },
-		get monthSwitchMessage() { return monthSwitchMessage; },
-		set monthSwitchMessage(v) { monthSwitchMessage = v; },
-		get modalSaving() { return modalSaving; },
-		set modalSaving(v) { modalSaving = v; },
-		get reportDialogs() { return reportDialogs; },
-		set reportDialogs(v) { reportDialogs = v; },
-		get activeClassId() { return activeClassId; },
-		get selectedClass() { return selectedClass; },
-		get exportDisabled() { return exportDisabled; },
-		get activeReportMonth() { return activeReportMonth; },
-		get matrixWeekGroups() { return matrixWeekGroups; },
-		get matrixStudents() { return matrixStudents; },
-		get hasAbsentCells() { return hasAbsentCells; },
-		get hasModalDraftChanges() { return hasModalDraftChanges; },
-		loadInitial, loadReport, loadWorkbookSettings,
-		onOpenSf2, retrySf2Open, onPresentAll, onSyncRoster,
-		requestExport, confirmExport, saveWorkbookDetails,
-		onMonthSelect, onReportMonthChange, onToggleFullReview,
-		onWindowKeydown, toggleAttendance,
+		sf2Open,
+		draft,
+		get classes() {
+			return classes;
+		},
+		set classes(v) {
+			classes = v;
+		},
+		get selectedClassId() {
+			return selectedClassId;
+		},
+		set selectedClassId(v) {
+			selectedClassId = v;
+		},
+		get preview() {
+			return preview;
+		},
+		set preview(v) {
+			preview = v;
+		},
+		get workbookSettings() {
+			return workbookSettings;
+		},
+		set workbookSettings(v) {
+			workbookSettings = v;
+		},
+		get loading() {
+			return loading;
+		},
+		set loading(v) {
+			loading = v;
+		},
+		get loadError() {
+			return loadError;
+		},
+		set loadError(v) {
+			loadError = v;
+		},
+		get genderFilter() {
+			return genderFilter;
+		},
+		set genderFilter(v) {
+			genderFilter = v;
+		},
+		get exporting() {
+			return exporting;
+		},
+		set exporting(v) {
+			exporting = v;
+		},
+		get syncingRoster() {
+			return syncingRoster;
+		},
+		set syncingRoster(v) {
+			syncingRoster = v;
+		},
+		get presentingAll() {
+			return presentingAll;
+		},
+		set presentingAll(v) {
+			presentingAll = v;
+		},
+		get savingDetails() {
+			return savingDetails;
+		},
+		set savingDetails(v) {
+			savingDetails = v;
+		},
+		get correctingCellKey() {
+			return correctingCellKey;
+		},
+		set correctingCellKey(v) {
+			correctingCellKey = v;
+		},
+		get exportDialogOpen() {
+			return exportDialogOpen;
+		},
+		set exportDialogOpen(v) {
+			exportDialogOpen = v;
+		},
+		get exportLoadingOpen() {
+			return exportLoadingOpen;
+		},
+		set exportLoadingOpen(v) {
+			exportLoadingOpen = v;
+		},
+		get fullReviewOpen() {
+			return fullReviewOpen;
+		},
+		set fullReviewOpen(v) {
+			fullReviewOpen = v;
+		},
+		get workbookDetailsOpen() {
+			return workbookDetailsOpen;
+		},
+		set workbookDetailsOpen(v) {
+			workbookDetailsOpen = v;
+		},
+		get monthPickerOpen() {
+			return monthPickerOpen;
+		},
+		set monthPickerOpen(v) {
+			monthPickerOpen = v;
+		},
+		get monthSwitchLoading() {
+			return monthSwitchLoading;
+		},
+		set monthSwitchLoading(v) {
+			monthSwitchLoading = v;
+		},
+		get monthSwitchError() {
+			return monthSwitchError;
+		},
+		set monthSwitchError(v) {
+			monthSwitchError = v;
+		},
+		get monthSwitchMessage() {
+			return monthSwitchMessage;
+		},
+		set monthSwitchMessage(v) {
+			monthSwitchMessage = v;
+		},
+		get modalSaving() {
+			return modalSaving;
+		},
+		set modalSaving(v) {
+			modalSaving = v;
+		},
+		get reportDialogs() {
+			return reportDialogs;
+		},
+		set reportDialogs(v) {
+			reportDialogs = v;
+		},
+		get activeClassId() {
+			return activeClassId;
+		},
+		get selectedClass() {
+			return selectedClass;
+		},
+		get exportDisabled() {
+			return exportDisabled;
+		},
+		get activeReportMonth() {
+			return activeReportMonth;
+		},
+		get matrixWeekGroups() {
+			return matrixWeekGroups;
+		},
+		get matrixStudents() {
+			return matrixStudents;
+		},
+		get hasAbsentCells() {
+			return hasAbsentCells;
+		},
+		get hasModalDraftChanges() {
+			return hasModalDraftChanges;
+		},
+		loadInitial,
+		loadReport,
+		loadWorkbookSettings,
+		onOpenSf2,
+		retrySf2Open,
+		onPresentAll,
+		onSyncRoster,
+		requestExport,
+		confirmExport,
+		saveWorkbookDetails,
+		onMonthSelect,
+		onReportMonthChange,
+		onToggleFullReview,
+		onWindowKeydown,
+		toggleAttendance
 	};
 }
