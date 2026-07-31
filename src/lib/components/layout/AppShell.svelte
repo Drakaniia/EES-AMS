@@ -9,8 +9,7 @@
 			FileSpreadsheet,
 			PanelLeft,
 			ScanLine,
-			Settings,
-			UsersRound
+			Settings
 		} from 'lucide-svelte';
 	
 		let { children } = $props();
@@ -24,8 +23,6 @@
 		const navItems = [
 			{ href: '/reports', label: 'SF2 Reports', icon: FileSpreadsheet },
 			{ href: '/attendance', label: 'Attendance', icon: ScanLine },
-			{ type: 'divider' as const },
-			{ href: '/students', label: 'Class List', icon: UsersRound },
 		] as const;
 
 	const attendanceNavLabel = $derived(

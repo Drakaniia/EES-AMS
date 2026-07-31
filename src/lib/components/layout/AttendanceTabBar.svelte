@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
-	import { ScanLine, LayoutDashboard, FileText } from 'lucide-svelte';
+	import { ScanLine, LayoutDashboard, FileText, UsersRound } from 'lucide-svelte';
 
 	const tabs = [
 		{ href: '/attendance', label: 'Attendance', icon: ScanLine },
 		{ href: '/attendance/overview', label: 'Daily Overview', icon: LayoutDashboard },
-		{ href: '/attendance/logs', label: 'Attendance Logs', icon: FileText }
+		{ href: '/attendance/logs', label: 'Attendance Logs', icon: FileText },
+		{ href: '/students', label: 'Class List', icon: UsersRound }
 	] as const;
 
 	function isActive(href: string, pathname: string) {
