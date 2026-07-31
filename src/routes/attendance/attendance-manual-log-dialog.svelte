@@ -12,7 +12,8 @@
 		dateLoading = false,
 		getNextAttendanceType = () => null as AttendanceType | null,
 		getStudentStatus = () => ({ label: '', tone: '' }) as { label: string; tone: string },
-		markStudent = async () => {}
+		markStudent = async () => {},
+		onMarkAbsent = () => {}
 	}: {
 		open: boolean;
 		pickerQuery: string;
@@ -28,6 +29,7 @@
 			action: AttendanceType | null,
 			closePicker: boolean
 		) => Promise<void>;
+		onMarkAbsent: (student: Student) => void;
 	} = $props();
 </script>
 
@@ -52,7 +54,12 @@
 			{#each pickerStudents as student (student.id)}
 				{@const action = getNextAttendanceType(student)}
 				{@const status = getStudentStatus(student)}
-				<li>
+				<li
+					oncontextmenu={(e) => {
+						e.preventDefault();
+						onMarkAbsent(student);
+					}}
+				>
 					<button
 						disabled={isProcessing || dateLoading}
 						onclick={() => markStudent(student, action, true)}
