@@ -107,9 +107,7 @@
 
 		<button
 			type="button"
-			disabled={
-				isProcessing || dateLoading || !isScheduledDayValue || rosterCount === 0
-			}
+			disabled={isProcessing || dateLoading || !isScheduledDayValue || rosterCount === 0}
 			onclick={onPresentAllStudents}
 			title={isScheduledDayValue
 				? 'Marks every student in this class as present, regardless of the search filter'

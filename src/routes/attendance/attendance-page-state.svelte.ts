@@ -553,8 +553,7 @@ class AttendancePageState {
 			.sort((a, b) => a.name.localeCompare(b.name))
 			.filter(
 				(student) =>
-					this.getNextAttendanceType(student) === 'in' &&
-					!this.absentStudentIds.has(student.id)
+					this.getNextAttendanceType(student) === 'in' && !this.absentStudentIds.has(student.id)
 			);
 
 		if (studentsToMark.length === 0) {
@@ -623,9 +622,7 @@ class AttendancePageState {
 
 			// Absent-marked students were skipped and keep their highlight.
 			const absentKept =
-				this.absentStudentIds.size > 0
-					? ` · ${this.absentStudentIds.size} kept absent`
-					: '';
+				this.absentStudentIds.size > 0 ? ` · ${this.absentStudentIds.size} kept absent` : '';
 			this.attendanceLog?.showToast(
 				`${createdEvents.length} ${createdEvents.length === 1 ? 'student' : 'students'} marked present${absentKept}`
 			);
