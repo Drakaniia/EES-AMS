@@ -502,6 +502,32 @@ class AttendancePageState {
 		}
 	}
 
+	async markAbsent(student: Student) {
+		if (this.isProcessing || this.dateLoading) {
+			this.attendanceLog?.showToast('Please wait - processing previous request', false);
+			return;
+		}
+
+		const last = this.getLastEventForSession(student);
+		if (!last) {
+			if (this.absentStudentIds.has(student.id)) return;
+			this.absentStudentIds.add(student.id);
+			this.attendanceLog?.showToast(`${student.name} marked absent`);
+			return;
+		}
+
+		this.isProcessing = true;
+		try {
+			// Manual grid/dialog marks never surface the late flag in this flow.
+			await this.logForStudent(student, null, {
+				suppressLate: true,
+				message: `${student.name} marked absent`
+			});
+		} finally {
+			this.isProcessing = false;
+		}
+	}
+
 	async handleUndo(eventId: string): Promise<boolean> {
 		try {
 			await deleteEvent(eventId);
