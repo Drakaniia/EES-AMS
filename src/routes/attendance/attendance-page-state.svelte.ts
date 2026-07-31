@@ -546,14 +546,23 @@ class AttendancePageState {
 		}
 
 		// Records the ENTIRE class roster - the search filter is intentionally ignored
-		// (spec 5.5): every student without a record gets one, absent highlights reset.
+		// (spec 5.5): every student without a record gets one, except absent-marked
+		// students, who keep their absent highlight.
 		const studentsToMark = this.students
 			.filter((student) => this.matchesSelectedClass(student))
 			.sort((a, b) => a.name.localeCompare(b.name))
-			.filter((student) => this.getNextAttendanceType(student) === 'in');
+			.filter(
+				(student) =>
+					this.getNextAttendanceType(student) === 'in' &&
+					!this.absentStudentIds.has(student.id)
+			);
 
 		if (studentsToMark.length === 0) {
-			this.attendanceLog?.showToast('All students are already recorded');
+			this.attendanceLog?.showToast(
+				this.absentStudentIds.size > 0
+					? 'All students are already recorded or marked absent'
+					: 'All students are already recorded'
+			);
 			return;
 		}
 
@@ -612,11 +621,13 @@ class AttendancePageState {
 				this.attendanceLog?.addLogEntries(createdLogLines);
 			}
 
-			// Everyone is present again - the session absent highlight no longer applies.
-			this.absentStudentIds.clear();
-
+			// Absent-marked students were skipped and keep their highlight.
+			const absentKept =
+				this.absentStudentIds.size > 0
+					? ` · ${this.absentStudentIds.size} kept absent`
+					: '';
 			this.attendanceLog?.showToast(
-				`${createdEvents.length} ${createdEvents.length === 1 ? 'student' : 'students'} marked present`
+				`${createdEvents.length} ${createdEvents.length === 1 ? 'student' : 'students'} marked present${absentKept}`
 			);
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err);
