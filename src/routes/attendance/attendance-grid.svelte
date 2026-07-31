@@ -1,21 +1,19 @@
 <script lang="ts">
-	import { Search, CheckCheck, Grid2X2, List } from 'lucide-svelte';
+	import { Search, CheckCheck, Grid2X2, List, Check, X } from 'lucide-svelte';
 	import type { Snippet } from 'svelte';
 	import type { Student, AttendanceType } from '$lib/db-rust';
 	import type { ManualViewMode } from './attendance-state.svelte';
-	import { getStudentInitials, getStudentClassName } from './attendance-state.svelte';
+	import { getStudentInitials } from './attendance-state.svelte';
 
 	let {
 		manualStudents,
 		manualViewMode = $bindable(),
 		isProcessing,
 		dateLoading,
-		selectedClassId,
-		selectedDateLabel,
-		classById,
-		recordedCount,
+		presentCount,
+		absentCount,
 		pendingCount,
-		pendingManualStudents,
+		rosterCount,
 		rosterQuery,
 		isScheduledDayValue,
 		isPresentingAll,
@@ -31,12 +29,10 @@
 		manualViewMode: ManualViewMode;
 		isProcessing: boolean;
 		dateLoading: boolean;
-		selectedClassId: string;
-		selectedDateLabel: string;
-		classById: Map<string, import('$lib/db-rust').Class>;
-		recordedCount: number;
+		presentCount: number;
+		absentCount: number;
 		pendingCount: number;
-		pendingManualStudents: Student[];
+		rosterCount: number;
 		rosterQuery: string;
 		isScheduledDayValue: boolean;
 		isPresentingAll: boolean;
@@ -56,14 +52,35 @@
 			<div>
 				<h3 class="text-xl font-semibold">Student boxes</h3>
 				<p class="mt-1 max-w-xl text-sm text-muted-foreground">
-					One click per learner. Boxes show whether attendance has been recorded for
-					{selectedDateLabel}.
+					Present by default. Like SF2, every learner starts as present. Click
+					<span class="font-semibold text-foreground">Present all</span> to record the class, then click
+					individual boxes to mark those learners absent.
 				</p>
+				<div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+					<span class="inline-flex items-center gap-1.5">
+						<span
+							class="size-2.5 rounded-sm border border-green-500/35 bg-green-50"
+							aria-hidden="true"
+						></span>
+						Present
+					</span>
+					<span class="inline-flex items-center gap-1.5">
+						<span class="size-2.5 rounded-sm border border-red-500/35 bg-red-50" aria-hidden="true"
+						></span>
+						Absent
+					</span>
+					<span class="inline-flex items-center gap-1.5">
+						<span class="size-2.5 rounded-sm border border-border bg-background" aria-hidden="true"
+						></span>
+						Pending · Present by default
+					</span>
+				</div>
 			</div>
-			<div class="grid grid-cols-3 overflow-hidden rounded-xl border border-border bg-surface">
+			<div class="grid grid-cols-4 overflow-hidden rounded-xl border border-border bg-surface">
 				{@render manualStat('Names', manualStudents.length)}
-				{@render manualStat('Recorded', recordedCount)}
+				{@render manualStat('Present', presentCount)}
 				{@render manualStat('Pending', pendingCount)}
+				{@render manualStat('Absent', absentCount)}
 			</div>
 		</div>
 	</div>
@@ -88,16 +105,12 @@
 
 		<button
 			type="button"
-			disabled={isProcessing ||
-				dateLoading ||
-				!isScheduledDayValue ||
-				pendingManualStudents.length === 0 ||
-				manualStudents.length === 0}
+			disabled={
+				isProcessing || dateLoading || !isScheduledDayValue || rosterCount === 0
+			}
 			onclick={onPresentAllStudents}
 			title={isScheduledDayValue
-				? rosterQuery.trim()
-					? 'Marks every pending student currently shown by the search as present'
-					: 'Marks every pending student in this roster as present'
+				? 'Marks every student in this class as present, regardless of the search filter'
 				: 'Attendance can only be recorded on scheduled class days'}
 			class="inline-flex h-10 shrink-0 items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 		>
@@ -106,19 +119,15 @@
 			{:else}
 				<CheckCheck class="size-4" aria-hidden="true" />
 			{/if}
-			{isPresentingAll
-				? 'Recording...'
-				: pendingManualStudents.length > 0
-					? `Present all (${pendingManualStudents.length})`
-					: 'Present all'}
+			{isPresentingAll ? 'Recording...' : 'Present all'}
 		</button>
 
-		{#if recordedCount > 0}
+		{#if presentCount > 0 || absentCount > 0}
 			<button
 				type="button"
 				disabled={isProcessing || dateLoading || !isScheduledDayValue}
 				onclick={onClearAllAttendance}
-				title="Remove all recorded attendance for this session"
+				title="Remove all recorded attendance and reset absent marks for this session"
 				class="inline-flex h-10 shrink-0 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
 			>
 				<svg
@@ -135,7 +144,7 @@
 					<path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
 					<path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
 				</svg>
-				Clear all ({recordedCount})
+				{presentCount > 0 ? `Clear all (${presentCount})` : 'Clear all'}
 			</button>
 		{/if}
 
@@ -219,17 +228,21 @@
 						title={`${student.name} - ${status.label}`}
 						disabled={isProcessing || dateLoading}
 						onclick={() => onMarkStudent(student, action)}
-						class="group flex h-[116px] min-w-0 flex-col justify-between overflow-hidden rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
-						'in'
-							? 'border-border bg-background hover:border-primary hover:bg-primary/10'
-							: 'border-border bg-surface/80 text-muted-foreground'}"
+						class="group flex h-[116px] min-w-0 flex-col justify-between overflow-hidden rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 {status.tone ===
+						'present'
+							? 'border-green-500/35 bg-green-50 hover:bg-green-100'
+							: status.tone === 'absent'
+								? 'border-red-500/35 bg-red-50 hover:bg-red-100'
+								: 'border-border bg-background hover:border-primary hover:bg-primary/10'}"
 					>
 						<span class="flex min-w-0 items-start gap-2">
 							<span
 								class="grid size-9 shrink-0 place-items-center rounded-lg border text-[11px] font-bold {status.tone ===
-								'in'
-									? 'border-primary/30 bg-primary text-primary-foreground'
-									: 'border-border bg-surface text-foreground'}"
+								'present'
+									? 'border-green-500/35 bg-green-100 text-green-700'
+									: status.tone === 'absent'
+										? 'border-red-500/35 bg-red-100 text-red-700'
+										: 'border-border bg-surface text-foreground'}"
 							>
 								{getStudentInitials(student.name)}
 							</span>
@@ -242,16 +255,25 @@
 							</span>
 						</span>
 						<span class="flex items-center justify-between gap-2">
-							<span class="min-w-0 truncate text-[10px] leading-snug text-muted-foreground">
-								{selectedClassId ? status.label : getStudentClassName(student, classById)}
-							</span>
 							<span
-								class="label-mono shrink-0 text-[10px] font-bold {action === 'in'
-									? 'text-primary'
-									: 'text-muted-foreground'}"
+								class="min-w-0 truncate text-[10px] leading-snug {status.tone === 'present'
+									? 'text-green-700'
+									: status.tone === 'absent'
+										? 'text-red-700'
+										: 'text-muted-foreground'}"
 							>
-								{action === 'in' ? 'IN' : 'RECORDED'}
+								{status.label}
 							</span>
+							{#if status.tone === 'present'}
+								<Check class="size-3.5 shrink-0 text-green-700" aria-hidden="true" />
+							{:else if status.tone === 'absent'}
+								<X class="size-3.5 shrink-0 text-red-700" aria-hidden="true" />
+							{:else}
+								<span
+									class="size-1.5 shrink-0 rounded-full bg-muted-foreground/40"
+									aria-hidden="true"
+								></span>
+							{/if}
 						</span>
 					</button>
 				{/each}
@@ -267,7 +289,12 @@
 						>
 							<div class="flex min-w-0 items-center gap-3">
 								<div
-									class="grid size-10 shrink-0 place-items-center rounded-lg border border-border bg-surface text-xs font-bold"
+									class="grid size-10 shrink-0 place-items-center rounded-lg border text-xs font-bold {status.tone ===
+									'present'
+										? 'border-green-500/35 bg-green-100 text-green-700'
+										: status.tone === 'absent'
+											? 'border-red-500/35 bg-red-100 text-red-700'
+											: 'border-border bg-surface text-foreground'}"
 								>
 									{getStudentInitials(student.name)}
 								</div>
@@ -276,10 +303,17 @@
 										{student.name}
 									</div>
 									<div
-										class="mt-1 text-xs {status.tone === 'in'
-											? 'text-primary'
-											: 'text-muted-foreground'}"
+										class="mt-1 flex items-center gap-1.5 text-xs {status.tone === 'present'
+											? 'text-green-700'
+											: status.tone === 'absent'
+												? 'text-red-700'
+												: 'text-muted-foreground'}"
 									>
+										{#if status.tone === 'present'}
+											<Check class="size-3.5" aria-hidden="true" />
+										{:else if status.tone === 'absent'}
+											<X class="size-3.5" aria-hidden="true" />
+										{/if}
 										{status.label}
 									</div>
 								</div>
@@ -287,12 +321,12 @@
 							<button
 								disabled={isProcessing || dateLoading || !isScheduledDayValue}
 								onclick={() => onMarkStudent(student, action)}
-								class="w-fit min-w-28 rounded-pill px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {action ===
-								'in'
-									? 'bg-primary text-primary-foreground hover:bg-accent'
-									: 'border border-border bg-surface text-muted-foreground'}"
+								class="w-fit min-w-28 rounded-pill px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {status.tone ===
+								'present'
+									? 'border border-border bg-surface text-muted-foreground'
+									: 'bg-primary text-primary-foreground hover:bg-accent'}"
 							>
-								{action === 'in' ? 'Record' : 'Recorded'}
+								{status.tone === 'present' ? 'Recorded' : 'Record'}
 							</button>
 						</li>
 					{/each}

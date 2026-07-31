@@ -19,7 +19,7 @@
 		type Student
 	} from '$lib/db-rust';
 	import { fmtDate, fmtTime } from '$lib/csv';
-import { formatAttendanceDate, adjustDate } from '../attendance-state.svelte';
+	import { formatAttendanceDate, adjustDate } from '../attendance-state.svelte';
 
 	let students = $state<Student[]>([]);
 	let classes = $state<Class[]>([]);
@@ -227,7 +227,7 @@ import { formatAttendanceDate, adjustDate } from '../attendance-state.svelte';
 				<section class="grid gap-4 sm:grid-cols-3" aria-label="Daily attendance totals">
 					{@render totalCard('Roster', roster.length, 'Students')}
 					{@render totalCard('Present', presentCount, 'Present records', true)}
-					{@render totalCard('Absent', absentCount, 'No present record')}
+					{@render totalCard('Absent', absentCount, 'Not recorded')}
 				</section>
 
 				<section class="surface-panel overflow-hidden">
@@ -258,7 +258,7 @@ import { formatAttendanceDate, adjustDate } from '../attendance-state.svelte';
 											<div class="mt-1 font-mono text-[11px] text-muted-foreground">
 												{present && records[0]
 													? `Present ${fmtTime(records[0].timestamp)}`
-													: 'Absent / no present record'}
+													: 'Not recorded'}
 											</div>
 										</div>
 										<button

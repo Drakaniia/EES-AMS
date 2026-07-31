@@ -19,7 +19,9 @@
 </script>
 
 <svelte:head>
-	<title>{attendanceState.isCardReaderMode ? 'Live Session' : 'Attendance'} - Attendance System</title>
+	<title
+		>{attendanceState.isCardReaderMode ? 'Live Session' : 'Attendance'} - Attendance System</title
+	>
 	<meta name="description" content="Record student attendance." />
 </svelte:head>
 
@@ -29,7 +31,11 @@
 	</div>
 {:else if attendanceState.loadError}
 	<div class="px-4 py-5 md:px-8 lg:px-10">
-		<EmptyState tone="warning" title="Attendance is unavailable" description={attendanceState.loadError}>
+		<EmptyState
+			tone="warning"
+			title="Attendance is unavailable"
+			description={attendanceState.loadError}
+		>
 			{#snippet actions()}
 				<button
 					type="button"
@@ -89,12 +95,10 @@
 			bind:manualViewMode={attendanceState.manualViewMode}
 			isProcessing={attendanceState.isProcessing}
 			dateLoading={attendanceState.dateLoading}
-			selectedClassId={attendanceState.selectedClassId}
-			selectedDateLabel={attendanceState.selectedDateLabel}
-			classById={attendanceState.classById}
-			recordedCount={attendanceState.recordedCount}
+			presentCount={attendanceState.presentCount}
+			absentCount={attendanceState.absentCount}
 			pendingCount={attendanceState.pendingCount}
-			pendingManualStudents={attendanceState.pendingManualStudents}
+			rosterCount={attendanceState.selectedClassRosterCount}
 			rosterQuery={attendanceState.rosterQuery}
 			isScheduledDayValue={attendanceState.isScheduledDayValue}
 			isPresentingAll={attendanceState.isPresentingAll}
@@ -134,4 +138,8 @@
 		attendanceState.markStudent(student, action, closePicker)}
 />
 
-<AttendanceLog bind:this={attendanceState.attendanceLog} bind:log={attendanceState.log} onUndo={(id) => attendanceState.handleUndo(id)} />
+<AttendanceLog
+	bind:this={attendanceState.attendanceLog}
+	bind:log={attendanceState.log}
+	onUndo={(id) => attendanceState.handleUndo(id)}
+/>

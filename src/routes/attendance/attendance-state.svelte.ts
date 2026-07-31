@@ -15,6 +15,8 @@ export type ManualViewMode = 'boxes' | 'list';
 
 export type LogOptions = {
 	timestamp?: number;
+	/** When true, late status is not surfaced in toasts/log pills for this record (manual grid flow). */
+	suppressLate?: boolean;
 };
 
 export type LastResult = {

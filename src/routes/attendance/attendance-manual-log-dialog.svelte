@@ -10,9 +10,9 @@
 		selectedClassId = '',
 		isProcessing = false,
 		dateLoading = false,
-		getNextAttendanceType = (_s: Student) => null as AttendanceType | null,
-		getStudentStatus = (_s: Student) => ({ label: '', tone: '' }) as { label: string; tone: string },
-		markStudent = async (_s: Student, _t: AttendanceType | null, _c: boolean) => {}
+		getNextAttendanceType = () => null as AttendanceType | null,
+		getStudentStatus = () => ({ label: '', tone: '' }) as { label: string; tone: string },
+		markStudent = async () => {}
 	}: {
 		open: boolean;
 		pickerQuery: string;
@@ -23,7 +23,11 @@
 		dateLoading: boolean;
 		getNextAttendanceType: (student: Student) => AttendanceType | null;
 		getStudentStatus: (student: Student) => { label: string; tone: string };
-		markStudent: (student: Student, action: AttendanceType | null, closePicker: boolean) => Promise<void>;
+		markStudent: (
+			student: Student,
+			action: AttendanceType | null,
+			closePicker: boolean
+		) => Promise<void>;
 	} = $props();
 </script>
 
@@ -47,6 +51,7 @@
 		{:else}
 			{#each pickerStudents as student (student.id)}
 				{@const action = getNextAttendanceType(student)}
+				{@const status = getStudentStatus(student)}
 				<li>
 					<button
 						disabled={isProcessing || dateLoading}
@@ -55,11 +60,21 @@
 					>
 						<span>
 							<span class="block font-medium">{student.name}</span>
-							<span class="mt-0.5 block text-xs text-muted-foreground">
-								{getStudentStatus(student).label}
+							<span
+								class="mt-0.5 block text-xs {status.tone === 'present'
+									? 'text-green-700'
+									: status.tone === 'absent'
+										? 'text-red-700'
+										: 'text-muted-foreground'}"
+							>
+								{status.label}
 							</span>
 						</span>
-						<span class="label-mono text-xs font-bold text-primary">
+						<span
+							class="label-mono text-xs font-bold {action === 'in'
+								? 'text-primary'
+								: 'text-muted-foreground'}"
+						>
 							{action === 'in' ? 'RECORD' : 'RECORDED'}
 						</span>
 					</button>
