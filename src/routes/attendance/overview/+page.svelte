@@ -18,15 +18,17 @@
 	} from '$lib/db-rust';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { settingsStore } from '$lib/stores/settings.svelte';
-	import {
-		ArrowUpRight,
-		CalendarClock,
-		CheckCircle2,
-		History,
-		ScanLine,
-		UsersRound
-	} from 'lucide-svelte';
+import {
+	ArrowUpRight,
+	CalendarClock,
+	CalendarDays,
+	CheckCircle2,
+	History,
+	ScanLine,
+	UsersRound
+} from 'lucide-svelte';
 	import { getActiveClass, eventTime, initials, attendanceHref } from '../../dashboard-state.svelte';
+import { formatAttendanceDate } from '../attendance-state.svelte';
 
 	let students = $state<Student[]>([]);
 	let events = $state<AttendanceEvent[]>([]);
@@ -78,6 +80,10 @@
 	}
 
 	const today = $derived(todayKey);
+	const todayLabel = $derived.by(() => {
+		const formatted = formatAttendanceDate(todayKey);
+		return `Today \u2022 ${formatted}`;
+	});
 	const todayEvents = $derived(events.filter((event) => fmtDate(event.timestamp) === today));
 	const studentMap = $derived(new SvelteMap(students.map((student) => [student.id, student])));
 	const activeClass = $derived(getActiveClass(classes));
@@ -161,6 +167,14 @@
 	description={dynamicDescription}
 >
 	{#snippet actions()}
+		<span
+			class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 text-sm font-semibold"
+			role="status"
+			title={todayKey}
+		>
+			<CalendarDays class="size-4 text-primary" aria-hidden="true" />
+			<span>{todayLabel}</span>
+		</span>
 		<a href={resolve('/students')} class="btn btn-secondary control-ring">
 			<UsersRound class="size-4" aria-hidden="true" />
 			Manage students

@@ -19,6 +19,7 @@
 		type Student
 	} from '$lib/db-rust';
 	import { fmtDate, fmtTime } from '$lib/csv';
+import { formatAttendanceDate, adjustDate } from '../attendance-state.svelte';
 
 	let students = $state<Student[]>([]);
 	let classes = $state<Class[]>([]);
@@ -36,6 +37,15 @@
 
 	onMount(() => {
 		reload();
+	});
+
+	const selectedDateLabel = $derived.by(() => {
+		const formatted = formatAttendanceDate(selectedDate);
+		const today = fmtDate(Date.now());
+		if (selectedDate === today) return `Today \u2022 ${formatted}`;
+		if (selectedDate === adjustDate(today, -1)) return `Yesterday \u2022 ${formatted}`;
+		if (selectedDate === adjustDate(today, 1)) return `Tomorrow \u2022 ${formatted}`;
+		return formatted;
 	});
 
 	const primaryClass = $derived(classes[0] ?? null);
@@ -193,9 +203,10 @@
 				aria-haspopup="dialog"
 				aria-expanded={datePickerOpen}
 				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-surface"
+				title={selectedDate}
 			>
 				<CalendarDays class="size-4 text-primary" aria-hidden="true" />
-				<span class="font-mono">{selectedDate}</span>
+				<span>{selectedDateLabel}</span>
 			</button>
 		{/snippet}
 	</PageHeader>
@@ -222,7 +233,7 @@
 				<section class="surface-panel overflow-hidden">
 					<div class="panel-header">
 						<div>
-							<h2 class="text-lg font-black">{selectedDate}</h2>
+							<h2 class="text-lg font-black">{selectedDateLabel}</h2>
 							<p class="mt-1 text-sm text-muted-foreground">
 								Mark a learner present or absent for this day without class-hour checks.
 							</p>
