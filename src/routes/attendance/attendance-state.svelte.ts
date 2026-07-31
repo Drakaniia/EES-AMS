@@ -17,6 +17,8 @@ export type LogOptions = {
 	timestamp?: number;
 	/** When true, late status is not surfaced in toasts/log pills for this record (manual grid flow). */
 	suppressLate?: boolean;
+	/** Overrides the toast shown when an existing 'in' record is removed (absent shortcut). */
+	message?: string;
 };
 
 export type LastResult = {

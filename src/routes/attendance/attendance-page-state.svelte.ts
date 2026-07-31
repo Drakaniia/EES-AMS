@@ -416,7 +416,7 @@ class AttendancePageState {
 				await deleteEvent(last.id, 'Toggled off by user');
 				this.events = this.events.filter((e) => e.id !== last.id);
 				this.attendanceLog?.removeLogEntry(last.id);
-				this.attendanceLog?.showToast(`${student.name} - Attendance removed`);
+				this.attendanceLog?.showToast(options.message ?? `${student.name} - Attendance removed`);
 				this.attendanceLog?.resetUndo();
 				this.absentStudentIds.add(student.id);
 				return;
