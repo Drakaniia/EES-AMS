@@ -23,6 +23,7 @@
 		onRosterQueryChange,
 		onGetNextAttendanceType,
 		onGetStudentStatus,
+		onMarkAbsent,
 		dateNav
 	}: {
 		manualStudents: Student[];
@@ -42,6 +43,7 @@
 		onRosterQueryChange: (value: string) => void;
 		onGetNextAttendanceType: (student: Student) => AttendanceType | null;
 		onGetStudentStatus: (student: Student) => { label: string; tone: string };
+		onMarkAbsent: (student: Student) => void;
 		dateNav?: Snippet;
 	} = $props();
 </script>
@@ -225,9 +227,13 @@
 					{@const status = onGetStudentStatus(student)}
 					<button
 						type="button"
-						title={`${student.name} - ${status.label}`}
+						title={`${student.name} - ${status.label} · Right-click to mark absent`}
 						disabled={isProcessing || dateLoading}
 						onclick={() => onMarkStudent(student, action)}
+						oncontextmenu={(e) => {
+							e.preventDefault();
+							onMarkAbsent(student);
+						}}
 						class="group flex h-[116px] min-w-0 flex-col justify-between overflow-hidden rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 {status.tone ===
 						'present'
 							? 'border-green-500/35 bg-green-50 hover:bg-green-100'
@@ -286,6 +292,10 @@
 						{@const status = onGetStudentStatus(student)}
 						<li
 							class="flex flex-col gap-3 px-4 py-3 hover:bg-surface/50 sm:flex-row sm:items-center sm:justify-between"
+							oncontextmenu={(e) => {
+								e.preventDefault();
+								onMarkAbsent(student);
+							}}
 						>
 							<div class="flex min-w-0 items-center gap-3">
 								<div
