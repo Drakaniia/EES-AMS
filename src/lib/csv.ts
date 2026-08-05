@@ -34,6 +34,7 @@ export function eventsToCSV(
 	>();
 
 	for (const e of events) {
+		if (e.type !== 'in') continue;
 		const student = byStudent.get(e.studentId);
 		if (!student) continue;
 		const date = fmtDate(e.timestamp);

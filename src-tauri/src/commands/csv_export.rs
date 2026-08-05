@@ -31,6 +31,11 @@ pub async fn export_csv_with_folder(
         classes.into_iter().map(|c| (c.id.clone(), c)).collect();
 
     for event in events {
+        // CSV rows describe check-in (IN) records only; explicit absent marks
+        // are not check-ins and must not set a check-in time.
+        if event.event_type != AttendanceType::In {
+            continue;
+        }
         if let Some(student) = student_map.get(&event.student_id) {
             let date = event
                 .timestamp
