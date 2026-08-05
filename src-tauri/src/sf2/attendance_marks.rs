@@ -1,16 +1,16 @@
 use crate::domain::error::Result;
 use crate::infrastructure::database::{DbPool, EventRepository, StudentRepository};
-use crate::sf2::attendance::present_events_for_day;
-use crate::sf2::logic::{
-    attendance_marks_for_closed_day, day_has_attendance_taken, Sf2CellMark, Sf2StudentMapping,
-};
+use crate::sf2::attendance::{absent_student_ids, present_student_ids};
+use crate::sf2::logic::{attendance_marks_for_day, Sf2CellMark, Sf2StudentMapping};
 use crate::sf2::models::{Sf2DateMappingRecord, Sf2StudentMappingRecord, Sf2TemplateRecord};
 
 use std::collections::{HashMap, HashSet};
 
-/// Generate attendance Excel marks for a set of closed days (days with attendance taken).
-/// Iterates through each day and creates cell marks for each student based on their
-/// present/absent status.
+/// Generate attendance Excel marks for a set of days.
+///
+/// An "X" is written only for students with an explicit absent record; every
+/// other student stays blank (present by default). Days with no records at all
+/// (open days) are skipped.
 pub(super) fn export_marks(
     pool: DbPool,
     class_id: &str,
@@ -41,17 +41,17 @@ pub(super) fn export_marks(
                 row_index: student.row_index,
             })
             .collect();
-        let present_events = present_events_for_day(&events, &students, class_id, day);
+        let absent_ids = absent_student_ids(&events, &students, class_id, day);
 
-        // Skip days where NO attendance was taken for ANY student.
-        // Per spec: a day with zero "in" events is an "Open" day, not "Absent".
-        if !day_has_attendance_taken(&present_events) {
+        // Skip days with no records at all (open days) - nothing to mark.
+        if absent_ids.is_empty() && present_student_ids(&events, &students, class_id, day).is_empty()
+        {
             continue;
         }
 
-        marks.extend(attendance_marks_for_closed_day(
+        marks.extend(attendance_marks_for_day(
             &day_students,
-            &present_events,
+            &absent_ids,
             &date_mapping.column_letter,
         ));
     }

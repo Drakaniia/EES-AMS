@@ -1,20 +1,18 @@
 use crate::domain::error::{AppError, Result};
+use crate::domain::models::AttendanceType;
 
-use crate::infrastructure::database::{
-    ClassRepository, DbPool, EventRepository, StudentRepository,
-};
+use crate::infrastructure::database::{ClassRepository, DbPool, StudentRepository};
 
-use crate::sf2::attendance::present_events_for_day;
 use crate::sf2::attendance_events;
 #[cfg(test)]
 use crate::sf2::attendance_events::parse_clock;
+use rusqlite::params;
 #[cfg(test)]
 use crate::sf2::attendance_marks::{
     attendance_grid_rows, clear_attendance_marks_for_records, learner_absent_present_formula_marks,
     mapped_attendance_rows, summary_formula_marks, total_formula_marks,
 };
 use crate::sf2::calendar::attendance_changed_since;
-use crate::sf2::logic::day_has_attendance_taken;
 #[cfg(test)]
 use crate::sf2::logic::Sf2CellMark;
 #[cfg(test)]
@@ -152,10 +150,9 @@ pub fn sync_and_open_sf2_workbook<R: tauri::Runtime>(
 /// touching the Excel workbook or rebuilding the full preview.
 /// Used by the pre-export review toggle so the user doesn't wait on Excel I/O.
 ///
-/// When marking a student as absent on a day with NO existing "in" events
-/// (an "Open" day), this also creates "in" events for all other mapped
-/// students. This establishes the day as having attendance taken, so this
-/// student correctly appears as Absent (X) in the preview instead of Present.
+/// Only the selected student's record is changed: marking absent stores an
+/// explicit 'absent' record for that one student (no other student is
+/// auto-recorded), and marking present replaces it with an 'in' record.
 pub fn set_preview_attendance_lightweight(
     pool: DbPool,
     class_id: String,
@@ -184,55 +181,18 @@ pub fn set_preview_attendance_lightweight(
         .find(|student| student.id.to_string() == student_id)
         .ok_or_else(|| AppError::InvalidInput("Selected student was not found".to_string()))?;
 
-    // When marking a student as absent on a day where NO attendance was taken
-    // (an "Open" day), we need to create "in" events for all OTHER mapped
-    // students. This establishes the day as having attendance taken, and leaves
-    // this specific student without an "in" event → they show as Absent (X).
-    if !present {
-        let event_repo = EventRepository::new(pool.clone());
-        let all_events = event_repo.list()?;
-        let present_events = present_events_for_day(&all_events, &students, &class_id, &date);
-        if !day_has_attendance_taken(&present_events) {
-            // This is an Open day → mark all other mapped students as present
-            let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
-            for mapping in &student_mappings {
-                if mapping.student_id == student_id {
-                    // Skip — this student should remain absent
-                    continue;
-                }
-                if present_events
-                    .iter()
-                    .any(|e| e.student_id == mapping.student_id)
-                {
-                    // Already has an "in" event — skip
-                    continue;
-                }
-                if let Err(e) = attendance_events::set_attendance_event_for_day(
-                    pool.clone(),
-                    &mapping.student_id,
-                    &class_id,
-                    date_value,
-                    &class.day_start,
-                    true,
-                ) {
-                    log::warn!(
-                        "Failed to mark student {} present on {}: {}",
-                        mapping.student_id,
-                        date,
-                        e
-                    );
-                }
-            }
-        }
-    }
-
+    let event_type = if present {
+        AttendanceType::In
+    } else {
+        AttendanceType::Absent
+    };
     attendance_events::set_attendance_event_for_day(
         pool,
         &student_id,
         &class_id,
         date_value,
         &class.day_start,
-        present,
+        event_type,
     )?;
     // Reset last_synced_at so the next SF2 open detects the change and
     // rewrites marks. Without this, the sync optimization in
@@ -285,13 +245,18 @@ pub fn set_preview_attendance(
         .find(|student| student.id.to_string() == student_id)
         .ok_or_else(|| AppError::InvalidInput("Selected student was not found".to_string()))?;
 
+    let event_type = if present {
+        AttendanceType::In
+    } else {
+        AttendanceType::Absent
+    };
     attendance_events::set_attendance_event_for_day(
         pool.clone(),
         &student_id,
         &class_id,
         date_value,
         &class.day_start,
-        present,
+        event_type,
     )?;
     let template = super::excel_service::refresh_template_calendar_from_saved_month(
         pool.clone(),
@@ -305,11 +270,9 @@ pub fn set_preview_attendance(
 
 /// Mark ALL absent students as present for the current report month of a class.
 ///
-/// For each date in the report month where attendance was taken (at least one
-/// "in" event exists), create "in" events for ALL mapped students who were
-/// absent. This effectively "clears" all X marks, resetting to all Present.
-///
-/// Open days (no attendance taken at all) are left as-is.
+/// Deletes every explicit 'absent' event for the class within the report month.
+/// With the present-by-default model, removing the absent records leaves every
+/// learner blank (present) - clearing all X marks without touching 'in' records.
 pub fn set_all_students_present(pool: DbPool, class_id: &str) -> Result<usize> {
     use crate::sf2::calendar::parse_date;
     use crate::sf2::sf2_metadata::sf2_date_mappings_for_report_month;
@@ -329,70 +292,49 @@ pub fn set_all_students_present(pool: DbPool, class_id: &str) -> Result<usize> {
         return Ok(0);
     }
 
-    let student_mappings = sf2_repo.student_mappings_for_template(&template.id)?;
-    if student_mappings.is_empty() {
-        return Ok(0);
-    }
-
-    let class = ClassRepository::new(pool.clone())
-        .get(class_id)?
-        .ok_or_else(|| AppError::InvalidInput("Selected class was not found".to_string()))?;
-
     let student_repo = StudentRepository::new(pool.clone());
-    let event_repo = EventRepository::new(pool.clone());
     let students = student_repo.list_by_class(Some(class_id))?;
-    let events = event_repo.list()?;
+    let roster_ids: HashSet<String> = students.iter().map(|s| s.id.to_string()).collect();
 
-    let report_dates: Vec<String> = date_mappings.iter().map(|m| m.date.clone()).collect();
-
-    let mut created_count = 0usize;
-
-    for date_str in &report_dates {
-        let Ok(date) = parse_date(date_str) else {
-            continue;
-        };
-
-        // Check if attendance was taken on this day
-        let present_events = present_events_for_day(&events, &students, class_id, date_str);
-        if !day_has_attendance_taken(&present_events) {
-            // No attendance taken on this day — skip (Open day)
-            continue;
-        }
-
-        // Find students who are absent (no "in" event) on this day
-        let present_ids: HashSet<&str> = present_events
-            .iter()
-            .map(|e| e.student_id.as_str())
-            .collect();
-
-        for mapping in &student_mappings {
-            if present_ids.contains(mapping.student_id.as_str()) {
-                // Already present
+    let mut conn = pool.get()?;
+    let transaction = conn.transaction()?;
+    let mut deleted = 0usize;
+    {
+        let mut stmt = transaction.prepare(
+            "SELECT id, student_id, class_id FROM events
+             WHERE event_type = 'absent' AND timestamp >= ?1 AND timestamp < ?2",
+        )?;
+        for mapping in &date_mappings {
+            let Ok(date) = parse_date(&mapping.date) else {
                 continue;
+            };
+            let (start_ts, end_ts) =
+                attendance_events::local_day_bounds_timestamps_for_date(date)?;
+            let rows = stmt.query_map(params![start_ts, end_ts], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })?;
+            for row in rows {
+                let (id, student_id, event_class_id) = row?;
+                let belongs = event_class_id.as_deref() == Some(class_id)
+                    || roster_ids.contains(&student_id);
+                if !belongs {
+                    continue;
+                }
+                transaction.execute("DELETE FROM events WHERE id = ?1", params![id])?;
+                deleted += 1;
             }
-
-            // Create "in" event for this absent student
-            if let Err(e) = attendance_events::set_attendance_event_for_day(
-                pool.clone(),
-                &mapping.student_id,
-                class_id,
-                date,
-                &class.day_start,
-                true,
-            ) {
-                log::warn!(
-                    "Failed to mark student {} present on {}: {}",
-                    mapping.student_id,
-                    date_str,
-                    e
-                );
-                continue;
-            }
-            created_count += 1;
         }
     }
+    transaction.commit()?;
 
-    Ok(created_count)
+    // Reset last_synced_at so the next SF2 open detects the change and
+    // rewrites the cleared marks.
+    sf2_repo.set_last_synced_at(&template.id, None)?;
+    Ok(deleted)
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use crate::domain::error::Result;
 use crate::domain::models::{AttendanceEvent, Student, StudentGender};
-use crate::sf2::attendance::present_student_ids;
+use crate::sf2::attendance::{absent_events_for_day, absent_student_ids, present_events_for_day};
 use crate::sf2::logic::normalize_learner_name;
 use crate::sf2::models::{
     Sf2ExportPreview, Sf2ExportReadiness, Sf2PreviewAbsence, Sf2PreviewCell, Sf2PreviewCellStatus,
@@ -27,18 +27,36 @@ pub(super) fn export_preview(
         .map(|student| (student.id.to_string(), student))
         .collect::<HashMap<_, _>>();
 
-    let present_by_day = dates
+    // Students with an explicit absent record per day. An absent cell (X) is
+    // driven ONLY by these records - untouched students stay blank (present by
+    // default), so other students are never affected by a single absent mark.
+    let absent_by_day = dates
         .iter()
         .map(|date| {
             (
                 date.date.clone(),
-                present_student_ids(
+                absent_student_ids(
                     events,
                     class_students,
                     &template.active_class_id,
                     &date.date,
                 ),
             )
+        })
+        .collect::<HashMap<_, _>>();
+
+    // Days with at least one attendance record (an 'in' OR an explicit 'absent'
+    // event). Days with no records stay 'open' in the preview - attendance was
+    // never taken, so every cell is editable and nothing is marked.
+    let has_attendance_by_day = dates
+        .iter()
+        .map(|date| {
+            let day = &date.date;
+            let has_present = !present_events_for_day(events, class_students, &template.active_class_id, day)
+                .is_empty();
+            let has_absent = !absent_events_for_day(events, class_students, &template.active_class_id, day)
+                .is_empty();
+            (day.clone(), has_present || has_absent)
         })
         .collect::<HashMap<_, _>>();
 
@@ -74,29 +92,32 @@ pub(super) fn export_preview(
             .iter()
             .map(|date| {
                 let editable = student.is_some();
-                let is_present = present_by_day
+                let is_absent = absent_by_day
                     .get(&date.date)
-                    .is_some_and(|present| present.contains(&mapping.student_id));
-
-                // A day has attendance taken if at least one student has an "in" event
-                let day_has_attendance = present_by_day
+                    .is_some_and(|absent| absent.contains(&mapping.student_id));
+                let day_has_attendance = has_attendance_by_day
                     .get(&date.date)
-                    .is_some_and(|present| !present.is_empty());
+                    .copied()
+                    .unwrap_or(false);
 
-                let status = preview_cell_status(is_present, day_has_attendance);
+                let status = preview_cell_status(is_absent, day_has_attendance);
 
-                if status == Sf2PreviewCellStatus::Present {
-                    row_present_count += 1;
-                    present_count += 1;
-                } else {
-                    row_absent_count += 1;
-                    absence_count += 1;
-                    absent_list.push(Sf2PreviewAbsence {
-                        student_id: mapping.student_id.clone(),
-                        student_name: student_name.clone(),
-                        date: date.date.clone(),
-                        row_index: mapping.row_index,
-                    });
+                match status {
+                    Sf2PreviewCellStatus::Present => {
+                        row_present_count += 1;
+                        present_count += 1;
+                    }
+                    Sf2PreviewCellStatus::Absent => {
+                        row_absent_count += 1;
+                        absence_count += 1;
+                        absent_list.push(Sf2PreviewAbsence {
+                            student_id: mapping.student_id.clone(),
+                            student_name: student_name.clone(),
+                            date: date.date.clone(),
+                            row_index: mapping.row_index,
+                        });
+                    }
+                    Sf2PreviewCellStatus::Open => {}
                 }
 
                 Sf2PreviewCell {
@@ -158,7 +179,7 @@ pub(super) fn export_preview(
                 .iter()
                 .map(|date| Sf2PreviewCell {
                     date: date.date.clone(),
-                    status: Sf2PreviewCellStatus::Absent,
+                    status: Sf2PreviewCellStatus::Present,
                     editable: false,
                 })
                 .collect(),
@@ -190,25 +211,20 @@ pub(super) fn export_preview(
 
 /// Determine the cell status for a student on a given day in the SF2 preview.
 ///
-/// - Present: student has an "in" event → empty cell
-/// - Absent: day had attendance taken but this student wasn't present → "X"
-/// - Present (fallback): no attendance taken — show as empty so the cell
-///   is clickable. Clicking it will mark this student as Absent (X) and
-///   create "in" events for all other students to establish the day.
+/// - Absent: the student has an explicit absent record → "X"
+/// - Present: the day has attendance taken (any record) and the student has no
+///   absent record → empty cell (present by default).
+/// - Open: the day has no records at all → nothing taken yet, cell is editable.
 pub(super) fn preview_cell_status(
-    is_present: bool,
+    is_absent: bool,
     day_has_attendance: bool,
 ) -> Sf2PreviewCellStatus {
-    if is_present {
-        Sf2PreviewCellStatus::Present
-    } else if day_has_attendance {
+    if is_absent {
         Sf2PreviewCellStatus::Absent
-    } else {
-        // No attendance taken: show as Present (empty) so the cell
-        // is clickable (regardless of whether the day is past or future).
-        // Clicking it will mark this student as Absent (X) and
-        // create "in" events for all other students to establish the day.
+    } else if day_has_attendance {
         Sf2PreviewCellStatus::Present
+    } else {
+        Sf2PreviewCellStatus::Open
     }
 }
 

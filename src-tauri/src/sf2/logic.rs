@@ -55,36 +55,36 @@ pub fn is_learner_name(value: &str) -> bool {
     normalized.contains(',') && normalized.chars().any(|c| c.is_alphabetic())
 }
 
-/// Check if a day has any attendance taken based on present events.
-/// A day has "attendance taken" when at least one "in" event exists.
-pub fn day_has_attendance_taken(present_events: &[Sf2AttendanceEvent]) -> bool {
-    present_events.iter().any(|event| event.event_type == "in")
+/// Check if a day has any attendance taken.
+/// A day has "attendance taken" when at least one event exists - either an "in"
+/// (present) record or an explicit "absent" record.
+pub fn day_has_attendance_taken(day_events: &[Sf2AttendanceEvent]) -> bool {
+    !day_events.is_empty()
 }
 
 #[cfg(test)]
 #[path = "__tests__/logic_tests.rs"]
 mod tests;
 
-pub fn attendance_marks_for_closed_day(
+/// Generate Excel marks for a day's attendance.
+///
+/// With explicit absent records, the X mark is written ONLY for students who
+/// have an explicit absent event. Everyone else (recorded present or untouched)
+/// stays blank - present by default, matching the SF2 opt-out model.
+pub fn attendance_marks_for_day(
     students: &[Sf2StudentMapping],
-    present_events: &[Sf2AttendanceEvent],
+    absent_student_ids: &HashSet<String>,
     column_letter: &str,
 ) -> Vec<Sf2CellMark> {
-    let present_student_ids: HashSet<&str> = present_events
-        .iter()
-        .filter(|event| event.event_type == "in")
-        .map(|event| event.student_id.as_str())
-        .collect();
-
     students
         .iter()
         .map(|student| Sf2CellMark {
             sheet_name: student.sheet_name.clone(),
             cell_address: format!("{column_letter}{}", student.row_index),
-            value: if present_student_ids.contains(student.student_id.as_str()) {
-                SF2_PRESENT_MARK
-            } else {
+            value: if absent_student_ids.contains(&student.student_id) {
                 SF2_ABSENT_MARK
+            } else {
+                SF2_PRESENT_MARK
             }
             .to_string(),
         })
