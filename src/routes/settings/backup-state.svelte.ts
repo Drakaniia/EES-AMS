@@ -26,9 +26,38 @@ import type { Ctx } from './state-context';
  *
  * Singleton pattern: imported by both orchestrator and components.
  * The orchestrator calls `.init(ctx)` to wire cross-cutting services.
- */
-class BackupState {
+ */ class BackupState {
 	ctx!: Ctx;
+
+	// ── Card view mode ───────────────────────────────────────────────────────
+	// The Data Management card defaults to a compact view that only surfaces the
+	// essential actions (Back Up / Restore). The full detail view is opt-in and
+	// the choice is remembered across sessions.
+	static readonly cardModeStorageKey = 'ees-ams.backup-card-view';
+	backupCardMode = $state<'simple' | 'full'>('simple');
+
+	constructor() {
+		// Restore the persisted view preference (defaults to the compact view).
+		if (typeof window !== 'undefined') {
+			try {
+				const saved = window.localStorage.getItem(BackupState.cardModeStorageKey);
+				if (saved === 'full' || saved === 'simple') this.backupCardMode = saved;
+			} catch {
+				// localStorage unavailable — keep the compact default
+			}
+		}
+	}
+
+	toggleBackupCardMode() {
+		this.backupCardMode = this.backupCardMode === 'simple' ? 'full' : 'simple';
+		if (typeof window !== 'undefined') {
+			try {
+				window.localStorage.setItem(BackupState.cardModeStorageKey, this.backupCardMode);
+			} catch {
+				// non-fatal: the view mode just won't persist across sessions
+			}
+		}
+	}
 
 	init(ctx: Ctx) {
 		this.ctx = ctx;
