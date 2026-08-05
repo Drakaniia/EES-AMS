@@ -25,11 +25,9 @@ impl EventRepository {
 
     /// List all events
     pub fn list(&self) -> Result<Vec<AttendanceEvent>> {
-        let conn = self.pool.get()?;
-        let mut stmt = conn.prepare(
+        let conn = self.pool.get()?;		let mut stmt = conn.prepare(
             "SELECT id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at
              FROM events 
-             WHERE event_type = 'in'
              ORDER BY timestamp DESC",
         )?;
 
@@ -66,12 +64,10 @@ impl EventRepository {
         let start_timestamp = start_local.with_timezone(&Utc).timestamp();
         let end_timestamp = end_local.with_timezone(&Utc).timestamp();
 
-        let conn = self.pool.get()?;
-        let mut stmt = conn.prepare(
+        let conn = self.pool.get()?;		let mut stmt = conn.prepare(
             "SELECT id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at
              FROM events
-             WHERE event_type = 'in'
-             AND class_id = ?1
+             WHERE class_id = ?1
              AND timestamp >= ?2
              AND timestamp < ?3
              ORDER BY timestamp DESC",
@@ -102,12 +98,10 @@ impl EventRepository {
         let start_timestamp = start_local.with_timezone(&Utc).timestamp();
         let end_timestamp = end_local.with_timezone(&Utc).timestamp();
 
-        let conn = self.pool.get()?;
-        let mut stmt = conn.prepare(
+        let conn = self.pool.get()?;		let mut stmt = conn.prepare(
             "SELECT id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at
              FROM events
-             WHERE event_type = 'in'
-             AND timestamp >= ?1
+             WHERE timestamp >= ?1
              AND timestamp < ?2
              ORDER BY timestamp DESC",
         )?;
@@ -141,12 +135,10 @@ impl EventRepository {
 
     /// List events for a specific student
     pub fn list_for_student(&self, student_id: StudentId) -> Result<Vec<AttendanceEvent>> {
-        let conn = self.pool.get()?;
-        let mut stmt = conn.prepare(
+        let conn = self.pool.get()?;		let mut stmt = conn.prepare(
             "SELECT id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at
              FROM events 
              WHERE student_id = ?1
-             AND event_type = 'in'
              ORDER BY timestamp DESC",
         )?;
 
@@ -159,13 +151,11 @@ impl EventRepository {
 
     /// Get last event for a student
     pub fn last_for_student(&self, student_id: StudentId) -> Result<Option<AttendanceEvent>> {
-        let conn = self.pool.get()?;
-        let event = conn
+        let conn = self.pool.get()?;		let event = conn
             .query_row(
                 "SELECT id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at
                  FROM events 
                  WHERE student_id = ?1
-                 AND event_type = 'in'
                  ORDER BY timestamp DESC 
                  LIMIT 1",
                 params![student_id.0.to_string()],

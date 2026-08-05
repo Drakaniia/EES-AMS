@@ -42,7 +42,7 @@ pub(super) fn attendance_event_from_row(row: &Row<'_>) -> rusqlite::Result<Atten
         id: EventId(uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap()),
         student_id: StudentId(uuid::Uuid::parse_str(&row.get::<_, String>(1)?).unwrap()),
         class_id: row.get(2)?,
-        event_type: AttendanceType::In,
+        event_type: AttendanceType::from_db_value(&row.get::<_, String>(3)?),
         timestamp: DateTime::from_timestamp(row.get::<_, i64>(4)?, 0)
             .unwrap()
             .with_timezone(&Utc),

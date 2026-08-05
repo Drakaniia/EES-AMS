@@ -104,6 +104,23 @@ pub struct Student {
 #[serde(rename_all = "lowercase")]
 pub enum AttendanceType {
     In,
+    Absent,
+}
+
+impl AttendanceType {
+    pub fn as_db_value(self) -> &'static str {
+        match self {
+            Self::In => "in",
+            Self::Absent => "absent",
+        }
+    }
+
+    pub fn from_db_value(value: &str) -> Self {
+        match value {
+            "absent" => Self::Absent,
+            _ => Self::In,
+        }
+    }
 }
 
 /// Attendance interface mode
