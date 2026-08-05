@@ -70,8 +70,9 @@ class AttendancePageState {
 	midnightTimer: ReturnType<typeof setTimeout> | null = null;
 	attendanceLog: AttendanceLogHandle | undefined = $state();
 
-	// Session-only absent highlight. Absence is represented by a deleted 'in' record;
-	// this set only drives the UI (spec: present-by-default marking).
+	// Absent highlight driven by explicit 'absent' event records. The set mirrors the
+	// persisted events (rebuilt on load) so absent marks survive navigation and the
+	// SF2 page shows an X for the marked student only.
 	absentStudentIds = $state(new SvelteSet<string>());
 
 	// ── Derived ────────────────────────────────────────────────────────────────
@@ -133,6 +134,7 @@ class AttendancePageState {
 		const byStudent = new SvelteMap<string, AttendanceEvent>();
 
 		for (const event of this.selectedDateEvents) {
+			if (event.type !== 'in') continue;
 			const student = this.studentById.get(event.studentId);
 			if (!student || !this.matchesCurrentSession(event, student)) continue;
 
@@ -145,11 +147,30 @@ class AttendancePageState {
 		return byStudent;
 	});
 
-	// Students with no 'in' record this session (pending + absent). Absent students are
-	// intentionally included - they have no record - so presentCount stays the true
-	// recorded count.
+	// Students with an explicit absent record this session. Absence is a real
+	// stored record (like 'in'), so it survives navigation and SF2 renders an X.
+	lastAbsentEventByStudentForSession = $derived.by(() => {
+		const byStudent = new SvelteMap<string, AttendanceEvent>();
+
+		for (const event of this.selectedDateEvents) {
+			if (event.type !== 'absent') continue;
+			const student = this.studentById.get(event.studentId);
+			if (!student || !this.matchesCurrentSession(event, student)) continue;
+
+			const previous = byStudent.get(event.studentId);
+			if (!previous || eventTime(event) > eventTime(previous)) {
+				byStudent.set(event.studentId, event);
+			}
+		}
+
+		return byStudent;
+	});
+
+	// Students with no 'in' record this session (pending + absent). Absent students
+	// have an 'absent' record but no 'in' record - they are intentionally included
+	// here so presentCount stays the true recorded count.
 	unrecordedStudents = $derived.by(() =>
-		this.manualStudents.filter((student) => this.getNextAttendanceType(student) === 'in')
+		this.manualStudents.filter((student) => !this.lastEventByStudentForSession.has(student.id))
 	);
 	presentCount = $derived(this.manualStudents.length - this.unrecordedStudents.length);
 	absentCount = $derived(
@@ -179,13 +200,6 @@ class AttendancePageState {
 					this.cardInputElement.focus();
 				}
 			});
-
-			// The session-absent highlight is per-day/per-class (spec 6.7): reset it
-			// whenever the selected class changes, mirroring the date-change reset.
-			$effect(() => {
-				void this.selectedClassId;
-				this.absentStudentIds.clear();
-			});
 		});
 	}
 
@@ -212,8 +226,9 @@ class AttendancePageState {
 				this.selectedClassId = active?.id ?? this.classes[0]?.id ?? '';
 			}
 
-			// Session-absent highlight is per day/class.
-			this.absentStudentIds.clear();
+			// Rebuild the absent highlight from persisted records so absent marks made
+			// before leaving the page survive navigation back.
+			this.rebuildAbsentFromEvents();
 
 			if (page.url.searchParams.get('manual') === 'true') {
 				this.pickerQuery = '';
@@ -247,10 +262,9 @@ class AttendancePageState {
 		);
 	}
 
-	getNextAttendanceType(student: Student): AttendanceType | null {
-		const last = this.lastEventByStudentForSession.get(student.id);
-		if (!last) return 'in';
-		return null;
+	getNextAttendanceType(student: Student): AttendanceType {
+		if (this.lastEventByStudentForSession.has(student.id)) return 'absent';
+		return 'in';
 	}
 
 	getStudentStatus(student: Student) {
@@ -320,8 +334,8 @@ class AttendancePageState {
 			async () => {
 				if (this.selectedDate === dateAtScheduleTime) {
 					this.selectedDate = fmtDate(Date.now());
-					this.absentStudentIds.clear();
 					await this.reload();
+					this.rebuildAbsentFromEvents();
 				}
 				this.scheduleMidnightRefresh();
 			},
@@ -337,10 +351,10 @@ class AttendancePageState {
 		const previousDate = this.selectedDate;
 		this.selectedDate = nextDate;
 		this.attendanceLog?.resetState();
-		this.absentStudentIds.clear();
 		this.dateLoading = true;
 		try {
 			this.events = await listEventsForDate(nextDate);
+			this.rebuildAbsentFromEvents();
 			this.attendanceLog?.showToast(`Loaded attendance for ${formatAttendanceDate(nextDate)}`);
 		} catch (error) {
 			this.selectedDate = previousDate;
@@ -408,23 +422,37 @@ class AttendancePageState {
 		forcedType?: AttendanceType | null,
 		options: LogOptions = {}
 	) {
-		const last = this.getLastEventForSession(student);
-		const type = forcedType ?? (last ? null : 'in');
+		const lastIn = this.lastEventByStudentForSession.get(student.id);
+		const lastAbsent = this.lastAbsentEventByStudentForSession.get(student.id);
 
-		if (type === null && last) {
-			try {
-				await deleteEvent(last.id, 'Toggled off by user');
-				this.events = this.events.filter((e) => e.id !== last.id);
-				this.attendanceLog?.removeLogEntry(last.id);
-				this.attendanceLog?.showToast(options.message ?? `${student.name} - Attendance removed`);
-				this.attendanceLog?.resetUndo();
-				this.absentStudentIds.add(student.id);
-				return;
-			} catch {
-				this.attendanceLog?.showToast('Failed to remove attendance', false);
-				return;
-			}
+		// Decide the target state: an explicit action wins; otherwise toggle
+		// (card-reader double tap: present → absent → present).
+		let target: AttendanceType;
+		if (forcedType === 'in' || forcedType === 'absent') {
+			target = forcedType;
+		} else if (lastIn) {
+			target = 'absent';
+		} else if (lastAbsent) {
+			target = 'in';
+		} else {
+			target = 'in';
 		}
+
+		if (target === 'in' && lastIn) {
+			this.attendanceLog?.showToast('Already recorded for this session', false);
+			return;
+		}
+		if (target === 'absent' && lastAbsent) {
+			this.attendanceLog?.showToast(`${student.name} already marked absent`, false);
+			return;
+		}
+
+		// Remove the conflicting record (if any) so the student has exactly one
+		// record per session, then write the new state. Only THIS student is
+		// affected - no other attendance is touched.
+		const eventIdsToDelete: string[] = [];
+		if (target === 'absent' && lastIn) eventIdsToDelete.push(lastIn.id);
+		if (target === 'in' && lastAbsent) eventIdsToDelete.push(lastAbsent.id);
 
 		const ts =
 			options.timestamp ??
@@ -440,38 +468,48 @@ class AttendancePageState {
 				)
 			);
 		const draft = this.getAttendanceDraft(student, ts);
-
-		const finalType = type ?? 'in';
-		const isLate = finalType === 'in' && draft.isLate && !options.suppressLate;
+		const isLate = target === 'in' && draft.isLate && !options.suppressLate;
 
 		try {
+			if (eventIdsToDelete.length > 0) {
+				await deleteEvents(eventIdsToDelete, 'Toggled by user');
+			}
 			const createdEvent = await addEvent({
 				studentId: student.id,
 				classId: draft.classId,
-				type: finalType,
+				type: target,
 				note: isLate ? 'Late' : undefined,
 				sessionKey: draft.sessionKey,
 				timestamp: new Date(ts).toISOString()
 			});
 
-			this.events = [createdEvent, ...this.events];
-			this.absentStudentIds.delete(student.id);
+			this.events = [createdEvent, ...this.events.filter((e) => !eventIdsToDelete.includes(e.id))];
+			for (const id of eventIdsToDelete) {
+				this.attendanceLog?.removeLogEntry(id);
+			}
+			if (target === 'in') {
+				this.absentStudentIds.delete(student.id);
+			} else {
+				this.absentStudentIds.add(student.id);
+			}
 			this.attendanceLog?.addLogEntry({
 				id: createdEvent.id,
 				studentName: student.name,
-				type: finalType,
+				type: target,
 				isLate,
-				message: isLate ? 'Recorded late' : 'Recorded',
+				message: target === 'in' ? (isLate ? 'Recorded late' : 'Recorded') : 'Marked absent',
 				timestamp: ts
 			});
 			this.attendanceLog?.showToast(
-				`${student.name} - ${isLate ? 'Late attendance' : 'Recorded'}`,
-				!isLate
+				target === 'in'
+					? `${student.name} - ${isLate ? 'Late attendance' : 'Recorded'}`
+					: (options.message ?? `${student.name} marked absent`),
+				target === 'in' ? !isLate : false
 			);
 			this.attendanceLog?.setUndo(createdEvent.id, {
 				ok: true,
 				name: student.name,
-				type: finalType,
+				type: target,
 				time: ts,
 				isLate,
 				eventId: createdEvent.id
@@ -495,7 +533,10 @@ class AttendancePageState {
 		this.isProcessing = true;
 		try {
 			// Manual grid/dialog marks never surface the late flag in this flow.
-			await this.logForStudent(student, action, { suppressLate: true });
+			await this.logForStudent(student, action, {
+				suppressLate: true,
+				message: `${student.name} marked absent`
+			});
 			if (closePicker) this.pickerOpen = false;
 		} finally {
 			this.isProcessing = false;
@@ -508,18 +549,12 @@ class AttendancePageState {
 			return;
 		}
 
-		const last = this.getLastEventForSession(student);
-		if (!last) {
-			if (this.absentStudentIds.has(student.id)) return;
-			this.absentStudentIds.add(student.id);
-			this.attendanceLog?.showToast(`${student.name} marked absent`);
-			return;
-		}
-
 		this.isProcessing = true;
 		try {
-			// Manual grid/dialog marks never surface the late flag in this flow.
-			await this.logForStudent(student, null, {
+			// Writes an explicit 'absent' record for THIS student only - no other
+			// student's attendance is touched, and the mark survives navigation
+			// (SF2 shows an X on this student's cell).
+			await this.logForStudent(student, 'absent', {
 				suppressLate: true,
 				message: `${student.name} marked absent`
 			});
@@ -528,10 +563,61 @@ class AttendancePageState {
 		}
 	}
 
+	/**
+	 * Rebuilds the session-absent highlight from persisted records so absent marks
+	 * survive navigation and reloads.
+	 *
+	 * Only students with an explicit 'absent' record this session are highlighted -
+	 * untouched students stay "Pending · Present by default" and are never affected
+	 * by marking someone else absent.
+	 */
+	rebuildAbsentFromEvents() {
+		this.absentStudentIds.clear();
+		for (const student of this.students) {
+			if (
+				this.matchesSelectedClass(student) &&
+				this.lastAbsentEventByStudentForSession.has(student.id)
+			) {
+				this.absentStudentIds.add(student.id);
+			}
+		}
+	}
+
+	/**
+	 * Builds 'in' event requests for the given students using the current
+	 * session/class context (timestamp, classId, sessionKey).
+	 */
+	buildInEventRequests(students: Student[]): CreateEventRequest[] {
+		return students.map((student) => {
+			const timestamp = attendanceTimestampForSelectedDate(
+				this.selectedDate,
+				this.selectedDateIsToday,
+				getAttendanceClass(
+					student,
+					this.currentClass,
+					this.isCardReaderMode,
+					this.activeClass,
+					this.classById
+				)
+			);
+			const draft = this.getAttendanceDraft(student, timestamp);
+			return {
+				studentId: student.id,
+				classId: draft.classId,
+				type: 'in',
+				sessionKey: draft.sessionKey,
+				timestamp: new Date(timestamp).toISOString()
+			};
+		});
+	}
+
 	async handleUndo(eventId: string): Promise<boolean> {
 		try {
 			await deleteEvent(eventId);
 			this.events = this.events.filter((e) => e.id !== eventId);
+			// Undoing an absent/present mark re-derives the highlight from the
+			// remaining persisted records.
+			this.rebuildAbsentFromEvents();
 			return true;
 		} catch {
 			return false;
@@ -546,22 +632,23 @@ class AttendancePageState {
 		}
 
 		// Records the ENTIRE class roster - the search filter is intentionally ignored
-		// (spec 5.5): every student without a record gets one, except absent-marked
-		// students, who keep their absent highlight.
+		// (spec 5.5): every student without a present record gets one, including
+		// students currently marked absent, who are restored to present.
 		const studentsToMark = this.students
 			.filter((student) => this.matchesSelectedClass(student))
 			.sort((a, b) => a.name.localeCompare(b.name))
-			.filter(
-				(student) =>
-					this.getNextAttendanceType(student) === 'in' && !this.absentStudentIds.has(student.id)
-			);
+			.filter((student) => this.getNextAttendanceType(student) === 'in');
+
+		// Absent-marked students are restored to present: their explicit absent
+		// records must be deleted first, otherwise the backend's per-session
+		// duplicate check would skip their new 'in' insert.
+		const restoredStudentIds = studentsToMark.filter((student) =>
+			this.absentStudentIds.has(student.id)
+		);
+		const restoredIdSet = new Set(restoredStudentIds.map((student) => student.id));
 
 		if (studentsToMark.length === 0) {
-			this.attendanceLog?.showToast(
-				this.absentStudentIds.size > 0
-					? 'All students are already recorded or marked absent'
-					: 'All students are already recorded'
-			);
+			this.attendanceLog?.showToast('All students are already recorded as present');
 			return;
 		}
 
@@ -569,62 +656,63 @@ class AttendancePageState {
 		this.isPresentingAll = true;
 		this.attendanceLog?.resetUndo();
 
-		const eventRequests: CreateEventRequest[] = [];
 		const eventMetadata = new SvelteMap<string, { student: Student }>();
 		const createdEvents: AttendanceEvent[] = [];
 		const createdLogLines: LogLine[] = [];
 
 		try {
-			for (const student of studentsToMark) {
-				const timestamp = attendanceTimestampForSelectedDate(
-					this.selectedDate,
-					this.selectedDateIsToday,
-					getAttendanceClass(
-						student,
-						this.currentClass,
-						this.isCardReaderMode,
-						this.activeClass,
-						this.classById
-					)
-				);
-				const draft = this.getAttendanceDraft(student, timestamp);
+			// Delete the absent records for restored students before inserting 'in'
+			// events (per-session uniqueness would otherwise reject the insert).
+			const absentEventIds = restoredStudentIds
+				.map((student) => this.lastAbsentEventByStudentForSession.get(student.id)?.id)
+				.filter((id): id is string => !!id);
+			if (absentEventIds.length > 0) {
+				await deleteEvents(absentEventIds, 'Present all by user');
+			}
 
-				eventRequests.push({
-					studentId: student.id,
-					classId: draft.classId,
-					type: 'in',
-					sessionKey: draft.sessionKey,
-					timestamp: new Date(timestamp).toISOString()
-				});
+			for (const student of studentsToMark) {
 				eventMetadata.set(student.id, { student });
 			}
 
-			const batchEvents = await addEvents(eventRequests);
+			const batchEvents = await addEvents(this.buildInEventRequests(studentsToMark));
 			createdEvents.push(...batchEvents);
 
 			for (const createdEvent of batchEvents) {
 				const metadata = eventMetadata.get(createdEvent.studentId);
 				if (!metadata) continue;
+				const restored = restoredIdSet.has(createdEvent.studentId);
 				createdLogLines.push({
 					id: createdEvent.id,
 					studentName: metadata.student.name,
 					type: 'in',
 					isLate: false,
-					message: 'Recorded by Present all',
+					message: restored ? 'Present all · restored from absent' : 'Recorded by Present all',
 					timestamp: eventTime(createdEvent)
 				});
 			}
 
 			if (createdEvents.length > 0) {
-				this.events = [...createdEvents, ...this.events];
+				this.events = [
+					...createdEvents,
+					...this.events.filter((e) => !absentEventIds.includes(e.id))
+				];
 				this.attendanceLog?.addLogEntries(createdLogLines);
 			}
 
-			// Absent-marked students were skipped and keep their highlight.
-			const absentKept =
-				this.absentStudentIds.size > 0 ? ` · ${this.absentStudentIds.size} kept absent` : '';
+			// Drop the stale 'Marked absent' log entries for restored students and
+			// clear their highlight - everyone is present now.
+			for (const id of absentEventIds) {
+				this.attendanceLog?.removeLogEntry(id);
+			}
+			for (const student of restoredStudentIds) {
+				this.absentStudentIds.delete(student.id);
+			}
+
+			const restoredCount = restoredStudentIds.length;
 			this.attendanceLog?.showToast(
-				`${createdEvents.length} ${createdEvents.length === 1 ? 'student' : 'students'} marked present${absentKept}`
+				`${createdEvents.length} ${createdEvents.length === 1 ? 'student' : 'students'} marked present${
+					restoredCount > 0 ? ` · ${restoredCount} restored from absent` : ''
+				}`
 			);
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -643,6 +731,14 @@ class AttendancePageState {
 
 		const eventIdsToRemove: string[] = [];
 		for (const [, event] of this.lastEventByStudentForSession) {
+			const student = this.studentById.get(event.studentId);
+			if (student && this.matchesCurrentSession(event, student)) {
+				eventIdsToRemove.push(event.id);
+			}
+		}
+		// Explicit absent records must also be removed so "Clear all" truly
+		// resets the session back to pending for everyone.
+		for (const [, event] of this.lastAbsentEventByStudentForSession) {
 			const student = this.studentById.get(event.studentId);
 			if (student && this.matchesCurrentSession(event, student)) {
 				eventIdsToRemove.push(event.id);

@@ -80,9 +80,9 @@
 						<span
 							class="label-mono text-xs font-bold {action === 'in'
 								? 'text-primary'
-								: 'text-muted-foreground'}"
+								: 'text-destructive'}"
 						>
-							{action === 'in' ? 'RECORD' : 'RECORDED'}
+							{action === 'in' ? 'RECORD' : 'MARK ABSENT'}
 						</span>
 					</button>
 				</li>

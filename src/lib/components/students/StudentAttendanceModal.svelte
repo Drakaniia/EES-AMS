@@ -109,9 +109,9 @@
 	function getStatus(dayEvents: AttendanceEvent[]) {
 		if (dayEvents.length === 0) return 'none';
 		const hasIn = dayEvents.some((e) => e.type === 'in');
-		// Simple logic: if they clocked in, they are present.
-		// We could add "Late" logic here if we compare with settings.lateAfter
-		return hasIn ? 'present' : 'none';
+		if (hasIn) return 'present';
+		// Only an explicit absent record → the day is marked absent.
+		return dayEvents.some((e) => e.type === 'absent') ? 'absent' : 'none';
 	}
 
 	function isLate(event: AttendanceEvent) {
@@ -123,10 +123,16 @@
 	const stats = $derived.by(() => {
 		const filtered = viewMode === 'quarter' ? quarterlyEvents : monthlyEvents;
 
-		const presents = new Set(filtered.map((e) => e.timestamp.split('T')[0])).size;
+		// Only days with an 'in' record count as presents - absent marks do not.
+		const presents = new Set(
+			filtered.filter((e) => e.type === 'in').map((e) => e.timestamp.split('T')[0])
+		).size;
+		const absences = new Set(
+			filtered.filter((e) => e.type === 'absent').map((e) => e.timestamp.split('T')[0])
+		).size;
 		const tardies = filtered.filter((e) => isLate(e)).length;
 
-		return { presents, tardies };
+		return { presents, absences, tardies };
 	});
 
 	function prevMonth() {
@@ -168,10 +174,14 @@
 			</div>
 		{:else}
 			<!-- Header Stats -->
-			<div class="grid grid-cols-3 gap-4">
+			<div class="grid grid-cols-4 gap-4">
 				<div class="rounded-xl border border-border bg-surface p-4">
 					<div class="label-mono text-xs">Total Presents</div>
 					<div class="mt-1 text-2xl font-bold text-primary">{stats.presents}</div>
+				</div>
+				<div class="rounded-xl border border-border bg-surface p-4">
+					<div class="label-mono text-xs">Absences</div>
+					<div class="mt-1 text-2xl font-bold text-destructive">{stats.absences}</div>
 				</div>
 				<div class="rounded-xl border border-border bg-surface p-4">
 					<div class="label-mono text-xs">Late Arrivals</div>
@@ -265,17 +275,23 @@
 									? late
 										? 'bg-warning/10 border-warning/20'
 										: 'border-primary/20 bg-primary/10'
-									: 'bg-surface'}"
+									: status === 'absent'
+										? 'border-destructive/20 bg-destructive/10'
+										: 'bg-surface'}"
 							>
 								<span
 									class="font-mono text-xs {status === 'present'
 										? 'font-bold'
-										: 'text-muted-foreground'}"
+										: status === 'absent'
+											? 'font-bold text-destructive'
+											: 'text-muted-foreground'}"
 								>
 									{d.day}
 								</span>
 								{#if status === 'present'}
 									<div class="mt-1 size-1 rounded-full {late ? 'bg-warning' : 'bg-primary'}"></div>
+								{:else if status === 'absent'}
+									<div class="mt-1 size-1 rounded-full bg-destructive"></div>
 								{/if}
 							</div>
 						{/if}
@@ -299,7 +315,9 @@
 									<div
 										class="flex size-9 items-center justify-center rounded-full {isLate(e)
 											? 'bg-warning/10 text-warning'
-											: 'bg-primary/10 text-primary'}"
+											: e.type === 'absent'
+												? 'bg-destructive/10 text-destructive'
+												: 'bg-primary/10 text-primary'}"
 									>
 										<svg
 											class="size-4"
@@ -330,7 +348,11 @@
 										</div>
 									</div>
 								</div>
-								<div class="rounded border border-border bg-background px-2 py-1 font-mono text-xs">
+								<div
+									class="rounded border px-2 py-1 font-mono text-xs {e.type === 'absent'
+										? 'border-destructive/30 bg-destructive/10 text-destructive'
+										: 'border-border bg-background'}"
+								>
 									{e.type.toUpperCase()}
 								</div>
 							</div>

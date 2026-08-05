@@ -145,8 +145,10 @@
 		class="shrink-0 rounded-pill px-2 py-1 font-mono text-[10px] font-bold
 			{type === 'in'
 			? 'bg-primary text-primary-foreground'
-			: 'bg-destructive text-destructive-foreground'}"
+			: type === 'absent'
+				? 'bg-destructive text-destructive-foreground'
+				: 'bg-muted text-muted-foreground'}"
 	>
-		{type === 'in' ? 'IN' : 'ERROR'}
+		{type === 'in' ? 'IN' : type === 'absent' ? 'ABSENT' : 'ERROR'}
 	</span>
 {/snippet}

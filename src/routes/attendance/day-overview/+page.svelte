@@ -60,12 +60,23 @@
 			return event.classId === primaryClass.id || student?.classId === primaryClass.id;
 		})
 	);
-	const presentStudentIds = $derived.by(() => new Set(dayEvents.map((event) => event.studentId)));
+	const presentStudentIds = $derived.by(
+		() => new Set(dayEvents.filter((event) => event.type === 'in').map((event) => event.studentId))
+	);
+	const absentStudentIds = $derived.by(
+		() =>
+			new Set(dayEvents.filter((event) => event.type === 'absent').map((event) => event.studentId))
+	);
 	const presentCount = $derived(
 		roster.filter((student) => presentStudentIds.has(student.id)).length
 	);
-	const absentStudents = $derived(roster.filter((student) => !presentStudentIds.has(student.id)));
+	const absentStudents = $derived(roster.filter((student) => absentStudentIds.has(student.id)));
 	const absentCount = $derived(absentStudents.length);
+	const pendingCount = $derived(
+		roster.filter(
+			(student) => !presentStudentIds.has(student.id) && !absentStudentIds.has(student.id)
+		).length
+	);
 
 	async function reload() {
 		loading = true;
@@ -126,6 +137,15 @@
 		const classItem = classForStudent(student);
 		const timestamp = attendanceTimestamp(classItem);
 		try {
+			// Replacing an explicit absent mark keeps the student to one record.
+			const existingAbsent = dayEvents.filter(
+				(event) => event.studentId === student.id && event.type === 'absent'
+			);
+			if (existingAbsent.length > 0) {
+				await Promise.all(
+					existingAbsent.map((event) => deleteEvent(event.id, 'Daily overview mark present'))
+				);
+			}
 			const created = await addEvent({
 				studentId: student.id,
 				classId: classItem?.id || student.classId,
@@ -134,7 +154,10 @@
 				overrideReason: 'Daily overview manual present',
 				timestamp: timestamp.toISOString()
 			});
-			events = [created, ...events];
+			events = [
+				created,
+				...events.filter((event) => !existingAbsent.some((item) => item.id === event.id))
+			];
 			toast(`${student.name} marked present`);
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : 'Could not mark present';
@@ -163,7 +186,22 @@
 		savingStudentId = target.id;
 		try {
 			await Promise.all(targetEvents.map((event) => deleteEvent(event.id, reason)));
-			events = events.filter((event) => !targetEvents.some((item) => item.id === event.id));
+			const classItem = classForStudent(target);
+			const timestamp = attendanceTimestamp(classItem);
+			// Absence is stored as an explicit 'absent' record (like the attendance
+			// page) so SF2 renders an X and the mark survives navigation.
+			const created = await addEvent({
+				studentId: target.id,
+				classId: classItem?.id || target.classId,
+				type: 'absent',
+				note: reason,
+				sessionKey: `${selectedDate}|${classItem?.id || target.classId || 'unassigned'}|day`,
+				timestamp: timestamp.toISOString()
+			});
+			events = [
+				created,
+				...events.filter((event) => !targetEvents.some((item) => item.id === event.id))
+			];
 			toast(`${target.name} marked absent`);
 			absentTarget = null;
 			absentReason = '';
@@ -224,10 +262,11 @@
 					{/snippet}
 				</EmptyState>
 			{:else}
-				<section class="grid gap-4 sm:grid-cols-3" aria-label="Daily attendance totals">
+				<section class="grid gap-4 sm:grid-cols-4" aria-label="Daily attendance totals">
 					{@render totalCard('Roster', roster.length, 'Students')}
 					{@render totalCard('Present', presentCount, 'Present records', true)}
-					{@render totalCard('Absent', absentCount, 'Not recorded')}
+					{@render totalCard('Absent', absentCount, 'Marked absent')}
+					{@render totalCard('Pending', pendingCount, 'Not yet recorded')}
 				</section>
 
 				<section class="surface-panel overflow-hidden">
@@ -251,14 +290,23 @@
 							<div class="grid gap-2 lg:grid-cols-2">
 								{#each roster as student (student.id)}
 									{@const present = presentStudentIds.has(student.id)}
+									{@const absent = !present && absentStudentIds.has(student.id)}
 									{@const records = studentEvents(student)}
 									<div class="list-row flex min-w-0 items-center justify-between gap-3 p-3">
 										<div class="min-w-0">
 											<div class="text-balance-safe text-sm font-semibold">{student.name}</div>
-											<div class="mt-1 font-mono text-[11px] text-muted-foreground">
+											<div
+												class="mt-1 font-mono text-[11px] {present
+													? 'text-green-700'
+													: absent
+														? 'text-red-700'
+														: 'text-muted-foreground'}"
+											>
 												{present && records[0]
 													? `Present ${fmtTime(records[0].timestamp)}`
-													: 'Not recorded'}
+													: absent
+														? 'Marked absent'
+														: 'Not recorded'}
 											</div>
 										</div>
 										<button

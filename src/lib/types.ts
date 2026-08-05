@@ -30,7 +30,7 @@ export interface Class {
 	createdAt: string;
 }
 
-export type AttendanceType = 'in';
+export type AttendanceType = 'in' | 'absent';
 export type AttendanceMode = 'manual' | 'card_reader';
 
 export interface AttendanceEvent {

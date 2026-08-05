@@ -122,10 +122,26 @@
 		return [...lastByStudent.values()].filter((event) => event.type === 'in');
 	});
 	const recordedStudentIds = $derived.by(() => new Set(checkedIn.map((event) => event.studentId)));
-	const notRecordedStudents = $derived.by(() =>
-		classStudents.filter((student) => !recordedStudentIds.has(student.id))
+	const absentStudentIds = $derived.by(
+		() =>
+			new Set(
+				relevantTodayEvents
+					.filter((event) => event.type === 'absent')
+					.map((event) => event.studentId)
+			)
 	);
-	const pendingCount = $derived(notRecordedStudents.length);
+	// Absence is an explicit mark; students with no record at all are merely
+	// pending (present by default) and are never counted as absent.
+	const absentStudents = $derived.by(() =>
+		classStudents.filter((student) => absentStudentIds.has(student.id))
+	);
+	const pendingStudents = $derived.by(() =>
+		classStudents.filter(
+			(student) => !recordedStudentIds.has(student.id) && !absentStudentIds.has(student.id)
+		)
+	);
+	const absentCount = $derived(absentStudents.length);
+	const pendingCount = $derived(pendingStudents.length);
 	const attendanceRate = $derived(
 		classStudents.length === 0 ? 0 : Math.round((checkedIn.length / classStudents.length) * 100)
 	);
@@ -242,8 +258,8 @@
 		<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Today summary">
 			{@render statCard('Students', classStudents.length, 'Assigned class')}
 			{@render statCard('Present', checkedIn.length, 'Marked present today', true)}
-			{@render statCard('Absent', pendingCount, 'No present record today')}
-			{@render statCard('Rate', `${attendanceRate}%`, 'Current completion')}
+			{@render statCard('Absent', absentCount, 'Marked absent today')}
+			{@render statCard('Pending', pendingCount, 'No record yet')}
 		</section>
 
 		<section class="surface-panel p-5" aria-label="Attendance completion">
@@ -251,7 +267,7 @@
 				<div class="min-w-0">
 					<div class="label-mono">Today completion</div>
 					<h2 class="mt-2 text-xl leading-tight font-black text-foreground">
-						{checkedIn.length} present / {pendingCount} absent
+						{checkedIn.length} present / {absentCount} absent · {pendingCount} pending
 					</h2>
 					<p class="text-balance-safe mt-1 text-sm leading-6 text-muted-foreground">
 						{assignedClass
@@ -278,42 +294,42 @@
 				<div class="panel-header">
 					<div class="min-w-0">
 						<h2 class="text-lg font-black">Absent today</h2>
-						<p class="mt-1 text-sm text-muted-foreground">Students not recorded for today</p>
+						<p class="mt-1 text-sm text-muted-foreground">Students explicitly marked absent</p>
 					</div>
-					<span class="chip shrink-0">{pendingCount} pending</span>
+					<span class="chip shrink-0">{absentCount} absent</span>
 				</div>
 
 				<div class="panel-body min-h-0 flex-1 overflow-y-auto">
-					{#if notRecordedStudents.length === 0}
+					{#if absentStudents.length === 0}
 						<div
 							class="rounded-xl border border-dashed border-border bg-surface/45 px-4 py-6 text-center"
 							role="status"
 						>
 							<CheckCircle2 class="mx-auto size-6 text-primary" aria-hidden="true" />
-							<p class="mt-2 text-sm font-semibold">Everyone in class is recorded.</p>
+							<p class="mt-2 text-sm font-semibold">No students marked absent today.</p>
 						</div>
 					{:else}
 						<ul class="space-y-2">
-							{#each notRecordedStudents.slice(0, 6) as student (student.id)}
+							{#each absentStudents.slice(0, 6) as student (student.id)}
 								<li class="list-row flex min-w-0 items-center gap-3 p-3">
 									<div
-										class="grid size-9 shrink-0 place-items-center rounded-lg border border-border bg-surface font-mono text-[11px] font-bold text-muted-foreground"
+										class="grid size-9 shrink-0 place-items-center rounded-lg border border-red-500/30 bg-red-50 font-mono text-[11px] font-bold text-red-700"
 										aria-hidden="true"
 									>
 										{initials(student.name)}
 									</div>
 									<div class="min-w-0 flex-1">
 										<div class="text-balance-safe text-sm font-semibold">{student.name}</div>
-										<div class="mt-0.5 font-mono text-[11px] text-muted-foreground">
-											No present record today
+										<div class="mt-0.5 font-mono text-[11px] text-red-700/80">
+											Marked absent today
 										</div>
 									</div>
 								</li>
 							{/each}
 						</ul>
-						{#if notRecordedStudents.length > 6}
+						{#if absentStudents.length > 6}
 							<p class="mt-3 text-xs text-muted-foreground">
-								+{notRecordedStudents.length - 6} more students not shown.
+								+{absentStudents.length - 6} more students not shown.
 							</p>
 						{/if}
 					{/if}
@@ -357,9 +373,12 @@
 										</div>
 									</div>
 									<span
-										class="rounded-pill bg-primary px-2 py-1 font-mono text-[10px] font-bold text-primary-foreground"
+										class="rounded-pill px-2 py-1 font-mono text-[10px] font-bold {event.type ===
+										'absent'
+											? 'bg-destructive text-destructive-foreground'
+											: 'bg-primary text-primary-foreground'}"
 									>
-										IN
+										{event.type === 'absent' ? 'ABSENT' : 'IN'}
 									</span>
 								</li>
 							{/each}
