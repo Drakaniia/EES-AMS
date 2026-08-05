@@ -10,8 +10,8 @@ use crate::sf2::attendance_events;
 use crate::sf2::attendance_events::parse_clock;
 #[cfg(test)]
 use crate::sf2::attendance_marks::{
-    attendance_grid_rows, clear_attendance_marks_for_records, mapped_attendance_rows,
-    summary_formula_marks, total_formula_marks,
+    attendance_grid_rows, clear_attendance_marks_for_records, learner_absent_present_formula_marks,
+    mapped_attendance_rows, summary_formula_marks, total_formula_marks,
 };
 use crate::sf2::calendar::attendance_changed_since;
 use crate::sf2::logic::day_has_attendance_taken;
@@ -114,6 +114,18 @@ pub fn sync_and_open_sf2_workbook<R: tauri::Runtime>(
         emit_sf2_progress(app, "open", 5, 10, "Attendance already up to date…");
         emit_sf2_progress(app, "open", 6, 10, "Skipping workbook rewrite…");
         emit_sf2_progress(app, "open", 7, 10, "Workbook is current…");
+
+        // Self-heal: the bundled template ships with missing ABSENT/PRESENT
+        // (AM/AO) formulas on some rows and a stale AW5 day count. Repair them
+        // now so the opened workbook always shows live formulas.
+        if crate::sf2::roster_parser::template_owns_roster(&template) {
+            if let Err(error) = super::progress::repair_learner_absent_present_formulas(
+                pool.clone(),
+                &template,
+            ) {
+                log::warn!("failed to repair ABSENT/PRESENT formulas: {error}");
+            }
+        }
     }
 
     // Step 8/10: Prepare to open

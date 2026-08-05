@@ -293,6 +293,118 @@ pub(super) fn total_formula_marks(
     formula_marks
 }
 
+/// Generate Excel formulas for the ABSENT (AM) and PRESENT (AO) columns so the
+/// per-learner absent/present totals recalculate automatically in Excel.
+///
+/// The bundled template ships with AM/AO formulas on most learner rows, but some
+/// rows are missing them (e.g. the SEPT. sheet lacks `=COUNTIF(F{r}:AL{r},"X")`
+/// on several rows, and the subtotal rows lack the `AO` formula). This generates
+/// complete formulas for every mapped student row plus the MALE/FEMALE/Combined
+/// subtotal cells.
+///
+/// Returns `(formula_marks, static_marks)`:
+/// - `formula_marks` — AM/AO formulas written with `set_sf2_formula`.
+/// - `static_marks` — a numeric `AW5` ("TOTAL NO. OF DAYS") value so `$AW$5-AM{r}`
+///   computes PRESENT from the actual mapped school-day count. The template's
+///   AW5 values are stale/inconsistent (e.g. 22 while 23 days are mapped), which
+///   would otherwise make every PRESENT count wrong.
+///
+/// Formula conventions (mirroring the bundled template):
+///   AM{r} = COUNTIF(F{r}:AL{r},"X")            → absent days for learner row r
+///   AO{r} = $AW$5-AM{r}                        → present days (total − absent)
+///   AM{male_total}   = SUM(AM8:AN{male_total-1})
+///   AO{male_total}   = $AW$5*{male_count}-AM{male_total}
+///   AM{female_total} = SUM(AM{male_total+1}:AN{female_total-1})
+///   AO{female_total} = $AW$5*{female_count}-AM{female_total}
+///   AM{combined}     = AM{male_total}+AM{female_total}
+///   AO{combined}     = AO{male_total}+AO{female_total}
+pub(super) fn learner_absent_present_formula_marks(
+    student_mappings: &[Sf2StudentMappingRecord],
+    male_count: usize,
+    female_count: usize,
+    day_count: usize,
+    male_total_row: u32,
+    female_total_row: u32,
+    combined_total_row: u32,
+    sheet_names: &[&str],
+) -> (Vec<Sf2CellMark>, Vec<Sf2CellMark>) {
+    if sheet_names.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+
+    let mut formula_marks = Vec::new();
+    let mut static_marks = Vec::new();
+
+    for sheet_name in sheet_names {
+        let sn = sheet_name.to_string();
+
+        // Correct "TOTAL NO. OF DAYS" so `$AW$5` matches the mapped day count.
+        static_marks.push(Sf2CellMark {
+            sheet_name: sn.clone(),
+            cell_address: "AW5".to_string(),
+            value: day_count.to_string(),
+        });
+
+        // Per-learner ABSENT / PRESENT formulas.
+        for mapping in student_mappings {
+            let row = mapping.row_index;
+            if row == 0 {
+                continue;
+            }
+            formula_marks.push(Sf2CellMark {
+                sheet_name: sn.clone(),
+                cell_address: format!("AM{row}"),
+                value: format!("=COUNTIF(F{row}:AL{row},\"X\")"),
+            });
+            formula_marks.push(Sf2CellMark {
+                sheet_name: sn.clone(),
+                cell_address: format!("AO{row}"),
+                value: format!("=$AW$5-AM{row}"),
+            });
+        }
+
+        // MALE TOTAL / FEMALE TOTAL / Combined TOTAL cells in the same columns.
+        let male_last = male_total_row.saturating_sub(1);
+        let female_first = male_total_row + 1;
+        let female_last = female_total_row.saturating_sub(1);
+
+        formula_marks.push(Sf2CellMark {
+            sheet_name: sn.clone(),
+            cell_address: format!("AM{male_total_row}"),
+            value: format!("=SUM(AM8:AN{male_last})"),
+        });
+        formula_marks.push(Sf2CellMark {
+            sheet_name: sn.clone(),
+            cell_address: format!("AO{male_total_row}"),
+            value: format!("=$AW$5*{male_count}-AM{male_total_row}"),
+        });
+
+        formula_marks.push(Sf2CellMark {
+            sheet_name: sn.clone(),
+            cell_address: format!("AM{female_total_row}"),
+            value: format!("=SUM(AM{female_first}:AN{female_last})"),
+        });
+        formula_marks.push(Sf2CellMark {
+            sheet_name: sn.clone(),
+            cell_address: format!("AO{female_total_row}"),
+            value: format!("=$AW$5*{female_count}-AM{female_total_row}"),
+        });
+
+        formula_marks.push(Sf2CellMark {
+            sheet_name: sn.clone(),
+            cell_address: format!("AM{combined_total_row}"),
+            value: format!("=AM{male_total_row}+AM{female_total_row}"),
+        });
+        formula_marks.push(Sf2CellMark {
+            sheet_name: sn.clone(),
+            cell_address: format!("AO{combined_total_row}"),
+            value: format!("=AO{male_total_row}+AO{female_total_row}"),
+        });
+    }
+
+    (formula_marks, static_marks)
+}
+
 /// Generate empty cell marks for all TOTAL PER DAY formula cells across ALL
 /// weekday columns (6–38). This clears stale template values (default `0` or
 /// leftover formulas) from columns that have no corresponding date in the

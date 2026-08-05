@@ -60,6 +60,16 @@ pub fn open_workbook(pool: DbPool, class_id: Option<String>) -> Result<String> {
         ));
     }
 
+    // Self-heal: the bundled template ships with missing ABSENT/PRESENT (AM/AO)
+    // formulas on some rows and a stale AW5 day count. Repair them before opening
+    // so the workbook always shows live formulas for every student.
+    if crate::sf2::roster_parser::template_owns_roster(&template) {
+        if let Err(error) = super::progress::repair_learner_absent_present_formulas(pool, &template)
+        {
+            log::warn!("failed to repair ABSENT/PRESENT formulas: {error}");
+        }
+    }
+
     open_path_in_default_app(&workbook_path)?;
     Ok(workbook_path.to_string_lossy().to_string())
 }
@@ -286,6 +296,7 @@ pub(super) fn refresh_template_calendar_from_saved_month(
         .count();
     let template_id_for_closure = template.id.clone();
     let student_mappings_for_update = student_mappings.clone();
+    let student_mappings_for_closure = student_mappings.clone();
 
     let metadata_for_excel = metadata.clone();
     let analysis = excel::batch_operations(&workbook_path, true, move |session| {
@@ -340,6 +351,37 @@ pub(super) fn refresh_template_calendar_from_saved_month(
             );
             session.write_formulas(&summary_formulas)?;
             session.write_marks_force(&summary_static)?;
+
+            // Rewrite ABSENT/PRESENT (AM/AO) per-learner + subtotal formulas and
+            // correct AW5 ("TOTAL NO. OF DAYS"). The bundled template ships with
+            // missing AM/AO formulas on some rows and stale AW5 values, which
+            // would otherwise leave some students' Absent/Present totals
+            // blank/wrong when the calendar is reconfigured for a new month.
+            if !inner_date_mappings.is_empty() {
+                let inner_sheet_names: Vec<&str> = inner_date_mappings
+                    .iter()
+                    .map(|mapping| mapping.sheet_name.as_str())
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .collect();
+                let (am_ao_formulas, am_ao_static) =
+                    attendance_marks::learner_absent_present_formula_marks(
+                        &student_mappings_for_closure,
+                        male_count,
+                        female_count,
+                        inner_date_mappings.len(),
+                        male_total_row,
+                        female_total_row,
+                        combined_total_row,
+                        &inner_sheet_names,
+                    );
+                if !am_ao_formulas.is_empty() {
+                    session.write_formulas(&am_ao_formulas)?;
+                }
+                if !am_ao_static.is_empty() {
+                    session.write_marks_force(&am_ao_static)?;
+                }
+            }
         }
 
         Ok(analysis)

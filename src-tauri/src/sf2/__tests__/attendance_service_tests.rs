@@ -1144,6 +1144,222 @@ fn total_formula_marks_skips_date_mappings_with_invalid_dates() {
     assert_eq!(combined_g.value, "=G29+G49");
 }
 
+// ── learner_absent_present_formula_marks ─────────────────────────────────
+
+#[test]
+fn learner_absent_present_formula_marks_writes_every_learner_and_subtotal() {
+    // 15 male students in rows 8-22, 10 female students in rows 30-39
+    let mut student_mappings = Vec::new();
+    for row in 8u32..=22 {
+        student_mappings.push(Sf2StudentMappingRecord {
+            template_id: "test".to_string(),
+            student_id: format!("m{row}"),
+            workbook_name: format!("Male {row}"),
+            normalized_name: format!("MALE {row}"),
+            row_index: row,
+            gender_block: Some("MALE".to_string()),
+        });
+    }
+    for row in 30u32..=39 {
+        student_mappings.push(Sf2StudentMappingRecord {
+            template_id: "test".to_string(),
+            student_id: format!("f{row}"),
+            workbook_name: format!("Female {row}"),
+            normalized_name: format!("FEMALE {row}"),
+            row_index: row,
+            gender_block: Some("FEMALE".to_string()),
+        });
+    }
+
+    let (formula_marks, static_marks) = learner_absent_present_formula_marks(
+        &student_mappings,
+        15, // male_count
+        10, // female_count
+        23, // day_count
+        29, // male_total_row
+        49, // female_total_row
+        50, // combined_total_row
+        &["JULY 2026"],
+    );
+
+    // AW5 static mark = mapped day count (the template's AW5 is stale)
+    let aw5 = static_marks
+        .iter()
+        .find(|m| m.cell_address == "AW5")
+        .expect("AW5 static mark");
+    assert_eq!(aw5.value, "23");
+
+    // Every learner row has AM (COUNTIF) and AO ($AW$5-AM) formulas
+    for row in 8u32..=22 {
+        let am = formula_marks
+            .iter()
+            .find(|m| m.cell_address == format!("AM{row}"))
+            .unwrap_or_else(|| panic!("missing AM{row}"));
+        assert_eq!(am.value, format!("=COUNTIF(F{row}:AL{row},\"X\")"));
+        let ao = formula_marks
+            .iter()
+            .find(|m| m.cell_address == format!("AO{row}"))
+            .unwrap_or_else(|| panic!("missing AO{row}"));
+        assert_eq!(ao.value, format!("=$AW$5-AM{row}"));
+    }
+    for row in 30u32..=39 {
+        assert!(
+            formula_marks
+                .iter()
+                .any(|m| m.cell_address == format!("AM{row}")),
+            "missing AM{row}"
+        );
+        assert!(
+            formula_marks
+                .iter()
+                .any(|m| m.cell_address == format!("AO{row}")),
+            "missing AO{row}"
+        );
+    }
+
+    // Male subtotal
+    let am29 = formula_marks.iter().find(|m| m.cell_address == "AM29").unwrap();
+    assert_eq!(am29.value, "=SUM(AM8:AN28)");
+    let ao29 = formula_marks.iter().find(|m| m.cell_address == "AO29").unwrap();
+    assert_eq!(ao29.value, "=$AW$5*15-AM29");
+
+    // Female subtotal
+    let am49 = formula_marks.iter().find(|m| m.cell_address == "AM49").unwrap();
+    assert_eq!(am49.value, "=SUM(AM30:AN48)");
+    let ao49 = formula_marks.iter().find(|m| m.cell_address == "AO49").unwrap();
+    assert_eq!(ao49.value, "=$AW$5*10-AM49");
+
+    // Combined
+    let am50 = formula_marks.iter().find(|m| m.cell_address == "AM50").unwrap();
+    assert_eq!(am50.value, "=AM29+AM49");
+    let ao50 = formula_marks.iter().find(|m| m.cell_address == "AO50").unwrap();
+    assert_eq!(ao50.value, "=AO29+AO49");
+
+    // 25 learners × 2 (AM+AO) + 6 subtotal formulas
+    assert_eq!(formula_marks.len(), 25 * 2 + 6);
+    assert_eq!(static_marks.len(), 1);
+}
+
+#[test]
+fn learner_absent_present_formula_marks_expanded_roster_uses_shifted_total_rows() {
+    // 25 male (rows 8-32), 22 female (rows 34-55) → totals at 33/56/57
+    let mut student_mappings = Vec::new();
+    for row in 8u32..=32 {
+        student_mappings.push(Sf2StudentMappingRecord {
+            template_id: "test".to_string(),
+            student_id: format!("m{row}"),
+            workbook_name: format!("Male {row}"),
+            normalized_name: format!("MALE {row}"),
+            row_index: row,
+            gender_block: Some("MALE".to_string()),
+        });
+    }
+    for row in 34u32..=55 {
+        student_mappings.push(Sf2StudentMappingRecord {
+            template_id: "test".to_string(),
+            student_id: format!("f{row}"),
+            workbook_name: format!("Female {row}"),
+            normalized_name: format!("FEMALE {row}"),
+            row_index: row,
+            gender_block: Some("FEMALE".to_string()),
+        });
+    }
+
+    let (formula_marks, static_marks) = learner_absent_present_formula_marks(
+        &student_mappings,
+        25,
+        22,
+        23,
+        33, // male_total_row
+        56, // female_total_row
+        57, // combined_total_row
+        &["JULY 2026"],
+    );
+
+    let am33 = formula_marks.iter().find(|m| m.cell_address == "AM33").unwrap();
+    assert_eq!(am33.value, "=SUM(AM8:AN32)");
+    let ao33 = formula_marks.iter().find(|m| m.cell_address == "AO33").unwrap();
+    assert_eq!(ao33.value, "=$AW$5*25-AM33");
+
+    let am56 = formula_marks.iter().find(|m| m.cell_address == "AM56").unwrap();
+    assert_eq!(am56.value, "=SUM(AM34:AN55)");
+    let ao56 = formula_marks.iter().find(|m| m.cell_address == "AO56").unwrap();
+    assert_eq!(ao56.value, "=$AW$5*22-AM56");
+
+    let am57 = formula_marks.iter().find(|m| m.cell_address == "AM57").unwrap();
+    assert_eq!(am57.value, "=AM33+AM56");
+    let ao57 = formula_marks.iter().find(|m| m.cell_address == "AO57").unwrap();
+    assert_eq!(ao57.value, "=AO33+AO56");
+
+    let aw5 = static_marks.iter().find(|m| m.cell_address == "AW5").unwrap();
+    assert_eq!(aw5.value, "23");
+}
+
+#[test]
+fn learner_absent_present_formula_marks_empty_mappings_still_writes_subtotals() {
+    let student_mappings: Vec<Sf2StudentMappingRecord> = vec![];
+    let (formula_marks, static_marks) = learner_absent_present_formula_marks(
+        &student_mappings,
+        0,
+        0,
+        23,
+        29,
+        49,
+        50,
+        &["JULY 2026"],
+    );
+
+    // 6 subtotal formulas + AW5 static
+    assert_eq!(formula_marks.len(), 6);
+    assert_eq!(static_marks.len(), 1);
+    let ao29 = formula_marks.iter().find(|m| m.cell_address == "AO29").unwrap();
+    assert_eq!(ao29.value, "=$AW$5*0-AM29");
+}
+
+#[test]
+fn learner_absent_present_formula_marks_empty_sheet_names_returns_empty() {
+    let student_mappings: Vec<Sf2StudentMappingRecord> = vec![];
+    let (formula_marks, static_marks) =
+        learner_absent_present_formula_marks(&student_mappings, 0, 0, 23, 29, 49, 50, &[]);
+    assert!(formula_marks.is_empty());
+    assert!(static_marks.is_empty());
+}
+
+#[test]
+fn learner_absent_present_formula_marks_multiple_sheets_generates_marks_for_each() {
+    let student_mappings = vec![Sf2StudentMappingRecord {
+        template_id: "test".to_string(),
+        student_id: "s1".to_string(),
+        workbook_name: "Student 1".to_string(),
+        normalized_name: "STUDENT 1".to_string(),
+        row_index: 8,
+        gender_block: Some("MALE".to_string()),
+    }];
+
+    let (formula_marks, static_marks) = learner_absent_present_formula_marks(
+        &student_mappings,
+        1,
+        0,
+        23,
+        29,
+        49,
+        50,
+        &["JULY 2026", "AUGUST 2026"],
+    );
+
+    // 2 sheets × (1 learner × 2 + 6 subtotals) = 16 formulas, 2 AW5 statics
+    assert_eq!(formula_marks.len(), 16);
+    assert_eq!(static_marks.len(), 2);
+    for sheet in ["JULY 2026", "AUGUST 2026"] {
+        assert!(formula_marks
+            .iter()
+            .any(|m| m.sheet_name == sheet && m.cell_address == "AM8"));
+        assert!(static_marks
+            .iter()
+            .any(|m| m.sheet_name == sheet && m.cell_address == "AW5"));
+    }
+}
+
 #[test]
 fn total_formula_marks_correct_range_for_imported_workbooks() {
     // Imported workbooks also use DepEd fixed positions, but the function
