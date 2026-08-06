@@ -17,7 +17,9 @@ use crate::sf2::calendar::attendance_changed_since;
 use crate::sf2::logic::Sf2CellMark;
 #[cfg(test)]
 use crate::sf2::models::{Sf2DateMappingRecord, Sf2StudentMappingRecord, Sf2TemplateRecord};
-use crate::sf2::progress::{emit_sf2_progress, write_template_marks_for_days};
+use crate::sf2::progress::{
+    emit_sf2_progress, write_template_marks_for_days, write_template_marks_for_days_with_progress,
+};
 use crate::sf2::repository::Sf2Repository;
 use crate::sf2::sf2_metadata::sf2_date_mappings_for_report_month;
 
@@ -99,9 +101,11 @@ pub fn sync_and_open_sf2_workbook<R: tauri::Runtime>(
         // Step 5/10: Compute attendance marks
         emit_sf2_progress(app, "open", 5, 10, "Computing attendance marks…");
 
-        // Step 6/10: Write marks to workbook
+        // Step 6/10: Write marks to workbook (fine-grained progress events
+        // are emitted from inside the Excel write phase by the progress sink).
         emit_sf2_progress(app, "open", 6, 10, "Writing marks to workbook…");
-        let _marks_written = write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
+        let _marks_written =
+            write_template_marks_for_days_with_progress(app, pool.clone(), &template, &report_dates)?;
 
         // Step 7/10: Save workbook changes
         emit_sf2_progress(app, "open", 7, 10, "Saving workbook changes…");
