@@ -1,7 +1,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { errorMessage } from './report-state.svelte';
-import { syncAndOpenSf2Workbook } from '$lib/db-rust';
+import { killAllExcelProcesses, syncAndOpenSf2Workbook } from '$lib/db-rust';
 import type { Sf2ExportPreview } from '$lib/db-rust';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -16,6 +16,16 @@ export const SF2_OPEN_MESSAGES = [
 	'Writing marks to the workbook…',
 	'Almost there, wrapping things up…',
 	'Opening in Excel…',
+	'Double-checking everything is in order…',
+	'Just a moment longer!'
+] as const;
+
+// Reassurance messages cycled while a single progress step stalls (typically
+// the slow Excel COM write). Only these are shown so the text never describes
+// an earlier phase than the actual progress bar.
+export const SF2_STALL_MESSAGES = [
+	'Still working on the workbook…',
+	'Excel is finishing up in the background…',
 	'Double-checking everything is in order…',
 	'Just a moment longer!'
 ] as const;
@@ -53,15 +63,21 @@ export function createSf2OpenState() {
 	let progressCurrent = $state(0);
 	let progressTotal = $state(10);
 	let error = $state<string | null>(null);
+	let isExcelError = $state(false);
 	let resultPath = $state<string | null>(null);
 	let cycleIndex = $state(0);
 	let lastBackendMsg = $state('');
 	let lastBackendTime = $state(0);
 	let displayMessage = $state('');
+	// Becomes true when no progress event arrives for a while (e.g. the slow
+	// Excel COM write phase) so the modal can surface a "please wait" hint and
+	// keep cycling friendly messages instead of appearing frozen.
+	let showWaitHint = $state(false);
 
 	let cycleTimer: ReturnType<typeof setInterval> | null = null;
 	let successTimer: ReturnType<typeof setTimeout> | null = null;
 	let unlisten: UnlistenFn | null = null;
+	let lastCycleAt = 0;
 
 	const progressPercent = $derived.by(() => {
 		if (progressTotal <= 0) return 0;
@@ -74,7 +90,15 @@ export function createSf2OpenState() {
 			displayMessage = lastBackendMsg;
 			return;
 		}
-		// Map progress steps to messages when no backend message
+		// While stalled on a long step, cycle the reassurance messages so the UI
+		// keeps feeling alive (e.g. "Just a moment longer!").
+		if (showWaitHint) {
+			displayMessage = SF2_STALL_MESSAGES[cycleIndex % SF2_STALL_MESSAGES.length];
+			return;
+		}
+		// Map progress steps to messages when no backend message. The step is
+		// derived from the percentage so this stays correct whether the backend
+		// reports on a 10-step scale or the fine-grained 100-point write phase.
 		if (progressCurrent > 0 && progressTotal > 0) {
 			const progressMessages: Record<number, string> = {
 				1: 'Warming up the workbook…',
@@ -88,7 +112,11 @@ export function createSf2OpenState() {
 				9: 'Opening in Excel…',
 				10: 'Done!'
 			};
-			displayMessage = progressMessages[progressCurrent] || SF2_OPEN_MESSAGES[cycleIndex];
+			const step = Math.min(
+				10,
+				Math.max(1, Math.floor((progressCurrent / progressTotal) * 10))
+			);
+			displayMessage = progressMessages[step] || SF2_OPEN_MESSAGES[cycleIndex];
 			return;
 		}
 		displayMessage = SF2_OPEN_MESSAGES[cycleIndex];
@@ -99,12 +127,19 @@ export function createSf2OpenState() {
 		updateDisplayMessage();
 		cycleTimer = setInterval(() => {
 			const now = Date.now();
-			// Only cycle if no backend message arrived in the last 3 seconds
-			if (now - lastBackendTime > 3000) {
+			// If no progress event arrived in the last 5 seconds, the backend is
+			// busy in a long operation (usually the Excel write) — flag it so the
+			// UI shows a "please wait" hint and cycles reassurance messages.
+			// Checked on every tick (1s) so the hint appears close to the 5s mark.
+			showWaitHint = now - lastBackendTime > 5000;
+			// Rotate the friendly message roughly every 2.5s, only when no
+			// backend message arrived in the last 3 seconds.
+			if (now - lastCycleAt >= 2500 && now - lastBackendTime > 3000) {
 				cycleIndex = (cycleIndex + 1) % SF2_OPEN_MESSAGES.length;
+				lastCycleAt = now;
 			}
 			updateDisplayMessage();
-		}, 2500);
+		}, 1000);
 	}
 
 	function stopMessageCycle() {
@@ -141,6 +176,7 @@ export function createSf2OpenState() {
 					if (event.payload.message) {
 						lastBackendMsg = event.payload.message;
 						lastBackendTime = Date.now();
+						showWaitHint = false;
 					}
 					updateDisplayMessage();
 				}
@@ -164,10 +200,13 @@ export function createSf2OpenState() {
 		progressCurrent = 0;
 		progressTotal = 10;
 		error = null;
+		isExcelError = false;
 		resultPath = null;
 		cycleIndex = 0;
+		lastCycleAt = 0;
 		lastBackendMsg = '';
 		lastBackendTime = 0;
+		showWaitHint = false;
 
 		// Show first step immediately for responsiveness
 		progressCurrent = 1;
@@ -192,9 +231,10 @@ export function createSf2OpenState() {
 			stopMessageCycle();
 			const msg = errorMessage(err, 'Failed to update SF2 workbook');
 			if (msg.toLowerCase().includes('excel')) {
+				isExcelError = true;
 				error =
-					'The SF2 working copy is currently open in Microsoft Excel. ' +
-					'Close the workbook in Excel first, then click Open SF2 again.';
+					'Excel may have a stuck background process preventing the workbook ' +
+					'from opening. Kill all Excel processes to recover?';
 			} else {
 				error = `Could not sync attendance to the SF2 workbook: ${msg}`;
 			}
@@ -205,6 +245,29 @@ export function createSf2OpenState() {
 	function close() {
 		status = 'idle';
 		error = null;
+		isExcelError = false;
+	}
+
+	async function killAndRetry(
+		activeClassId: string,
+		preview: Sf2ExportPreview | null,
+		showToast: ShowToastFn
+	) {
+		status = 'idle';
+		error = null;
+		isExcelError = false;
+		try {
+			const killed = await killAllExcelProcesses();
+			console.info(`killed ${killed} EXCEL.EXE process(es)`);
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			await open(activeClassId, preview, showToast);
+		} catch (err) {
+			error =
+				'Could not stop Excel processes. ' +
+				'Try manually ending EXCEL.EXE in Task Manager, then try again.';
+			isExcelError = true;
+			status = 'error';
+		}
 	}
 
 	async function retry(
@@ -233,11 +296,17 @@ export function createSf2OpenState() {
 		get error() {
 			return error;
 		},
+		get isExcelError() {
+			return isExcelError;
+		},
 		get resultPath() {
 			return resultPath;
 		},
 		get displayMessage() {
 			return displayMessage;
+		},
+		get showWaitHint() {
+			return showWaitHint;
 		},
 		get progressPercent() {
 			return progressPercent;
@@ -246,6 +315,7 @@ export function createSf2OpenState() {
 		// Actions
 		open,
 		retry,
+		killAndRetry,
 		close,
 		cleanup
 	};

@@ -160,6 +160,9 @@
 	resultPath={page.sf2Open.resultPath}
 	displayMessage={page.sf2Open.displayMessage}
 	progressPercent={page.sf2Open.progressPercent}
+	showWaitHint={page.sf2Open.showWaitHint}
+	isExcelError={page.sf2Open.isExcelError}
 	onRetry={page.retrySf2Open}
+	onKillAndRetry={page.killAndRetrySf2Open}
 	onClose={() => page.sf2Open.close()}
 />

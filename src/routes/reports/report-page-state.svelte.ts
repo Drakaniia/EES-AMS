@@ -178,6 +178,12 @@ export function createReportPageState() {
 		await sf2Open.retry(activeClassId, preview, (msg, ok) => reportDialogs?.showToast(msg, ok));
 	}
 
+	async function killAndRetrySf2Open() {
+		await sf2Open.killAndRetry(activeClassId, preview, (msg, ok) =>
+			reportDialogs?.showToast(msg, ok)
+		);
+	}
+
 	async function onPresentAll() {
 		if (!activeClassId || !preview?.template || presentingAll) return;
 		presentingAll = true;
@@ -522,6 +528,7 @@ export function createReportPageState() {
 		loadWorkbookSettings,
 		onOpenSf2,
 		retrySf2Open,
+		killAndRetrySf2Open,
 		onPresentAll,
 		onSyncRoster,
 		requestExport,
