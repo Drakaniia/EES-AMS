@@ -117,7 +117,7 @@
 		role="dialog"
 		aria-modal="true"
 		aria-label="SF2 {sf2State.sf2Progress.task} in progress"
-		class="fixed inset-0 z-[70] flex items-center justify-center bg-background/40 backdrop-blur-[2px]"
+		class="fixed inset-x-0 top-8 bottom-0 z-[70] flex items-center justify-center bg-background/40"
 		tabindex="-1"
 	>
 		<div

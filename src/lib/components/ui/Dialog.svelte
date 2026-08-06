@@ -120,12 +120,12 @@
 
 {#if open}
 	<div
-		class="fixed inset-0 z-40 bg-foreground/45"
+		class="fixed inset-x-0 top-8 bottom-0 z-40 bg-foreground/45"
 		role="presentation"
 		onclick={handleBackdropClick}
 	></div>
 
-	<div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+	<div class="fixed inset-x-0 top-8 bottom-0 z-50 flex items-center justify-center p-4 sm:p-6">
 		<div
 			bind:this={panel}
 			class="surface-panel {widthClass} max-h-[min(86vh,760px)] w-full overflow-hidden"

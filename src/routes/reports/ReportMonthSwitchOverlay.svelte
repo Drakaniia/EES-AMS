@@ -17,7 +17,7 @@
 		role="dialog"
 		aria-modal="true"
 		aria-label="Switching SF2 report month"
-		class="fixed inset-0 z-[70] flex items-center justify-center bg-background/40 backdrop-blur-[2px]"
+		class="fixed inset-x-0 top-8 bottom-0 z-[70] flex items-center justify-center bg-background/40"
 	>
 		<div
 			class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
@@ -51,7 +51,7 @@
 		role="dialog"
 		aria-modal="true"
 		aria-label="Month switch failed"
-		class="fixed inset-0 z-[70] flex items-center justify-center bg-background/40 backdrop-blur-[2px]"
+		class="fixed inset-x-0 top-8 bottom-0 z-[70] flex items-center justify-center bg-background/40"
 		tabindex="-1"
 		onkeydown={(e) => {
 			if (e.key === 'Escape') onDismissError?.();

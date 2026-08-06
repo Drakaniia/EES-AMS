@@ -282,7 +282,7 @@
 <!-- ── Delete confirmation dialog ────────────────────────────────────────── -->
 {#if deleteTarget}
 	<div
-		class="fixed inset-0 z-40 bg-black/50"
+		class="fixed inset-x-0 top-8 bottom-0 z-40 bg-black/50"
 		role="presentation"
 		onclick={cancelDelete}
 		onkeydown={(e) => {
@@ -291,7 +291,7 @@
 	></div>
 
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4"
+		class="fixed inset-x-0 top-8 bottom-0 z-50 flex items-center justify-center p-4"
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="records-delete-dialog-title"
