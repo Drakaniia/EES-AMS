@@ -314,14 +314,19 @@ pub(super) fn refresh_template_calendar_from_saved_month(
 
             // Clear stale template defaults from all weekday columns (6–38)
             // so columns without dates in this month show nothing.
-            let clear_marks = attendance_marks::clear_total_cell_marks(
-                male_total_row,
-                female_total_row,
-                combined_total_row,
-                &inner_date_mappings,
-            );
-            if !clear_marks.is_empty() {
-                session.write_marks_force(&clear_marks)?;
+            let clear_sheet_names: Vec<&str> = inner_date_mappings
+                .iter()
+                .map(|m| m.sheet_name.as_str())
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+            for sheet_name in &clear_sheet_names {
+                session.clear_total_rows(
+                    sheet_name,
+                    male_total_row,
+                    female_total_row,
+                    combined_total_row,
+                )?;
             }
 
             // Write fresh formulas only for columns that have valid dates.

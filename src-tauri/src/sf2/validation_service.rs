@@ -223,14 +223,19 @@ fn import_workbook_with_analysis(
             let date_mappings = date_mappings_from_analysis(&template_id_for_excel, &analysis);
 
             // Step 14: Write Excel formulas for MALE TOTAL, FEMALE TOTAL, Combined TOTAL
-            let clear_total = super::attendance_marks::clear_total_cell_marks(
-                male_total_row,
-                female_total_row,
-                combined_total_row,
-                &date_mappings,
-            );
-            if !clear_total.is_empty() {
-                session.write_marks_force(&clear_total)?;
+            let total_sheet_names: Vec<&str> = date_mappings
+                .iter()
+                .map(|m| m.sheet_name.as_str())
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            for sheet_name in &total_sheet_names {
+                session.clear_total_rows(
+                    sheet_name,
+                    male_total_row,
+                    female_total_row,
+                    combined_total_row,
+                )?;
             }
 
             let formula_marks = super::attendance_marks::total_formula_marks(

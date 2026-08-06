@@ -2,7 +2,7 @@ use crate::domain::error::{AppError, Result};
 use crate::domain::models::StudentGender;
 use crate::infrastructure::database::{ClassRepository, DbPool, StudentRepository};
 use crate::sf2::attendance_marks::{
-    clear_total_cell_marks, summary_formula_marks, total_formula_marks,
+    summary_formula_marks, total_formula_marks,
 };
 use crate::sf2::calendar::validate_configured_calendar;
 use crate::sf2::excel;
@@ -172,14 +172,19 @@ pub fn update_workbook_settings(pool: DbPool, draft: Sf2TemplateDraft) -> Result
             // Clear stale TOTAL cell values from all weekday columns (6–38)
             // so columns without dates in this month end up clean/empty rather
             // than showing a stale value inherited from the bundled template.
-            let clear_marks = clear_total_cell_marks(
-                bundle_male_total_row,
-                bundle_female_total_row,
-                bundle_combined_total_row,
-                &bundle_date_mappings,
-            );
-            if !clear_marks.is_empty() {
-                session.write_marks_force(&clear_marks)?;
+            let total_sheet_names: Vec<&str> = bundle_date_mappings
+                .iter()
+                .map(|m| m.sheet_name.as_str())
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            for sheet_name in &total_sheet_names {
+                session.clear_total_rows(
+                    sheet_name,
+                    bundle_male_total_row,
+                    bundle_female_total_row,
+                    bundle_combined_total_row,
+                )?;
             }
 
             // Write TOTAL formulas

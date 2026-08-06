@@ -168,3 +168,35 @@ pub fn rename_sheet_unique(sheet: &ComObject, base_name: &str) -> Result<()> {
 fn truncate_sheet_name(name: &str) -> String {
     name.chars().take(31).collect()
 }
+
+/// Clear a rectangular range of cells using `Range.ClearContents()` in a single
+/// COM call. Unlike per-cell writes, this clears the entire range at once —
+/// dramatically faster for large rectangular areas like the attendance grid.
+///
+/// The range MUST NOT partially intersect merged cells (Excel throws COM error
+/// 0x800A03EC). The SF2 attendance grid (F:AL, rows 8+) has no merged cells,
+/// so this is safe for that area.
+///
+/// Returns `Ok(())` silently if `start_row > end_row` (empty range).
+pub fn clear_range(
+    sheet: &ComObject,
+    start_row: u32,
+    end_row: u32,
+    start_col: i32,
+    end_col: i32,
+) -> Result<()> {
+    if start_row > end_row {
+        return Ok(());
+    }
+    let col_start = super::workbook_utils::column_number_to_letter(start_col);
+    let col_end = super::workbook_utils::column_number_to_letter(end_col);
+    let range_addr = format!("{col_start}{start_row}:{col_end}{end_row}");
+    let range = sheet.get_object_with_args(
+        "Range",
+        vec![crate::sf2::excel_com::com_session::ComVariant::bstr(
+            &range_addr,
+        )],
+    )?;
+    range.method("ClearContents", Vec::new())?;
+    Ok(())
+}

@@ -4,7 +4,7 @@ use crate::infrastructure::database::{
     ClassRepository, DbPool, SettingsRepository, StudentRepository,
 };
 use crate::sf2::attendance_marks::{
-    clear_total_cell_marks, summary_formula_marks, total_formula_marks,
+    summary_formula_marks, total_formula_marks,
 };
 use crate::sf2::calendar::validate_configured_calendar;
 use crate::sf2::excel;
@@ -161,10 +161,20 @@ pub(super) fn create_workbook_from_template_in_dir(
 
             // Clear stale template values from TOTAL cells for columns without
             // dates (e.g. Mon/Tue in a week where the month starts on Wed).
-            let clear_total_cells =
-                clear_total_cell_marks(male_total, female_total, combined_total, &date_mappings);
-            if !clear_total_cells.is_empty() {
-                session.write_marks_force(&clear_total_cells)?;
+            // Uses Range.ClearContents() bulk clear instead of per-cell marks.
+            let total_sheet_names: Vec<&str> = date_mappings
+                .iter()
+                .map(|m| m.sheet_name.as_str())
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            for sheet_name in &total_sheet_names {
+                session.clear_total_rows(
+                    sheet_name,
+                    male_total,
+                    female_total,
+                    combined_total,
+                )?;
             }
 
             // Step 9: Write MALE/FEMALE/Combined TOTAL formulas
