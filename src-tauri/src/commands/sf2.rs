@@ -1,5 +1,15 @@
 use super::*;
 
+/// Kill all running EXCEL.EXE processes so orphaned background instances
+/// don't prevent the SF2 workbook from opening. Returns the count of
+/// terminated processes.
+#[tauri::command]
+pub fn kill_all_excel_processes() -> std::result::Result<u32, String> {
+    let killed = crate::sf2::excel::kill_excel_processes();
+    log::info!("killed {killed} EXCEL.EXE process(es)");
+    Ok(killed)
+}
+
 #[tauri::command]
 pub async fn validate_sf2_workbook_import(
     app: tauri::AppHandle,

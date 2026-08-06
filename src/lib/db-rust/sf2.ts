@@ -127,3 +127,12 @@ export async function presentAllSf2PreviewAttendance(classId: string): Promise<n
 export async function syncAndOpenSf2Workbook(classId: string): Promise<string> {
 	return await invoke('sync_and_open_sf2_workbook', { classId });
 }
+
+/**
+ * Kill all running EXCEL.EXE processes so orphaned background instances
+ * don't prevent the SF2 workbook from opening. Returns the count of
+ * terminated processes.
+ */
+export async function killAllExcelProcesses(): Promise<number> {
+	return await invoke('kill_all_excel_processes');
+}

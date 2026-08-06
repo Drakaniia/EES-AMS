@@ -8,6 +8,23 @@ use std::path::Path;
 #[cfg(target_os = "windows")]
 pub use super::excel_com::WorkbookSession;
 
+/// Kill all running EXCEL.EXE processes. Returns the count of terminated
+/// processes. Used by the Tauri command and the quit-and-verify prevention
+/// logic.
+pub fn kill_excel_processes() -> u32 {
+    kill_excel_processes_impl()
+}
+
+#[cfg(target_os = "windows")]
+fn kill_excel_processes_impl() -> u32 {
+    super::excel_com::process::kill_excel_processes()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn kill_excel_processes_impl() -> u32 {
+    0
+}
+
 /// Placeholder for non-Windows platforms.
 #[cfg(not(target_os = "windows"))]
 pub struct WorkbookSession;

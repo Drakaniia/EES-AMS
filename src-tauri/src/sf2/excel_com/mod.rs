@@ -1,6 +1,7 @@
 pub mod calendar;
 pub mod com_session;
 pub mod learners;
+pub mod process;
 pub mod workbook;
 pub mod workbook_analysis;
 pub mod workbook_io;

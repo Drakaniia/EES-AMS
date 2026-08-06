@@ -41,6 +41,7 @@ use commands::{
     get_student,
     import_all,
     import_sf2_workbook,
+    kill_all_excel_processes,
     last_event_for_student,
     list_attendance_audit,
     list_audit_events,
@@ -143,6 +144,7 @@ pub fn run() {
             present_all_sf2_preview_attendance,
             export_sf2_workbook,
             open_sf2_workbook,
+            kill_all_excel_processes,
             // Updater commands
             check_for_updates,
             download_and_install,

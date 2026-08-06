@@ -91,6 +91,7 @@ impl ExcelSession {
     pub(crate) fn new() -> Result<Self> {
         let app = ComObject::excel_application()?;
         app.put_bool("Visible", false)?;
+        app.put_bool("ScreenUpdating", false)?;
         app.put_bool("DisplayAlerts", false)?;
         app.put_bool("EnableEvents", false)?;
         let _ = app.put_i4("AutomationSecurity", 3);
@@ -130,7 +131,33 @@ impl ExcelSession {
         if self.quit_called.replace(true) {
             return Ok(());
         }
-        self.app.method("Quit", Vec::new())?;
+        let quit_result = self.app.method("Quit", Vec::new());
+
+        // Give Excel a moment to actually exit before we verify.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        if quit_result.is_ok() {
+            // Quit succeeded — just verify the process actually exited.
+            // We do NOT force-kill here because the user may have other
+            // unrelated Excel windows open that should not be destroyed.
+            let remaining = super::process::count_excel_processes();
+            if remaining > 0 {
+                log::warn!(
+                    "Excel Quit() returned Ok but {remaining} EXCEL.EXE \
+                     process(es) still running (likely unrelated)"
+                );
+            }
+        } else {
+            // Quit failed — force-kill any remaining EXCEL.EXE to prevent
+            // orphaned background processes from accumulating.
+            let killed = super::process::kill_excel_processes();
+            log::error!(
+                "Excel Quit() failed; force-killed {killed} EXCEL.EXE \
+                 process(es) to prevent orphans"
+            );
+        }
+
+        quit_result?;
         Ok(())
     }
 }
