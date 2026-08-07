@@ -226,6 +226,46 @@ export function headerReviewValue(
 	return value.trim() || 'Blank';
 }
 
+/**
+ * Generate skeleton preview dates for a month — all weekdays with empty SF2
+ * mappings. This lets the calendar grid render instantly after a month switch
+ * before the full preview loads from the backend.
+ */
+export function buildSkeletonDates(reportMonth: string, schoolYear?: string): Sf2PreviewDate[] {
+	const month = sf2MonthByValue(reportMonth);
+	if (!month) return [];
+
+	// Derive the calendar year from the school year if available
+	let year = new SvelteDate().getFullYear();
+	if (schoolYear) {
+		const startYear = parseInt(schoolYear.split('-')[0], 10);
+		if (!isNaN(startYear)) {
+			// If report month is June–December, use the start year;
+			// if January–May, use startYear + 1 (next calendar year)
+			year = month.monthIndex >= 5 ? startYear : startYear + 1;
+		}
+	}
+
+	const dayCount = new SvelteDate(year, month.monthIndex + 1, 0).getDate();
+	const dates: Sf2PreviewDate[] = [];
+
+	for (let day = 1; day <= dayCount; day += 1) {
+		const dateKey = localDateKey(new SvelteDate(year, month.monthIndex, day));
+		const weekdayIndexVal = weekdayIndexForDate(dateKey);
+		// Skip weekends
+		if (weekdayIndexVal < 0 || weekdayIndexVal > 4) continue;
+
+		dates.push({
+			date: dateKey,
+			sheetName: '',
+			columnLetter: '',
+			columnIndex: 0
+		});
+	}
+
+	return dates;
+}
+
 export function headerReviewMonthValue(
 	draftReportMonth: string,
 	templateValue: string,

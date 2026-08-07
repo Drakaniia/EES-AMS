@@ -7,6 +7,7 @@
 
 	type Props = {
 		preview: Sf2ExportPreview | null;
+		previewRefreshing: boolean;
 		selectedClass: Class | null | undefined;
 		draftSchoolId: string;
 		draftSchoolYear: string;
@@ -31,6 +32,7 @@
 
 	let {
 		preview,
+		previewRefreshing = false,
 		selectedClass,
 		draftSchoolId,
 		draftSchoolYear,
@@ -81,15 +83,27 @@
 				{/if}
 				{syncingRoster ? 'Syncing...' : 'Sync Roster'}
 			</button>
-			<button
-				type="button"
-				onclick={onRequestExport}
-				disabled={exportDisabled}
-				class="control-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-			>
-				<Save class="size-4" aria-hidden="true" />
-				{exporting ? 'Exporting...' : 'Review Export'}
-			</button>
+			<!-- Export button: show skeleton pulsing when preview is refreshing -->
+			{#if previewRefreshing}
+				<button
+					type="button"
+					disabled
+					class="control-ring inline-flex h-10 w-full cursor-not-allowed items-center justify-center gap-2 rounded-pill bg-primary/60 px-4 text-sm font-semibold text-primary-foreground/70"
+				>
+					<Spinner />
+					Loading preview...
+				</button>
+			{:else}
+				<button
+					type="button"
+					onclick={onRequestExport}
+					disabled={exportDisabled}
+					class="control-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					<Save class="size-4" aria-hidden="true" />
+					{exporting ? 'Exporting...' : 'Review Export'}
+				</button>
+			{/if}
 		</div>
 	</div>
 
@@ -134,7 +148,18 @@
 			)}
 			{@render metaRow('Imported', formatImportedAt(preview?.template?.importedAt))}
 		</dl>
-		{#if preview?.canExport !== undefined}
+		<!-- Export readiness badge: pulsing skeleton when refreshing, live indicator otherwise -->
+		{#if previewRefreshing}
+			<div
+				class="mt-4 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs"
+			>
+				<div
+					class="skeleton-pulse size-2 shrink-0 rounded-full bg-muted-foreground/40"
+					aria-hidden="true"
+				></div>
+				<span class="skeleton-pulse text-muted-foreground">Loading preview...</span>
+			</div>
+		{:else if preview?.canExport !== undefined}
 			<div
 				class="mt-4 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs"
 			>
@@ -155,7 +180,15 @@
 		<div class="flex items-start justify-between gap-3">
 			<div>
 				<div class="label-mono text-primary">Absent list</div>
-				<h2 class="mt-1 text-lg font-semibold">{preview?.absentList.length ?? 0} entries</h2>
+				{#if previewRefreshing}
+					<h2
+						class="skeleton-pulse mt-1 inline-block rounded text-lg font-semibold text-transparent"
+					>
+						&nbsp;&nbsp;&nbsp;entries
+					</h2>
+				{:else}
+					<h2 class="mt-1 text-lg font-semibold">{preview?.absentList.length ?? 0} entries</h2>
+				{/if}
 			</div>
 			<UserX class="size-5 text-red-700" aria-hidden="true" />
 		</div>
@@ -172,7 +205,7 @@
 					</div>
 				{/each}
 			</div>
-		{:else}
+		{:else if !previewRefreshing}
 			<p class="mt-4 text-sm leading-6 text-muted-foreground">
 				No absences are currently marked for this report month.
 			</p>
@@ -186,3 +219,19 @@
 		<dd class="font-medium">{value}</dd>
 	</div>
 {/snippet}
+
+<style>
+	.skeleton-pulse {
+		animation: skeleton-pulse 1.5s ease-in-out infinite;
+	}
+
+	@keyframes skeleton-pulse {
+		0%,
+		100% {
+			opacity: 0.4;
+		}
+		50% {
+			opacity: 1;
+		}
+	}
+</style>

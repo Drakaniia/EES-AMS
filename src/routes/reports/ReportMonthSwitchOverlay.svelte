@@ -5,11 +5,17 @@
 		monthSwitchLoading: boolean;
 		monthSwitchMessage: string;
 		monthSwitchError: string | null;
+		monthSwitchProgressPercent: number;
 		onDismissError?: () => void;
 	};
 
-	let { monthSwitchLoading, monthSwitchMessage, monthSwitchError, onDismissError }: Props =
-		$props();
+	let {
+		monthSwitchLoading,
+		monthSwitchMessage,
+		monthSwitchError,
+		monthSwitchProgressPercent = 0,
+		onDismissError
+	}: Props = $props();
 </script>
 
 {#if monthSwitchLoading}
@@ -24,22 +30,49 @@
 			role="status"
 			aria-live="polite"
 		>
-			<!-- Animated bouncing dots -->
-			<div class="flex items-center gap-1" aria-hidden="true">
-				<span class="loading-dot size-2.5 rounded-full bg-primary"></span>
-				<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 200ms"
-				></span>
-				<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 400ms"
-				></span>
-			</div>
+			<!-- Animated bouncing dots (hide when progress bar is visible) -->
+			{#if monthSwitchProgressPercent <= 0}
+				<div class="flex items-center gap-1" aria-hidden="true">
+					<span class="loading-dot size-2.5 rounded-full bg-primary"></span>
+					<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 200ms"
+					></span>
+					<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 400ms"
+					></span>
+				</div>
+			{/if}
 
-			<!-- Rotating friendly message -->
+			<!-- Progress bar (visible when backend reports progress) -->
+			{#if monthSwitchProgressPercent > 0}
+				<div class="w-full space-y-2">
+					<div
+						class="h-2 w-full overflow-hidden rounded-full bg-muted"
+						role="progressbar"
+						aria-valuenow={monthSwitchProgressPercent}
+						aria-valuemin="0"
+						aria-valuemax="100"
+						aria-valuetext={`${monthSwitchProgressPercent} percent`}
+					>
+						<div
+							class="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+							style="width: {monthSwitchProgressPercent}%"
+						></div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Rotating / real progress message -->
 			<div class="space-y-1">
 				<p class="text-sm font-semibold text-foreground transition-all duration-500 ease-out">
 					{monthSwitchMessage}
 				</p>
 				<p class="text-xs text-muted-foreground transition-opacity duration-300">
-					Updating workbook calendar and attendance marks
+					{#if monthSwitchProgressPercent >= 100}
+						Almost done — loading preview…
+					{:else if monthSwitchProgressPercent > 0}
+						Updating the SF2 workbook for the new month
+					{:else}
+						Updating workbook calendar and attendance marks
+					{/if}
 				</p>
 			</div>
 		</div>

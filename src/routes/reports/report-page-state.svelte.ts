@@ -1,5 +1,6 @@
 import { onMount, onDestroy } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import {
 	exportSf2Workbook,
@@ -20,6 +21,7 @@ import {
 
 import {
 	buildMatrixWeekGroups,
+	buildSkeletonDates,
 	cellKey,
 	errorMessage,
 	formatDate,
@@ -62,6 +64,9 @@ export function createReportPageState() {
 	let monthSwitchLoading = $state(false);
 	let monthSwitchError = $state<string | null>(null);
 	let monthSwitchMessage = $state('');
+	let monthSwitchProgressPercent = $state(0);
+	let monthSwitchUnlisten: UnlistenFn | null = null;
+	let previewRefreshing = $state(false);
 	let modalSaving = $state(false);
 	let reportDialogs = $state<ReportExportDialogs | undefined>();
 
@@ -90,6 +95,10 @@ export function createReportPageState() {
 	});
 	onDestroy(() => {
 		sf2Open.cleanup();
+		if (monthSwitchUnlisten) {
+			monthSwitchUnlisten();
+			monthSwitchUnlisten = null;
+		}
 	});
 
 	async function loadInitial() {
@@ -284,6 +293,13 @@ export function createReportPageState() {
 
 	$effect(() => {
 		if (monthSwitchLoading) {
+			// If we have real progress from the backend (>0%), skip the static
+			// message cycling — the backend messages have priority.
+			if (monthSwitchProgressPercent > 0) {
+				return;
+			}
+			// Fallback: cycle through reassuring messages while waiting for
+			// the backend to start reporting progress.
 			let index = -1;
 			const advance = () => {
 				index = (index + 1) % MONTH_SWITCH_MESSAGES.length;
@@ -297,12 +313,15 @@ export function createReportPageState() {
 
 	async function onMonthSelect(monthValue: string) {
 		draft.onFieldChange('draftReportMonth', monthValue);
-		monthSwitchLoading = true;
 		monthPickerOpen = false;
 		await onReportMonthChange();
 	}
 
 	async function onReportMonthChange() {
+		// Guard against concurrent month switches
+		if (monthSwitchLoading) return;
+		monthSwitchLoading = true;
+
 		const previousReportMonth =
 			workbookSettings?.reportMonth || preview?.template?.reportMonth || '';
 		const nextMonth = draft.reportMonth;
@@ -312,27 +331,117 @@ export function createReportPageState() {
 			return;
 		}
 
+		// Clean up any stale listener from a previous run
+		if (monthSwitchUnlisten) {
+			monthSwitchUnlisten();
+			monthSwitchUnlisten = null;
+		}
+
 		invalidateCacheForMonth(activeClassId, previousReportMonth);
 		monthSwitchLoading = true;
 		monthSwitchError = null;
+		monthSwitchProgressPercent = 0;
+		monthSwitchMessage = 'Preparing your attendance report…';
+
+		// Set up progress listener for the month switch backend operation
+		try {
+			monthSwitchUnlisten = await listen<{
+				task: string;
+				current: number;
+				total: number;
+				message: string;
+			}>('sf2-progress', (event) => {
+				if (event.payload.task === 'month_switch') {
+					if (event.payload.message) {
+						monthSwitchMessage = event.payload.message;
+					}
+					if (event.payload.total > 0) {
+						monthSwitchProgressPercent = Math.round(
+							(event.payload.current / event.payload.total) * 100
+						);
+					}
+				}
+			});
+		} catch {
+			monthSwitchUnlisten = null;
+			// Listener setup failed; continue without progress updates
+		}
+
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		const switchStartTime = Date.now();
+
+		// Step 1: Persist month switch via backend
 		try {
 			await setSf2ReportMonth(activeClassId, nextMonth);
-			await loadReport(activeClassId);
-			reportDialogs?.showToast(`Switched to ${reportMonthLabel(nextMonth)}`);
 		} catch (error) {
+			// Month switch failed — clean up and roll back
+			if (monthSwitchUnlisten) {
+				monthSwitchUnlisten();
+				monthSwitchUnlisten = null;
+			}
 			const msg = errorMessage(error, 'Failed to switch report month');
 			monthSwitchError = msg;
 			reportDialogs?.showToast(`Could not switch month: ${msg}`, false);
 			draft.onFieldChange('draftReportMonth', previousReportMonth);
-		} finally {
-			const elapsed = Date.now() - switchStartTime;
-			if (elapsed < 500) {
-				await new Promise((resolve) => setTimeout(resolve, 500 - elapsed));
-			}
 			monthSwitchLoading = false;
+			return;
+		}
+
+		// ── Optimistic skeleton ────────────────────────────────────────────
+		// Replace the preview with a lightweight skeleton immediately so the
+		// calendar grid renders with the new month's dates. The overlay hides
+		// and real attendance data fills in asynchronously below.
+		const schoolYear = workbookSettings?.schoolYear || preview?.template?.schoolYear || '';
+		const skeletonDates = buildSkeletonDates(nextMonth, schoolYear);
+		preview = {
+			template: preview?.template ? { ...preview.template, reportMonth: nextMonth } : undefined,
+			classId: activeClassId,
+			className: preview?.className || '',
+			sourcePath: preview?.sourcePath,
+			dates: skeletonDates,
+			students: [],
+			absentList: [],
+			mappedStudents: 0,
+			mappedDates: 0,
+			presentCount: 0,
+			absenceCount: 0,
+			unmappedStudentCount: 0,
+			canExport: false,
+			issues: [],
+			warnings: []
+		};
+
+		// Signal that the preview is being loaded in the background —
+		// the sidebar should show pulsing skeleton indicators.
+		previewRefreshing = true;
+
+		// Dismiss the overlay — the skeleton calendar is now visible
+		if (monthSwitchUnlisten) {
+			monthSwitchUnlisten();
+			monthSwitchUnlisten = null;
+		}
+		const elapsed = Date.now() - switchStartTime;
+		if (elapsed < 500) {
+			await new Promise((resolve) => setTimeout(resolve, 500 - elapsed));
+		}
+		monthSwitchLoading = false;
+
+		// Step 2: Load real preview data (replaces skeleton when ready)
+		// Failure here does NOT roll back the month — the backend already
+		// committed the change. The skeleton stays visible and the error
+		// is shown via toast so the user can retry.
+		try {
+			await loadReport(activeClassId);
+			reportDialogs?.showToast(`Switched to ${reportMonthLabel(nextMonth)}`);
+		} catch (error) {
+			const msg = errorMessage(error, 'Failed to load preview');
+			reportDialogs?.showToast(
+				`Month switched but preview load failed: ${msg}. Try refreshing.`,
+				false
+			);
+		} finally {
+			previewRefreshing = false;
 		}
 	}
 
@@ -487,6 +596,12 @@ export function createReportPageState() {
 		set monthSwitchMessage(v) {
 			monthSwitchMessage = v;
 		},
+		get monthSwitchProgressPercent() {
+			return monthSwitchProgressPercent;
+		},
+		set monthSwitchProgressPercent(v) {
+			monthSwitchProgressPercent = v;
+		},
 		get modalSaving() {
 			return modalSaving;
 		},
@@ -522,6 +637,9 @@ export function createReportPageState() {
 		},
 		get hasModalDraftChanges() {
 			return hasModalDraftChanges;
+		},
+		get previewRefreshing() {
+			return previewRefreshing;
 		},
 		loadInitial,
 		loadReport,

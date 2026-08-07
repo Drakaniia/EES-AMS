@@ -82,6 +82,7 @@
 
 				<ReportSidebar
 					preview={page.preview}
+					previewRefreshing={page.previewRefreshing}
 					selectedClass={page.selectedClass}
 					draftSchoolId={page.draft.schoolId}
 					draftSchoolYear={page.draft.schoolYear}
@@ -151,6 +152,7 @@
 	monthSwitchLoading={page.monthSwitchLoading}
 	monthSwitchMessage={page.monthSwitchMessage}
 	monthSwitchError={page.monthSwitchError}
+	monthSwitchProgressPercent={page.monthSwitchProgressPercent}
 	onDismissError={() => (page.monthSwitchError = null)}
 />
 
