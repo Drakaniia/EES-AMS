@@ -44,7 +44,8 @@ pub(super) fn export_marks(
         let absent_ids = absent_student_ids(&events, &students, class_id, day);
 
         // Skip days with no records at all (open days) - nothing to mark.
-        if absent_ids.is_empty() && present_student_ids(&events, &students, class_id, day).is_empty()
+        if absent_ids.is_empty()
+            && present_student_ids(&events, &students, class_id, day).is_empty()
         {
             continue;
         }
@@ -318,6 +319,10 @@ pub(super) fn total_formula_marks(
 ///   AO{female_total} = $AW$5*{female_count}-AM{female_total}
 ///   AM{combined}     = AM{male_total}+AM{female_total}
 ///   AO{combined}     = AO{male_total}+AO{female_total}
+// The row counts and totals are intentionally flat: they mirror the SF2 layout
+// columns and are consumed directly by the formula builders below. Grouping
+// them into a struct would obscure that 1:1 mapping at every call site.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn learner_absent_present_formula_marks(
     student_mappings: &[Sf2StudentMappingRecord],
     male_count: usize,

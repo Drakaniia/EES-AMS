@@ -44,10 +44,7 @@ fn noop_progress() -> WriteProgress {
 /// is 7/10 (70%), so the frontend bar crawls instead of pausing at 60%.
 fn emit_write_step(progress: &WriteProgress, units_done: usize, total_units: usize, message: &str) {
     let total = total_units.max(1) as u64;
-    let offset = (units_done as u64)
-        .saturating_mul(8)
-        .div_ceil(total)
-        .min(8);
+    let offset = (units_done as u64).saturating_mul(8).div_ceil(total).min(8);
     progress(61 + offset as u32, 100, message);
 }
 
@@ -215,8 +212,7 @@ fn write_template_marks_for_mappings_impl(
         crate::sf2::roster_parser::bundled_template_total_rows(male_count, female_count);
 
     // ── ABSENT/PRESENT formula marks ────────────────────────────────
-    let formula_marks_opt =
-        compute_absent_present_marks(template, student_mappings, date_mappings);
+    let formula_marks_opt = compute_absent_present_marks(template, student_mappings, date_mappings);
 
     // ── Single Excel session ────────────────────────────────────────
     excel::batch_operations(&workbook_path, true, move |session| {
@@ -225,7 +221,7 @@ fn write_template_marks_for_mappings_impl(
         // writes thousands of cells. The no-op reporter keeps non-UI callers
         // (e.g. roster sync) unaffected.
         const CHUNK_SIZE: usize = 100;
-        let (ref formula_marks, ref static_marks) = match &formula_marks_opt {
+        let (formula_marks, static_marks) = match &formula_marks_opt {
             Some((formula, static_marks)) => (formula.as_slice(), static_marks.as_slice()),
             None => (&[][..], &[][..]),
         };
@@ -236,12 +232,9 @@ fn write_template_marks_for_mappings_impl(
         // INVARIANT: total_units must equal the sum of every phase's unit count
         // below (sheet clears + chunked per-cell writes). Keep it in sync when
         // adding or removing phases so the 61–69% mapping stays accurate.
-        let total_units = (bulk_sheets.len()
-            + clear_chunks
-            + marks_chunks
-            + formula_chunks
-            + static_chunks)
-            .max(1);
+        let total_units =
+            (bulk_sheets.len() + clear_chunks + marks_chunks + formula_chunks + static_chunks)
+                .max(1);
         let mut units_done = 0usize;
 
         // Move the bar as soon as the write phase starts, before the first
@@ -287,11 +280,7 @@ fn write_template_marks_for_mappings_impl(
                     &progress,
                     units_done,
                     total_units,
-                    &format!(
-                        "Writing attendance marks ({}/{})…",
-                        index + 1,
-                        marks_chunks
-                    ),
+                    &format!("Writing attendance marks ({}/{})…", index + 1, marks_chunks),
                 );
             }
         }

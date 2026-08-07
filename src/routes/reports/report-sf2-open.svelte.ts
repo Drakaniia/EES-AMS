@@ -112,10 +112,7 @@ export function createSf2OpenState() {
 				9: 'Opening in Excel…',
 				10: 'Done!'
 			};
-			const step = Math.min(
-				10,
-				Math.max(1, Math.floor((progressCurrent / progressTotal) * 10))
-			);
+			const step = Math.min(10, Math.max(1, Math.floor((progressCurrent / progressTotal) * 10)));
 			displayMessage = progressMessages[step] || SF2_OPEN_MESSAGES[cycleIndex];
 			return;
 		}
@@ -261,7 +258,7 @@ export function createSf2OpenState() {
 			console.info(`killed ${killed} EXCEL.EXE process(es)`);
 			await new Promise((resolve) => setTimeout(resolve, 300));
 			await open(activeClassId, preview, showToast);
-		} catch (err) {
+		} catch {
 			error =
 				'Could not stop Excel processes. ' +
 				'Try manually ending EXCEL.EXE in Task Manager, then try again.';
