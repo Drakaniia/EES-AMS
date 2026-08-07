@@ -36,6 +36,38 @@ pub fn create_workbook_from_template<R: tauri::Runtime>(
 /// lighter than a full `update_workbook_settings` call (which also handles
 /// roster metadata, student name sync, and row expansion).
 pub fn set_report_month(pool: DbPool, class_id: &str, report_month: &str) -> Result<()> {
+    set_report_month_impl(pool, class_id, report_month, &|_, _, _| {})
+}
+
+/// Same as [`set_report_month`] but emits fine-grained progress events so the
+/// frontend can show a determinate progress bar during month switch.
+pub fn set_report_month_with_progress<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    pool: DbPool,
+    class_id: &str,
+    report_month: &str,
+) -> Result<()> {
+    use super::progress::emit_sf2_progress;
+    let app = app.clone();
+    let class_id_owned = class_id.to_string();
+    let report_month_owned = report_month.to_string();
+    set_report_month_impl(
+        pool,
+        &class_id_owned,
+        &report_month_owned,
+        &move |current, total, message| {
+            emit_sf2_progress(&app, "month_switch", current, total, message);
+        },
+    )
+}
+
+fn set_report_month_impl(
+    pool: DbPool,
+    class_id: &str,
+    report_month: &str,
+    emit: &dyn Fn(u32, u32, &str),
+) -> Result<()> {
+    emit(1, 8, "Updating report month in database…");
     if report_month.trim().is_empty() {
         return Err(AppError::InvalidInput(
             "Report month is required".to_string(),
@@ -52,6 +84,7 @@ pub fn set_report_month(pool: DbPool, class_id: &str, report_month: &str) -> Res
             AppError::InvalidInput("No SF2 workbook imported for this class".to_string())
         })?;
     sf2_repo.set_report_month(&template.id, report_month)?;
+    emit(2, 8, "Month saved — preparing the workbook…");
 
     // 2. Reload the template so we have the current report_month.
     let updated_template = sf2_repo
@@ -66,15 +99,16 @@ pub fn set_report_month(pool: DbPool, class_id: &str, report_month: &str) -> Res
     //    - Persists the new mappings in the DB
     //    - Returns the fully refreshed template with current date mappings
     //
-    //    force_refresh=true ensures the Excel calendar is ALWAYS reconfigured
-    //    on month switch, even if partial date mappings already exist in the DB
-    //    from a previous buggy refresh. This guarantees every new month gets
-    //    complete, correct date mappings.
+    //    Steps 3-6 span the Excel COM operations (the bulk of the time).
+    //    The bar jumps quickly from 3→4 (emitted before the call) and
+    //    6→7→8 (emitted after), with steps 4-5 implied during the COM work.
+    emit(3, 8, "Opening Excel to reconfigure the calendar…");
     let refreshed = super::excel_service::refresh_template_calendar_from_saved_month(
         pool.clone(),
         &updated_template,
         true,
     )?;
+    emit(6, 8, "Calendar reconfigured — verifying date mappings…");
 
     // 4. Verify date mappings exist for the new month.
     //    We intentionally DO NOT write attendance marks here — the Excel
@@ -89,5 +123,9 @@ pub fn set_report_month(pool: DbPool, class_id: &str, report_month: &str) -> Res
         log::warn!("No date mappings found for report month {report_month} (class {class_id})");
     }
 
+    emit(7, 8, "Saving date mappings…");
+    // Mappings already saved by refresh_template_calendar_from_saved_month
+
+    emit(8, 8, "Month switch complete!");
     Ok(())
 }

@@ -10,7 +10,9 @@ pub use super::attendance_service::{
     sync_and_open_sf2_workbook, sync_attendance_to_sf2_workbook,
 };
 
-pub use super::template_ops::{create_workbook_from_template, set_report_month};
+pub use super::template_ops::{
+    create_workbook_from_template, set_report_month, set_report_month_with_progress,
+};
 pub use super::template_update::update_workbook_settings;
 
 pub use super::roster_sync::sync_workbook_roster_for_class;

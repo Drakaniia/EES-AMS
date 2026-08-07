@@ -147,13 +147,19 @@ pub fn update_sf2_workbook_settings(
 }
 
 #[tauri::command]
-pub fn set_sf2_report_month(
+pub async fn set_sf2_report_month(
+    app: tauri::AppHandle,
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
     class_id: String,
     report_month: String,
 ) -> std::result::Result<(), String> {
-    service::set_report_month(pool.inner().clone(), &class_id, &report_month)
-        .map_err(|e| e.to_string())
+    let pool = pool.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        service::set_report_month_with_progress(&app, pool, &class_id, &report_month)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
