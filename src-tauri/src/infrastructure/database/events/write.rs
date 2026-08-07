@@ -55,7 +55,8 @@ impl EventRepository {
         let class_id = normalize_optional_text(req.class_id);
         let session_key = normalize_optional_text(req.session_key)
             .unwrap_or_else(|| attendance_session_key(timestamp, class_id.as_deref()));
-        let override_reason = normalize_optional_text(req.override_reason);		let existing_count: i32 = transaction
+        let override_reason = normalize_optional_text(req.override_reason);
+        let existing_count: i32 = transaction
             .query_row(
                 "SELECT COUNT(*) FROM events 
                  WHERE student_id = ?1 
@@ -84,7 +85,8 @@ impl EventRepository {
             session_key: Some(session_key),
             override_reason,
             updated_at: None,
-        };		transaction.execute(
+        };
+        transaction.execute(
             "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![

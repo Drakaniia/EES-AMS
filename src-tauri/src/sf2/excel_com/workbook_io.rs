@@ -129,10 +129,8 @@ impl WorkbookSession {
             let sheet = if let Some(cached) = sheet_cache.get(mark.sheet_name.as_str()) {
                 cached
             } else {
-                let obj = sheets.get_object_with_args(
-                    "Item",
-                    vec![ComVariant::bstr(&mark.sheet_name)],
-                )?;
+                let obj = sheets
+                    .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
                 // Use raw pointer trick: insert returns None on first insert, then
                 // get provides the reference. Safe because we never remove entries.
                 sheet_cache.insert(mark.sheet_name.as_str(), obj);
@@ -152,10 +150,8 @@ impl WorkbookSession {
             let sheet = if let Some(cached) = sheet_cache.get(mark.sheet_name.as_str()) {
                 cached
             } else {
-                let obj = sheets.get_object_with_args(
-                    "Item",
-                    vec![ComVariant::bstr(&mark.sheet_name)],
-                )?;
+                let obj = sheets
+                    .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
                 sheet_cache.insert(mark.sheet_name.as_str(), obj);
                 sheet_cache.get(mark.sheet_name.as_str()).unwrap()
             };
@@ -173,10 +169,8 @@ impl WorkbookSession {
             let sheet = if let Some(cached) = sheet_cache.get(mark.sheet_name.as_str()) {
                 cached
             } else {
-                let obj = sheets.get_object_with_args(
-                    "Item",
-                    vec![ComVariant::bstr(&mark.sheet_name)],
-                )?;
+                let obj = sheets
+                    .get_object_with_args("Item", vec![ComVariant::bstr(&mark.sheet_name)])?;
                 sheet_cache.insert(mark.sheet_name.as_str(), obj);
                 sheet_cache.get(mark.sheet_name.as_str()).unwrap()
             };
@@ -196,8 +190,7 @@ impl WorkbookSession {
         female_total_row: u32,
     ) -> Result<()> {
         let sheets = self.workbook.get_object("Worksheets")?;
-        let sheet =
-            sheets.get_object_with_args("Item", vec![ComVariant::bstr(sheet_name)])?;
+        let sheet = sheets.get_object_with_args("Item", vec![ComVariant::bstr(sheet_name)])?;
 
         // Male learner rows: 8 to (male_total_row - 1)
         // Skip if zero male students (male_total_row == 8 means no male slots).
@@ -225,8 +218,7 @@ impl WorkbookSession {
         combined_total_row: u32,
     ) -> Result<()> {
         let sheets = self.workbook.get_object("Worksheets")?;
-        let sheet =
-            sheets.get_object_with_args("Item", vec![ComVariant::bstr(sheet_name)])?;
+        let sheet = sheets.get_object_with_args("Item", vec![ComVariant::bstr(sheet_name)])?;
         clear_range(&sheet, male_total_row, male_total_row, 6, 38)?;
         clear_range(&sheet, female_total_row, female_total_row, 6, 38)?;
         clear_range(&sheet, combined_total_row, combined_total_row, 6, 38)?;

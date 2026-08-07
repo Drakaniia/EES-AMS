@@ -1218,21 +1218,39 @@ fn learner_absent_present_formula_marks_writes_every_learner_and_subtotal() {
     }
 
     // Male subtotal
-    let am29 = formula_marks.iter().find(|m| m.cell_address == "AM29").unwrap();
+    let am29 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AM29")
+        .unwrap();
     assert_eq!(am29.value, "=SUM(AM8:AN28)");
-    let ao29 = formula_marks.iter().find(|m| m.cell_address == "AO29").unwrap();
+    let ao29 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AO29")
+        .unwrap();
     assert_eq!(ao29.value, "=$AW$5*15-AM29");
 
     // Female subtotal
-    let am49 = formula_marks.iter().find(|m| m.cell_address == "AM49").unwrap();
+    let am49 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AM49")
+        .unwrap();
     assert_eq!(am49.value, "=SUM(AM30:AN48)");
-    let ao49 = formula_marks.iter().find(|m| m.cell_address == "AO49").unwrap();
+    let ao49 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AO49")
+        .unwrap();
     assert_eq!(ao49.value, "=$AW$5*10-AM49");
 
     // Combined
-    let am50 = formula_marks.iter().find(|m| m.cell_address == "AM50").unwrap();
+    let am50 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AM50")
+        .unwrap();
     assert_eq!(am50.value, "=AM29+AM49");
-    let ao50 = formula_marks.iter().find(|m| m.cell_address == "AO50").unwrap();
+    let ao50 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AO50")
+        .unwrap();
     assert_eq!(ao50.value, "=AO29+AO49");
 
     // 25 learners × 2 (AM+AO) + 6 subtotal formulas
@@ -1276,22 +1294,43 @@ fn learner_absent_present_formula_marks_expanded_roster_uses_shifted_total_rows(
         &["JULY 2026"],
     );
 
-    let am33 = formula_marks.iter().find(|m| m.cell_address == "AM33").unwrap();
+    let am33 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AM33")
+        .unwrap();
     assert_eq!(am33.value, "=SUM(AM8:AN32)");
-    let ao33 = formula_marks.iter().find(|m| m.cell_address == "AO33").unwrap();
+    let ao33 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AO33")
+        .unwrap();
     assert_eq!(ao33.value, "=$AW$5*25-AM33");
 
-    let am56 = formula_marks.iter().find(|m| m.cell_address == "AM56").unwrap();
+    let am56 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AM56")
+        .unwrap();
     assert_eq!(am56.value, "=SUM(AM34:AN55)");
-    let ao56 = formula_marks.iter().find(|m| m.cell_address == "AO56").unwrap();
+    let ao56 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AO56")
+        .unwrap();
     assert_eq!(ao56.value, "=$AW$5*22-AM56");
 
-    let am57 = formula_marks.iter().find(|m| m.cell_address == "AM57").unwrap();
+    let am57 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AM57")
+        .unwrap();
     assert_eq!(am57.value, "=AM33+AM56");
-    let ao57 = formula_marks.iter().find(|m| m.cell_address == "AO57").unwrap();
+    let ao57 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AO57")
+        .unwrap();
     assert_eq!(ao57.value, "=AO33+AO56");
 
-    let aw5 = static_marks.iter().find(|m| m.cell_address == "AW5").unwrap();
+    let aw5 = static_marks
+        .iter()
+        .find(|m| m.cell_address == "AW5")
+        .unwrap();
     assert_eq!(aw5.value, "23");
 }
 
@@ -1312,7 +1351,10 @@ fn learner_absent_present_formula_marks_empty_mappings_still_writes_subtotals() 
     // 6 subtotal formulas + AW5 static
     assert_eq!(formula_marks.len(), 6);
     assert_eq!(static_marks.len(), 1);
-    let ao29 = formula_marks.iter().find(|m| m.cell_address == "AO29").unwrap();
+    let ao29 = formula_marks
+        .iter()
+        .find(|m| m.cell_address == "AO29")
+        .unwrap();
     assert_eq!(ao29.value, "=$AW$5*0-AM29");
 }
 

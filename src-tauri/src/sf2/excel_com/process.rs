@@ -59,17 +59,13 @@ pub(crate) fn kill_excel_processes() -> u32 {
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
         TH32CS_SNAPPROCESS,
     };
-    use windows::Win32::System::Threading::{
-        OpenProcess, TerminateProcess, PROCESS_TERMINATE,
-    };
+    use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
 
     let mut killed: u32 = 0;
 
     // SAFETY: CreateToolhelp32Snapshot is a well-known Win32 API with no
     // memory-safety concerns beyond the handle lifecycle.
-    let snapshot = unsafe {
-        CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-    };
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
     let snapshot = match snapshot {
         Ok(handle) => handle,
         Err(_) => {
@@ -94,15 +90,11 @@ pub(crate) fn kill_excel_processes() -> u32 {
         if exe_name.eq_ignore_ascii_case("EXCEL.EXE") {
             // SAFETY: OpenProcess with PROCESS_TERMINATE on a known PID.
             // The handle is closed immediately after TerminateProcess.
-            match unsafe {
-                OpenProcess(PROCESS_TERMINATE, false, entry.th32ProcessID)
-            } {
+            match unsafe { OpenProcess(PROCESS_TERMINATE, false, entry.th32ProcessID) } {
                 Ok(process_handle) if !process_handle.is_invalid() => {
                     // TerminateProcess with exit code 0 — Excel has no
                     // unsaved-work recovery to preserve (per spec).
-                    let terminated = unsafe {
-                        TerminateProcess(process_handle, 0)
-                    };
+                    let terminated = unsafe { TerminateProcess(process_handle, 0) };
                     if terminated.is_ok() {
                         killed += 1;
                     } else {

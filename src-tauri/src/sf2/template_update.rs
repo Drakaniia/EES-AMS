@@ -1,9 +1,7 @@
 use crate::domain::error::{AppError, Result};
 use crate::domain::models::StudentGender;
 use crate::infrastructure::database::{ClassRepository, DbPool, StudentRepository};
-use crate::sf2::attendance_marks::{
-    summary_formula_marks, total_formula_marks,
-};
+use crate::sf2::attendance_marks::{summary_formula_marks, total_formula_marks};
 use crate::sf2::calendar::validate_configured_calendar;
 use crate::sf2::excel;
 use crate::sf2::models::{Sf2ImportSummary, Sf2TemplateDraft, Sf2TemplateRecord};

@@ -52,10 +52,12 @@ pub(super) fn export_preview(
         .iter()
         .map(|date| {
             let day = &date.date;
-            let has_present = !present_events_for_day(events, class_students, &template.active_class_id, day)
-                .is_empty();
-            let has_absent = !absent_events_for_day(events, class_students, &template.active_class_id, day)
-                .is_empty();
+            let has_present =
+                !present_events_for_day(events, class_students, &template.active_class_id, day)
+                    .is_empty();
+            let has_absent =
+                !absent_events_for_day(events, class_students, &template.active_class_id, day)
+                    .is_empty();
             (day.clone(), has_present || has_absent)
         })
         .collect::<HashMap<_, _>>();

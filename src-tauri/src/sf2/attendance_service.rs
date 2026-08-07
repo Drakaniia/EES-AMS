@@ -6,7 +6,6 @@ use crate::infrastructure::database::{ClassRepository, DbPool, StudentRepository
 use crate::sf2::attendance_events;
 #[cfg(test)]
 use crate::sf2::attendance_events::parse_clock;
-use rusqlite::params;
 #[cfg(test)]
 use crate::sf2::attendance_marks::{
     attendance_grid_rows, clear_attendance_marks_for_records, learner_absent_present_formula_marks,
@@ -22,6 +21,7 @@ use crate::sf2::progress::{
 };
 use crate::sf2::repository::Sf2Repository;
 use crate::sf2::sf2_metadata::sf2_date_mappings_for_report_month;
+use rusqlite::params;
 
 use std::collections::HashSet;
 
@@ -104,8 +104,12 @@ pub fn sync_and_open_sf2_workbook<R: tauri::Runtime>(
         // Step 6/10: Write marks to workbook (fine-grained progress events
         // are emitted from inside the Excel write phase by the progress sink).
         emit_sf2_progress(app, "open", 6, 10, "Writing marks to workbook…");
-        let _marks_written =
-            write_template_marks_for_days_with_progress(app, pool.clone(), &template, &report_dates)?;
+        let _marks_written = write_template_marks_for_days_with_progress(
+            app,
+            pool.clone(),
+            &template,
+            &report_dates,
+        )?;
 
         // Step 7/10: Save workbook changes
         emit_sf2_progress(app, "open", 7, 10, "Saving workbook changes…");
@@ -121,10 +125,9 @@ pub fn sync_and_open_sf2_workbook<R: tauri::Runtime>(
         // (AM/AO) formulas on some rows and a stale AW5 day count. Repair them
         // now so the opened workbook always shows live formulas.
         if crate::sf2::roster_parser::template_owns_roster(&template) {
-            if let Err(error) = super::progress::repair_learner_absent_present_formulas(
-                pool.clone(),
-                &template,
-            ) {
+            if let Err(error) =
+                super::progress::repair_learner_absent_present_formulas(pool.clone(), &template)
+            {
                 log::warn!("failed to repair ABSENT/PRESENT formulas: {error}");
             }
         }
@@ -312,8 +315,7 @@ pub fn set_all_students_present(pool: DbPool, class_id: &str) -> Result<usize> {
             let Ok(date) = parse_date(&mapping.date) else {
                 continue;
             };
-            let (start_ts, end_ts) =
-                attendance_events::local_day_bounds_timestamps_for_date(date)?;
+            let (start_ts, end_ts) = attendance_events::local_day_bounds_timestamps_for_date(date)?;
             let rows = stmt.query_map(params![start_ts, end_ts], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -323,8 +325,8 @@ pub fn set_all_students_present(pool: DbPool, class_id: &str) -> Result<usize> {
             })?;
             for row in rows {
                 let (id, student_id, event_class_id) = row?;
-                let belongs = event_class_id.as_deref() == Some(class_id)
-                    || roster_ids.contains(&student_id);
+                let belongs =
+                    event_class_id.as_deref() == Some(class_id) || roster_ids.contains(&student_id);
                 if !belongs {
                     continue;
                 }

@@ -71,12 +71,13 @@
 				{#if isExcelError && onKillAndRetry && showKillConfirm}
 					<!-- Kill confirmation — sits above the button row for breathing room -->
 					<div class="flex w-full flex-col gap-3">
-						<div class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-left">
+						<div
+							class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-left"
+						>
 							<AlertTriangle class="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
 							<p class="text-xs leading-relaxed text-amber-800">
-								This will close <strong>all</strong> open Excel windows, including any
-								unsaved work in other spreadsheets. Make sure you've saved
-								everything in Excel first.
+								This will close <strong>all</strong> open Excel windows, including any unsaved work in
+								other spreadsheets. Make sure you've saved everything in Excel first.
 							</p>
 						</div>
 						<div class="flex justify-center gap-2">
@@ -200,8 +201,8 @@
 							<span class="relative inline-flex size-2 rounded-full bg-primary"></span>
 						</span>
 						<span>
-							Excel is still working on the workbook in the background — this can take a
-							little longer. Please wait a moment and keep this window open.
+							Excel is still working on the workbook in the background — this can take a little
+							longer. Please wait a moment and keep this window open.
 						</span>
 					</div>
 				{/if}

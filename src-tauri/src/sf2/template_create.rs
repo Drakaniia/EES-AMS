@@ -3,9 +3,7 @@ use crate::domain::models::{Class, Settings, StudentGender};
 use crate::infrastructure::database::{
     ClassRepository, DbPool, SettingsRepository, StudentRepository,
 };
-use crate::sf2::attendance_marks::{
-    summary_formula_marks, total_formula_marks,
-};
+use crate::sf2::attendance_marks::{summary_formula_marks, total_formula_marks};
 use crate::sf2::calendar::validate_configured_calendar;
 use crate::sf2::excel;
 use crate::sf2::models::{Sf2ImportSummary, Sf2StudentMappingRecord, Sf2TemplateRecord};
@@ -169,12 +167,7 @@ pub(super) fn create_workbook_from_template_in_dir(
                 .into_iter()
                 .collect();
             for sheet_name in &total_sheet_names {
-                session.clear_total_rows(
-                    sheet_name,
-                    male_total,
-                    female_total,
-                    combined_total,
-                )?;
+                session.clear_total_rows(sheet_name, male_total, female_total, combined_total)?;
             }
 
             // Step 9: Write MALE/FEMALE/Combined TOTAL formulas
