@@ -74,9 +74,9 @@ jobs:
           tagName: app-v__VERSION__
           releaseName: EES-AMS v__VERSION__
           releaseBody: Signed Windows installer and updater manifest. Download EES-AMS_windows-setup.exe to install.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           tauriScript: bun run tauri
-          assetNamePattern: EES-AMS_[platform][setup].[ext]
-          includeUpdaterJson: true
+          releaseAssetNamePattern: EES-AMS_[platform][setup].[ext]
+          uploadUpdaterJson: true
           updaterJsonPreferNsis: true
