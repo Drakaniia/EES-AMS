@@ -65,6 +65,7 @@ jobs:
           }
 
       - name: Build signed Windows release
+        id: release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -74,9 +75,16 @@ jobs:
           tagName: app-v__VERSION__
           releaseName: EES-AMS v__VERSION__
           releaseBody: Signed Windows installer and updater manifest. Download EES-AMS_windows-setup.exe to install.
-          releaseDraft: false
+          # GitHub immutable releases seal a release the moment it is published, so
+          # assets must be attached to a draft first, then the draft is published.
+          releaseDraft: true
           prerelease: false
           tauriScript: bun run tauri
           releaseAssetNamePattern: EES-AMS_[platform][setup].[ext]
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "app-v${{ steps.release.outputs.appVersion }}" --draft=false
