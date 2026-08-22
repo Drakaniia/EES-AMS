@@ -9,6 +9,7 @@ import { classState } from './class-state.svelte';
 import { backupState } from './backup-state.svelte';
 import { sf2State } from './sf2-state.svelte';
 import { quarterState } from './quarter-state.svelte';
+import { updateSectionState } from './update-state.svelte';
 import type { Ctx } from './state-context';
 
 /**
@@ -22,6 +23,7 @@ class SettingsPageState implements Ctx {
 		classState.init(this);
 		backupState.init(this);
 		sf2State.init(this);
+		updateSectionState.init(this);
 	}
 
 	// ── Sub-state references (same singletons exported from sub-state files) ───
@@ -29,6 +31,7 @@ class SettingsPageState implements Ctx {
 	backupState = backupState;
 	sf2State = sf2State;
 	quarterState = quarterState;
+	updateSectionState = updateSectionState;
 
 	// ── Global settings ────────────────────────────────────────────────────────
 	defaultDayStart = $state('08:00');
@@ -151,6 +154,11 @@ class SettingsPageState implements Ctx {
 	init() {
 		this.reload();
 		this.backupState.reloadBackups();
+		this.updateSectionState.start();
+	}
+
+	hasUnsavedGlobalSettings(): boolean {
+		return this.globalSettingsDirty;
 	}
 
 	async reload() {
@@ -179,4 +187,4 @@ export const settingsState = new SettingsPageState();
 // Components can `import { classState } from './settings-state.svelte'`
 // or `import { classState } from './class-state.svelte'` — both point to
 // the same instances created above.
-export { classState, backupState, sf2State, quarterState };
+export { classState, backupState, sf2State, quarterState, updateSectionState };
