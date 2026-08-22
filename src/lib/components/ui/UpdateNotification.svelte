@@ -1,113 +1,71 @@
 <script lang="ts">
-	import { invoke } from '@tauri-apps/api/core';
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import Toast from './Toast.svelte';
+	import { updateStore } from '$lib/stores/update.svelte';
 
-	interface UpdateInfo {
-		available: boolean;
-		version?: string;
-		notes?: string;
-		pubDate?: string;
-		currentVersion: string;
-	}
-
-	let updateInfo = $state<UpdateInfo | null>(null);
 	let showUpdateToast = $state(false);
-	let isDownloading = $state(false);
-	let downloadError = $state('');
-	let installMessage = $state('');
 
 	function isTauriRuntime() {
 		return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 	}
 
-	onMount(async () => {
+	onMount(() => {
 		if (!isTauriRuntime()) return;
-		await checkForUpdates();
+		void initToast();
 	});
 
-	async function checkForUpdates() {
-		try {
-			const result: UpdateInfo = await invoke('check_for_updates');
-			updateInfo = result;
-
-			if (result.available) {
-				showUpdateToast = true;
-			}
-		} catch (error) {
-			console.error('Failed to check for updates:', error);
+	async function initToast() {
+		await updateStore.init();
+		if (updateStore.stagedVersion) {
+			// Reminder that a previously downloaded update is still pending
+			showUpdateToast = true;
+		} else if (updateStore.status === 'available' && updateStore.updateInfo) {
+			showUpdateToast = true;
 		}
 	}
 
-	async function downloadAndInstall() {
-		if (!updateInfo?.available) return;
-
-		isDownloading = true;
-		downloadError = '';
-
-		try {
-			installMessage = await invoke<string>('download_and_install');
-		} catch (error) {
-			downloadError = error instanceof Error ? error.message : String(error);
-			console.error('Update failed:', error);
-		} finally {
-			isDownloading = false;
-		}
+	function goToSettings() {
+		showUpdateToast = false;
+		goto(resolve('/settings'));
 	}
 
 	function dismissUpdate() {
 		showUpdateToast = false;
 	}
 
-	function formatUpdateMessage(info: UpdateInfo): string {
-		if (!info.version) return 'An update is available';
+	function toastTitle(): string {
+		return updateStore.stagedVersion ? 'Update Ready' : 'Update Available';
+	}
 
-		let message = `Version ${info.version} is ready to install`;
-		if (info.currentVersion) {
-			message += ` (current ${info.currentVersion})`;
+	function toastMessage(): string {
+		if (updateStore.stagedVersion) {
+			return `Version ${updateStore.stagedVersion} is downloaded. Restart to apply the update.`;
 		}
-
+		const info = updateStore.updateInfo;
+		if (!info) return 'An update is available';
+		let message = `Version ${info.version ?? 'X'} is available`;
+		if (info.currentVersion) {
+			message += ` (current v${info.currentVersion})`;
+		}
 		if (info.notes) {
 			const notes = info.notes.length > 100 ? info.notes.substring(0, 100) + '...' : info.notes;
 			message += `\n\n${notes}`;
 		}
-
 		return message;
 	}
 </script>
 
-{#if showUpdateToast && updateInfo}
+{#if showUpdateToast}
 	<Toast
 		type="update"
-		title="Update Available"
-		message={formatUpdateMessage(updateInfo)}
+		title={toastTitle()}
+		message={toastMessage()}
 		duration={0}
-		closable={!isDownloading}
-		actionText={isDownloading ? 'Downloading...' : 'Download & Install'}
-		actionDisabled={isDownloading}
-		action={isDownloading ? undefined : downloadAndInstall}
+		closable={true}
+		actionText="Go to Settings"
+		action={goToSettings}
 		onClose={dismissUpdate}
-	/>
-{/if}
-
-{#if installMessage}
-	<Toast
-		type="success"
-		title="Update Installed"
-		message={installMessage}
-		duration={10000}
-		closable={true}
-		onClose={() => (installMessage = '')}
-	/>
-{/if}
-
-{#if downloadError}
-	<Toast
-		type="error"
-		title="Update Failed"
-		message={downloadError}
-		duration={10000}
-		closable={true}
-		onClose={() => (downloadError = '')}
 	/>
 {/if}
