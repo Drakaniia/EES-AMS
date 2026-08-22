@@ -1,7 +1,7 @@
 {
 	"$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
 	"productName": "ees_ams",
-	"version": "0.5.1",
+	"version": "0.5.2",
 	"identifier": "com.ees.ams",
 	"build": {
 		"frontendDist": "../build",
