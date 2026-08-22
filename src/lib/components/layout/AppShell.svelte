@@ -3,6 +3,7 @@
 	import { base } from '$app/paths';
 	import logo from '$lib/assets/logo-seal.png';
 	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { updateStore } from '$lib/stores/update.svelte';
 	import { fullPreviewStore } from '$lib/stores/full-preview.svelte';
 	import { onMount } from 'svelte';
 	import { FileSpreadsheet, PanelLeft, ScanLine, Settings } from 'lucide-svelte';
@@ -168,6 +169,13 @@
 							<Settings class="size-4" aria-hidden="true" />
 						</span>
 						<span class="truncate">Settings</span>
+						{#if updateStore.badgeVisible}
+							<span
+								class="ml-auto size-2 shrink-0 rounded-full bg-orange-600"
+								title="Update available"
+								aria-hidden="true"
+							></span>
+						{/if}
 					</a>
 				{/if}
 
