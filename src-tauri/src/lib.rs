@@ -8,6 +8,7 @@ use commands::{
     add_event,
     add_events,
     // Updater commands
+    cancel_update_download,
     check_for_updates,
     choose_backup_sync_folder,
     choose_restore_backup,
@@ -24,7 +25,7 @@ use commands::{
     delete_events,
     delete_student,
     disconnect_google_drive_backup,
-    download_and_install,
+    download_update,
     export_all,
     export_csv_with_folder,
     export_database,
@@ -39,8 +40,10 @@ use commands::{
     get_sf2_export_readiness,
     get_sf2_workbook_settings,
     get_student,
+    get_update_status,
     import_all,
     import_sf2_workbook,
+    install_staged_update,
     kill_all_excel_processes,
     last_event_for_student,
     list_attendance_audit,
@@ -55,6 +58,7 @@ use commands::{
     // Student commands
     list_students,
     open_backup_folder,
+    open_external_url,
     open_sf2_workbook,
     present_all_sf2_preview_attendance,
     restore_backup,
@@ -72,6 +76,7 @@ use commands::{
     upload_latest_backup_to_google_drive,
     validate_sf2_workbook_import,
     wipe_all,
+    UpdateState,
 };
 use infrastructure::init_db;
 use tauri::Manager;
@@ -147,8 +152,13 @@ pub fn run() {
             kill_all_excel_processes,
             // Updater commands
             check_for_updates,
-            download_and_install,
+            get_update_status,
+            download_update,
+            cancel_update_download,
+            install_staged_update,
+            open_external_url,
         ])
+        .manage(UpdateState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
