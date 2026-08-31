@@ -35,6 +35,8 @@ use commands::{
     get_backup_status,
     get_class,
     // Settings commands
+    get_default_logo_path,
+    get_branding_logo_path,
     get_settings,
     get_sf2_export_preview,
     get_sf2_export_readiness,
@@ -62,6 +64,8 @@ use commands::{
     open_sf2_workbook,
     present_all_sf2_preview_attendance,
     restore_backup,
+    save_branding_logo,
+    pick_branding_logo,
     save_settings,
     set_sf2_preview_attendance,
     set_sf2_report_month,
@@ -75,6 +79,8 @@ use commands::{
     update_student,
     upload_latest_backup_to_google_drive,
     validate_sf2_workbook_import,
+    delete_branding_logo,
+    reset_branding,
     wipe_all,
     UpdateState,
 };
@@ -114,7 +120,13 @@ pub fn run() {
             clear_audit_events,
             // Settings commands
             get_settings,
-            save_settings,
+            save_settings,            // Branding commands
+            save_branding_logo,
+            pick_branding_logo,
+            get_branding_logo_path,
+            get_default_logo_path,
+            delete_branding_logo,
+            reset_branding,
             // Export/Import commands
             export_all,
             export_database,

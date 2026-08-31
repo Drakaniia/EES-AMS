@@ -21,7 +21,7 @@ impl SettingsRepository {
         let conn = self.pool.get()?;
         let mut settings = conn
             .query_row(
-                "SELECT id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode, school_id, school_name, school_year, report_month, grade_level, section, adviser_name, school_head_name FROM settings WHERE id = 'app'",
+                "SELECT id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode, school_id, school_name, school_year, report_month, grade_level, section, adviser_name, school_head_name, branding_logo_path, branding_title FROM settings WHERE id = 'app'",
                 [],
                 |row| {
                     let attendance_mode = row.get::<_, String>(11)?;
@@ -46,6 +46,8 @@ impl SettingsRepository {
                         section: row.get(17)?,
                         adviser_name: row.get(18)?,
                         school_head_name: row.get(19)?,
+                        branding_logo_path: row.get(20)?,
+                        branding_title: row.get::<_, Option<String>>(21)?.unwrap_or_else(|| "EES AMS".to_string()),
                     })
                 },
             )
@@ -77,9 +79,33 @@ impl SettingsRepository {
 
         let mut conn = self.pool.get()?;
         let transaction = conn.transaction()?;
+        let branding_title = if settings.branding_title.trim().is_empty() {
+            "EES AMS".to_string()
+        } else {
+            settings.branding_title.clone()
+        };
+        // Sanitize: remove control characters, trim whitespace
+        let branding_title: String = branding_title
+            .chars()
+            .filter(|c| !c.is_control())
+            .collect::<String>()
+            .trim()
+            .to_string();
+        let branding_title = if branding_title.is_empty() {
+            "EES AMS".to_string()
+        } else {
+            branding_title
+        };
+        let branding_title = if branding_title.len() > 40 {
+            branding_title[..40].to_string()
+        } else {
+            branding_title
+        };
+        settings.branding_title = branding_title;
+
         transaction.execute(
-            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode, school_id, school_name, school_year, report_month, grade_level, section, adviser_name, school_head_name)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode, school_id, school_name, school_year, report_month, grade_level, section, adviser_name, school_head_name, branding_logo_path, branding_title)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
             params![
                 settings.id.as_str(),
                 settings.day_start.as_str(),
@@ -101,6 +127,8 @@ impl SettingsRepository {
                 settings.section.as_deref(),
                 settings.adviser_name.as_deref(),
                 settings.school_head_name.as_deref(),
+                settings.branding_logo_path.as_deref(),
+                settings.branding_title.as_str(),
             ],
         )?;
         let before_json = serialize_audit_payload("settings audit before payload", &before)?;

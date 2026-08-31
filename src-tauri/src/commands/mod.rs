@@ -1,6 +1,7 @@
 /// Tauri command interface.
 mod attendance;
 mod backup;
+mod branding;
 mod classes;
 mod common;
 mod csv_export;
@@ -14,6 +15,7 @@ use common::*;
 
 pub use attendance::*;
 pub use backup::*;
+pub use branding::*;
 pub use classes::*;
 pub use csv_export::*;
 pub use data_transfer::*;

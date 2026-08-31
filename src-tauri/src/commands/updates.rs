@@ -1,4 +1,5 @@
 use super::*;
+use crate::infrastructure::database::DbPool;
 
 use parking_lot::Mutex;
 use serde::Deserialize;
@@ -332,6 +333,18 @@ async fn install_staged_inner(app: &tauri::AppHandle) -> Result<(), String> {
             }
         }
     };
+
+    // Safeguard: snapshot the database before the installer runs. The update
+    // only replaces app binaries, but a fresh backup gives a rollback point if
+    // anything goes wrong; refuse to install when the snapshot fails.
+    let pool = app.state::<DbPool>().inner();
+    let app_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Failed to resolve app data directory: {error}"))?;
+    backup_service::create_manual_backup(pool, &app_dir)
+        .map_err(|error| format!("Pre-install backup failed: {error}"))?;
+    log::info!("created pre-install database backup");
 
     let bytes = std::fs::read(&marker.file)
         .map_err(|error| format!("Failed to read staged update: {error}"))?;

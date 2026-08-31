@@ -274,6 +274,10 @@ pub struct Settings {
     pub section: Option<String>,
     pub adviser_name: Option<String>,
     pub school_head_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branding_logo_path: Option<String>,
+    #[serde(default)]
+    pub branding_title: String,
 }
 
 impl Default for Settings {
@@ -299,6 +303,8 @@ impl Default for Settings {
             section: None,
             adviser_name: None,
             school_head_name: None,
+            branding_logo_path: None,
+            branding_title: "EES AMS".to_string(),
         }
     }
 }

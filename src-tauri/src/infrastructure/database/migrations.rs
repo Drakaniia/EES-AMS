@@ -6,7 +6,7 @@ use rusqlite::params;
 use std::path::Path;
 
 /// Current SQLite schema version.
-pub const CURRENT_SCHEMA_VERSION: i32 = 17;
+pub const CURRENT_SCHEMA_VERSION: i32 = 18;
 
 /// Initialize the database with schema and migrations
 pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
@@ -117,6 +117,14 @@ pub fn migrate_db(conn: &rusqlite::Connection) -> Result<()> {
 
     if user_version < 17 {
         migrate_to_v17(conn)?;
+        conn.execute(
+            &format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"),
+            [],
+        )?;
+    }
+
+    if user_version < 18 {
+        migrate_to_v18(conn)?;
         conn.execute(
             &format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"),
             [],
@@ -545,5 +553,11 @@ fn migrate_to_v16(conn: &rusqlite::Connection) -> Result<()> {
 /// a missing 'in' record, so other students are never auto-recorded.
 fn migrate_to_v17(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v17.sql"))?;
+    Ok(())
+}
+
+/// Migrate database to version 18 (sidebar branding customization)
+fn migrate_to_v18(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v18.sql"))?;
     Ok(())
 }
