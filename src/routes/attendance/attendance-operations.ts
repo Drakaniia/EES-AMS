@@ -6,6 +6,7 @@ import {
 	type AttendanceEvent,
 	type AttendanceType,
 	type CreateEventRequest,
+	type Class,
 	type Student
 } from '$lib/db-rust';
 import {
@@ -24,10 +25,10 @@ import type { AttendanceLogHandle } from './attendance-page-state.svelte';
 export type PageState = {
 	selectedDate: string;
 	selectedDateIsToday: boolean;
-	currentClass: any;
+	currentClass: Class | null;
 	isCardReaderMode: boolean;
-	activeClass: any;
-	classById: Map<string, any>;
+	activeClass: Class | null;
+	classById: Map<string, Class>;
 	students: Student[];
 	events: AttendanceEvent[];
 	absentStudentIds: Set<string>;
@@ -45,7 +46,7 @@ export type PageState = {
 		student: Student,
 		timestamp?: number
 	): {
-		classObj: any;
+		classObj: Class;
 		classId: string | undefined;
 		sessionKey: string;
 		isLate: boolean;

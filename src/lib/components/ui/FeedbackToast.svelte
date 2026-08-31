@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { AlertCircle, CheckCircle2, X } from 'lucide-svelte';
-	import { onDestroy } from 'svelte';
 
 	type Props = {
 		message: string | null;

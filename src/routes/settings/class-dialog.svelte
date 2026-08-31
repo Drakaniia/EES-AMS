@@ -184,7 +184,7 @@
 			</div>
 
 			<div class="max-h-64 space-y-4 overflow-y-auto pr-1">
-				{#each formSessions as session, i (i)}
+				{#each formSessions as _session, i (i)}
 					<div class="relative space-y-3 rounded-xl border border-border p-4">
 						{#if sessionMode === 'custom' && formSessions.length > 1}
 							<button

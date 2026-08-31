@@ -13,7 +13,11 @@ export type CardReaderState = {
 	dateLoading: boolean;
 	lastScan: { serial: string; timestamp: number } | null;
 	attendanceLog: AttendanceLogHandle | undefined;
-	logForStudent(student: Student, forcedType?: any, options?: any): Promise<void>;
+	logForStudent(
+		student: Student,
+		forcedType?: string,
+		options?: Record<string, unknown>
+	): Promise<void>;
 };
 
 /**

@@ -8,7 +8,6 @@ import {
 	deleteEvents,
 	type AttendanceEvent,
 	type AttendanceType,
-	type CreateEventRequest,
 	type Student,
 	type Class
 } from '$lib/db-rust';

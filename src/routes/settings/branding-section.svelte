@@ -2,11 +2,7 @@
 	import { settingsState } from './settings-state.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import logo from '$lib/assets/logo-seal.png';
-	import {
-		pickBrandingLogo,
-		resetBranding,
-		deleteBrandingLogo
-	} from '$lib/features/settings/native';
+	import { pickBrandingLogo, resetBranding } from '$lib/features/settings/native';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 
@@ -143,7 +139,7 @@
 	<div class="space-y-3">
 		<span class="label-mono text-sm">Preset Gallery</span>
 		<div class="grid grid-cols-4 gap-2">
-			{#each presets as preset}
+			{#each presets as preset (preset.name)}
 				<button
 					type="button"
 					class="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-surface p-3 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-background hover:text-foreground"
