@@ -107,7 +107,8 @@
 				</span>
 			</legend>
 			<div class="flex justify-between gap-1">
-				{#each ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as day, i (i)}
+				{#each ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as dayName, i (i)}
+					{@const dayShort = i === 4 ? 'Th' : dayName[0]}
 					<button
 						type="button"
 						onclick={() => {
@@ -117,12 +118,14 @@
 								formDays = [...formDays, i].sort();
 							}
 						}}
+						aria-label={dayName}
+						aria-pressed={formDays.includes(i)}
 						class="flex size-9 items-center justify-center rounded-md border text-xs font-semibold transition-colors
 							{formDays.includes(i)
 							? 'border-primary bg-primary text-primary-foreground'
 							: 'border-border bg-background hover:bg-surface'}"
 					>
-						{day}{i === 4 ? 'H' : ''}
+						{dayShort}
 					</button>
 				{/each}
 			</div>
@@ -207,7 +210,7 @@
 								<label class="text-xs font-medium text-muted-foreground">
 									Session Name
 									<input
-										bind:value={session.name}
+										bind:value={formSessions[i].name}
 										placeholder="e.g. Morning"
 										required
 										readonly={sessionMode !== 'custom'}
@@ -220,7 +223,7 @@
 									Late After
 									<input
 										type="time"
-										bind:value={session.lateAfter}
+										bind:value={formSessions[i].lateAfter}
 										required
 										class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 									/>
@@ -234,7 +237,7 @@
 									Start Time
 									<input
 										type="time"
-										bind:value={session.startTime}
+										bind:value={formSessions[i].startTime}
 										required
 										class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 									/>
@@ -245,7 +248,7 @@
 									End Time
 									<input
 										type="time"
-										bind:value={session.endTime}
+										bind:value={formSessions[i].endTime}
 										required
 										class="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 									/>

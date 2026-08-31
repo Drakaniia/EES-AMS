@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
-	import logo from '$lib/assets/logo-seal.png';
+	import defaultLogo from '$lib/assets/logo-seal.png';
 	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { convertFileSrc } from '@tauri-apps/api/core';
 	import { updateStore } from '$lib/stores/update.svelte';
 	import { fullPreviewStore } from '$lib/stores/full-preview.svelte';
 	import { onMount } from 'svelte';
@@ -20,6 +21,18 @@
 		{ href: '/reports', label: 'SF2 Reports', icon: FileSpreadsheet },
 		{ href: '/attendance', label: 'Attendance', icon: ScanLine }
 	] as const;
+
+	const activeLogo = $derived.by(() => {
+		const path = settingsStore.settings?.brandingLogoPath;
+		if (path) {
+			return convertFileSrc(path);
+		}
+		return defaultLogo;
+	});
+
+	const brandingTitle = $derived(
+		settingsStore.settings?.brandingTitle || 'EES AMS'
+	);
 
 	const attendanceNavLabel = $derived(
 		settingsStore.settings?.attendanceMode === 'card_reader' ? 'Live Session' : 'Attendance'
@@ -62,42 +75,53 @@
 
 	{#if !fullPreviewStore.isActive}
 		<aside
-			class="sidebar flex shrink-0 flex-col border-b border-border bg-background transition-all duration-300 md:min-h-0 md:border-r md:border-b-0 {isCollapsed
+			class="sidebar group flex shrink-0 flex-col border-b border-border bg-background transition-all duration-300 md:min-h-0 md:border-r md:border-b-0 {isCollapsed
 				? 'collapsed md:w-16'
 				: 'md:w-64'}"
 			aria-label="Primary navigation"
 		>
 			<!-- Header -->
-			<div class="flex items-center gap-3 px-4 py-3 md:px-4 md:pt-5 md:pb-4">
-				<button
-					onclick={toggleCollapse}
-					aria-label="Toggle sidebar"
-					class="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface/70 hover:text-foreground"
-				>
-					<PanelLeft class="size-4" />
-				</button>
-				<img
-					src={logo}
-					alt="Espiritu Elementary School seal"
-					class="size-10 shrink-0 rounded-xl object-contain ring-1 ring-border md:size-11"
-				/>
-				<div class="min-w-0">
-					<div
-						class="truncate text-base leading-tight font-bold tracking-tight md:text-lg {isCollapsed
-							? 'hidden'
-							: ''}"
+			<div class="{isCollapsed ? 'relative flex items-center justify-center py-4 md:pt-6 md:pb-4' : 'flex items-center gap-3 px-4 py-3 md:px-4 md:pt-5 md:pb-4'}">
+				{#if isCollapsed}
+					<!-- Collapsed: logo centered, icon dead center on hover -->
+					<button
+						onclick={toggleCollapse}
+						aria-label="Toggle sidebar"
+						class="relative flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl"
 					>
-						EES AMS
+						<img
+							src={activeLogo}
+							alt={brandingTitle}
+							class="size-11 rounded-xl object-contain ring-1 ring-border transition-opacity duration-200 group-hover:opacity-0"
+						/>
+						<span class="absolute inset-0 flex items-center justify-center rounded-xl opacity-0 transition-opacity duration-200 group-hover:opacity-100 text-muted-foreground hover:text-foreground">
+							<PanelLeft class="size-4" />
+						</span>
+					</button>
+				{:else}
+					<img
+						src={activeLogo}
+						alt={brandingTitle}
+						class="size-10 shrink-0 rounded-xl object-contain ring-1 ring-border md:size-11"
+					/>
+					<div class="min-w-0 flex-1 whitespace-nowrap">
+						<div class="truncate text-base leading-tight font-bold tracking-tight md:text-lg">
+							{brandingTitle}
+						</div>
+						<div class="truncate text-[11px] font-medium text-muted-foreground">
+							{settingsStore.settings?.quarter ?? '1st Quarter'}
+						</div>
 					</div>
-					<div
-						class="mt-0.5 text-[11px] font-medium text-muted-foreground {isCollapsed
-							? 'hidden'
-							: ''}"
+					<button
+						onclick={toggleCollapse}
+						aria-label="Toggle sidebar"
+						class="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface/70 hover:text-foreground"
 					>
-						{settingsStore.settings?.quarter ?? '1st Quarter'}
-					</div>
-				</div>
+						<PanelLeft class="size-4" />
+					</button>
+				{/if}
 			</div>
+
 
 			<!-- Navigation -->
 			<nav

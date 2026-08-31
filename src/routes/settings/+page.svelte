@@ -10,6 +10,7 @@
 	import GlobalConfigForm from './global-config-form.svelte';
 	import UpdateSection from './update-section.svelte';
 	import RestoreBackupDialog from './restore-backup-dialog.svelte';
+	import BrandingSection from './branding-section.svelte';
 
 	onMount(() => {
 		settingsState.init();
@@ -37,13 +38,12 @@
 					<ClassesSection />
 					<Sf2Section />
 					<BackupSection />
-				</div>
-
-				<!-- ── Right column ──────────────────────────────────────────── -->
-				<div class="space-y-6 lg:col-span-4">
-					<GlobalConfigForm />
-					<UpdateSection />
-				</div>
+				</div>					<!-- ── Right column ──────────────────────────────────────────── -->
+					<div class="space-y-6 lg:col-span-4">
+						<BrandingSection />
+						<GlobalConfigForm />
+						<UpdateSection />
+					</div>
 			</div>
 		{/if}
 	</div>

@@ -93,16 +93,18 @@ describe('AppShell sidebar collapse', () => {
 		});
 	});
 
-	it('hides the logo text when sidebar is collapsed', async () => {
+	it('removes the logo text from DOM when sidebar is collapsed', async () => {
 		renderAppShell();
 		const toggleBtn = screen.getByLabelText('Toggle sidebar');
+
+		// Title should be present before collapse
+		expect(screen.getByText('EES AMS')).toBeInTheDocument();
 
 		// Collapse sidebar
 		await fireEvent.click(toggleBtn);
 
-		// Logo text "EES AMS" should be hidden
-		const logoText = screen.getByText('EES AMS');
-		expect(logoText.className).toContain('hidden');
+		// Logo text "EES AMS" should no longer be in the DOM (conditionally rendered)
+		expect(screen.queryByText('EES AMS')).not.toBeInTheDocument();
 	});
 
 	it('hides the footer when sidebar is collapsed', async () => {
