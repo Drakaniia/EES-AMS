@@ -89,7 +89,11 @@
 </script>
 
 {#if show}
-	<div class="fixed top-4 right-4 z-50 w-full max-w-sm" role={type === 'error' ? 'alert' : 'status'} aria-live={type === 'error' ? 'assertive' : 'polite'}>
+	<div
+		class="fixed top-4 right-4 z-50 w-full max-w-sm"
+		role={type === 'error' ? 'alert' : 'status'}
+		aria-live={type === 'error' ? 'assertive' : 'polite'}
+	>
 		<div class="flex items-start rounded-lg border p-4 {colorClass}">
 			<div class="shrink-0">
 				{#if actionDisabled && type === 'update'}

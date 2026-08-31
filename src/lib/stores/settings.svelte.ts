@@ -39,23 +39,23 @@ class SettingsStore {
 			this._settings = await getSettings();
 		} catch (error) {
 			this._error = error instanceof Error ? error.message : 'Failed to load settings';
-			console.error('Failed to load settings:', error);				// Set fallback settings to prevent UI from breaking
-				this._settings = {
-					id: 'app',
-					dayStart: '08:00',
-					dayEnd: '15:00',
-					lateAfter: '08:45',
-					quarter: '1st Quarter',
-					attendanceMode: 'manual',
-					q1Start: '',
-					q1End: '',
-					q2Start: '',
-					q2End: '',
-					q3Start: '',
-					q3End: '',
-					brandingLogoPath: null,
-					brandingTitle: 'EES AMS'
-				};
+			console.error('Failed to load settings:', error); // Set fallback settings to prevent UI from breaking
+			this._settings = {
+				id: 'app',
+				dayStart: '08:00',
+				dayEnd: '15:00',
+				lateAfter: '08:45',
+				quarter: '1st Quarter',
+				attendanceMode: 'manual',
+				q1Start: '',
+				q1End: '',
+				q2Start: '',
+				q2End: '',
+				q3Start: '',
+				q3End: '',
+				brandingLogoPath: null,
+				brandingTitle: 'EES AMS'
+			};
 		} finally {
 			this._loading = false;
 		}

@@ -23,7 +23,11 @@
 		if (inputElement) {
 			// Only auto-focus if nothing inside the dialog is already focused
 			const active = document.activeElement;
-			if (active instanceof HTMLElement && inputElement.parentElement?.contains(active) && active !== inputElement) {
+			if (
+				active instanceof HTMLElement &&
+				inputElement.parentElement?.contains(active) &&
+				active !== inputElement
+			) {
 				hasFocused = true;
 				return;
 			}

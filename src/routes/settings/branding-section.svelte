@@ -112,11 +112,7 @@
 			<div
 				class="flex size-24 items-center justify-center overflow-hidden rounded-2xl bg-background ring-1 ring-border"
 			>
-				<img
-					src={activeLogo}
-					alt="Current branding logo"
-					class="size-full object-contain p-1"
-				/>
+				<img src={activeLogo} alt="Current branding logo" class="size-full object-contain p-1" />
 			</div>
 
 			<div class="flex flex-wrap items-center justify-center gap-2">
@@ -155,9 +151,17 @@
 				>
 					<span class="grid size-10 place-items-center rounded-lg bg-background ring-1 ring-border">
 						<!-- Preset icon placeholder -->
-						<span class="text-lg">{preset.name === 'seal' ? '🏛️' : preset.name === 'graduation' ? '🎓' : preset.name === 'book' ? '📖' : '🍎'}</span>
+						<span class="text-lg"
+							>{preset.name === 'seal'
+								? '🏛️'
+								: preset.name === 'graduation'
+									? '🎓'
+									: preset.name === 'book'
+										? '📖'
+										: '🍎'}</span
+						>
 					</span>
-					<span class="truncate w-full text-center">{preset.label}</span>
+					<span class="w-full truncate text-center">{preset.label}</span>
 				</button>
 			{/each}
 		</div>
@@ -178,7 +182,7 @@
 				class="h-10 w-full rounded-md border border-border bg-background px-3 pr-16 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
 			/>
 			<span
-				class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground tabular-nums"
+				class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs text-muted-foreground tabular-nums"
 			>
 				{charCount}/{MAX_TITLE_LENGTH}
 			</span>

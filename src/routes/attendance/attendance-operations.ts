@@ -1,6 +1,20 @@
 import { SvelteMap } from 'svelte/reactivity';
-import { addEvents, deleteEvent, deleteEvents, type AttendanceEvent, type AttendanceType, type CreateEventRequest, type Student } from '$lib/db-rust';
-import { eventTime, attendanceTimestampForSelectedDate, getAttendanceClass, type LogLine, type LogOptions } from './attendance-state.svelte';
+import {
+	addEvents,
+	deleteEvent,
+	deleteEvents,
+	type AttendanceEvent,
+	type AttendanceType,
+	type CreateEventRequest,
+	type Student
+} from '$lib/db-rust';
+import {
+	eventTime,
+	attendanceTimestampForSelectedDate,
+	getAttendanceClass,
+	type LogLine,
+	type LogOptions
+} from './attendance-state.svelte';
 import type { AttendanceLogHandle } from './attendance-page-state.svelte';
 
 /**
@@ -27,14 +41,21 @@ export type PageState = {
 	attendanceLog: AttendanceLogHandle | undefined;
 	matchesSelectedClass(student: Student): boolean;
 	matchesCurrentSession(event: AttendanceEvent, student: Student, timestamp?: number): boolean;
-	getAttendanceDraft(student: Student, timestamp?: number): {
+	getAttendanceDraft(
+		student: Student,
+		timestamp?: number
+	): {
 		classObj: any;
 		classId: string | undefined;
 		sessionKey: string;
 		isLate: boolean;
 		className: string;
 	};
-	logForStudent(student: Student, forcedType?: AttendanceType | null, options?: LogOptions): Promise<void>;
+	logForStudent(
+		student: Student,
+		forcedType?: AttendanceType | null,
+		options?: LogOptions
+	): Promise<void>;
 };
 
 // ── Mark student ──────────────────────────────────────────────────────────
@@ -70,10 +91,7 @@ export async function markStudent(
  * Mark a single student absent.
  * Extracted from `AttendancePageState.markAbsent`.
  */
-export async function markAbsent(
-	state: PageState,
-	student: Student
-): Promise<void> {
+export async function markAbsent(state: PageState, student: Student): Promise<void> {
 	if (state.isProcessing || state.dateLoading) {
 		state.attendanceLog?.showToast('Please wait - processing previous request', false);
 		return;
@@ -171,9 +189,7 @@ export function buildInEventRequests(state: PageState, students: Student[]): Cre
  *
  * Extracted from `AttendancePageState.presentAllStudents`.
  */
-export async function presentAllStudents(
-	state: PageState
-): Promise<void> {
+export async function presentAllStudents(state: PageState): Promise<void> {
 	if (state.isProcessing || state.dateLoading) {
 		state.attendanceLog?.showToast('Please wait - processing previous request', false);
 		return;
@@ -267,9 +283,7 @@ export async function presentAllStudents(
  * Clear all attendance records for the current session.
  * Extracted from `AttendancePageState.clearAllAttendance`.
  */
-export async function clearAllAttendance(
-	state: PageState
-): Promise<void> {
+export async function clearAllAttendance(state: PageState): Promise<void> {
 	if (state.isProcessing || state.dateLoading) {
 		state.attendanceLog?.showToast('Please wait - processing previous request', false);
 		return;

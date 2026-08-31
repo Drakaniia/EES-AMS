@@ -49,15 +49,14 @@ describe('AppShell sidebar collapse', () => {
 
 	it('toggles collapsed state when clicking the toggle button', async () => {
 		renderAppShell();
-		const toggleBtn = screen.getByLabelText('Toggle sidebar');
 		const sidebar = screen.getByLabelText('Primary navigation');
 
 		// Click to collapse
-		await fireEvent.click(toggleBtn);
+		await fireEvent.click(screen.getByLabelText('Toggle sidebar'));
 		expect(sidebar.className).toContain('collapsed');
 
-		// Click to expand again
-		await fireEvent.click(toggleBtn);
+		// Click to expand again (re-query since DOM re-renders)
+		await fireEvent.click(screen.getByLabelText('Toggle sidebar'));
 		expect(sidebar.className).not.toContain('collapsed');
 	});
 

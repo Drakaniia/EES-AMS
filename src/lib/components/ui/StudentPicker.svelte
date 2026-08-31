@@ -124,14 +124,15 @@
 							<div class="min-w-0 flex-1">
 								<div class="truncate font-medium group-hover:text-primary">{s.name}</div>
 							</div>
-							{#if s.id === selectedId}						<svg
-							class="size-4 text-primary"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="3"
-							aria-hidden="true"
-							>
+							{#if s.id === selectedId}
+								<svg
+									class="size-4 text-primary"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="3"
+									aria-hidden="true"
+								>
 									<polyline points="20 6 9 17 4 12" />
 								</svg>
 							{/if}

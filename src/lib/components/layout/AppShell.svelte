@@ -30,9 +30,7 @@
 		return defaultLogo;
 	});
 
-	const brandingTitle = $derived(
-		settingsStore.settings?.brandingTitle || 'EES AMS'
-	);
+	const brandingTitle = $derived(settingsStore.settings?.brandingTitle || 'EES AMS');
 
 	const attendanceNavLabel = $derived(
 		settingsStore.settings?.attendanceMode === 'card_reader' ? 'Live Session' : 'Attendance'
@@ -81,7 +79,11 @@
 			aria-label="Primary navigation"
 		>
 			<!-- Header -->
-			<div class="{isCollapsed ? 'relative flex items-center justify-center py-4 md:pt-6 md:pb-4' : 'flex items-center gap-3 px-4 py-3 md:px-4 md:pt-5 md:pb-4'}">
+			<div
+				class={isCollapsed
+					? 'relative flex items-center justify-center py-4 md:pt-6 md:pb-4'
+					: 'flex items-center gap-3 px-4 py-3 md:px-4 md:pt-5 md:pb-4'}
+			>
 				{#if isCollapsed}
 					<!-- Collapsed: logo centered, icon dead center on hover -->
 					<button
@@ -94,7 +96,9 @@
 							alt={brandingTitle}
 							class="size-11 rounded-xl object-contain ring-1 ring-border transition-opacity duration-200 group-hover:opacity-0"
 						/>
-						<span class="absolute inset-0 flex items-center justify-center rounded-xl opacity-0 transition-opacity duration-200 group-hover:opacity-100 text-muted-foreground hover:text-foreground">
+						<span
+							class="absolute inset-0 flex items-center justify-center rounded-xl text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:text-foreground"
+						>
 							<PanelLeft class="size-4" />
 						</span>
 					</button>
@@ -121,7 +125,6 @@
 					</button>
 				{/if}
 			</div>
-
 
 			<!-- Navigation -->
 			<nav

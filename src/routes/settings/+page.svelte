@@ -38,12 +38,13 @@
 					<ClassesSection />
 					<Sf2Section />
 					<BackupSection />
-				</div>					<!-- ── Right column ──────────────────────────────────────────── -->
-					<div class="space-y-6 lg:col-span-4">
-						<BrandingSection />
-						<GlobalConfigForm />
-						<UpdateSection />
-					</div>
+				</div>
+				<!-- ── Right column ──────────────────────────────────────────── -->
+				<div class="space-y-6 lg:col-span-4">
+					<BrandingSection />
+					<GlobalConfigForm />
+					<UpdateSection />
+				</div>
 			</div>
 		{/if}
 	</div>

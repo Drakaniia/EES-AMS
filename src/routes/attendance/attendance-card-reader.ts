@@ -21,10 +21,7 @@ export type CardReaderState = {
  *
  * Extracted from `AttendancePageState.handleCardSubmit` to reduce class size.
  */
-export async function handleCardSubmit(
-	state: CardReaderState,
-	serial: string
-): Promise<void> {
+export async function handleCardSubmit(state: CardReaderState, serial: string): Promise<void> {
 	const trimmed = serial.trim();
 	if (!trimmed) return;
 
