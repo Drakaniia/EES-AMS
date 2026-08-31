@@ -68,17 +68,18 @@
 				stroke-width="2"
 				stroke-linecap="round"
 				stroke-linejoin="round"
+				aria-hidden="true"
 			>
 				<circle cx="11" cy="11" r="8" />
 				<path d="m21 21-4.3-4.3" />
-			</svg>
-			<input
-				type="text"
-				value={searchTerms}
-				oninput={(e) => onSearchChange((e.currentTarget as HTMLInputElement).value)}
-				placeholder="Search by name..."
-				class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-			/>
+			</svg>				<input
+					type="text"
+					value={searchTerms}
+					oninput={(e) => onSearchChange((e.currentTarget as HTMLInputElement).value)}
+					placeholder="Search by name..."
+					aria-label="Search students"
+					class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				/>
 		</div>
 	</div>
 
@@ -167,7 +168,8 @@
 		</div>
 	{:else}
 		<div class="table-wrap mt-6 min-h-0 flex-1">
-			<table class="w-full min-w-[760px] text-sm">
+			<table class="w-full min-w-[760px] text-sm" aria-label="Student roster">
+				<caption class="sr-only">Student roster with search, filter, and sort controls</caption>
 				<thead class="bg-surface text-left">
 					<tr>
 						<th class="label-mono px-4 py-3">
@@ -203,15 +205,15 @@
 									onclick={() => onOpenAttendance(s)}
 									class="group flex min-w-0 items-center gap-2 text-left font-medium transition-colors hover:text-primary"
 								>
-									<span class="text-balance-safe">{s.name}</span>
-									<svg
-										class="size-3 opacity-0 transition-opacity group-hover:opacity-100"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2.5"
-										stroke-linecap="round"
-										stroke-linejoin="round"
+									<span class="text-balance-safe">{s.name}</span>								<svg
+									class="size-3 opacity-0 transition-opacity group-hover:opacity-100"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
 									>
 										<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
 										<polyline points="15 3 21 3 21 9" />
@@ -244,8 +246,7 @@
 										href={resolve(`/attendance/logs?studentId=${s.id}`)}
 										class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
 										title="View attendance records"
-									>
-										<svg
+									>										<svg
 											class="size-3.5"
 											viewBox="0 0 24 24"
 											fill="none"
@@ -253,7 +254,8 @@
 											stroke-width="2"
 											stroke-linecap="round"
 											stroke-linejoin="round"
-										>
+											aria-hidden="true"
+											>
 											<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
 											<polyline points="14 2 14 8 20 8" />
 											<line x1="16" y1="13" x2="8" y2="13" />
@@ -265,8 +267,7 @@
 										onclick={() => onOpenScan(s)}
 										class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
 										title="Pair card"
-									>
-										<svg
+									>										<svg
 											class="size-3.5"
 											viewBox="0 0 24 24"
 											fill="none"
@@ -274,7 +275,8 @@
 											stroke-width="2"
 											stroke-linecap="round"
 											stroke-linejoin="round"
-										>
+											aria-hidden="true"
+											>
 											<rect x="2" y="5" width="20" height="14" rx="2" />
 											<path d="M2 10h20" />
 										</svg>
@@ -283,8 +285,7 @@
 										onclick={() => onOpenEdit(s)}
 										class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
 										title="Edit student"
-									>
-										<svg
+									>										<svg
 											class="size-3.5"
 											viewBox="0 0 24 24"
 											fill="none"
@@ -292,7 +293,8 @@
 											stroke-width="2"
 											stroke-linecap="round"
 											stroke-linejoin="round"
-										>
+											aria-hidden="true"
+											>
 											<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
 											<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
 										</svg>
@@ -301,8 +303,7 @@
 										onclick={(event) => onDelete(event, s)}
 										class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-destructive transition-colors hover:bg-surface"
 										title="Delete student"
-									>
-										<svg
+									>										<svg
 											class="size-3.5"
 											viewBox="0 0 24 24"
 											fill="none"
@@ -310,7 +311,8 @@
 											stroke-width="2"
 											stroke-linecap="round"
 											stroke-linejoin="round"
-										>
+											aria-hidden="true"
+											>
 											<polyline points="3 6 5 6 21 6" />
 											<path
 												d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"

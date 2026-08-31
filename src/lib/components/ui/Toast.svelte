@@ -41,19 +41,19 @@
 	};
 
 	const colors = {
-		info: 'border-slate-200 bg-white text-slate-800',
-		success: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-		warning: 'border-amber-200 bg-amber-50 text-amber-900',
-		error: 'border-red-200 bg-red-50 text-red-900',
-		update: 'border-orange-200 bg-orange-50 text-stone-900'
+		info: 'border-border bg-background text-foreground',
+		success: 'border-primary/25 bg-primary/10 text-foreground',
+		warning: 'border-accent/25 bg-accent/10 text-foreground',
+		error: 'border-destructive/25 bg-destructive/10 text-destructive',
+		update: 'border-primary/25 bg-primary/10 text-foreground'
 	};
 
 	const iconColors = {
-		info: 'text-slate-500',
-		success: 'text-emerald-600',
-		warning: 'text-amber-600',
-		error: 'text-red-600',
-		update: 'text-orange-600'
+		info: 'text-muted-foreground',
+		success: 'text-primary',
+		warning: 'text-accent',
+		error: 'text-destructive',
+		update: 'text-primary'
 	};
 
 	function close() {
@@ -89,7 +89,7 @@
 </script>
 
 {#if show}
-	<div class="fixed top-4 right-4 z-50 w-full max-w-sm" role="alert" aria-live="polite">
+	<div class="fixed top-4 right-4 z-50 w-full max-w-sm" role={type === 'error' ? 'alert' : 'status'} aria-live={type === 'error' ? 'assertive' : 'polite'}>
 		<div class="flex items-start rounded-lg border p-4 {colorClass}">
 			<div class="shrink-0">
 				{#if actionDisabled && type === 'update'}
@@ -111,7 +111,7 @@
 					<button
 						onclick={handleAction}
 						disabled={actionDisabled}
-						class="mt-3 rounded-md border border-current/15 bg-white/70 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
+						class="mt-3 rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-surface/80 disabled:cursor-not-allowed disabled:opacity-70"
 					>
 						{actionText}
 					</button>
@@ -122,7 +122,7 @@
 				<div class="ml-4 shrink-0">
 					<button
 						onclick={close}
-						class="inline-flex rounded-md p-1.5 transition-colors hover:bg-white/20"
+						class="inline-flex rounded-md p-1.5 transition-colors hover:bg-surface"
 						aria-label="Close notification"
 					>
 						<X class="h-4 w-4" />

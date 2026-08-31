@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { AlertCircle, CheckCircle2, X } from 'lucide-svelte';
+	import { onDestroy } from 'svelte';
 
 	type Props = {
 		message: string | null;
@@ -11,6 +12,47 @@
 
 	let { message, ok = true, actionLabel, onAction, onClose }: Props = $props();
 	const Icon = $derived(ok ? CheckCircle2 : AlertCircle);
+
+	let timer: ReturnType<typeof setTimeout> | null = null;
+	let remaining = $state(3000);
+	let startTime = $state(0);
+
+	function startTimer() {
+		startTime = Date.now();
+		timer = setTimeout(() => {
+			timer = null;
+			onClose?.();
+		}, remaining);
+	}
+
+	function pauseTimer() {
+		if (timer) {
+			clearTimeout(timer);
+			timer = null;
+			remaining -= Date.now() - startTime;
+		}
+	}
+
+	$effect(() => {
+		if (message) {
+			remaining = 3000;
+			startTimer();
+		}
+		return () => {
+			if (timer) clearTimeout(timer);
+			timer = null;
+		};
+	});
+
+	function handleMouseEnter() {
+		pauseTimer();
+	}
+
+	function handleMouseLeave() {
+		if (message && remaining > 0) {
+			startTimer();
+		}
+	}
 </script>
 
 {#if message}
@@ -21,6 +63,8 @@
 			: 'border-destructive/40 bg-background/96 text-destructive'}"
 		role={ok ? 'status' : 'alert'}
 		aria-live={ok ? 'polite' : 'assertive'}
+		onmouseenter={handleMouseEnter}
+		onmouseleave={handleMouseLeave}
 	>
 		<Icon class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
 		<span class="text-balance-safe min-w-0 flex-1">{message}</span>

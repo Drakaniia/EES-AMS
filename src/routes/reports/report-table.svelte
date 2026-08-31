@@ -146,7 +146,7 @@
 					{#each matrixWeekGroups as week (week.key)}
 						<th
 							colspan={week.slots.length}
-							class="sticky top-0 z-20 border-b border-l-2 border-border border-l-primary/45 bg-orange-50 px-2 py-2 text-center"
+							class="sticky top-0 z-20 border-b border-l-2 border-border border-l-primary/45 bg-primary/5 px-2 py-2 text-center"
 							title={weekRangeLabel(week)}
 						>
 							<div class="label-mono text-primary">{week.label}</div>
@@ -181,7 +181,7 @@
 			</thead>
 			<tbody>
 				{#each matrixStudents as row (row.studentId)}
-					<tr class={row.mapped ? 'bg-background' : 'bg-amber-50/60'}>
+					<tr class={row.mapped ? 'bg-background' : 'bg-accent/10'}>
 						<th
 							class="sticky left-0 z-10 w-72 min-w-72 border-r border-b border-border bg-inherit px-4 py-2 text-left align-middle"
 						>

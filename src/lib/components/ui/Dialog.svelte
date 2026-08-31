@@ -26,6 +26,7 @@
 	let panel = $state<HTMLDivElement | null>(null);
 	let previousFocus: Element | null = null;
 	let previousBodyOverflow = '';
+	let hasAutoFocused = $state(false);
 	const titleId = $derived(
 		`dialog-title-${
 			title
@@ -50,22 +51,34 @@
 
 	$effect(() => {
 		if (!open) {
+			hasAutoFocused = false;
 			if (previousFocus instanceof HTMLElement) previousFocus.focus();
 			previousFocus = null;
 			if (typeof document !== 'undefined') document.body.style.overflow = previousBodyOverflow;
 			return;
 		}
 
+		if (hasAutoFocused) return;
+
 		previousFocus = document.activeElement;
 		previousBodyOverflow = document.body.style.overflow;
 		document.body.style.overflow = 'hidden';
 		tick().then(() => {
+			if (!panel) return;
+			// Don't steal focus if user already focused an element inside the dialog
+			// (e.g. clicked an input before tick resolved, or typing caused a re-render)
+			const active = document.activeElement;
+			if (active instanceof HTMLElement && panel.contains(active) && active !== panel) {
+				hasAutoFocused = true;
+				return;
+			}
 			const firstFocusable = getFocusableElements()[0];
 			if (firstFocusable) {
 				firstFocusable.focus();
-				return;
+			} else {
+				panel?.focus();
 			}
-			panel?.focus();
+			hasAutoFocused = true;
 		});
 	});
 

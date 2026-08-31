@@ -32,6 +32,9 @@
 	let canvas: HTMLCanvasElement;
 	let wrapper: HTMLDivElement;
 	const sparks: Spark[] = [];
+	let raf = 0;
+	let running = false;
+	let drawFn: ((ts: number) => void) | null = null;
 
 	function easeFunc(t: number): number {
 		switch (easing) {
@@ -70,8 +73,6 @@
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
-		let raf = 0;
-
 		const draw = (timestamp: number) => {
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -102,15 +103,23 @@
 				ctx.stroke();
 			}
 
-			raf = requestAnimationFrame(draw);
+			if (sparks.length > 0) {
+				raf = requestAnimationFrame(draw);
+			} else {
+				running = false;
+			}
 		};
 
-		raf = requestAnimationFrame(draw);
+		drawFn = draw;
 
 		return () => {
 			ro.disconnect();
 			clearTimeout(resizeTimeout);
-			cancelAnimationFrame(raf);
+			if (running) {
+				cancelAnimationFrame(raf);
+				running = false;
+			}
+			drawFn = null;
 		};
 	});
 
@@ -124,6 +133,11 @@
 
 		for (let i = 0; i < sparkCount; i++) {
 			sparks.push({ x, y, angle: (2 * Math.PI * i) / sparkCount, startTime: now });
+		}
+
+		if (!running && drawFn) {
+			running = true;
+			raf = requestAnimationFrame(drawFn);
 		}
 	}
 </script>

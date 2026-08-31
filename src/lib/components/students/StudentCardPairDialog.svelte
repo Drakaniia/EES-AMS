@@ -12,10 +12,25 @@
 	let { open, student, cardSerial = $bindable(''), onSave, onClose }: Props = $props();
 
 	let inputElement: HTMLInputElement | null = $state(null);
+	let hasFocused = $state(false);
 
 	$effect(() => {
-		if (open && inputElement) {
-			inputElement.focus();
+		if (!open) {
+			hasFocused = false;
+			return;
+		}
+		if (hasFocused) return;
+		if (inputElement) {
+			// Only auto-focus if nothing inside the dialog is already focused
+			const active = document.activeElement;
+			if (active instanceof HTMLElement && inputElement.parentElement?.contains(active) && active !== inputElement) {
+				hasFocused = true;
+				return;
+			}
+			if (active !== inputElement) {
+				inputElement.focus();
+			}
+			hasFocused = true;
 		}
 	});
 </script>
