@@ -4,10 +4,7 @@ import {
 	listStudents,
 	listClasses,
 	listEventsForDate,
-	findStudentByCard,
 	addEvent,
-	addEvents,
-	deleteEvent,
 	deleteEvents,
 	type AttendanceEvent,
 	type AttendanceType,
@@ -31,6 +28,15 @@ import {
 	type LogOptions,
 	type LastResult
 } from './attendance-state.svelte';
+import { handleCardSubmit as submitCard } from './attendance-card-reader';
+import {
+	markStudent as opMarkStudent,
+	markAbsent as opMarkAbsent,
+	rebuildAbsentFromEvents as opRebuildAbsent,
+	handleUndo as opHandleUndo,
+	presentAllStudents as opPresentAll,
+	clearAllAttendance as opClearAll
+} from './attendance-operations';
 
 export type AttendanceLogHandle = {
 	showToast: (msg: string, ok?: boolean) => void;
@@ -373,43 +379,7 @@ class AttendancePageState {
 
 	// ── Card reader operations ─────────────────────────────────────────────────
 	async handleCardSubmit(serial: string) {
-		const trimmed = serial.trim();
-		if (!trimmed) return;
-
-		if (this.isProcessing || this.dateLoading) {
-			this.attendanceLog?.showToast('Please wait - processing previous tap', false);
-			return;
-		}
-
-		const now = Date.now();
-		if (this.lastScan && this.lastScan.serial === trimmed && now - this.lastScan.timestamp < 2500) {
-			this.cardInput = '';
-			this.attendanceLog?.showToast(
-				'Duplicate card tap ignored - wait a moment before scanning again',
-				false
-			);
-			this.cardInputElement?.focus();
-			return;
-		}
-
-		this.lastScan = { serial: trimmed, timestamp: now };
-		this.cardInput = '';
-		this.isProcessing = true;
-
-		try {
-			const student = await findStudentByCard(trimmed);
-			if (!student) {
-				this.attendanceLog?.showToast('Unknown card - not paired to any student', false);
-				return;
-			}
-			await this.logForStudent(student);
-		} catch (err: unknown) {
-			const message = err instanceof Error ? err.message : String(err);
-			this.attendanceLog?.showToast(`Error: ${message}`, false);
-		} finally {
-			this.isProcessing = false;
-			this.cardInputElement?.focus();
-		}
+		await submitCard(this, serial);
 	}
 
 	handleCardInputChange(value: string) {
@@ -525,42 +495,11 @@ class AttendancePageState {
 	}
 
 	async markStudent(student: Student, action: AttendanceType | null, closePicker = false) {
-		if (this.isProcessing || this.dateLoading) {
-			this.attendanceLog?.showToast('Please wait - processing previous request', false);
-			return;
-		}
-
-		this.isProcessing = true;
-		try {
-			// Manual grid/dialog marks never surface the late flag in this flow.
-			await this.logForStudent(student, action, {
-				suppressLate: true,
-				message: `${student.name} marked absent`
-			});
-			if (closePicker) this.pickerOpen = false;
-		} finally {
-			this.isProcessing = false;
-		}
+		await opMarkStudent(this, student, action, closePicker);
 	}
 
 	async markAbsent(student: Student) {
-		if (this.isProcessing || this.dateLoading) {
-			this.attendanceLog?.showToast('Please wait - processing previous request', false);
-			return;
-		}
-
-		this.isProcessing = true;
-		try {
-			// Writes an explicit 'absent' record for THIS student only - no other
-			// student's attendance is touched, and the mark survives navigation
-			// (SF2 shows an X on this student's cell).
-			await this.logForStudent(student, 'absent', {
-				suppressLate: true,
-				message: `${student.name} marked absent`
-			});
-		} finally {
-			this.isProcessing = false;
-		}
+		await opMarkAbsent(this, student);
 	}
 
 	/**
@@ -572,209 +511,20 @@ class AttendancePageState {
 	 * by marking someone else absent.
 	 */
 	rebuildAbsentFromEvents() {
-		this.absentStudentIds.clear();
-		for (const student of this.students) {
-			if (
-				this.matchesSelectedClass(student) &&
-				this.lastAbsentEventByStudentForSession.has(student.id)
-			) {
-				this.absentStudentIds.add(student.id);
-			}
-		}
-	}
-
-	/**
-	 * Builds 'in' event requests for the given students using the current
-	 * session/class context (timestamp, classId, sessionKey).
-	 */
-	buildInEventRequests(students: Student[]): CreateEventRequest[] {
-		return students.map((student) => {
-			const timestamp = attendanceTimestampForSelectedDate(
-				this.selectedDate,
-				this.selectedDateIsToday,
-				getAttendanceClass(
-					student,
-					this.currentClass,
-					this.isCardReaderMode,
-					this.activeClass,
-					this.classById
-				)
-			);
-			const draft = this.getAttendanceDraft(student, timestamp);
-			return {
-				studentId: student.id,
-				classId: draft.classId,
-				type: 'in',
-				sessionKey: draft.sessionKey,
-				timestamp: new Date(timestamp).toISOString()
-			};
-		});
-	}
-
-	async handleUndo(eventId: string): Promise<boolean> {
-		try {
-			await deleteEvent(eventId);
-			this.events = this.events.filter((e) => e.id !== eventId);
-			// Undoing an absent/present mark re-derives the highlight from the
-			// remaining persisted records.
-			this.rebuildAbsentFromEvents();
-			return true;
-		} catch {
-			return false;
-		}
+		opRebuildAbsent(this);
 	}
 
 	// ── Bulk operations ────────────────────────────────────────────────────────
+	async handleUndo(eventId: string): Promise<boolean> {
+		return opHandleUndo(this, eventId);
+	}
+
 	async presentAllStudents() {
-		if (this.isProcessing || this.dateLoading) {
-			this.attendanceLog?.showToast('Please wait - processing previous request', false);
-			return;
-		}
-
-		// Records the ENTIRE class roster - the search filter is intentionally ignored
-		// (spec 5.5): every student without a present record gets one, including
-		// students currently marked absent, who are restored to present.
-		const studentsToMark = this.students
-			.filter((student) => this.matchesSelectedClass(student))
-			.sort((a, b) => a.name.localeCompare(b.name))
-			.filter((student) => this.getNextAttendanceType(student) === 'in');
-
-		// Absent-marked students are restored to present: their explicit absent
-		// records must be deleted first, otherwise the backend's per-session
-		// duplicate check would skip their new 'in' insert.
-		const restoredStudentIds = studentsToMark.filter((student) =>
-			this.absentStudentIds.has(student.id)
-		);
-		const restoredIdSet = new Set(restoredStudentIds.map((student) => student.id));
-
-		if (studentsToMark.length === 0) {
-			this.attendanceLog?.showToast('All students are already recorded as present');
-			return;
-		}
-
-		this.isProcessing = true;
-		this.isPresentingAll = true;
-		this.attendanceLog?.resetUndo();
-
-		const eventMetadata = new SvelteMap<string, { student: Student }>();
-		const createdEvents: AttendanceEvent[] = [];
-		const createdLogLines: LogLine[] = [];
-
-		try {
-			// Delete the absent records for restored students before inserting 'in'
-			// events (per-session uniqueness would otherwise reject the insert).
-			const absentEventIds = restoredStudentIds
-				.map((student) => this.lastAbsentEventByStudentForSession.get(student.id)?.id)
-				.filter((id): id is string => !!id);
-			if (absentEventIds.length > 0) {
-				await deleteEvents(absentEventIds, 'Present all by user');
-			}
-
-			for (const student of studentsToMark) {
-				eventMetadata.set(student.id, { student });
-			}
-
-			const batchEvents = await addEvents(this.buildInEventRequests(studentsToMark));
-			createdEvents.push(...batchEvents);
-
-			for (const createdEvent of batchEvents) {
-				const metadata = eventMetadata.get(createdEvent.studentId);
-				if (!metadata) continue;
-				const restored = restoredIdSet.has(createdEvent.studentId);
-				createdLogLines.push({
-					id: createdEvent.id,
-					studentName: metadata.student.name,
-					type: 'in',
-					isLate: false,
-					message: restored ? 'Present all · restored from absent' : 'Recorded by Present all',
-					timestamp: eventTime(createdEvent)
-				});
-			}
-
-			if (createdEvents.length > 0) {
-				this.events = [
-					...createdEvents,
-					...this.events.filter((e) => !absentEventIds.includes(e.id))
-				];
-				this.attendanceLog?.addLogEntries(createdLogLines);
-			}
-
-			// Drop the stale 'Marked absent' log entries for restored students and
-			// clear their highlight - everyone is present now.
-			for (const id of absentEventIds) {
-				this.attendanceLog?.removeLogEntry(id);
-			}
-			for (const student of restoredStudentIds) {
-				this.absentStudentIds.delete(student.id);
-			}
-
-			const restoredCount = restoredStudentIds.length;
-			this.attendanceLog?.showToast(
-				`${createdEvents.length} ${createdEvents.length === 1 ? 'student' : 'students'} marked present${
-					restoredCount > 0 ? ` · ${restoredCount} restored from absent` : ''
-				}`
-			);
-		} catch (err: unknown) {
-			const message = err instanceof Error ? err.message : String(err);
-			this.attendanceLog?.showToast(`Present all failed: ${message}`, false);
-		} finally {
-			this.isPresentingAll = false;
-			this.isProcessing = false;
-		}
+		await opPresentAll(this);
 	}
 
 	async clearAllAttendance() {
-		if (this.isProcessing || this.dateLoading) {
-			this.attendanceLog?.showToast('Please wait - processing previous request', false);
-			return;
-		}
-
-		const eventIdsToRemove: string[] = [];
-		for (const [, event] of this.lastEventByStudentForSession) {
-			const student = this.studentById.get(event.studentId);
-			if (student && this.matchesCurrentSession(event, student)) {
-				eventIdsToRemove.push(event.id);
-			}
-		}
-		// Explicit absent records must also be removed so "Clear all" truly
-		// resets the session back to pending for everyone.
-		for (const [, event] of this.lastAbsentEventByStudentForSession) {
-			const student = this.studentById.get(event.studentId);
-			if (student && this.matchesCurrentSession(event, student)) {
-				eventIdsToRemove.push(event.id);
-			}
-		}
-
-		const absentToClear = this.absentStudentIds.size;
-		if (eventIdsToRemove.length === 0 && absentToClear === 0) {
-			this.attendanceLog?.showToast('No recorded attendance to clear');
-			return;
-		}
-
-		this.isProcessing = true;
-		this.attendanceLog?.resetState();
-
-		try {
-			if (eventIdsToRemove.length > 0) {
-				await deleteEvents(eventIdsToRemove, 'Cleared all by user');
-				this.events = this.events.filter((e) => !eventIdsToRemove.includes(e.id));
-			}
-			this.absentStudentIds.clear();
-			if (eventIdsToRemove.length > 0) {
-				this.attendanceLog?.showToast(
-					`Cleared attendance for ${eventIdsToRemove.length} ${eventIdsToRemove.length === 1 ? 'student' : 'students'}`
-				);
-			} else {
-				this.attendanceLog?.showToast(
-					`Reset ${absentToClear} ${absentToClear === 1 ? 'absent mark' : 'absent marks'} to pending`
-				);
-			}
-		} catch (err: unknown) {
-			const message = err instanceof Error ? err.message : String(err);
-			this.attendanceLog?.showToast(`Clear all failed: ${message}`, false);
-		} finally {
-			this.isProcessing = false;
-		}
+		await opClearAll(this);
 	}
 }
 

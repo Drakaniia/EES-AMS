@@ -226,6 +226,7 @@
 					<button
 						type="button"
 						title={`${student.name} - ${status.label} · Right-click to mark absent`}
+						aria-label={`${student.name}, ${status.label}`}
 						disabled={isProcessing || dateLoading}
 						onclick={() => onMarkStudent(student, action)}
 						oncontextmenu={(e) => {
