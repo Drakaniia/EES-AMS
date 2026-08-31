@@ -25,7 +25,7 @@ import type { AttendanceLogHandle } from './attendance-page-state.svelte';
 export type PageState = {
 	selectedDate: string;
 	selectedDateIsToday: boolean;
-	currentClass: Class | null;
+	currentClass: Class | undefined;
 	isCardReaderMode: boolean;
 	activeClass: Class | null;
 	classById: Map<string, Class>;
@@ -46,7 +46,7 @@ export type PageState = {
 		student: Student,
 		timestamp?: number
 	): {
-		classObj: Class;
+		classObj: Class | undefined | null;
 		classId: string | undefined;
 		sessionKey: string;
 		isLate: boolean;

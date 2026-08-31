@@ -1,5 +1,5 @@
 import { findStudentByCard } from '$lib/db-rust';
-import type { Student } from '$lib/db-rust';
+import type { Student, AttendanceType } from '$lib/db-rust';
 import type { AttendanceLogHandle } from './attendance-page-state.svelte';
 
 /**
@@ -15,7 +15,7 @@ export type CardReaderState = {
 	attendanceLog: AttendanceLogHandle | undefined;
 	logForStudent(
 		student: Student,
-		forcedType?: string,
+		forcedType?: AttendanceType | null,
 		options?: Record<string, unknown>
 	): Promise<void>;
 };
