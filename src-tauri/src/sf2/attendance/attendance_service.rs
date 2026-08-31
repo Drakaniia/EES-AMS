@@ -125,9 +125,10 @@ pub fn sync_and_open_sf2_workbook<R: tauri::Runtime>(
         // (AM/AO) formulas on some rows and a stale AW5 day count. Repair them
         // now so the opened workbook always shows live formulas.
         if crate::sf2::roster_parser::template_owns_roster(&template) {
-            if let Err(error) =
-                crate::sf2::progress::repair_learner_absent_present_formulas(pool.clone(), &template)
-            {
+            if let Err(error) = crate::sf2::progress::repair_learner_absent_present_formulas(
+                pool.clone(),
+                &template,
+            ) {
                 log::warn!("failed to repair ABSENT/PRESENT formulas: {error}");
             }
         }

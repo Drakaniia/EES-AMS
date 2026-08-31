@@ -1,6 +1,8 @@
 use crate::domain::error::Result;
 use crate::sf2::excel::excel_com::calendar::configure_sf2_calendar;
-use crate::sf2::excel::excel_com::com_session::{run_excel_task, with_workbook, ComObject, ComVariant};
+use crate::sf2::excel::excel_com::com_session::{
+    run_excel_task, with_workbook, ComObject, ComVariant,
+};
 use crate::sf2::excel::excel_com::workbook::WorkbookSession;
 use crate::sf2::excel::excel_com::workbook_utils::*;
 use crate::sf2::excel::excel_com::worksheet::{

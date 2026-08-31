@@ -64,7 +64,8 @@ pub fn open_workbook(pool: DbPool, class_id: Option<String>) -> Result<String> {
     // formulas on some rows and a stale AW5 day count. Repair them before opening
     // so the workbook always shows live formulas for every student.
     if crate::sf2::roster_parser::template_owns_roster(&template) {
-        if let Err(error) = crate::sf2::progress::repair_learner_absent_present_formulas(pool, &template)
+        if let Err(error) =
+            crate::sf2::progress::repair_learner_absent_present_formulas(pool, &template)
         {
             log::warn!("failed to repair ABSENT/PRESENT formulas: {error}");
         }
@@ -223,8 +224,11 @@ pub fn export_workbook(
         ));
     }
 
-    let marks_written =
-        crate::sf2::progress::write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
+    let marks_written = crate::sf2::progress::write_template_marks_for_days(
+        pool.clone(),
+        &template,
+        &report_dates,
+    )?;
 
     let metadata = template_metadata(&template);
     excel::write_metadata(&working_copy_path, &metadata)?;

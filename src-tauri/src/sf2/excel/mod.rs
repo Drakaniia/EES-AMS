@@ -1,8 +1,8 @@
+#[cfg(target_os = "windows")]
+pub(crate) mod excel_com;
 pub(crate) mod excel_preview;
 pub(crate) mod excel_service;
 pub(crate) mod excel_service_helpers;
-#[cfg(target_os = "windows")]
-pub(crate) mod excel_com;
 
 use crate::domain::error::{AppError, Result};
 use crate::sf2::logic::Sf2CellMark;

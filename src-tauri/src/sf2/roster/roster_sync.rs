@@ -95,5 +95,5 @@ pub(crate) fn roster_sync_formula_marks(
 }
 
 #[cfg(test)]
-#[path = "__tests__/roster_sync_tests.rs"]
+#[path = "../__tests__/roster_sync_tests.rs"]
 mod tests;

@@ -104,8 +104,7 @@ fn save_branding_logo_inner(
     let uuid = uuid::Uuid::new_v4();
     let dest = branding_dir.join(format!("user-{uuid}.{ext}"));
 
-    fs::write(&dest, &file_data)
-        .map_err(|e| format!("Failed to write logo file: {e}"))?;
+    fs::write(&dest, &file_data).map_err(|e| format!("Failed to write logo file: {e}"))?;
 
     let settings_repo = SettingsRepository::new(pool);
     let mut settings = settings_repo.get().map_err(|e| e.to_string())?;
