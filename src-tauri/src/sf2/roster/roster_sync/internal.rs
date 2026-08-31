@@ -3,7 +3,7 @@ use crate::domain::models::{Student, StudentGender};
 use crate::infrastructure::database::DbPool;
 use crate::sf2::attendance_marks::clear_total_cell_marks;
 use crate::sf2::excel;
-use crate::sf2::excel_com::workbook_utils::month_number;
+use crate::sf2::excel::excel_com::workbook_utils::month_number;
 use crate::sf2::logic::{normalize_learner_name, Sf2CellMark};
 use crate::sf2::models::{Sf2StudentMappingRecord, Sf2TemplateRecord, Sf2WorkbookLearner};
 use crate::sf2::repository::Sf2Repository;
@@ -165,7 +165,7 @@ pub(super) fn sync_bundled_template_roster(
         .map(|m| m.date.clone())
         .collect::<Vec<_>>();
 
-    if let Err(error) = super::super::progress::write_template_marks_for_mappings(
+    if let Err(error) = crate::sf2::progress::write_template_marks_for_mappings(
         pool,
         &synced_template,
         &report_dates,
@@ -297,7 +297,7 @@ pub(super) fn sync_imported_workbook_roster(
         .map(|m| m.date.clone())
         .collect::<Vec<_>>();
 
-    if let Err(error) = super::super::progress::write_template_marks_for_mappings(
+    if let Err(error) = crate::sf2::progress::write_template_marks_for_mappings(
         pool,
         &synced_template,
         &report_dates,

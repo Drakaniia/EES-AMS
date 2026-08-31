@@ -1,3 +1,9 @@
+pub(crate) mod excel_preview;
+pub(crate) mod excel_service;
+pub(crate) mod excel_service_helpers;
+#[cfg(target_os = "windows")]
+pub(crate) mod excel_com;
+
 use crate::domain::error::{AppError, Result};
 use crate::sf2::logic::Sf2CellMark;
 use crate::sf2::models::{Sf2WorkbookAnalysis, Sf2WorkbookMetadata};
@@ -6,7 +12,7 @@ use std::path::Path;
 
 // Re-export the WorkbookSession type on Windows so callers can use it.
 #[cfg(target_os = "windows")]
-pub use super::excel_com::WorkbookSession;
+pub use excel_com::WorkbookSession;
 
 /// Kill all running EXCEL.EXE processes. Returns the count of terminated
 /// processes. Used by the Tauri command and the quit-and-verify prevention
@@ -17,7 +23,7 @@ pub fn kill_excel_processes() -> u32 {
 
 #[cfg(target_os = "windows")]
 fn kill_excel_processes_impl() -> u32 {
-    super::excel_com::process::kill_excel_processes()
+    excel_com::process::kill_excel_processes()
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -81,7 +87,7 @@ pub fn write_marks_force(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<
 
 #[cfg(target_os = "windows")]
 fn write_marks_force_impl(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
-    super::excel_com::write_marks_force(workbook_path, marks)
+    excel_com::write_marks_force(workbook_path, marks)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -127,9 +133,9 @@ pub fn write_metadata(workbook_path: &Path, metadata: &Sf2WorkbookMetadata) -> R
 fn batch_operations_impl<T, F>(path: &Path, save_on_close: bool, action: F) -> Result<T>
 where
     T: Send + 'static,
-    F: FnOnce(&super::excel_com::WorkbookSession) -> Result<T> + Send + 'static,
+    F: FnOnce(&excel_com::WorkbookSession) -> Result<T> + Send + 'static,
 {
-    super::excel_com::batch_operations(path, save_on_close, action)
+    excel_com::batch_operations(path, save_on_close, action)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -143,7 +149,7 @@ where
 
 #[cfg(target_os = "windows")]
 fn analyze_workbook_impl(path: &Path) -> Result<Sf2WorkbookAnalysis> {
-    super::excel_com::analyze_workbook(path)
+    excel_com::analyze_workbook(path)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -153,7 +159,7 @@ fn analyze_workbook_impl(_path: &Path) -> Result<Sf2WorkbookAnalysis> {
 
 #[cfg(target_os = "windows")]
 fn write_formulas_impl(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
-    super::excel_com::write_formulas(workbook_path, marks)
+    excel_com::write_formulas(workbook_path, marks)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -163,7 +169,7 @@ fn write_formulas_impl(_workbook_path: &Path, _marks: &[Sf2CellMark]) -> Result<
 
 #[cfg(target_os = "windows")]
 fn write_marks_impl(workbook_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
-    super::excel_com::write_marks(workbook_path, marks)
+    excel_com::write_marks(workbook_path, marks)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -178,7 +184,7 @@ fn hide_empty_learner_rows_impl(
     female_total_row: u32,
     occupied_rows: &HashSet<u32>,
 ) -> Result<()> {
-    super::excel_com::hide_empty_learner_rows(
+    excel_com::hide_empty_learner_rows(
         workbook_path,
         male_total_row,
         female_total_row,
@@ -204,7 +210,7 @@ fn expand_roster_rows_impl(
     male_total_row: Option<u32>,
     female_total_row: Option<u32>,
 ) -> Result<()> {
-    super::excel_com::expand_roster_rows(
+    excel_com::expand_roster_rows(
         workbook_path,
         extra_male_rows,
         extra_female_rows,
@@ -226,7 +232,7 @@ fn expand_roster_rows_impl(
 
 #[cfg(target_os = "windows")]
 fn write_metadata_impl(workbook_path: &Path, metadata: &Sf2WorkbookMetadata) -> Result<()> {
-    super::excel_com::write_metadata(workbook_path, metadata)
+    excel_com::write_metadata(workbook_path, metadata)
 }
 
 #[cfg(not(target_os = "windows"))]

@@ -1,8 +1,8 @@
 use crate::domain::error::{AppError, Result};
-use crate::sf2::excel_com::com_session::ComObject;
-use crate::sf2::excel_com::learners::best_sf2_monthly_sheet;
-use crate::sf2::excel_com::workbook_utils::{month_name, month_number, report_year};
-use crate::sf2::excel_com::worksheet::{
+use crate::sf2::excel::excel_com::com_session::ComObject;
+use crate::sf2::excel::excel_com::learners::best_sf2_monthly_sheet;
+use crate::sf2::excel::excel_com::workbook_utils::{month_name, month_number, report_year};
+use crate::sf2::excel::excel_com::worksheet::{
     cell_text, rename_sheet_unique, set_sf2_cell, worksheet_cell,
 };
 use crate::sf2::models::Sf2WorkbookMetadata;
@@ -176,7 +176,7 @@ fn parse_weekday_label(label: &str) -> Option<i64> {
 fn set_sf2_date_cell(sheet: &ComObject, column: i32, value: &str) -> Result<()> {
     set_sf2_cell(sheet, 6, column, value, true)?;
     let cell = worksheet_cell(sheet, 6, column)?;
-    let target = crate::sf2::excel_com::worksheet::merged_target(&cell)?;
+    let target = crate::sf2::excel::excel_com::worksheet::merged_target(&cell)?;
 
     if cell.get_bool("MergeCells")? {
         if let Ok(merge_area) = cell.get_object("MergeArea") {

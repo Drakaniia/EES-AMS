@@ -24,7 +24,7 @@ use crate::sf2::workbook_files::{
 use std::collections::HashSet;
 use std::path::Path;
 
-pub(super) fn create_workbook_from_template_in_dir(
+pub(crate) fn create_workbook_from_template_in_dir(
     workbook_dir: &Path,
     pool: DbPool,
     draft: crate::sf2::models::Sf2TemplateDraft,
@@ -230,7 +230,7 @@ pub(super) fn create_workbook_from_template_in_dir(
         .collect::<Vec<_>>();
 
     if let Err(error) =
-        super::progress::write_template_marks_for_days(pool.clone(), &template, &report_dates)
+        crate::sf2::progress::write_template_marks_for_days(pool.clone(), &template, &report_dates)
     {
         log::warn!("failed to backfill created SF2 workbook marks: {error}");
     }

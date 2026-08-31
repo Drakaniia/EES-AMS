@@ -1,7 +1,7 @@
 use crate::domain::error::Result;
-use crate::sf2::excel_com::com_session::{run_excel_task, with_workbook, ComVariant};
-use crate::sf2::excel_com::workbook::WorkbookSession;
-use crate::sf2::excel_com::workbook_utils::*;
+use crate::sf2::excel::excel_com::com_session::{run_excel_task, with_workbook, ComVariant};
+use crate::sf2::excel::excel_com::workbook::WorkbookSession;
+use crate::sf2::excel::excel_com::workbook_utils::*;
 use std::collections::HashSet;
 use std::path::Path;
 

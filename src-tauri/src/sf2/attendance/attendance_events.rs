@@ -9,7 +9,7 @@ use rusqlite::params;
 ///
 /// Any existing record (of either type) for that student/day is removed first,
 /// so a student never has both an 'in' and an 'absent' record for the same day.
-pub(super) fn set_attendance_event_for_day(
+pub(crate) fn set_attendance_event_for_day(
     pool: crate::infrastructure::database::DbPool,
     student_id: &str,
     class_id: &str,
@@ -89,7 +89,7 @@ pub(super) fn set_attendance_event_for_day(
     Ok(())
 }
 
-pub(super) fn local_day_bounds_timestamps_for_date(date: NaiveDate) -> Result<(i64, i64)> {
+pub(crate) fn local_day_bounds_timestamps_for_date(date: NaiveDate) -> Result<(i64, i64)> {
     let next_day = date.succ_opt().ok_or_else(|| {
         AppError::Internal("failed to calculate local attendance date".to_string())
     })?;
@@ -117,7 +117,7 @@ fn local_timestamp(date: NaiveDate, hour: u32, minute: u32) -> Result<i64> {
     Ok(local_time.with_timezone(&Utc).timestamp())
 }
 
-pub(super) fn parse_clock(value: &str) -> Option<(u32, u32)> {
+pub(crate) fn parse_clock(value: &str) -> Option<(u32, u32)> {
     let (hour, minute) = value.trim().split_once(':')?;
     let hour = hour.parse::<u32>().ok()?;
     let minute = minute.parse::<u32>().ok()?;

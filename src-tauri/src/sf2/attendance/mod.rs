@@ -1,3 +1,7 @@
+pub(crate) mod attendance_events;
+pub(crate) mod attendance_marks;
+pub(crate) mod attendance_service;
+
 use crate::domain::models::{AttendanceEvent, AttendanceType, Student};
 use crate::sf2::logic::Sf2AttendanceEvent;
 use chrono::Local;

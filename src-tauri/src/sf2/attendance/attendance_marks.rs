@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 /// An "X" is written only for students with an explicit absent record; every
 /// other student stays blank (present by default). Days with no records at all
 /// (open days) are skipped.
-pub(super) fn export_marks(
+pub(crate) fn export_marks(
     pool: DbPool,
     class_id: &str,
     closed_days: &[String],
@@ -64,7 +64,7 @@ pub(super) fn export_marks(
 /// Generates empty cell marks for every combination of sheet × weekday column × attendance row,
 /// ensuring stale marks from the bundled template or previous months are erased before
 /// writing new ones.
-pub(super) fn clear_attendance_marks_for_records(
+pub(crate) fn clear_attendance_marks_for_records(
     template: &Sf2TemplateRecord,
     date_mappings: &[Sf2DateMappingRecord],
     student_mappings: &[Sf2StudentMappingRecord],
@@ -135,7 +135,7 @@ fn column_number_to_letter(mut column: i32) -> String {
 ///
 /// Marks are generated per unique sheet name found in `date_mappings`, so all visible
 /// monthly sheets get the same summary formulas.
-pub(super) fn summary_formula_marks(
+pub(crate) fn summary_formula_marks(
     male_count: usize,
     female_count: usize,
     total_students: usize,
@@ -242,7 +242,7 @@ pub(super) fn summary_formula_marks(
 ///
 /// The formulas use "X" marks (absent) to compute PRESENT count per day.
 /// Empty template rows (no student assigned) never have X marks, so they don't affect the count.
-pub(super) fn total_formula_marks(
+pub(crate) fn total_formula_marks(
     male_count: usize,
     female_count: usize,
     male_total_row: u32,
@@ -323,7 +323,7 @@ pub(super) fn total_formula_marks(
 // columns and are consumed directly by the formula builders below. Grouping
 // them into a struct would obscure that 1:1 mapping at every call site.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn learner_absent_present_formula_marks(
+pub(crate) fn learner_absent_present_formula_marks(
     student_mappings: &[Sf2StudentMappingRecord],
     male_count: usize,
     female_count: usize,
@@ -419,7 +419,7 @@ pub(super) fn learner_absent_present_formula_marks(
 /// Must be called with `write_marks_force` *before* `write_formulas` so that
 /// columns WITHOUT a valid date end up clean/empty rather than showing a
 /// stale value inherited from the bundled template.
-pub(super) fn clear_total_cell_marks(
+pub(crate) fn clear_total_cell_marks(
     male_total_row: u32,
     female_total_row: u32,
     combined_total_row: u32,
@@ -460,8 +460,8 @@ pub(super) fn clear_total_cell_marks(
     marks
 }
 
-pub(super) fn attendance_grid_rows<I>(
-    row_slots: &[super::calendar_service::TemplateRosterSlot],
+pub(crate) fn attendance_grid_rows<I>(
+    row_slots: &[crate::sf2::calendar_service::TemplateRosterSlot],
     extra_rows: I,
 ) -> Vec<u32>
 where
@@ -477,7 +477,7 @@ where
     rows
 }
 
-pub(super) fn mapped_attendance_rows<I>(rows: I) -> Vec<u32>
+pub(crate) fn mapped_attendance_rows<I>(rows: I) -> Vec<u32>
 where
     I: IntoIterator<Item = u32>,
 {

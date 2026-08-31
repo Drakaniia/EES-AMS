@@ -63,7 +63,7 @@ use internal::{sync_bundled_template_roster, sync_imported_workbook_roster};
 /// These marks should be written to the workbook after syncing the roster so that
 /// the MALE/FEMALE/Combined TOTAL rows and the Enrolment summary (Row 53) reflect
 /// the current student count and gender distribution.
-pub(super) fn roster_sync_formula_marks(
+pub(crate) fn roster_sync_formula_marks(
     male_count: usize,
     female_count: usize,
     male_total_row: u32,

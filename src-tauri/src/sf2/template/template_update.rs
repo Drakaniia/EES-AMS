@@ -304,7 +304,7 @@ pub fn update_workbook_settings(pool: DbPool, draft: Sf2TemplateDraft) -> Result
         .collect::<Vec<_>>();
 
     if let Err(error) =
-        super::progress::write_template_marks_for_days(pool, &template, &report_dates)
+        crate::sf2::progress::write_template_marks_for_days(pool, &template, &report_dates)
     {
         log::warn!("failed to backfill updated SF2 workbook marks: {error}");
     }

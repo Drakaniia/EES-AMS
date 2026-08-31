@@ -1,5 +1,5 @@
 use crate::domain::error::Result;
-use crate::sf2::excel_com::com_session::{ComObject, ComVariant, ExcelSession};
+use crate::sf2::excel::excel_com::com_session::{ComObject, ComVariant, ExcelSession};
 use std::path::Path;
 
 /// An open Excel workbook session with its owning Excel application object.

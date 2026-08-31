@@ -126,7 +126,7 @@ pub fn sync_and_open_sf2_workbook<R: tauri::Runtime>(
         // now so the opened workbook always shows live formulas.
         if crate::sf2::roster_parser::template_owns_roster(&template) {
             if let Err(error) =
-                super::progress::repair_learner_absent_present_formulas(pool.clone(), &template)
+                crate::sf2::progress::repair_learner_absent_present_formulas(pool.clone(), &template)
             {
                 log::warn!("failed to repair ABSENT/PRESENT formulas: {error}");
             }
@@ -265,14 +265,14 @@ pub fn set_preview_attendance(
         &class.day_start,
         event_type,
     )?;
-    let template = super::excel_service::refresh_template_calendar_from_saved_month(
+    let template = crate::sf2::excel_service::refresh_template_calendar_from_saved_month(
         pool.clone(),
         &template,
         false,
     )?;
     write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
 
-    super::excel_preview::export_preview(pool, Some(class_id))
+    crate::sf2::excel_preview::export_preview(pool, Some(class_id))
 }
 
 /// Mark ALL absent students as present for the current report month of a class.
@@ -344,5 +344,5 @@ pub fn set_all_students_present(pool: DbPool, class_id: &str) -> Result<usize> {
 }
 
 #[cfg(test)]
-#[path = "__tests__/attendance_service_tests.rs"]
+#[path = "../__tests__/attendance_service_tests.rs"]
 mod tests;

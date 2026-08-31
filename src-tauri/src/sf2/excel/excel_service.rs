@@ -64,7 +64,7 @@ pub fn open_workbook(pool: DbPool, class_id: Option<String>) -> Result<String> {
     // formulas on some rows and a stale AW5 day count. Repair them before opening
     // so the workbook always shows live formulas for every student.
     if crate::sf2::roster_parser::template_owns_roster(&template) {
-        if let Err(error) = super::progress::repair_learner_absent_present_formulas(pool, &template)
+        if let Err(error) = crate::sf2::progress::repair_learner_absent_present_formulas(pool, &template)
         {
             log::warn!("failed to repair ABSENT/PRESENT formulas: {error}");
         }
@@ -182,7 +182,7 @@ pub fn export_workbook(
         })?;
     let template = refresh_template_calendar_from_saved_month(pool.clone(), &template, false)?;
     let template =
-        super::calendar_service::sync_template_roster_from_class(pool.clone(), &template)?;
+        crate::sf2::calendar_service::sync_template_roster_from_class(pool.clone(), &template)?;
 
     let working_copy_path = PathBuf::from(&template.source_path);
     if !working_copy_path.exists() {
@@ -224,7 +224,7 @@ pub fn export_workbook(
     }
 
     let marks_written =
-        super::progress::write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
+        crate::sf2::progress::write_template_marks_for_days(pool.clone(), &template, &report_dates)?;
 
     let metadata = template_metadata(&template);
     excel::write_metadata(&working_copy_path, &metadata)?;
@@ -239,7 +239,7 @@ pub fn export_workbook(
     })
 }
 
-pub(super) fn refresh_template_calendar_from_saved_month(
+pub(crate) fn refresh_template_calendar_from_saved_month(
     pool: DbPool,
     template: &Sf2TemplateRecord,
     force_refresh: bool,
@@ -423,5 +423,5 @@ use crate::sf2::excel_service_helpers::{
 };
 
 #[cfg(test)]
-#[path = "__tests__/excel_service_tests.rs"]
+#[path = "../__tests__/excel_service_tests.rs"]
 mod tests;

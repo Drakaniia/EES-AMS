@@ -11,10 +11,10 @@ pub fn create_workbook_from_template<R: tauri::Runtime>(
     pool: DbPool,
     draft: Sf2TemplateDraft,
 ) -> Result<Sf2ImportSummary> {
-    super::progress::emit_sf2_progress(&app, "create", 1, 2, "Creating SF2 working workbook");
+    crate::sf2::progress::emit_sf2_progress(&app, "create", 1, 2, "Creating SF2 working workbook");
     let workbook_dir = sf2_workbook_dir(&app)?;
     let summary = create_workbook_from_template_in_dir(&workbook_dir, pool, draft)?;
-    super::progress::emit_sf2_progress(&app, "create", 2, 2, "SF2 workbook ready");
+    crate::sf2::progress::emit_sf2_progress(&app, "create", 2, 2, "SF2 workbook ready");
     Ok(summary)
 }
 
@@ -47,7 +47,7 @@ pub fn set_report_month_with_progress<R: tauri::Runtime>(
     class_id: &str,
     report_month: &str,
 ) -> Result<()> {
-    use super::progress::emit_sf2_progress;
+    use crate::sf2::progress::emit_sf2_progress;
     let app = app.clone();
     let class_id_owned = class_id.to_string();
     let report_month_owned = report_month.to_string();
@@ -103,7 +103,7 @@ fn set_report_month_impl(
     //    The bar jumps quickly from 3→4 (emitted before the call) and
     //    6→7→8 (emitted after), with steps 4-5 implied during the COM work.
     emit(3, 8, "Opening Excel to reconfigure the calendar…");
-    let refreshed = super::excel_service::refresh_template_calendar_from_saved_month(
+    let refreshed = crate::sf2::excel_service::refresh_template_calendar_from_saved_month(
         pool.clone(),
         &updated_template,
         true,

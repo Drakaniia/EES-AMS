@@ -438,7 +438,7 @@ fn set_sf2_mark_rejects_formula_cells_but_force_accepts() {
         );
 
         // TEST 1: set_sf2_mark SHOULD REJECT formula cells (this IS the bug)
-        let reject = crate::sf2::excel_com::worksheet::set_sf2_mark(&sheet, "A1", "X");
+        let reject = crate::sf2::excel::excel_com::worksheet::set_sf2_mark(&sheet, "A1", "X");
         assert!(
             reject.is_err(),
             "set_sf2_mark MUST reject formula cells — its call to ensure_not_formula should refuse"
@@ -450,7 +450,7 @@ fn set_sf2_mark_rejects_formula_cells_but_force_accepts() {
         );
 
         // TEST 2: set_sf2_mark_force SHOULD ACCEPT formula cells (this IS the fix)
-        let force = crate::sf2::excel_com::worksheet::set_sf2_mark_force(&sheet, "A1", "X");
+        let force = crate::sf2::excel::excel_com::worksheet::set_sf2_mark_force(&sheet, "A1", "X");
         assert!(
             force.is_ok(),
             "set_sf2_mark_force MUST accept formula cells — it skips ensure_not_formula"

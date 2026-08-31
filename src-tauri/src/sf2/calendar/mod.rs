@@ -1,8 +1,10 @@
+pub(crate) mod calendar_service;
+
 use crate::domain::error::{AppError, Result};
 use crate::sf2::models::{Sf2WorkbookAnalysis, Sf2WorkbookMetadata};
 use chrono::{Datelike, Local, NaiveDate};
 
-pub(super) fn first_school_day_for_report_month<'a, I>(
+pub(crate) fn first_school_day_for_report_month<'a, I>(
     report_month: &str,
     school_year: &str,
     dates: I,
@@ -32,7 +34,7 @@ where
     default_sf2_first_school_day(report_month, school_year)
 }
 
-pub(super) fn default_sf2_first_school_day(report_month: &str, school_year: &str) -> Result<u32> {
+pub(crate) fn default_sf2_first_school_day(report_month: &str, school_year: &str) -> Result<u32> {
     let month = sf2_month_number(report_month).ok_or_else(|| {
         AppError::InvalidInput("Report Month must be a valid month name".to_string())
     })?;
@@ -48,7 +50,7 @@ pub(super) fn default_sf2_first_school_day(report_month: &str, school_year: &str
         })
 }
 
-pub(super) fn validate_first_school_day(
+pub(crate) fn validate_first_school_day(
     day: u32,
     report_month: &str,
     school_year: &str,
@@ -73,7 +75,7 @@ pub(super) fn validate_first_school_day(
     Ok(())
 }
 
-pub(super) fn validate_configured_calendar(
+pub(crate) fn validate_configured_calendar(
     analysis: &Sf2WorkbookAnalysis,
     metadata: &Sf2WorkbookMetadata,
 ) -> Result<()> {
@@ -108,7 +110,7 @@ pub(super) fn validate_configured_calendar(
     }
 }
 
-pub(super) fn sf2_month_number(name: &str) -> Option<u32> {
+pub(crate) fn sf2_month_number(name: &str) -> Option<u32> {
     let normalized = name.trim().to_ascii_uppercase();
     if normalized.contains("JAN") {
         Some(1)
@@ -139,7 +141,7 @@ pub(super) fn sf2_month_number(name: &str) -> Option<u32> {
     }
 }
 
-pub(super) fn sf2_month_name(month: u32) -> &'static str {
+pub(crate) fn sf2_month_name(month: u32) -> &'static str {
     match month {
         1 => "JANUARY",
         2 => "FEBRUARY",
@@ -157,7 +159,7 @@ pub(super) fn sf2_month_name(month: u32) -> &'static str {
     }
 }
 
-pub(super) fn sf2_report_year(school_year: &str, month: u32) -> i32 {
+pub(crate) fn sf2_report_year(school_year: &str, month: u32) -> i32 {
     // Parse "START-END" school year format (e.g., "2024-2025").
     // Months June-December (>=6) use the start year; January-May (<6) use end year.
     if let Some(start_year) = school_year
@@ -176,7 +178,7 @@ pub(super) fn sf2_report_year(school_year: &str, month: u32) -> i32 {
     }
 }
 
-pub(super) fn last_day_of_month(year: i32, month: u32) -> u32 {
+pub(crate) fn last_day_of_month(year: i32, month: u32) -> u32 {
     let (next_year, next_month) = if month == 12 {
         (year + 1, 1)
     } else {
@@ -188,7 +190,7 @@ pub(super) fn last_day_of_month(year: i32, month: u32) -> u32 {
         .unwrap_or(31)
 }
 
-pub(super) fn parse_date(date: &str) -> Result<NaiveDate> {
+pub(crate) fn parse_date(date: &str) -> Result<NaiveDate> {
     NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .map_err(|_| AppError::InvalidInput(format!("invalid date: {date}")))
 }
@@ -204,7 +206,7 @@ pub(super) fn parse_date(date: &str) -> Result<NaiveDate> {
 /// write; `None` means the workbook has never been synced, so we must sync.
 /// `latest_event_at` is the most recent attendance event timestamp for the
 /// class; `None` means there are no attendance events at all (nothing to write).
-pub(super) fn attendance_changed_since(
+pub(crate) fn attendance_changed_since(
     last_synced_at: Option<i64>,
     latest_event_at: Option<i64>,
 ) -> bool {
@@ -218,5 +220,5 @@ pub(super) fn attendance_changed_since(
 }
 
 #[cfg(test)]
-#[path = "__tests__/calendar_tests.rs"]
+#[path = "../__tests__/calendar_tests.rs"]
 mod tests;
