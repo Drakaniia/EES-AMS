@@ -38,6 +38,8 @@ class SettingsPageState implements Ctx {
 	defaultDayEnd = $state('15:00');
 	defaultLateAfter = $state('08:45');
 	attendanceMode = $state<AttendanceMode>('manual');
+	brandingLogoPath = $state<string | null>(null);
+	brandingTitle = $state('EES AMS');
 
 	savedGlobalSettingsSnapshot = $state<Settings | null>(null);
 	pendingGlobalSettingsReload = $state<Settings | null>(null);
@@ -62,7 +64,9 @@ class SettingsPageState implements Ctx {
 			q2Start: this.quarterState.q2Start,
 			q2End: this.quarterState.q2End,
 			q3Start: this.quarterState.q3Start,
-			q3End: this.quarterState.q3End
+			q3End: this.quarterState.q3End,
+			brandingLogoPath: this.brandingLogoPath,
+			brandingTitle: this.brandingTitle
 		});
 	}
 
@@ -79,6 +83,8 @@ class SettingsPageState implements Ctx {
 		this.quarterState.q2End = normalized.q2End ?? '';
 		this.quarterState.q3Start = normalized.q3Start ?? '';
 		this.quarterState.q3End = normalized.q3End ?? '';
+		this.brandingLogoPath = normalized.brandingLogoPath ?? null;
+		this.brandingTitle = normalized.brandingTitle ?? 'EES AMS';
 		this.savedGlobalSettingsSnapshot = normalized;
 		this.pendingGlobalSettingsReload = null;
 	}

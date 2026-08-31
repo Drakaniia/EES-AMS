@@ -12,6 +12,8 @@ export type GlobalSettingsFields = {
 	q2End: string;
 	q3Start: string;
 	q3End: string;
+	brandingLogoPath?: string | null;
+	brandingTitle?: string;
 };
 
 export const DEFAULT_GLOBAL_SETTINGS: Settings = {
@@ -26,13 +28,17 @@ export const DEFAULT_GLOBAL_SETTINGS: Settings = {
 	q2Start: '',
 	q2End: '',
 	q3Start: '',
-	q3End: ''
+	q3End: '',
+	brandingLogoPath: null,
+	brandingTitle: 'EES AMS'
 };
 
 export function buildGlobalSettingsPayload(fields: GlobalSettingsFields): Settings {
 	return {
 		id: 'app',
-		...fields
+		...fields,
+		brandingLogoPath: fields.brandingLogoPath ?? null,
+		brandingTitle: fields.brandingTitle ?? 'EES AMS'
 	};
 }
 
@@ -49,7 +55,9 @@ export function normalizeGlobalSettings(settings: Settings): Settings {
 		q2Start: settings.q2Start ?? DEFAULT_GLOBAL_SETTINGS.q2Start,
 		q2End: settings.q2End ?? DEFAULT_GLOBAL_SETTINGS.q2End,
 		q3Start: settings.q3Start ?? DEFAULT_GLOBAL_SETTINGS.q3Start,
-		q3End: settings.q3End ?? DEFAULT_GLOBAL_SETTINGS.q3End
+		q3End: settings.q3End ?? DEFAULT_GLOBAL_SETTINGS.q3End,
+		brandingLogoPath: settings.brandingLogoPath ?? DEFAULT_GLOBAL_SETTINGS.brandingLogoPath,
+		brandingTitle: settings.brandingTitle ?? DEFAULT_GLOBAL_SETTINGS.brandingTitle
 	};
 }
 
@@ -67,6 +75,8 @@ export function globalSettingsEqual(a: Settings, b: Settings) {
 		left.q2Start === right.q2Start &&
 		left.q2End === right.q2End &&
 		left.q3Start === right.q3Start &&
-		left.q3End === right.q3End
+		left.q3End === right.q3End &&
+		left.brandingLogoPath === right.brandingLogoPath &&
+		left.brandingTitle === right.brandingTitle
 	);
 }

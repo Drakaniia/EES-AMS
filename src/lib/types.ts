@@ -85,6 +85,8 @@ export interface Settings {
 	q2End?: string;
 	q3Start?: string;
 	q3End?: string;
+	brandingLogoPath?: string | null;
+	brandingTitle?: string;
 }
 
 export interface CreateStudentRequest {

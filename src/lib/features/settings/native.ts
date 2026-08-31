@@ -25,7 +25,13 @@ export {
 	updateSf2WorkbookSettings,
 	uploadLatestBackupToGoogleDrive,
 	validateSf2WorkbookImport,
-	wipeAll
+	wipeAll,
+	saveBrandingLogo,
+	pickBrandingLogo,
+	getBrandingLogoPath,
+	getDefaultLogoPath,
+	deleteBrandingLogo,
+	resetBranding
 } from '$lib/db-rust';
 
 export type {
