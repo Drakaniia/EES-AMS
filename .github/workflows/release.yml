@@ -47,10 +47,6 @@ jobs:
         working-directory: src-tauri
         run: cargo fmt --check
 
-      - name: Check Rust
-        working-directory: src-tauri
-        run: cargo check
-
       - name: Lint Rust
         working-directory: src-tauri
         run: cargo clippy
