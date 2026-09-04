@@ -1,28 +1,53 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen } from '@testing-library/svelte';
 import AppShell from './AppShell.svelte';
 
-// Mock SvelteKit modules
 vi.mock('$app/state', () => ({
-	page: {
-		url: { pathname: '/' }
-	}
+	page: { url: { pathname: '/' } }
 }));
 
-vi.mock('$app/paths', () => ({
-	base: ''
-}));
+vi.mock('$app/paths', () => ({ base: '' }));
 
 vi.mock('$lib/stores/settings.svelte', () => ({
 	settingsStore: {
 		settings: {
 			quarter: '1st Quarter',
-			attendanceMode: 'card_reader'
+			attendanceMode: 'card_reader',
+			brandingLogoPath: null,
+			brandingTitle: 'EES AMS'
 		},
 		loading: false,
 		error: null
 	}
 }));
+
+vi.mock('$lib/stores/update.svelte', () => ({
+	updateStore: { badgeVisible: false }
+}));
+
+vi.mock('$lib/stores/full-preview.svelte', () => {
+	let isActive = false;
+	return {
+		fullPreviewStore: {
+			get isActive() {
+				return isActive;
+			},
+			set isActive(v: boolean) {
+				isActive = v;
+			},
+			get isTitleBarHidden() {
+				return isActive;
+			}
+		}
+	};
+});
+vi.mock('@tauri-apps/api/core', () => ({
+	convertFileSrc: (path: string) => `asset://localhost/${path}`
+}));
+
+vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
+
+vi.mock('$lib/db-rust', () => ({ listStudents: vi.fn(async () => []) }));
 
 function renderAppShell() {
 	return render(AppShell, {
@@ -32,90 +57,40 @@ function renderAppShell() {
 	});
 }
 
-describe('AppShell sidebar collapse', () => {
-	it('renders the sidebar with expanded state by default', () => {
+describe('AppShell', () => {
+	it('renders the TitleBar', () => {
 		renderAppShell();
-		const sidebar = screen.getByLabelText('Primary navigation');
-		expect(sidebar).toBeInTheDocument();
-		// Sidebar should NOT have the collapsed class by default
-		expect(sidebar.className).not.toContain('collapsed');
+		const titleBar = document.querySelector('.title-bar');
+		expect(titleBar).toBeInTheDocument();
 	});
 
-	it('has a collapse toggle button with aria-label', () => {
+	it('does not render a sidebar', () => {
 		renderAppShell();
-		const toggleBtn = screen.getByLabelText('Toggle sidebar');
-		expect(toggleBtn).toBeInTheDocument();
+		const sidebar = document.querySelector('aside');
+		expect(sidebar).not.toBeInTheDocument();
 	});
 
-	it('toggles collapsed state when clicking the toggle button', async () => {
+	it('renders the main content area', () => {
 		renderAppShell();
-		const sidebar = screen.getByLabelText('Primary navigation');
-
-		// Click to collapse
-		await fireEvent.click(screen.getByLabelText('Toggle sidebar'));
-		expect(sidebar.className).toContain('collapsed');
-
-		// Click to expand again (re-query since DOM re-renders)
-		await fireEvent.click(screen.getByLabelText('Toggle sidebar'));
-		expect(sidebar.className).not.toContain('collapsed');
+		const main = screen.getByRole('main');
+		expect(main).toBeInTheDocument();
 	});
 
-	it('hides text labels when sidebar is collapsed', async () => {
+	it('renders navigation links in the TitleBar', () => {
 		renderAppShell();
-		const toggleBtn = screen.getByLabelText('Toggle sidebar');
-
-		// Collapse sidebar
-		await fireEvent.click(toggleBtn);
-
-		// Nav labels with text should have the hidden class
-		const navLinks = screen.getAllByRole('link');
-		navLinks.forEach((link) => {
-			const textSpan = link.querySelector('.nav-label');
-			if (textSpan) {
-				expect(textSpan.className).toContain('hidden');
-			}
-		});
+		const navLinks = document.querySelectorAll('.title-nav-link');
+		expect(navLinks.length).toBe(2);
 	});
 
-	it('shows nav icons when sidebar is collapsed', async () => {
+	it('hides TitleBar in full-preview mode', async () => {
+		const { fullPreviewStore } = await import('$lib/stores/full-preview.svelte');
+		fullPreviewStore.isActive = true;
+
 		renderAppShell();
-		const toggleBtn = screen.getByLabelText('Toggle sidebar');
+		const titleBar = document.querySelector('.title-bar');
+		expect(titleBar).not.toBeInTheDocument();
 
-		// Collapse sidebar
-		await fireEvent.click(toggleBtn);
-
-		// Icon containers should still be visible
-		const iconSpans = document.querySelectorAll('.nav-icon');
-		expect(iconSpans.length).toBeGreaterThan(0);
-		iconSpans.forEach((icon) => {
-			expect(icon.className).not.toContain('hidden');
-		});
-	});
-
-	it('removes the logo text from DOM when sidebar is collapsed', async () => {
-		renderAppShell();
-		const toggleBtn = screen.getByLabelText('Toggle sidebar');
-
-		// Title should be present before collapse
-		expect(screen.getByText('EES AMS')).toBeInTheDocument();
-
-		// Collapse sidebar
-		await fireEvent.click(toggleBtn);
-
-		// Logo text "EES AMS" should no longer be in the DOM (conditionally rendered)
-		expect(screen.queryByText('EES AMS')).not.toBeInTheDocument();
-	});
-
-	it('hides the footer when sidebar is collapsed', async () => {
-		renderAppShell();
-		const toggleBtn = screen.getByLabelText('Toggle sidebar');
-
-		// Collapse sidebar
-		await fireEvent.click(toggleBtn);
-
-		// Footer should have hidden class
-		const footer = document.querySelector('.sidebar-footer');
-		expect(footer).not.toBeNull();
-		expect(footer!.className).toContain('hidden');
+		// Reset
+		fullPreviewStore.isActive = false;
 	});
 });

@@ -93,9 +93,9 @@
 
 <div class="space-y-5 rounded-2xl border border-border bg-card p-6">
 	<div class="space-y-1">
-		<h3 class="text-lg font-medium">Sidebar Branding</h3>
+		<h3 class="text-lg font-medium">App Branding</h3>
 		<p class="text-xs text-muted-foreground">
-			Customize the logo and title shown in the sidebar header.
+			Customize the logo and title shown in the title bar.
 		</p>
 	</div>
 
@@ -190,6 +190,6 @@
 		class="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground"
 	>
 		<span class="font-medium text-foreground">💡 Tip:</span>
-		Enter a title like "Mrs. Santos" or "Room 201 - Grade 3" to personalize your sidebar.
+		Enter a title like "Mrs. Santos" or "Room 201 - Grade 3" to personalize your title bar.
 	</div>
 </div>

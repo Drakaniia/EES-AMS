@@ -1,69 +1,12 @@
 <script lang="ts">
-	import { page } from '$app/state';
-	import { base } from '$app/paths';
-	import defaultLogo from '$lib/assets/logo-seal.png';
-	import { settingsStore } from '$lib/stores/settings.svelte';
-	import { convertFileSrc } from '@tauri-apps/api/core';
-	import { updateStore } from '$lib/stores/update.svelte';
 	import { fullPreviewStore } from '$lib/stores/full-preview.svelte';
-	import { onMount } from 'svelte';
-	import { FileSpreadsheet, PanelLeft, ScanLine, Settings } from 'lucide-svelte';
+	import TitleBar from '$lib/components/ui/TitleBar.svelte';
+	import CommandPalette from '$lib/components/ui/CommandPalette.svelte';
 
 	let { children } = $props();
-	let isCollapsed = $state(false);
-	let isOnline = $state(true);
-
-	function toggleCollapse() {
-		isCollapsed = !isCollapsed;
-	}
-
-	const navItems = [
-		{ href: '/reports', label: 'SF2 Reports', icon: FileSpreadsheet },
-		{ href: '/attendance', label: 'Attendance', icon: ScanLine }
-	] as const;
-
-	const activeLogo = $derived.by(() => {
-		const path = settingsStore.settings?.brandingLogoPath;
-		if (path) {
-			return convertFileSrc(path);
-		}
-		return defaultLogo;
-	});
-
-	const brandingTitle = $derived(settingsStore.settings?.brandingTitle || 'EES AMS');
-
-	const attendanceNavLabel = $derived(
-		settingsStore.settings?.attendanceMode === 'card_reader' ? 'Live Session' : 'Attendance'
-	);
-	const todayLabel = $derived(
-		new Intl.DateTimeFormat(undefined, {
-			weekday: 'short',
-			month: 'short',
-			day: 'numeric'
-		}).format(new Date())
-	);
-
-	onMount(() => {
-		isOnline = navigator.onLine;
-		const updateOnlineStatus = () => {
-			isOnline = navigator.onLine;
-		};
-
-		window.addEventListener('online', updateOnlineStatus);
-		window.addEventListener('offline', updateOnlineStatus);
-
-		return () => {
-			window.removeEventListener('online', updateOnlineStatus);
-			window.removeEventListener('offline', updateOnlineStatus);
-		};
-	});
-
-	function isActive(href: string, pathname: string) {
-		return href === '/' ? pathname === '/' : pathname.startsWith(href);
-	}
 </script>
 
-<div class="app-surface flex h-full min-h-0 flex-col overflow-hidden text-foreground md:flex-row">
+<div class="app-surface flex h-full min-h-0 flex-col overflow-hidden text-foreground">
 	<a
 		href="#main-content"
 		class="sr-only focus:not-sr-only focus:fixed focus:top-10 focus:left-4 focus:z-[80] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground"
@@ -71,155 +14,8 @@
 		Skip to content
 	</a>
 
-	{#if !fullPreviewStore.isActive}
-		<aside
-			class="sidebar group flex shrink-0 flex-col border-b border-border bg-background transition-all duration-300 md:min-h-0 md:border-r md:border-b-0 {isCollapsed
-				? 'collapsed md:w-16'
-				: 'md:w-64'}"
-			aria-label="Primary navigation"
-		>
-			<!-- Header -->
-			<div
-				class={isCollapsed
-					? 'relative flex items-center justify-center py-4 md:pt-6 md:pb-4'
-					: 'flex items-center gap-3 px-4 py-3 md:px-4 md:pt-5 md:pb-4'}
-			>
-				{#if isCollapsed}
-					<!-- Collapsed: logo centered, icon dead center on hover -->
-					<button
-						onclick={toggleCollapse}
-						aria-label="Toggle sidebar"
-						class="relative flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl"
-					>
-						<img
-							src={activeLogo}
-							alt={brandingTitle}
-							class="size-11 rounded-xl object-contain ring-1 ring-border transition-opacity duration-200 group-hover:opacity-0"
-						/>
-						<span
-							class="absolute inset-0 flex items-center justify-center rounded-xl text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:text-foreground"
-						>
-							<PanelLeft class="size-4" />
-						</span>
-					</button>
-				{:else}
-					<img
-						src={activeLogo}
-						alt={brandingTitle}
-						class="size-10 shrink-0 rounded-xl object-contain ring-1 ring-border md:size-11"
-					/>
-					<div class="min-w-0 flex-1 whitespace-nowrap">
-						<div class="truncate text-base leading-tight font-bold tracking-tight md:text-lg">
-							{brandingTitle}
-						</div>
-						<div class="truncate text-[11px] font-medium text-muted-foreground">
-							{settingsStore.settings?.quarter ?? '1st Quarter'}
-						</div>
-					</div>
-					<button
-						onclick={toggleCollapse}
-						aria-label="Toggle sidebar"
-						class="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface/70 hover:text-foreground"
-					>
-						<PanelLeft class="size-4" />
-					</button>
-				{/if}
-			</div>
-
-			<!-- Navigation -->
-			<nav
-				class="min-w-0 flex-1 touch-pan-x overflow-x-auto px-2 pb-2 md:overflow-y-auto md:px-2 md:pb-4"
-			>
-				<div class="flex gap-1 md:flex-col">
-					{#each navItems as item, i ('type' in item && item.type === 'divider' ? `div-${i}` : (item as { href: string }).href)}
-						{#if 'type' in item && item.type === 'divider'}
-							<div
-								class="mx-3 my-1 hidden h-px bg-border md:block"
-								role="separator"
-								aria-hidden="true"
-							></div>
-							<div class="mx-1 w-px bg-border md:hidden" role="separator" aria-hidden="true"></div>
-						{:else}
-							{@const navItem = item as {
-								href: string;
-								label: string;
-								icon: typeof FileSpreadsheet;
-							}}
-							{@const active = isActive(navItem.href, page.url.pathname)}
-							{@const Icon = navItem.icon}
-							<a
-								href={`${base}${navItem.href}`}
-								aria-current={active ? 'page' : undefined}
-								class="nav-link group relative flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium whitespace-nowrap transition-all md:h-10
-								{active
-									? 'bg-primary/10 text-foreground'
-									: 'text-muted-foreground hover:bg-surface/70 hover:text-foreground'}"
-							>
-								<span
-									class="nav-icon grid size-7 shrink-0 place-items-center rounded-lg transition-all
-									{active
-										? 'bg-primary text-primary-foreground shadow-sm'
-										: 'text-muted-foreground group-hover:text-foreground'}"
-								>
-									<Icon class="size-4" aria-hidden="true" />
-								</span>
-								<span class="nav-label truncate {isCollapsed ? 'hidden' : ''}">
-									{navItem.href === '/attendance' ? attendanceNavLabel : navItem.label}
-								</span>
-							</a>
-						{/if}
-					{/each}
-				</div>
-			</nav>
-
-			<!-- Footer -->
-			<div
-				class="sidebar-footer border-t border-border {isCollapsed
-					? 'hidden'
-					: 'max-md:hidden md:block'}"
-			>
-				<!-- Settings link at bottom of sidebar -->
-				{#if true}
-					{@const settingsActive = page.url.pathname.startsWith('/settings')}
-					<a
-						href={`${base}/settings`}
-						aria-current={settingsActive ? 'page' : undefined}
-						class="flex h-9 items-center gap-3 px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-surface/70 hover:text-foreground {settingsActive
-							? 'bg-primary/10 text-foreground'
-							: ''}"
-					>
-						<span
-							class="nav-icon grid size-7 shrink-0 place-items-center rounded-lg transition-all {settingsActive
-								? 'bg-primary text-primary-foreground shadow-sm'
-								: 'text-muted-foreground'}"
-						>
-							<Settings class="size-4" aria-hidden="true" />
-						</span>
-						<span class="truncate">Settings</span>
-						{#if updateStore.badgeVisible}
-							<span
-								class="ml-auto size-2 shrink-0 rounded-full bg-orange-600"
-								title="Update available"
-								aria-hidden="true"
-							></span>
-						{/if}
-					</a>
-				{/if}
-
-				<div class="border-t border-border px-4 py-3">
-					<div class="flex items-center justify-between gap-2">
-						<div class="min-w-0">
-							<div class="truncate text-xs font-semibold text-muted-foreground">{todayLabel}</div>
-						</div>
-						<span class="status-indicator" title={isOnline ? 'Online' : 'Offline'}>
-							<span class="status-dot {isOnline ? '' : 'status-dot-muted'}" aria-hidden="true"
-							></span>
-							<span class="sr-only">{isOnline ? 'Online' : 'Offline'}</span>
-						</span>
-					</div>
-				</div>
-			</div>
-		</aside>
+	{#if !fullPreviewStore.isTitleBarHidden}
+		<TitleBar />
 	{/if}
 
 	<main
@@ -229,4 +25,6 @@
 	>
 		{@render children()}
 	</main>
+
+	<CommandPalette />
 </div>

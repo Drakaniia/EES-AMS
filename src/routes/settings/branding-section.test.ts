@@ -72,9 +72,9 @@ beforeEach(() => {
 });
 
 describe('BrandingSection', () => {
-	it('renders the sidebar branding heading', () => {
+	it('renders the app branding heading', () => {
 		render(BrandingSection);
-		expect(screen.getByText('Sidebar Branding')).toBeInTheDocument();
+		expect(screen.getByText('App Branding')).toBeInTheDocument();
 	});
 
 	it('displays the current title in the input field', () => {
