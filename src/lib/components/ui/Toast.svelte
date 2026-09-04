@@ -45,7 +45,7 @@
 		success: 'border-primary/25 bg-primary/10 text-foreground',
 		warning: 'border-accent/25 bg-accent/10 text-foreground',
 		error: 'border-destructive/25 bg-destructive/10 text-destructive',
-		update: 'border-primary/25 bg-primary/10 text-foreground'
+		update: 'border-primary/40 bg-background text-foreground shadow-soft'
 	};
 
 	const iconColors = {
