@@ -1,191 +1,259 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
-	import { getCurrentWindow } from '@tauri-apps/api/window';
-	import { Minimize2, Minus, Square, X } from 'lucide-svelte';
+	import { page } from '$app/state';
+	import { base } from '$app/paths';
+	import { convertFileSrc } from '@tauri-apps/api/core';
+	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { updateStore } from '$lib/stores/update.svelte';
+	import defaultLogo from '$lib/assets/logo-seal.png';
+	import { FileSpreadsheet, ScanLine, Search, Settings } from 'lucide-svelte';
+	import { commandPaletteStore } from '$lib/stores/command-palette.svelte';
 
-	let isMaximized = $state(false);
-	let appWindow: ReturnType<typeof getCurrentWindow> | null = null;
-	let unlistenResize: (() => void) | null = null;
-
-	function isTauriRuntime() {
-		return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-	}
-
-	onMount(() => {
-		if (!isTauriRuntime()) return;
-
-		try {
-			appWindow = getCurrentWindow();
-			void syncMaximizedState();
-			appWindow
-				.onResized(() => {
-					void syncMaximizedState();
-				})
-				.then((unlisten) => {
-					unlistenResize = unlisten;
-				})
-				.catch((error) => {
-					console.error('Failed to listen for window resize:', error);
-				});
-		} catch (error) {
-			appWindow = null;
-			console.error('Failed to initialize window:', error);
-		}
+	const activeLogo = $derived.by(() => {
+		const path = settingsStore.settings?.brandingLogoPath;
+		if (path) return convertFileSrc(path);
+		return defaultLogo;
 	});
 
-	onDestroy(() => {
-		unlistenResize?.();
-	});
+	const brandingTitle = $derived(settingsStore.settings?.brandingTitle || 'EES AMS');
 
-	async function syncMaximizedState() {
-		if (!appWindow) return;
-		try {
-			isMaximized = await appWindow.isMaximized();
-		} catch (error) {
-			console.error('Failed to read maximize state:', error);
-		}
-	}
+	const attendanceNavLabel = $derived(
+		settingsStore.settings?.attendanceMode === 'card_reader' ? 'Live Session' : 'Attendance'
+	);
 
-	async function minimize() {
-		if (!appWindow) {
-			console.error('Window not initialized');
-			return;
-		}
-		try {
-			await appWindow.minimize();
-		} catch (error) {
-			console.error('Failed to minimize window:', error);
-		}
-	}
+	const navItems = [
+		{ href: '/reports', label: 'SF2 Reports', icon: FileSpreadsheet },
+		{ href: '/attendance', label: 'Attendance', icon: ScanLine }
+	] as const;
 
-	async function maximize() {
-		if (!appWindow) {
-			console.error('Window not initialized');
-			return;
-		}
-		try {
-			const currentlyMaximized = await appWindow.isMaximized();
-
-			if (currentlyMaximized) {
-				await appWindow.unmaximize();
-			} else {
-				await appWindow.maximize();
-			}
-			await syncMaximizedState();
-		} catch (error) {
-			console.error('Failed to toggle maximize:', error);
-		}
-	}
-
-	async function close() {
-		if (!appWindow) {
-			console.error('Window not initialized');
-			return;
-		}
-		try {
-			await appWindow.close();
-		} catch (error) {
-			console.error('Failed to close window:', error);
-		}
+	function isActive(href: string, pathname: string) {
+		return href === '/' ? pathname === '/' : pathname.startsWith(href);
 	}
 </script>
 
 <div class="title-bar" data-tauri-drag-region>
-	<div class="title-bar-content" data-tauri-drag-region>
-		<!-- App title or logo can go here -->
-		<div class="app-title" data-tauri-drag-region>EES Attendance Management System</div>
-	</div>
+	<!-- Logo -->
+	<a
+		href={`${base}/reports`}
+		class="title-logo"
+		title={brandingTitle}
+		aria-label="Navigate to Reports"
+		data-tauri-drag-region
+	>
+		<img src={activeLogo} alt={brandingTitle} class="title-logo-img" />
+	</a>
 
-	<div class="window-controls" aria-label="Window controls">
-		<button
-			class="window-control minimize"
-			onclick={minimize}
-			title="Minimize"
-			aria-label="Minimize"
-		>
-			<Minus size={14} aria-hidden="true" />
-		</button>
-		<button
-			class="window-control maximize"
-			onclick={maximize}
-			title={isMaximized ? 'Restore' : 'Maximize'}
-			aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
-		>
-			{#if isMaximized}
-				<Minimize2 size={14} aria-hidden="true" />
-			{:else}
-				<Square size={14} aria-hidden="true" />
-			{/if}
-		</button>
-		<button class="window-control close" onclick={close} title="Close" aria-label="Close window">
-			<X size={14} aria-hidden="true" />
-		</button>
-	</div>
+	<!-- Nav tabs -->
+	<nav class="title-nav" aria-label="Primary navigation" data-tauri-drag-region>
+		{#each navItems as item (item.href)}
+			{@const active = isActive(item.href, page.url.pathname)}
+			{@const Icon = item.icon}
+			{@const label = item.href === '/attendance' ? attendanceNavLabel : item.label}
+			<a
+				href={`${base}${item.href}`}
+				aria-current={active ? 'page' : undefined}
+				class="title-nav-link"
+				class:active
+			>
+				<Icon class="size-[15px] shrink-0" aria-hidden="true" />
+				<span class="title-nav-label">{label}</span>
+				{#if active}
+					<span class="title-nav-indicator" aria-hidden="true"></span>
+				{/if}
+			</a>
+		{/each}
+	</nav>
+
+	<!-- Spacer -->
+	<div class="title-spacer" data-tauri-drag-region></div>
+
+	<!-- Command palette trigger -->
+	<button
+		type="button"
+		class="title-search"
+		title="Search commands (Ctrl+K)"
+		aria-label="Search commands (Ctrl+K)"
+		onclick={() => commandPaletteStore.openPalette()}
+	>
+		<Search class="size-3.5" aria-hidden="true" />
+		<kbd class="title-search-kbd">Ctrl K</kbd>
+	</button>
+
+	<!-- Settings gear -->
+	<a
+		href={`${base}/settings`}
+		aria-current={page.url.pathname.startsWith('/settings') ? 'page' : undefined}
+		class="title-settings"
+		title="Settings"
+	>
+		<Settings class="size-4" aria-hidden="true" />
+		{#if updateStore.badgeVisible}
+			<span class="title-badge" title="Update available" aria-hidden="true"></span>
+		{/if}
+	</a>
 </div>
 
 <style>
 	.title-bar {
 		display: flex;
-		justify-content: space-between;
 		align-items: center;
-		height: 32px;
-		background: var(--color-background);
-		border-bottom: 1px solid var(--color-border);
+		height: 48px;
+		padding: 0 8px 0 12px;
+		background: rgba(253, 251, 249, 0.72);
+		backdrop-filter: blur(20px) saturate(180%);
+		-webkit-backdrop-filter: blur(20px) saturate(180%);
+		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 		user-select: none;
 		-webkit-app-region: drag;
+		position: relative;
+		z-index: 50;
 	}
 
-	.title-bar-content {
-		flex: 1;
+	:global(.dark) .title-bar {
+		background: rgba(18, 18, 20, 0.72);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	}
+
+	@media (prefers-reduced-transparency: reduce) {
+		.title-bar {
+			background: var(--color-background);
+			backdrop-filter: none;
+			-webkit-backdrop-filter: none;
+		}
+	}
+
+	/* ── Logo ─────────────────────────────────────── */
+	.title-logo {
 		display: flex;
 		align-items: center;
-		padding-left: 12px;
-		-webkit-app-region: drag;
+		flex-shrink: 0;
+		-webkit-app-region: no-drag;
+		border-radius: 8px;
+		padding: 4px;
+		transition: background-color 150ms ease;
+	}
+	.title-logo:hover {
+		background: color-mix(in oklab, var(--color-surface) 70%, transparent);
+	}
+	.title-logo-img {
+		width: 24px;
+		height: 24px;
+		border-radius: 6px;
+		object-fit: contain;
+		outline: 1px solid var(--color-border);
+		outline-offset: 0px;
 	}
 
-	.app-title {
-		font-size: 12px;
-		font-weight: 700;
-		color: var(--color-muted-foreground);
-		-webkit-app-region: drag;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		letter-spacing: 0;
-	}
-
-	.window-controls {
+	/* ── Nav ──────────────────────────────────────── */
+	.title-nav {
 		display: flex;
+		align-items: center;
+		gap: 2px;
+		margin-left: 16px;
 		-webkit-app-region: no-drag;
 	}
+	.title-nav-link {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 32px;
+		padding: 0 12px;
+		border-radius: 8px;
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--color-muted-foreground);
+		text-decoration: none;
+		transition:
+			background-color 150ms ease,
+			color 150ms ease;
+		white-space: nowrap;
+	}
+	.title-nav-link:hover {
+		background: color-mix(in oklab, var(--color-surface) 70%, transparent);
+		color: var(--color-foreground);
+	}
+	.title-nav-link.active {
+		color: var(--color-foreground);
+		font-weight: 600;
+	}
+	.title-nav-indicator {
+		position: absolute;
+		bottom: -1px;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 16px;
+		height: 2px;
+		border-radius: 1px;
+		background: var(--color-primary);
+	}
 
-	.window-control {
+	/* ── Spacer ───────────────────────────────────── */
+	.title-spacer {
+		flex: 1;
+		-webkit-app-region: drag;
+	}
+
+	/* ── Search ───────────────────────────────────── */
+	.title-search {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		height: 32px;
+		margin-right: 4px;
+		border: 1px solid var(--color-border);
+		border-radius: 8px;
+		background: transparent;
+		padding: 0 10px;
+		color: var(--color-muted-foreground);
+		-webkit-app-region: no-drag;
+		transition:
+			background-color 150ms ease,
+			border-color 150ms ease,
+			color 150ms ease;
+	}
+	.title-search:hover {
+		background: color-mix(in oklab, var(--color-surface) 70%, transparent);
+		border-color: color-mix(in oklab, var(--color-primary) 38%, var(--color-border));
+		color: var(--color-foreground);
+	}
+	.title-search-kbd {
+		border: 1px solid var(--color-border);
+		border-radius: 5px;
+		background: var(--surface-soft);
+		padding: 1px 5px;
+		font-family: var(--font-mono);
+		font-size: 10px;
+		font-weight: 600;
+		color: var(--color-muted-foreground);
+	}
+
+	/* ── Settings ─────────────────────────────────── */
+	.title-settings {
+		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 46px;
+		width: 32px;
 		height: 32px;
-		border: none;
-		background: transparent;
-		cursor: pointer;
+		border-radius: 8px;
 		color: var(--color-muted-foreground);
+		text-decoration: none;
+		-webkit-app-region: no-drag;
 		transition:
-			background-color 0.15s ease,
-			color 0.15s ease;
+			background-color 150ms ease,
+			color 150ms ease;
 	}
-
-	.window-control:hover {
-		background: var(--color-surface);
+	.title-settings:hover {
+		background: color-mix(in oklab, var(--color-surface) 70%, transparent);
 		color: var(--color-foreground);
 	}
-
-	.window-control:focus-visible {
-		outline: 2px solid color-mix(in oklab, var(--color-ring) 72%, white);
-		outline-offset: -2px;
-	}
-
-	.window-control.close:hover {
-		background: var(--color-destructive);
-		color: var(--color-destructive-foreground);
+	.title-badge {
+		position: absolute;
+		top: 5px;
+		right: 5px;
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: oklch(0.6 0.22 27);
 	}
 </style>

@@ -4,13 +4,11 @@
 	import UpdateNotification from '$lib/components/ui/UpdateNotification.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import ClickSpark from '$lib/components/ui/ClickSpark.svelte';
-	import TitleBar from '$lib/components/ui/TitleBar.svelte';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
 
 	onMount(() => {
-		// Hide the initial loading screen once SvelteKit is ready
 		const initialLoading = document.getElementById('initial-loading');
 		if (initialLoading) {
 			initialLoading.style.display = 'none';
@@ -21,8 +19,6 @@
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
 <div class="app-container">
-	<TitleBar />
-
 	<div class="content-container">
 		<UpdateNotification />
 
