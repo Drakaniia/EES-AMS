@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { fullPreviewStore } from '$lib/stores/full-preview.svelte';
+	import { commandPaletteStore } from '$lib/stores/command-palette.svelte';
 	import ReportTable from './report-table.svelte';
 	import ReportExportDialogs from './report-export-dialogs.svelte';
 	import ReportMonthPicker from './report-month-picker.svelte';
@@ -15,6 +16,23 @@
 
 	$effect(() => {
 		fullPreviewStore.isActive = page.fullReviewOpen;
+	});
+
+	// Contextual palette action: switch the report month. Registered only while
+	// an SF2 workbook is actually loaded.
+	$effect(() => {
+		if (!page.preview?.template) return;
+		commandPaletteStore.register({
+			id: 'reports-switch-month',
+			label: 'Reports · Switch Month',
+			keywords: 'change report month sf2 period',
+			hint: 'Reports',
+			group: 'Actions',
+			run: () => {
+				page.monthPickerOpen = true;
+			}
+		});
+		return () => commandPaletteStore.unregister('reports-switch-month');
 	});
 
 	onDestroy(() => {

@@ -13,6 +13,7 @@ import {
 } from '$lib/db-rust';
 import { fmtDate } from '$lib/csv';
 import { settingsStore } from '$lib/stores/settings.svelte';
+import { commandPaletteStore } from '$lib/stores/command-palette.svelte';
 import {
 	getActiveClass,
 	eventTime,
@@ -205,16 +206,65 @@ class AttendancePageState {
 					this.cardInputElement.focus();
 				}
 			});
+
+			// Card-reader wedge safety: while the card input is armed on this page,
+			// the command palette must refuse to open so raw scans never leak into
+			// its query box.
+			$effect(() => {
+				commandPaletteStore.setCardReaderArmed(
+					this.isCardReaderMode && !!this.cardInputElement && !this.loading
+				);
+			});
 		});
 	}
 
 	async init() {
+		this.registerPaletteActions();
 		await this.loadInitial();
 		this.scheduleMidnightRefresh();
 	}
 
 	destroy() {
 		if (this.midnightTimer) clearTimeout(this.midnightTimer);
+		commandPaletteStore.setCardReaderArmed(false);
+		this.unregisterPaletteActions();
+	}
+
+	// ── Command palette actions ───────────────────────────────────────────────
+	private paletteRegistered = false;
+
+	private registerPaletteActions() {
+		if (this.paletteRegistered) return;
+		this.paletteRegistered = true;
+		commandPaletteStore.register({
+			id: 'attendance-manual-log',
+			label: 'Attendance · Open Manual Log',
+			keywords: 'manual log picker mark individual student',
+			hint: 'Attendance',
+			group: 'Actions',
+			run: () => {
+				this.pickerQuery = '';
+				this.pickerOpen = true;
+			}
+		});
+		commandPaletteStore.register({
+			id: 'attendance-mark-all-present',
+			label: 'Attendance · Mark All Present',
+			keywords: 'present all whole class roster bulk',
+			hint: 'Attendance',
+			group: 'Actions',
+			run: () => {
+				if (this.loading || this.classes.length === 0) return;
+				void this.presentAllStudents();
+			}
+		});
+	}
+
+	private unregisterPaletteActions() {
+		if (!this.paletteRegistered) return;
+		this.paletteRegistered = false;
+		commandPaletteStore.unregister('attendance-manual-log');
+		commandPaletteStore.unregister('attendance-mark-all-present');
 	}
 
 	async loadInitial() {

@@ -1,3 +1,4 @@
+import { page } from '$app/state';
 import {
 	listStudents,
 	saveStudent,
@@ -153,6 +154,14 @@ class StudentPageState {
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	async init() {
 		await this.reload();
+
+		// Command palette jumps here with ?student=<id>; open that student's
+		// attendance log once the roster has loaded.
+		const studentId = page.url.searchParams.get('student');
+		if (studentId) {
+			const target = this.students.find((student) => student.id === studentId);
+			if (target) this.openAttendance(target);
+		}
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
