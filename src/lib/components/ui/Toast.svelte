@@ -41,11 +41,11 @@
 	};
 
 	const colors = {
-		info: 'border-border bg-background text-foreground',
-		success: 'border-primary/25 bg-primary/10 text-foreground',
-		warning: 'border-accent/25 bg-accent/10 text-foreground',
-		error: 'border-destructive/25 bg-destructive/10 text-destructive',
-		update: 'border-primary/40 bg-background text-foreground shadow-soft'
+		info: 'border-border bg-card text-foreground shadow-xl',
+		success: 'border-primary/25 bg-card text-foreground shadow-xl',
+		warning: 'border-accent/25 bg-card text-foreground shadow-xl',
+		error: 'border-destructive/25 bg-card text-destructive shadow-xl',
+		update: 'border-primary/40 bg-card text-foreground shadow-xl'
 	};
 
 	const iconColors = {
@@ -90,11 +90,11 @@
 
 {#if show}
 	<div
-		class="fixed top-4 right-4 z-50 w-full max-w-sm"
+		class="fixed top-4 right-4 z-[70] w-full max-w-sm"
 		role={type === 'error' ? 'alert' : 'status'}
 		aria-live={type === 'error' ? 'assertive' : 'polite'}
 	>
-		<div class="flex items-start rounded-lg border p-4 {colorClass}">
+		<div class="toast-panel flex items-start rounded-lg border p-4 {colorClass}">
 			<div class="shrink-0">
 				{#if actionDisabled && type === 'update'}
 					<span class="mt-2 block size-2 rounded-full bg-orange-600" aria-hidden="true"></span>
@@ -136,3 +136,14 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	/* Opaque panel: Tailwind `bg-card` resolves via CSS vars, but pin a solid
+	   background + real shadow here so the toast never blends with page content. */
+	.toast-panel {
+		background-color: var(--color-card);
+		box-shadow:
+			var(--shadow-soft),
+			0 1px 2px color-mix(in oklab, var(--color-foreground) 9%, transparent);
+	}
+</style>

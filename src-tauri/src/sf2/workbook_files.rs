@@ -6,7 +6,6 @@ use chrono::{Datelike, Local};
 use std::hash::Hasher;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
@@ -124,39 +123,11 @@ fn dialog_path(path: Option<tauri_plugin_dialog::FilePath>) -> Result<Option<Pat
     }
 }
 
-#[cfg(target_os = "windows")]
+/// Open a workbook path in the OS default app (Excel for .xls).
+/// Uses the `open` crate (ShellExecuteW on Windows, `open`/`xdg-open`
+/// elsewhere) so no console window flashes on Windows.
 pub(super) fn open_path_in_default_app(path: &Path) -> Result<()> {
-    let status = Command::new("cmd")
-        .arg("/C")
-        .arg("start")
-        .arg("")
-        .arg(path)
-        .status()
-        .map_err(|error| AppError::Internal(format!("failed to open SF2 workbook: {error}")))?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(AppError::Internal(format!(
-            "failed to open SF2 workbook: default app returned {status}"
-        )))
-    }
-}
-
-#[cfg(target_os = "macos")]
-pub(super) fn open_path_in_default_app(path: &Path) -> Result<()> {
-    Command::new("open")
-        .arg(path)
-        .spawn()
-        .map_err(|error| AppError::Internal(format!("failed to open SF2 workbook: {error}")))?;
-    Ok(())
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-pub(super) fn open_path_in_default_app(path: &Path) -> Result<()> {
-    Command::new("xdg-open")
-        .arg(path)
-        .spawn()
+    open::that(path)
         .map_err(|error| AppError::Internal(format!("failed to open SF2 workbook: {error}")))?;
     Ok(())
 }

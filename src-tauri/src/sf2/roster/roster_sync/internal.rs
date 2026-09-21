@@ -1,7 +1,6 @@
 use crate::domain::error::{AppError, Result};
 use crate::domain::models::{Student, StudentGender};
 use crate::infrastructure::database::DbPool;
-use crate::sf2::attendance_marks::clear_total_cell_marks;
 use crate::sf2::excel;
 use crate::sf2::excel::excel_com::workbook_utils::month_number;
 use crate::sf2::logic::{normalize_learner_name, Sf2CellMark};
@@ -62,99 +61,120 @@ pub(super) fn sync_bundled_template_roster(
     let current_male_total = 8u32 + current_male_capacity;
     let current_female_total = 30u32 + current_extra_male + current_female_capacity;
 
-    if extra_male > 0 || extra_female > 0 {
-        excel::expand_roster_rows(
-            &workbook_path,
-            extra_male,
-            extra_female,
-            existing_mappings
-                .is_empty()
-                .then_some(29)
-                .or(Some(current_male_total)),
-            existing_mappings
-                .is_empty()
-                .then_some(49)
-                .or(Some(current_female_total)),
-        )?;
-    }
-
-    let analysis = excel::analyze_workbook(&workbook_path)?;
-    let roster_marks = roster_name_marks(&analysis, &roster_assignments);
-    excel::write_marks(&workbook_path, &roster_marks)?;
-
-    let mapped_rows: Vec<u32> = roster_assignments
-        .iter()
-        .map(|a| a.slot.row_index)
-        .collect();
-    let expanded_counts = if extra_male > 0 || extra_female > 0 {
-        (Some(male_count), Some(female_count))
+    let expand_male_total = if existing_mappings.is_empty() {
+        Some(29)
     } else {
-        (None, None)
+        Some(current_male_total)
     };
-    let clear_marks = clear_unused_learner_marks(
-        &analysis,
-        &mapped_rows,
-        expanded_counts.0,
-        expanded_counts.1,
-    );
-    if !clear_marks.is_empty() {
-        excel::write_marks(&workbook_path, &clear_marks)?;
-    }
+    let expand_female_total = if existing_mappings.is_empty() {
+        Some(49)
+    } else {
+        Some(current_female_total)
+    };
 
-    let occupied_rows: HashSet<u32> = roster_assignments
-        .iter()
-        .map(|a| a.slot.row_index)
-        .collect();
-    excel::hide_empty_learner_rows(
-        &workbook_path,
-        male_total_row,
-        female_total_row,
-        &occupied_rows,
-    )?;
-
-    let refreshed_analysis = excel::analyze_workbook(&workbook_path)?;
+    // Student mappings are pure Rust (no Excel needed) — compute before
+    // the batch so `roster_assignments` can move into the closure.
     let student_mappings =
         student_mappings_from_roster_assignments(&template.id, &roster_assignments);
-    let date_mappings = date_mappings_from_analysis(&template.id, &refreshed_analysis);
 
-    let clear_marks = clear_total_cell_marks(
-        male_total_row,
-        female_total_row,
-        combined_total_row,
-        &date_mappings,
-    );
-    if !clear_marks.is_empty() {
-        if let Err(error) = excel::write_marks_force(&workbook_path, &clear_marks) {
-            log::warn!("failed to clear stale TOTAL formula cells during roster sync: {error}");
-        }
-    }
+    // ── Single Excel session for all roster writes ──────────────────────
+    // Previously this function opened Excel ~8 separate times (expand,
+    // analyze, write names, clear unused, hide rows, re-analyze, clear
+    // totals, write formulas ×3), each with its own Excel startup plus a
+    // full CalculateFullRebuild + Save. Every add/update/delete-student
+    // command runs this sync, so the UI froze until the command timed out.
+    // This mirrors the batching already used by template_create/update.
+    let template_id_for_excel = template.id.clone();
+    let (analysis, date_mappings) = excel::batch_operations(
+        &workbook_path,
+        true,
+        move |session| {
+            if extra_male > 0 || extra_female > 0 {
+                session.expand_roster_rows(
+                    extra_male,
+                    extra_female,
+                    expand_male_total,
+                    expand_female_total,
+                )?;
+            }
 
-    let (total_formulas, summary_formulas, summary_static) = roster_sync_formula_marks(
-        male_count,
-        female_count,
-        male_total_row,
-        female_total_row,
-        combined_total_row,
-        &date_mappings,
-    );
-    if !total_formulas.is_empty() {
-        if let Err(error) = excel::write_formulas(&workbook_path, &total_formulas) {
-            log::warn!("failed to write TOTAL formula marks during roster sync: {error}");
-        }
-    }
-    if !summary_formulas.is_empty() {
-        if let Err(error) = excel::write_formulas(&workbook_path, &summary_formulas) {
-            log::warn!("failed to write summary formula marks during roster sync: {error}");
-        }
-    }
-    if !summary_static.is_empty() {
-        if let Err(error) = excel::write_marks_force(&workbook_path, &summary_static) {
-            log::warn!("failed to write summary static marks during roster sync: {error}");
-        }
-    }
+            let analysis = session.analyze()?;
+
+            // Names (col C) + sequence numbers (col A) for every assignment.
+            let roster_marks = roster_name_marks(&analysis, &roster_assignments);
+            session.write_marks(&roster_marks)?;
+
+            let mapped_rows: Vec<u32> = roster_assignments
+                .iter()
+                .map(|a| a.slot.row_index)
+                .collect();
+            let expanded_counts = if extra_male > 0 || extra_female > 0 {
+                (Some(male_count), Some(female_count))
+            } else {
+                (None, None)
+            };
+            let clear_marks = clear_unused_learner_marks(
+                &analysis,
+                &mapped_rows,
+                expanded_counts.0,
+                expanded_counts.1,
+            );
+            if !clear_marks.is_empty() {
+                session.write_marks(&clear_marks)?;
+            }
+
+            let occupied_rows: HashSet<u32> = roster_assignments
+                .iter()
+                .map(|a| a.slot.row_index)
+                .collect();
+            session.hide_empty_learner_rows(male_total_row, female_total_row, &occupied_rows)?;
+
+            let date_mappings =
+                date_mappings_from_analysis(&template_id_for_excel, &analysis);
+
+            // Bulk-clear TOTAL rows (3 COM calls per sheet) instead of the
+            // previous per-cell clear marks.
+            let total_sheet_names: Vec<&str> = date_mappings
+                .iter()
+                .map(|m| m.sheet_name.as_str())
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            for sheet_name in &total_sheet_names {
+                session.clear_total_rows(
+                    sheet_name,
+                    male_total_row,
+                    female_total_row,
+                    combined_total_row,
+                )?;
+            }
+
+            let (total_formulas, summary_formulas, summary_static) = roster_sync_formula_marks(
+                male_count,
+                female_count,
+                male_total_row,
+                female_total_row,
+                combined_total_row,
+                &date_mappings,
+            );
+            // Preserve best-effort semantics: formula write failures warn
+            // instead of aborting the whole sync.
+            if let Err(error) = session.write_formulas(&total_formulas) {
+                log::warn!("failed to write TOTAL formula marks during roster sync: {error}");
+            }
+            if let Err(error) = session.write_formulas(&summary_formulas) {
+                log::warn!("failed to write summary formula marks during roster sync: {error}");
+            }
+            if let Err(error) = session.write_marks_force(&summary_static) {
+                log::warn!("failed to write summary static marks during roster sync: {error}");
+            }
+
+            Ok((analysis, date_mappings))
+        },
+    )?;
 
     let synced_template = Sf2TemplateRecord {
-        layout_fingerprint: layout_fingerprint(&refreshed_analysis),
+        layout_fingerprint: layout_fingerprint(&analysis),
         ..template.clone()
     };
 

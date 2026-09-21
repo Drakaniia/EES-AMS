@@ -20,7 +20,9 @@
 
 	<main
 		id="main-content"
-		class="min-h-0 min-w-0 flex-1 overflow-auto focus:outline-none"
+		class="min-h-0 min-w-0 flex-1 focus:outline-none {fullPreviewStore.isTitleBarHidden
+			? 'overflow-hidden'
+			: 'overflow-auto'}"
 		tabindex="-1"
 	>
 		{@render children()}

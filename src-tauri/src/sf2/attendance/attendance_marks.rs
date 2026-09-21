@@ -410,56 +410,6 @@ pub(crate) fn learner_absent_present_formula_marks(
     (formula_marks, static_marks)
 }
 
-/// Generate empty cell marks for all TOTAL PER DAY formula cells across ALL
-/// weekday columns (6–38). This clears stale template values (default `0` or
-/// leftover formulas) from columns that have no corresponding date in the
-/// report month — e.g. columns for Monday/Tuesday in the first week when
-/// the month starts mid-week.
-///
-/// Must be called with `write_marks_force` *before* `write_formulas` so that
-/// columns WITHOUT a valid date end up clean/empty rather than showing a
-/// stale value inherited from the bundled template.
-pub(crate) fn clear_total_cell_marks(
-    male_total_row: u32,
-    female_total_row: u32,
-    combined_total_row: u32,
-    date_mappings: &[Sf2DateMappingRecord],
-) -> Vec<Sf2CellMark> {
-    let sheet_names: Vec<&str> = date_mappings
-        .iter()
-        .map(|m| m.sheet_name.as_str())
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect();
-
-    if sheet_names.is_empty() {
-        return Vec::new();
-    }
-
-    let mut marks = Vec::with_capacity(sheet_names.len() * 33 * 3);
-    for sheet_name in sheet_names {
-        for col in 6..=38 {
-            let col_letter = column_number_to_letter(col);
-            marks.push(Sf2CellMark {
-                sheet_name: sheet_name.to_string(),
-                cell_address: format!("{col_letter}{male_total_row}"),
-                value: String::new(),
-            });
-            marks.push(Sf2CellMark {
-                sheet_name: sheet_name.to_string(),
-                cell_address: format!("{col_letter}{female_total_row}"),
-                value: String::new(),
-            });
-            marks.push(Sf2CellMark {
-                sheet_name: sheet_name.to_string(),
-                cell_address: format!("{col_letter}{combined_total_row}"),
-                value: String::new(),
-            });
-        }
-    }
-    marks
-}
-
 pub(crate) fn attendance_grid_rows<I>(
     row_slots: &[crate::sf2::calendar_service::TemplateRosterSlot],
     extra_rows: I,

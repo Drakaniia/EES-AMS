@@ -57,8 +57,8 @@
 
 	{#if !page.loading && !page.loadError && page.preview?.template}
 		{#if page.fullReviewOpen}
-			<section class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 md:px-8 lg:px-10">
-				<div class="flex min-h-0 flex-1 flex-col">
+			<section class="flex min-h-0 flex-1 flex-col overflow-hidden">
+				<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
 					<ReportTable
 						previewTemplateGradeLevel={page.preview.template.gradeLevel}
 						previewTemplateSection={page.preview.template.section}

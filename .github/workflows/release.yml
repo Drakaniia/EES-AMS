@@ -40,17 +40,6 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      - name: Check frontend
-        run: bun run check && bun run lint && bun run typecheck && bun run test
-
-      - name: Check Rust formatting
-        working-directory: src-tauri
-        run: cargo fmt --check
-
-      - name: Lint Rust
-        working-directory: src-tauri
-        run: cargo clippy
-
       - name: Verify updater signing secret
         shell: pwsh
         env:

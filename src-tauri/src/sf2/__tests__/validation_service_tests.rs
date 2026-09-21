@@ -128,10 +128,13 @@ fn import_computes_roster_name_marks_from_analysis() {
     let assignments = template_roster_assignments(&students).unwrap();
     let marks = roster_name_marks(&analysis, &assignments);
 
-    assert_eq!(marks.len(), 1);
+    assert_eq!(marks.len(), 2);
     assert_eq!(marks[0].sheet_name, "JULY 2026");
-    assert_eq!(marks[0].cell_address, "C8");
-    assert_eq!(marks[0].value, "Juan");
+    assert_eq!(marks[0].cell_address, "A8");
+    assert_eq!(marks[0].value, "1");
+    assert_eq!(marks[1].sheet_name, "JULY 2026");
+    assert_eq!(marks[1].cell_address, "C8");
+    assert_eq!(marks[1].value, "Juan");
 }
 
 #[test]

@@ -35,6 +35,8 @@
 	let lastScrollLeft = -1;
 	let measureFrame = 0;
 	let affordanceFrame = 0;
+	// Guard against feedback loops between the two horizontal scrollers.
+	let isSyncingScroll = false;
 
 	function updateAffordances(scrollLeft: number) {
 		const maxScroll = contentWidth - viewportWidth;
@@ -70,15 +72,31 @@
 	}
 
 	/**
-	 * The top strip is a passive indicator, not a second scroller: it is driven
-	 * one-way from the grid. Mirroring it used to need a scroll listener, an
-	 * `isSyncing` flag and a rAF to break the feedback loop, because the write
-	 * fired a scroll event straight back at the grid.
+	 * The top strip is a live horizontal scroller that mirrors the grid
+	 * two-way. Writes are guarded by `isSyncingScroll` to break the
+	 * feedback loop where each scroller's scroll event fires the other.
 	 */
 	function syncTopBar(scrollLeft: number) {
 		const target = topScrollEl;
 		if (!target || Math.abs(target.scrollLeft - scrollLeft) < 0.5) return;
+		isSyncingScroll = true;
 		target.scrollLeft = scrollLeft;
+		requestAnimationFrame(() => {
+			isSyncingScroll = false;
+		});
+	}
+
+	function onTopScroll() {
+		if (isSyncingScroll || !topScrollEl || !scrollEl) return;
+		const scrollLeft = topScrollEl.scrollLeft;
+		if (Math.abs(scrollEl.scrollLeft - scrollLeft) < 0.5) return;
+		isSyncingScroll = true;
+		scrollEl.scrollLeft = scrollLeft;
+		lastScrollLeft = scrollLeft;
+		scheduleAffordance(scrollLeft);
+		requestAnimationFrame(() => {
+			isSyncingScroll = false;
+		});
 	}
 
 	function onMainScroll() {
@@ -156,19 +174,15 @@
 </script>
 
 <div
-	class="flex min-h-0 flex-1 flex-col border border-border bg-card shadow-sm {fullReview
-		? 'rounded-xl'
-		: 'rounded-2xl'}"
+	class="flex min-h-0 flex-1 flex-col overflow-hidden {fullReview
+		? 'rounded-none border-0 bg-background shadow-none'
+		: 'rounded-2xl border border-border bg-card shadow-sm'}"
 >
-	<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
+	<div class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
 		<div>
-			<div class="label-mono text-primary">SF2 attendance grid</div>
-			<h2 class="mt-1 text-xl font-semibold">
+			<h2 class="text-xl font-semibold">
 				{previewTemplateGradeLevel} - {previewTemplateSection}
 			</h2>
-			<p class="mt-1 text-sm text-muted-foreground">
-				Click a cell to toggle the learner between present and absent.
-			</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2 text-xs">
 			{#if onGenderFilterChange}
@@ -245,14 +259,15 @@
 	</div>
 
 	{#if showTopBar}
-		<!-- Passive indicator: reflects the grid's horizontal offset only. It takes
-		     no pointer input, so there is no second live scroller on the scroll path.
-		     Opaque background: a translucent strip would force the compositor to
-		     blend it against the page on every scroll frame. -->
+		<!-- Interactive horizontal scroller: drag the thumb (or Shift+wheel over
+		     the grid) to pan. Mirrored two-way with the grid via onTopScroll /
+		     syncTopBar. Opaque background: a translucent strip would force the
+		     compositor to blend it against the page on every scroll frame. -->
 		<div
 			bind:this={topScrollEl}
-			class="report-top-scroll pointer-events-none shrink-0 overflow-x-auto overflow-y-hidden border-b border-border bg-surface"
-			aria-hidden="true"
+			onscroll={onTopScroll}
+			class="report-top-scroll shrink-0 cursor-grab overflow-x-auto overflow-y-hidden border-b border-border bg-surface active:cursor-grabbing"
+			aria-label="Scroll attendance grid horizontally"
 		>
 			<div style:width="{contentWidth}px" class="h-3.5"></div>
 		</div>
@@ -382,7 +397,7 @@
 				type="button"
 				onclick={() => nudge(-1)}
 				disabled={!canScrollLeft}
-				class="absolute top-3 left-2 z-[14] hidden h-7 w-7 place-items-center rounded-full border border-border bg-card disabled:opacity-30 md:grid"
+				class="absolute top-3 left-2 z-[40] hidden h-7 w-7 place-items-center rounded-full border border-border bg-card shadow-lg disabled:opacity-30 md:grid"
 				aria-label="Scroll table left"
 				title="Scroll left (also Shift+wheel)"
 			>
@@ -392,7 +407,7 @@
 				type="button"
 				onclick={() => nudge(1)}
 				disabled={!canScrollRight}
-				class="absolute top-3 right-2 z-[14] hidden h-7 w-7 place-items-center rounded-full border border-border bg-card disabled:opacity-30 md:grid"
+				class="absolute top-3 right-2 z-[40] hidden h-7 w-7 place-items-center rounded-full border border-border bg-card shadow-lg disabled:opacity-30 md:grid"
 				aria-label="Scroll table right"
 				title="Scroll right (also Shift+wheel)"
 			>

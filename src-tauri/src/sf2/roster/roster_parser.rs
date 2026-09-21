@@ -6,6 +6,7 @@ use crate::sf2::models::{Sf2StudentMappingRecord, Sf2WorkbookAnalysis};
 use std::collections::{HashMap, HashSet};
 
 pub(crate) const SF2_NAME_COLUMN: &str = "C";
+pub(crate) const SF2_NUMBER_COLUMN: &str = "A";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -288,9 +289,25 @@ pub(crate) fn roster_name_marks(
         .map(|sheet| sheet.name.clone())
         .collect::<Vec<_>>();
 
-    let mut marks = Vec::with_capacity(sheet_names.len() * assignments.len());
+    // Two marks per assignment per sheet: column C (learner name) and
+    // column A (sequence number, restarting at 1 per gender block).
+    let mut marks = Vec::with_capacity(sheet_names.len() * assignments.len() * 2);
     for sheet_name in sheet_names {
+        let mut male_number = 0u32;
+        let mut female_number = 0u32;
         for assignment in assignments {
+            let sequence = if assignment.slot.gender_block == "MALE" {
+                male_number += 1;
+                male_number
+            } else {
+                female_number += 1;
+                female_number
+            };
+            marks.push(Sf2CellMark {
+                sheet_name: sheet_name.clone(),
+                cell_address: format!("{SF2_NUMBER_COLUMN}{}", assignment.slot.row_index),
+                value: sequence.to_string(),
+            });
             marks.push(Sf2CellMark {
                 sheet_name: sheet_name.clone(),
                 cell_address: format!("{SF2_NAME_COLUMN}{}", assignment.slot.row_index),
