@@ -85,10 +85,8 @@ pub(super) fn sync_bundled_template_roster(
     // command runs this sync, so the UI froze until the command timed out.
     // This mirrors the batching already used by template_create/update.
     let template_id_for_excel = template.id.clone();
-    let (analysis, date_mappings) = excel::batch_operations(
-        &workbook_path,
-        true,
-        move |session| {
+    let (analysis, date_mappings) =
+        excel::batch_operations(&workbook_path, true, move |session| {
             if extra_male > 0 || extra_female > 0 {
                 session.expand_roster_rows(
                     extra_male,
@@ -129,8 +127,7 @@ pub(super) fn sync_bundled_template_roster(
                 .collect();
             session.hide_empty_learner_rows(male_total_row, female_total_row, &occupied_rows)?;
 
-            let date_mappings =
-                date_mappings_from_analysis(&template_id_for_excel, &analysis);
+            let date_mappings = date_mappings_from_analysis(&template_id_for_excel, &analysis);
 
             // Bulk-clear TOTAL rows (3 COM calls per sheet) instead of the
             // previous per-cell clear marks.
@@ -170,8 +167,7 @@ pub(super) fn sync_bundled_template_roster(
             }
 
             Ok((analysis, date_mappings))
-        },
-    )?;
+        })?;
 
     let synced_template = Sf2TemplateRecord {
         layout_fingerprint: layout_fingerprint(&analysis),
