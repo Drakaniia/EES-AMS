@@ -64,6 +64,7 @@
 						previewTemplateSection={page.preview.template.section}
 						genderFilter={page.genderFilter}
 						matrixWeekGroups={page.matrixWeekGroups}
+						matrixDates={page.matrixDates}
 						matrixStudents={page.matrixStudents}
 						correctingCellKey={page.correctingCellKey}
 						fullReview={true}
@@ -86,6 +87,7 @@
 						previewTemplateSection={page.preview.template.section}
 						genderFilter={page.genderFilter}
 						matrixWeekGroups={page.matrixWeekGroups}
+						matrixDates={page.matrixDates}
 						matrixStudents={page.matrixStudents}
 						correctingCellKey={page.correctingCellKey}
 						fullReview={false}

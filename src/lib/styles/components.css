@@ -289,6 +289,28 @@
 	background: color-mix(in oklab, var(--color-surface) 82%, var(--color-background));
 }
 
+/* ── SF2 attendance grid ──────────────────────────────────────────────────────
+   Sticky grid chrome must be OPAQUE. A translucent background forces the
+   compositor to blend every sticky cell against the rows scrolling underneath
+   it on each frame, which is the dominant paint cost of this table. These are
+   the same tints the grid previously produced with Tailwind opacity
+   utilities, premixed against the surface they actually sit on. */
+.sf2-row-mapped {
+	background: var(--color-background);
+}
+
+.sf2-row-unmapped {
+	background: color-mix(in oklab, var(--color-accent) 10%, var(--color-background));
+}
+
+.sf2-tint-week {
+	background: color-mix(in oklab, var(--color-primary) 5%, var(--color-card));
+}
+
+.sf2-tint-day {
+	background: color-mix(in oklab, var(--color-primary) 5%, var(--color-background));
+}
+
 .text-balance-safe {
 	overflow-wrap: anywhere;
 	word-break: normal;

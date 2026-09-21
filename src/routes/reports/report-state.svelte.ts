@@ -1,4 +1,4 @@
-import { SvelteDate, SvelteMap } from 'svelte/reactivity';
+import { SvelteDate } from 'svelte/reactivity';
 import type { Sf2PreviewDate } from '$lib/types';
 import { sf2MonthByValue, sf2ReportMonthLabel } from '$lib/features/settings/sf2-workbook';
 import type { Sf2PreviewCell, Sf2PreviewStudentRow } from '$lib/db-rust';
@@ -14,6 +14,12 @@ export type MatrixDateSlot = {
 	weekday: MatrixWeekday;
 	date: Sf2PreviewDate | null;
 	dateKey: string | null;
+	/** True for the Monday slot that opens a week group. */
+	weekStart: boolean;
+	/** Precomputed for header render — avoids new SvelteDate() per cell per frame. */
+	dayNumber: string;
+	dateLabel: string;
+	title: string;
 };
 
 export type MatrixWeekGroup = {
@@ -22,8 +28,31 @@ export type MatrixWeekGroup = {
 	slots: MatrixDateSlot[];
 };
 
-export type MatrixStudentRow = Sf2PreviewStudentRow & {
-	cellsByDate: Map<string, Sf2PreviewCell>;
+export type MatrixCell = Sf2PreviewCell & {
+	/** `${studentId}:${date}` — precomputed so template never calls cellKey(). */
+	key: string;
+	label: string;
+	cls: string;
+};
+
+export type MatrixWeekGroupHeader = {
+	key: string;
+	label: string;
+	slots: MatrixDateSlot[];
+	rangeLabel: string;
+};
+
+/**
+ * A student row flattened for rendering. `cellColumns` is aligned 1:1 with the
+ * flat `MatrixDateSlot[]` returned by {@link flattenMatrixSlots}, so the table
+ * template resolves a cell with a plain array read instead of hashing a date on
+ * every render (`null` = blank slot with no class day). Each cell is enriched
+ * with precomputed `key`/`label`/`cls` so the grid hot path does no function
+ * calls or SvelteDate allocs.
+ */
+export type MatrixStudentRow = Omit<Sf2PreviewStudentRow, 'cells'> & {
+	cells: Sf2PreviewCell[];
+	cellColumns: (MatrixCell | null)[];
 };
 
 // ── Pure utility functions ──────────────────────────────────────────────────────
@@ -71,14 +100,64 @@ export function cellLabel(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
 	return `${row.studentName}, ${matrixDateLabel(cell.date)}: ${state}`;
 }
 
+function cellLabelFor(studentName: string, date: string, status: Sf2PreviewCell['status']) {
+	const state = status === 'absent' ? 'absent' : 'present';
+	return `${studentName}, ${matrixDateLabel(date)}: ${state}`;
+}
+
+function cellClassFor(mapped: boolean, status: Sf2PreviewCell['status']) {
+	if (!mapped) return 'border-border bg-surface text-muted-foreground';
+	if (status === 'absent') return 'border-red-500/35 bg-red-50 text-red-700';
+	return 'border-border bg-background text-muted-foreground';
+}
+
 /**
- * Returns the cell for a given date key, or null if no cell exists (weekend/blank slot).
- * Since the backend now includes ALL weekdays in the preview dates, every weekday
- * should have a corresponding cell in the student row.
+ * Flattens week groups into a single ordered slot list for the grid body. The
+ * header still uses the grouped form (for `colspan`); the body iterates the
+ * flat list so each row renders one `{#each}` block instead of one per week.
  */
-export function cellForDate(row: MatrixStudentRow, date: string | null) {
-	if (!date) return null;
-	return row.cellsByDate.get(date) ?? null;
+export function flattenMatrixSlots(groups: MatrixWeekGroup[]) {
+	const slots: MatrixDateSlot[] = [];
+	for (const group of groups) slots.push(...group.slots);
+	return slots;
+}
+
+/**
+ * Projects the preview rows onto the visible slot columns. This runs once per
+ * preview load (inside a `$derived`), so the per-render cost of the grid is a
+ * plain array read per cell rather than a date-keyed lookup.
+ */
+export function buildMatrixRows(
+	students: Sf2PreviewStudentRow[],
+	slots: MatrixDateSlot[],
+	genderFilter: 'all' | 'male' | 'female'
+): MatrixStudentRow[] {
+	const rows: MatrixStudentRow[] = [];
+
+	for (const student of students) {
+		if (genderFilter !== 'all' && student.gender?.toLowerCase() !== genderFilter) continue;
+
+		const cellsByDate = new Map<string, Sf2PreviewCell>();
+		for (const cell of student.cells) cellsByDate.set(cell.date, cell);
+
+		rows.push({
+			...student,
+			cellColumns: slots.map((slot) => {
+				if (!slot.dateKey) return null;
+				const raw = cellsByDate.get(slot.dateKey);
+				if (!raw) return null;
+				const key = `${student.studentId}:${raw.date}`;
+				return {
+					...raw,
+					key,
+					label: cellLabelFor(student.studentName, raw.date, raw.status),
+					cls: cellClassFor(student.mapped, raw.status)
+				} satisfies MatrixCell;
+			})
+		});
+	}
+
+	return rows;
 }
 
 export function cellClass(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
@@ -100,8 +179,46 @@ export function createMatrixWeekGroup(key: string): MatrixWeekGroup {
 			key: `${key}-${weekday}`,
 			weekday,
 			date: null,
-			dateKey: null
+			dateKey: null,
+			weekStart: weekday === MATRIX_WEEKDAYS[0],
+			dayNumber: '',
+			dateLabel: '',
+			title: `${weekday}, no class day in this month`
 		}))
+	};
+}
+
+function enrichSlot(
+	weekday: MatrixWeekday,
+	date: Sf2PreviewDate | null,
+	dateKey: string | null,
+	weekStart: boolean
+): MatrixDateSlot {
+	const key = dateKey ?? `${weekday}-${weekStart ? 'start' : 'mid'}`;
+	if (!dateKey) {
+		return {
+			key,
+			weekday,
+			date,
+			dateKey,
+			weekStart,
+			dayNumber: '',
+			dateLabel: '',
+			title: `${weekday}, no class day in this month`
+		};
+	}
+	const dayNumber = formatDayNumber(dateKey);
+	const dateLabel = matrixDateLabel(dateKey);
+	const col = date ? ` ${date.columnLetter}${date.columnIndex}` : '';
+	return {
+		key: dateKey,
+		weekday,
+		date,
+		dateKey,
+		weekStart,
+		dayNumber,
+		dateLabel,
+		title: `${dateLabel}${col}`
 	};
 }
 
@@ -134,7 +251,7 @@ export function buildMatrixWeekGroups(
 	const month = sf2MonthByValue(reportMonth);
 
 	// Pre-index dates by dateKey for O(1) lookup instead of O(n) Array.find per slot
-	const datesByKey = new SvelteMap<string, Sf2PreviewDate>();
+	const datesByKey = new Map<string, Sf2PreviewDate>();
 	for (const d of dates) {
 		datesByKey.set(d.date, d);
 	}
@@ -144,7 +261,7 @@ export function buildMatrixWeekGroups(
 			dates.length > 0 ? Number(dates[0].date.split('-')[0]) : new SvelteDate().getFullYear();
 		const dayCount = new SvelteDate(year, month.monthIndex + 1, 0).getDate();
 		// Index groups by week key for O(1) lookup
-		const groupsByKey = new SvelteMap<string, MatrixWeekGroup>();
+		const groupsByKey = new Map<string, MatrixWeekGroup>();
 		const groups: MatrixWeekGroup[] = [];
 
 		for (let day = 1; day <= dayCount; day += 1) {
@@ -160,12 +277,12 @@ export function buildMatrixWeekGroups(
 				groups.push(group);
 			}
 
-			group.slots[weekdayIndexVal] = {
-				key: dateKey,
-				weekday: MATRIX_WEEKDAYS[weekdayIndexVal],
-				date: datesByKey.get(dateKey) ?? null,
-				dateKey
-			};
+			group.slots[weekdayIndexVal] = enrichSlot(
+				MATRIX_WEEKDAYS[weekdayIndexVal],
+				datesByKey.get(dateKey) ?? null,
+				dateKey,
+				weekdayIndexVal === 0
+			);
 		}
 
 		return groups.map((g, index) => ({
@@ -175,7 +292,7 @@ export function buildMatrixWeekGroups(
 	}
 
 	// Fallback: when no month match, build from the dates array directly
-	const groupsByKey = new SvelteMap<string, MatrixWeekGroup>();
+	const groupsByKey = new Map<string, MatrixWeekGroup>();
 	const groups: MatrixWeekGroup[] = [];
 
 	for (const dt of dates) {
@@ -191,12 +308,12 @@ export function buildMatrixWeekGroups(
 			groups.push(group);
 		}
 
-		group.slots[weekdayIndexVal] = {
-			key: dt.date,
-			weekday: MATRIX_WEEKDAYS[weekdayIndexVal],
-			date: dt,
-			dateKey: dt.date
-		};
+		group.slots[weekdayIndexVal] = enrichSlot(
+			MATRIX_WEEKDAYS[weekdayIndexVal],
+			dt,
+			dt.date,
+			weekdayIndexVal === 0
+		);
 	}
 
 	return groups.map((g, index) => ({

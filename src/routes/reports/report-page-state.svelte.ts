@@ -1,5 +1,4 @@
 import { onMount, onDestroy } from 'svelte';
-import { SvelteMap } from 'svelte/reactivity';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import {
@@ -20,13 +19,14 @@ import {
 } from '$lib/db-rust';
 
 import {
+	buildMatrixRows,
 	buildMatrixWeekGroups,
 	buildSkeletonDates,
 	cellKey,
 	errorMessage,
+	flattenMatrixSlots,
 	formatDate,
-	reportMonthLabel,
-	type MatrixStudentRow
+	reportMonthLabel
 } from './report-state.svelte';
 
 import {
@@ -46,7 +46,10 @@ export function createReportPageState() {
 
 	let classes = $state<Class[]>([]);
 	let selectedClassId = $state('');
-	let preview = $state<Sf2ExportPreview | null>(null);
+	// `$state.raw` on purpose: the preview is replaced wholesale on every load and
+	// never mutated in place, so deep proxying its thousands of cell objects only
+	// adds per-property reactive reads to the grid's hot render path.
+	let preview = $state.raw<Sf2ExportPreview | null>(null);
 	let workbookSettings = $state<Sf2WorkbookSettings | null>(null);
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
@@ -79,13 +82,11 @@ export function createReportPageState() {
 	);
 	const activeReportMonth = $derived(draft.reportMonth || preview?.template?.reportMonth || '');
 	const matrixWeekGroups = $derived(buildMatrixWeekGroups(preview?.dates ?? [], activeReportMonth));
-	const matrixStudents = $derived.by((): MatrixStudentRow[] =>
-		(preview?.students ?? [])
-			.filter((row) => genderFilter === 'all' || row.gender?.toLowerCase() === genderFilter)
-			.map((row) => ({
-				...row,
-				cellsByDate: new SvelteMap(row.cells.map((cell) => [cell.date, cell]))
-			}))
+	const matrixDates = $derived(flattenMatrixSlots(matrixWeekGroups));
+	// Built once per preview load / gender filter change: rows arrive with their
+	// cells already projected onto the visible date columns.
+	const matrixStudents = $derived(
+		buildMatrixRows(preview?.students ?? [], matrixDates, genderFilter)
 	);
 	const hasAbsentCells = $derived((preview?.absentList.length ?? 0) > 0);
 	const hasModalDraftChanges = $derived(draft.hasChanges(workbookSettings));
@@ -628,6 +629,9 @@ export function createReportPageState() {
 		},
 		get matrixWeekGroups() {
 			return matrixWeekGroups;
+		},
+		get matrixDates() {
+			return matrixDates;
 		},
 		get matrixStudents() {
 			return matrixStudents;
