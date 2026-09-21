@@ -75,6 +75,7 @@
 		onclick={() => commandPaletteStore.openPalette()}
 	>
 		<Search class="size-3.5" aria-hidden="true" />
+		<span class="title-search-label">Search</span>
 		<kbd class="title-search-kbd">Ctrl K</kbd>
 	</button>
 
@@ -198,6 +199,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
+		width: 220px;
 		height: 32px;
 		margin-right: 4px;
 		border: 1px solid var(--color-border);
@@ -216,7 +218,14 @@
 		border-color: color-mix(in oklab, var(--color-primary) 38%, var(--color-border));
 		color: var(--color-foreground);
 	}
+	.title-search-label {
+		flex: 1;
+		text-align: left;
+		font-size: 13px;
+		white-space: nowrap;
+	}
 	.title-search-kbd {
+		flex-shrink: 0;
 		border: 1px solid var(--color-border);
 		border-radius: 5px;
 		background: var(--surface-soft);

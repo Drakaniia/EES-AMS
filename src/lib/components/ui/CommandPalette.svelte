@@ -211,7 +211,7 @@
 
 	.palette-panel {
 		display: flex;
-		width: min(480px, 100%);
+		width: min(640px, 100%);
 		flex-direction: column;
 		overflow: hidden;
 		pointer-events: auto;
