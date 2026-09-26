@@ -129,6 +129,7 @@ pub(crate) fn backup_kind_file_part(kind: BackupKind) -> &'static str {
         BackupKind::Auto => "auto",
         BackupKind::Manual => "manual",
         BackupKind::PreRestore => "pre-restore",
+        BackupKind::PreWipe => "pre-wipe",
         BackupKind::Unknown => "unknown",
     }
 }
@@ -140,6 +141,8 @@ pub(crate) fn backup_kind_from_file_name(file_name: &str) -> BackupKind {
         BackupKind::Manual
     } else if file_name.starts_with("attendance-pre-restore-") {
         BackupKind::PreRestore
+    } else if file_name.starts_with("attendance-pre-wipe-") {
+        BackupKind::PreWipe
     } else {
         BackupKind::Unknown
     }
@@ -153,7 +156,8 @@ pub(crate) fn backup_timestamp_from_file_name(file_name: &str) -> Option<i64> {
     let timestamp = file_name
         .strip_prefix("attendance-auto-")
         .or_else(|| file_name.strip_prefix("attendance-manual-"))
-        .or_else(|| file_name.strip_prefix("attendance-pre-restore-"))?
+        .or_else(|| file_name.strip_prefix("attendance-pre-restore-"))
+        .or_else(|| file_name.strip_prefix("attendance-pre-wipe-"))?
         .trim_end_matches(".db");
     let timestamp = timestamp.split('-').next().unwrap_or(timestamp);
     let naive = NaiveDateTime::parse_from_str(timestamp, "%Y%m%d_%H%M%S").ok()?;

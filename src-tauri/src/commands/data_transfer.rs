@@ -239,8 +239,16 @@ pub fn import_all(
 
 #[tauri::command]
 pub fn wipe_all(
+    app: tauri::AppHandle,
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
-) -> std::result::Result<(), String> {
+) -> std::result::Result<WipeOutcome, String> {
+    // A wipe is the one destructive action in the app with no undo, and it is
+    // the action that has actually cost this user their attendance marks. Take
+    // a labelled safety copy first so a wipe is recoverable from Data
+    // Management → Restore. Best-effort: never block the wipe on a backup
+    // failure, but say so in the outcome when one happens.
+    let pre_wipe_backup = take_pre_wipe_backup(&app, pool.inner());
+
     let mut conn = pool.get().map_err(|e| e.to_string())?;
     let transaction = conn.transaction().map_err(|e| e.to_string())?;
     let student_count: i64 = transaction
@@ -306,6 +314,7 @@ pub fn wipe_all(
         "settings": settings_count,
         "attendanceAuditEvents": attendance_audit_count,
         "sf2Templates": sf2_template_count,
+        "preWipeBackupPath": pre_wipe_backup.as_deref(),
     }))?;
     record_audit_event(
         &transaction,
@@ -321,7 +330,48 @@ pub fn wipe_all(
     )
     .map_err(|e| e.to_string())?;
 
-    transaction.commit().map_err(|e| e.to_string())
+    transaction.commit().map_err(|e| e.to_string())?;
+
+    Ok(WipeOutcome {
+        deleted_students: student_count,
+        deleted_classes: class_count,
+        deleted_events: event_count,
+        pre_wipe_backup_path: pre_wipe_backup,
+    })
+}
+
+/// What a wipe destroyed, and where the safety copy went.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WipeOutcome {
+    pub deleted_students: i64,
+    pub deleted_classes: i64,
+    pub deleted_events: i64,
+    /// `None` when the safety backup could not be written.
+    pub pre_wipe_backup_path: Option<String>,
+}
+
+/// Write a labelled pre-wipe backup into the app's backups folder.
+fn take_pre_wipe_backup(
+    app: &tauri::AppHandle,
+    pool: &Pool<SqliteConnectionManager>,
+) -> Option<String> {
+    let app_dir = app_data_dir(app).ok()?;
+    match backup_service::create_backup_at(
+        pool,
+        &app_dir,
+        crate::backup::models::BackupKind::PreWipe,
+        chrono::Local::now(),
+    ) {
+        Ok(summary) => {
+            log::info!("created pre-wipe safety backup at {}", summary.path);
+            Some(summary.path)
+        }
+        Err(error) => {
+            log::error!("failed to create pre-wipe safety backup: {error}");
+            None
+        }
+    }
 }
 
 #[tauri::command]

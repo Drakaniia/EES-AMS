@@ -20,6 +20,7 @@ mod workbook_files;
 // These keep `crate::sf2::module_name::Item` paths working for code that
 // references moved submodules through their old flat paths.
 pub(crate) use attendance::attendance_events;
+pub(crate) use attendance::attendance_import;
 pub(crate) use attendance::attendance_marks;
 pub(crate) use attendance::attendance_service;
 pub(crate) use calendar::calendar_service;

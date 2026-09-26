@@ -205,13 +205,21 @@ pub(crate) fn parse_date(date: &str) -> Result<NaiveDate> {
 /// `last_synced_at` is the timestamp (seconds) of the last successful mark
 /// write; `None` means the workbook has never been synced, so we must sync.
 /// `latest_event_at` is the most recent attendance event timestamp for the
-/// class; `None` means there are no attendance events at all (nothing to write).
+/// class, or `None` when the class has no attendance events at all.
+///
+/// The `None`/`None` case is the dangerous one. A reset or rebuilt database has
+/// no events *and* keeps the old `last_synced_at`, which used to report "in
+/// sync" — so the app never rewrote the workbook and the two diverged
+/// permanently: the grid showed nothing while the workbook still held marks
+/// that only the workbook knew about. With no events to write there is still
+/// something to reconcile, so the workbook is treated as stale and cleared
+/// back into agreement with the (empty) database.
 pub(crate) fn attendance_changed_since(
     last_synced_at: Option<i64>,
     latest_event_at: Option<i64>,
 ) -> bool {
     let Some(latest_event_at) = latest_event_at else {
-        return false;
+        return last_synced_at.is_some();
     };
     match last_synced_at {
         None => true,

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Calendar, ExternalLink, Pencil, RefreshCw, Save, UserX } from 'lucide-svelte';
+	import { Calendar, Download, ExternalLink, Pencil, RefreshCw, Save, UserX } from 'lucide-svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import { reportMonthLabel, formatImportedAt, formatDate } from './report-state.svelte';
 	import type { Sf2ExportPreview, Sf2WorkbookSettings } from '$lib/db-rust';
@@ -19,12 +19,14 @@
 		exportDisabled: boolean;
 		exporting: boolean;
 		syncingRoster: boolean;
+		importingAttendance: boolean;
 		sf2OpenStatus: string;
 		workbookSettings: Sf2WorkbookSettings | null;
 		savingDetails: boolean;
 		activeClassId: string;
 		onOpenSf2?: () => void;
 		onSyncRoster?: () => void;
+		onImportAttendance?: () => void;
 		onRequestExport?: () => void;
 		onEditDetails?: () => void;
 		onSwitchMonth?: () => void;
@@ -44,16 +46,26 @@
 		exportDisabled,
 		exporting,
 		syncingRoster,
+		importingAttendance,
 		sf2OpenStatus,
 		workbookSettings,
 		savingDetails,
 		activeClassId,
 		onOpenSf2,
 		onSyncRoster,
+		onImportAttendance,
 		onRequestExport,
 		onEditDetails,
 		onSwitchMonth
 	}: Props = $props();
+
+	// The grid shows nothing when the database has no absences for this report
+	// month — which is exactly what a rebuilt database looks like. The workbook
+	// is the school's official record and may still hold those marks, so offer
+	// the way back rather than leaving the user with a silently empty grid.
+	const canRecoverFromWorkbook = $derived(
+		!!preview?.template && !previewRefreshing && (preview?.absentList.length ?? 0) === 0
+	);
 </script>
 
 <aside class="min-h-0 space-y-5 overflow-auto">
@@ -82,6 +94,21 @@
 					<RefreshCw class="size-4" aria-hidden="true" />
 				{/if}
 				{syncingRoster ? 'Syncing...' : 'Sync Roster'}
+			</button>
+			<button
+				type="button"
+				onclick={onImportAttendance}
+				disabled={!preview?.template || importingAttendance || !activeClassId}
+				class="control-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+				aria-label="Import X marks from the SF2 workbook"
+				title="Read the X marks out of the SF2 workbook and record them as absences. Use this if the grid lost its marks — for example after the app was reinstalled."
+			>
+				{#if importingAttendance}
+					<Spinner />
+				{:else}
+					<Download class="size-4" aria-hidden="true" />
+				{/if}
+				{importingAttendance ? 'Importing...' : 'Import X from Workbook'}
 			</button>
 			<!-- Export button: show skeleton pulsing when preview is refreshing -->
 			{#if previewRefreshing}
@@ -209,6 +236,31 @@
 			<p class="mt-4 text-sm leading-6 text-muted-foreground">
 				No absences are currently marked for this report month.
 			</p>
+		{/if}
+
+		{#if canRecoverFromWorkbook}
+			<div
+				class="mt-4 rounded-md border border-amber-500/40 bg-amber-50/60 p-3 text-xs leading-5 text-amber-900"
+			>
+				<p class="font-semibold">No X marks in the app for this month.</p>
+				<p class="mt-1">
+					If the SF2 workbook still shows X marks, they were never copied into the app. Import them
+					back so the grid and the workbook agree.
+				</p>
+				<button
+					type="button"
+					onclick={onImportAttendance}
+					disabled={importingAttendance}
+					class="control-ring mt-2 inline-flex h-8 items-center gap-1.5 rounded-md border border-amber-500/50 bg-background px-2.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					{#if importingAttendance}
+						<Spinner />
+					{:else}
+						<Download class="size-3.5" aria-hidden="true" />
+					{/if}
+					{importingAttendance ? 'Importing...' : 'Import X marks from workbook'}
+				</button>
+			</div>
 		{/if}
 	</div>
 </aside>

@@ -6,6 +6,9 @@ pub enum BackupKind {
     Auto,
     Manual,
     PreRestore,
+    /// Safety copy taken immediately before "wipe all data" destroys the
+    /// contents of the live database.
+    PreWipe,
     Unknown,
 }
 

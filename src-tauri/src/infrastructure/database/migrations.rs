@@ -1,5 +1,6 @@
 use super::DbPool;
-use crate::domain::{error::Result, models::Session};
+use crate::domain::error::{AppError, Result};
+use crate::domain::models::Session;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
@@ -8,8 +9,14 @@ use std::path::Path;
 /// Current SQLite schema version.
 pub const CURRENT_SCHEMA_VERSION: i32 = 18;
 
+/// How many pre-migration snapshots to keep beside the live database.
+const SNAPSHOT_HISTORY: usize = 3;
+
 /// Initialize the database with schema and migrations
 pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
+    let path = path.as_ref();
+    snapshot_before_migration(path);
+
     let manager = SqliteConnectionManager::file(path)
         .with_init(|conn| conn.execute_batch("PRAGMA foreign_keys = ON;"));
     let pool = Pool::new(manager)?;
@@ -19,6 +26,98 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
     migrate_db(&conn)?;
 
     Ok(pool)
+}
+
+/// Copy the database aside before running migrations, so an update that breaks
+/// something can always be rolled back to the exact pre-update data.
+///
+/// Migrations are the one moment the app rewrites the schema of the file that
+/// holds every attendance mark. Several migrations rebuild tables; a mistake in
+/// one of those is silent and unrecoverable without a copy. The snapshot is
+/// best-effort — a failure here must never stop the app from starting.
+fn snapshot_before_migration(path: &Path) {
+    let Ok(from_version) = stored_schema_version(path) else {
+        return;
+    };
+    if from_version >= CURRENT_SCHEMA_VERSION {
+        return;
+    }
+
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+        return;
+    };
+
+    let snapshot_name = format!("{file_name}.pre-v{from_version}-to-v{CURRENT_SCHEMA_VERSION}");
+    let snapshot_path = parent.join(&snapshot_name);
+    if snapshot_path.exists() {
+        // Already snapshotted for this exact version transition.
+        return;
+    }
+
+    match std::fs::copy(path, &snapshot_path) {
+        Ok(_) => {
+            log::info!(
+                "snapshotted database before migrating v{from_version} -> v{CURRENT_SCHEMA_VERSION}: {}",
+                snapshot_path.display()
+            );
+            prune_snapshots(parent, file_name);
+        }
+        Err(error) => log::warn!(
+            "failed to snapshot database before migrating: {error} (continuing without a rollback point)"
+        ),
+    }
+}
+
+/// Read `PRAGMA user_version` from an existing database file.
+fn stored_schema_version(path: &Path) -> Result<i32> {
+    if !path.exists() {
+        return Err(AppError::Internal(
+            "database file does not exist".to_string(),
+        ));
+    }
+    let conn = rusqlite::Connection::open_with_flags(
+        path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    let version: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    Ok(version)
+}
+
+/// Keep only the newest [`SNAPSHOT_HISTORY`] snapshots for this database file.
+fn prune_snapshots(parent: &Path, file_name: &str) {
+    let prefix = format!("{file_name}.pre-v");
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return;
+    };
+
+    let mut snapshots = entries
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.starts_with(&prefix) {
+                return None;
+            }
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            Some((modified, entry.path()))
+        })
+        .collect::<Vec<_>>();
+    if snapshots.len() <= SNAPSHOT_HISTORY {
+        return;
+    }
+
+    // Newest first, then drop everything past the retention limit.
+    snapshots.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
+    for (_, stale) in snapshots.into_iter().skip(SNAPSHOT_HISTORY) {
+        if let Err(error) = std::fs::remove_file(&stale) {
+            log::warn!(
+                "failed to prune old database snapshot {}: {error}",
+                stale.display()
+            );
+        }
+    }
 }
 
 /// Run all pending database migrations on an existing SQLite connection.

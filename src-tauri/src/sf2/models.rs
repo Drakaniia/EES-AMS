@@ -262,6 +262,8 @@ pub struct Sf2ExportReadiness {
     pub warnings: Vec<String>,
 }
 
+pub use super::attendance::attendance_import::Sf2AttendanceImportOutcome;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Sf2ExportPreview {

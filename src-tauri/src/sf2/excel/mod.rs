@@ -54,6 +54,15 @@ pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
     analyze_workbook_impl(path)
 }
 
+/// Read the display text of many A1-addressed cells in a single read-only Excel
+/// session. `cells` is a list of `(sheet_name, cell_address)` pairs.
+pub fn read_cell_texts(
+    path: &Path,
+    cells: &[(String, String)],
+) -> Result<std::collections::HashMap<(String, String), String>> {
+    read_cell_texts_impl(path, cells)
+}
+
 pub fn write_workbook(source_path: &Path, output_path: &Path, marks: &[Sf2CellMark]) -> Result<()> {
     std::fs::copy(source_path, output_path)
         .map_err(|error| AppError::Internal(format!("failed to copy SF2 workbook: {error}")))?;
@@ -154,6 +163,22 @@ fn analyze_workbook_impl(path: &Path) -> Result<Sf2WorkbookAnalysis> {
 
 #[cfg(not(target_os = "windows"))]
 fn analyze_workbook_impl(_path: &Path) -> Result<Sf2WorkbookAnalysis> {
+    Err(unsupported_excel_automation())
+}
+
+#[cfg(target_os = "windows")]
+fn read_cell_texts_impl(
+    path: &Path,
+    cells: &[(String, String)],
+) -> Result<std::collections::HashMap<(String, String), String>> {
+    excel_com::read_cell_texts(path, cells)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn read_cell_texts_impl(
+    _path: &Path,
+    _cells: &[(String, String)],
+) -> Result<std::collections::HashMap<(String, String), String>> {
     Err(unsupported_excel_automation())
 }
 

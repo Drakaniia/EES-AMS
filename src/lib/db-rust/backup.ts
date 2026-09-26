@@ -7,14 +7,16 @@ import type {
 	RestoreResult,
 	AttendanceEvent,
 	Student,
-	Class
+	Class,
+	WipeOutcome
 } from '../types';
 export type {
 	ExportData,
 	BackupSummary,
 	BackupStatus,
 	BackupPreview,
-	RestoreResult
+	RestoreResult,
+	WipeOutcome
 } from '../types';
 
 export async function exportAll(): Promise<ExportData> {
@@ -42,7 +44,7 @@ export async function importAll(payload: ExportData): Promise<void> {
 	return await invoke('import_all', { payload });
 }
 
-export async function wipeAll(): Promise<void> {
+export async function wipeAll(): Promise<WipeOutcome> {
 	return await invoke('wipe_all');
 }
 

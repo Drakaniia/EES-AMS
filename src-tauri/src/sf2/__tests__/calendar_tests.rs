@@ -3,10 +3,23 @@ use super::*;
 // ── attendance_changed_since ────────────────────────────────────────
 
 #[test]
-fn no_events_means_no_sync_needed() {
+fn no_events_after_a_sync_still_requires_sync() {
+    // A rebuilt/reset database has no events but keeps the old last_synced_at.
+    // Reporting "in sync" here left the workbook holding marks the app had no
+    // record of, permanently, because nothing ever rewrote it.
     assert!(
-        !attendance_changed_since(Some(1000), None),
-        "with no attendance events, the workbook is already current"
+        attendance_changed_since(Some(1000), None),
+        "an empty database must still reconcile the workbook back to agreement"
+    );
+}
+
+#[test]
+fn no_events_and_never_synced_skips_sync() {
+    // Nothing has ever been written and there is nothing to write, so opening
+    // the workbook must stay instant.
+    assert!(
+        !attendance_changed_since(None, None),
+        "a never-synced workbook with no events has nothing to reconcile"
     );
 }
 

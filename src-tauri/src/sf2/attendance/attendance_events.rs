@@ -9,6 +9,10 @@ use rusqlite::params;
 ///
 /// Any existing record (of either type) for that student/day is removed first,
 /// so a student never has both an 'in' and an 'absent' record for the same day.
+///
+/// `reason` is recorded as the note and audit `override_reason` so the trail
+/// says which flow wrote the record (e.g. "SF2 preview correction").
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn set_attendance_event_for_day(
     pool: crate::infrastructure::database::DbPool,
     student_id: &str,
@@ -16,6 +20,7 @@ pub(crate) fn set_attendance_event_for_day(
     date: NaiveDate,
     day_start: &str,
     event_type: AttendanceType,
+    reason: &str,
 ) -> Result<()> {
     let (day_start_timestamp, day_end_timestamp) = local_day_bounds_timestamps_for_date(date)?;
     let mut conn = pool.get()?;
@@ -52,9 +57,9 @@ pub(crate) fn set_attendance_event_for_day(
             class_id,
             event_type.as_db_value(),
             attendance_timestamp,
-            "SF2 preview correction",
+            reason,
             session_key,
-            "SF2 preview correction",
+            reason,
         ],
     )?;
     let created_event_id: Option<String> = Some(event_id);
@@ -69,7 +74,7 @@ pub(crate) fn set_attendance_event_for_day(
     }))
     .map_err(|error| AppError::Internal(format!("failed to serialize audit metadata: {error}")))?;
     let summary = format!(
-        "Set SF2 preview attendance for student {student_id} on {date} to {}",
+        "Set SF2 attendance for student {student_id} on {date} to {} ({reason})",
         event_type.as_db_value()
     );
     record_audit_event(
@@ -87,6 +92,36 @@ pub(crate) fn set_attendance_event_for_day(
 
     transaction.commit()?;
     Ok(())
+}
+
+/// True when the student already has an explicit `absent` record for that local
+/// day. Used by the workbook→DB import so re-running it is a no-op instead of
+/// rewriting the same absence (and audit-logging it) over and over.
+pub(crate) fn has_absent_event_for_day(
+    pool: &crate::infrastructure::database::DbPool,
+    student_id: &str,
+    class_id: &str,
+    date: NaiveDate,
+) -> Result<bool> {
+    let (day_start_timestamp, day_end_timestamp) = local_day_bounds_timestamps_for_date(date)?;
+    let conn = pool.get()?;
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM events
+         WHERE student_id = ?1
+         AND event_type = ?2
+         AND timestamp >= ?3
+         AND timestamp < ?4
+         AND (class_id IS NULL OR class_id = ?5)",
+        params![
+            student_id,
+            AttendanceType::Absent.as_db_value(),
+            day_start_timestamp,
+            day_end_timestamp,
+            class_id
+        ],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
 }
 
 pub(crate) fn local_day_bounds_timestamps_for_date(date: NaiveDate) -> Result<(i64, i64)> {

@@ -298,9 +298,14 @@ import type { Ctx } from './state-context';
 	}
 
 	async onWipeConfirm() {
-		await wipeAll();
+		const outcome = await wipeAll();
 		await this.ctx.reload();
-		this.ctx.toast('All data wiped');
+		this.ctx.toast(
+			outcome.preWipeBackupPath
+				? `All data wiped (${outcome.deletedEvents} attendance records). A safety backup was saved first.`
+				: `All data wiped (${outcome.deletedEvents} attendance records). The safety backup could not be written.`,
+			!!outcome.preWipeBackupPath
+		);
 	}
 }
 

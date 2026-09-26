@@ -6,7 +6,8 @@ import type {
 	Sf2WorkbookSettings,
 	Sf2ExportPreview,
 	Sf2ExportReadiness,
-	Sf2ExportResult
+	Sf2ExportResult,
+	Sf2AttendanceImportOutcome
 } from '../types';
 export type {
 	Sf2ImportSummary,
@@ -21,7 +22,8 @@ export type {
 	Sf2ValidationDuplicate,
 	Sf2ValidationLearner,
 	Sf2ValidationStudent,
-	Sf2CloseDaySummary
+	Sf2CloseDaySummary,
+	Sf2AttendanceImportOutcome
 } from '../types';
 
 export async function validateSf2WorkbookImport(): Promise<Sf2ImportValidation> {
@@ -71,6 +73,22 @@ export async function getSf2ExportPreview(classId?: string): Promise<Sf2ExportPr
 /** Sync the latest attendance events from the DB to the SF2 Excel working copy. */
 export async function syncSf2Attendance(classId: string): Promise<void> {
 	await invoke('sync_sf2_attendance', { classId });
+}
+
+/**
+ * Read the "X" absence marks back out of the SF2 working workbook and record
+ * them as absences in the app.
+ *
+ * The workbook is the school's official record, so it is the only surviving
+ * copy of a day's absences when the app's database has been reset — names and
+ * SF2 details are rebuilt from the workbook automatically, but attendance marks
+ * used to be write-only. Additive and idempotent: an "X" is only recorded when
+ * the database does not already have that learner absent for that day.
+ */
+export async function importSf2AttendanceFromWorkbook(
+	classId: string
+): Promise<Sf2AttendanceImportOutcome> {
+	return await invoke('import_sf2_attendance_from_workbook', { classId });
 }
 
 /** Sync the class roster to the SF2 working workbook.

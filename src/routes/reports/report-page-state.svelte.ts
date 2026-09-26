@@ -5,6 +5,7 @@ import {
 	exportSf2Workbook,
 	getSf2ExportPreview,
 	getSf2WorkbookSettings,
+	importSf2AttendanceFromWorkbook,
 	listClasses,
 	presentAllSf2PreviewAttendance,
 	setSf2ReportMonth,
@@ -56,6 +57,7 @@ export function createReportPageState() {
 	let genderFilter = $state<'all' | 'male' | 'female'>('all');
 	let exporting = $state(false);
 	let syncingRoster = $state(false);
+	let importingAttendance = $state(false);
 	let presentingAll = $state(false);
 	let savingDetails = $state(false);
 	let correctingCellKey = $state<string | null>(null);
@@ -207,6 +209,39 @@ export function createReportPageState() {
 			reportDialogs?.showToast(`Could not mark all present: ${msg}`, false);
 		} finally {
 			presentingAll = false;
+		}
+	}
+
+	/**
+	 * Pull the "X" marks back out of the SF2 working workbook and record them as
+	 * absences. The workbook is the school's official record, so it is the only
+	 * surviving copy of a day's marks when the app's database has been rebuilt.
+	 */
+	async function onImportAttendance() {
+		if (!activeClassId || !preview?.template || importingAttendance) return;
+		importingAttendance = true;
+		try {
+			const outcome = await importSf2AttendanceFromWorkbook(activeClassId);
+			invalidateCacheForMonth(activeClassId, activeReportMonth);
+			await loadReport(activeClassId);
+			if (outcome.imported > 0) {
+				reportDialogs?.showToast(
+					`Imported ${outcome.imported} X mark${outcome.imported === 1 ? '' : 's'} from the workbook` +
+						(outcome.alreadyRecorded > 0 ? ` (${outcome.alreadyRecorded} already recorded)` : '') +
+						'.'
+				);
+			} else if (outcome.alreadyRecorded > 0) {
+				reportDialogs?.showToast(
+					`All ${outcome.alreadyRecorded} X mark${outcome.alreadyRecorded === 1 ? '' : 's'} in the workbook are already recorded.`
+				);
+			} else {
+				reportDialogs?.showToast('No X marks found in the workbook for this report month.');
+			}
+		} catch (error) {
+			const msg = errorMessage(error, 'Attendance import failed');
+			reportDialogs?.showToast(`Could not import X marks: ${msg}`, false);
+		} finally {
+			importingAttendance = false;
 		}
 	}
 
@@ -531,6 +566,12 @@ export function createReportPageState() {
 		set syncingRoster(v) {
 			syncingRoster = v;
 		},
+		get importingAttendance() {
+			return importingAttendance;
+		},
+		set importingAttendance(v) {
+			importingAttendance = v;
+		},
 		get presentingAll() {
 			return presentingAll;
 		},
@@ -652,6 +693,7 @@ export function createReportPageState() {
 		retrySf2Open,
 		killAndRetrySf2Open,
 		onPresentAll,
+		onImportAttendance,
 		onSyncRoster,
 		requestExport,
 		confirmExport,

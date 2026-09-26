@@ -25,6 +25,10 @@ use rusqlite::params;
 
 use std::collections::HashSet;
 
+/// Recorded on attendance events written from the SF2 preview grid, so the audit
+/// trail says the mark was corrected in the app rather than imported.
+const SF2_PREVIEW_CORRECTION: &str = "SF2 preview correction";
+
 /// Sync latest attendance events to the SF2 Excel working copy for a given class.
 /// This ensures the Excel file's attendance marks reflect the current attendance state
 /// after a student is marked present or absent from the attendance page.
@@ -201,6 +205,7 @@ pub fn set_preview_attendance_lightweight(
         date_value,
         &class.day_start,
         event_type,
+        SF2_PREVIEW_CORRECTION,
     )?;
     // Reset last_synced_at so the next SF2 open detects the change and
     // rewrites marks. Without this, the sync optimization in
@@ -265,6 +270,7 @@ pub fn set_preview_attendance(
         date_value,
         &class.day_start,
         event_type,
+        SF2_PREVIEW_CORRECTION,
     )?;
     let template = crate::sf2::excel_service::refresh_template_calendar_from_saved_month(
         pool.clone(),

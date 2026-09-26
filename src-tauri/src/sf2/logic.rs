@@ -2,7 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 const SF2_PRESENT_MARK: &str = "";
-const SF2_ABSENT_MARK: &str = "X";
+
+/// The cell text that marks a learner absent. Shared by the writer
+/// (`attendance_marks_for_day`) and the reader (`attendance_import`) so the
+/// two can never drift apart on what counts as an absence.
+pub(crate) const SF2_ABSENT_MARK: &str = "X";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

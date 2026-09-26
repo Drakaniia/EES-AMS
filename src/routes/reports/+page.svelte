@@ -114,12 +114,14 @@
 					exportDisabled={page.exportDisabled}
 					exporting={page.exporting}
 					syncingRoster={page.syncingRoster}
+					importingAttendance={page.importingAttendance}
 					sf2OpenStatus={page.sf2Open.status}
 					workbookSettings={page.workbookSettings}
 					savingDetails={page.savingDetails}
 					activeClassId={page.activeClassId}
 					onOpenSf2={page.onOpenSf2}
 					onSyncRoster={page.onSyncRoster}
+					onImportAttendance={page.onImportAttendance}
 					onRequestExport={page.requestExport}
 					onEditDetails={() => (page.workbookDetailsOpen = true)}
 					onSwitchMonth={() => (page.monthPickerOpen = true)}

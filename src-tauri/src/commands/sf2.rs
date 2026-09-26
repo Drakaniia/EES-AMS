@@ -208,6 +208,44 @@ pub fn present_all_sf2_preview_attendance(
     service::set_all_students_present(pool.inner().clone(), &class_id).map_err(|e| e.to_string())
 }
 
+/// Read the "X" absence marks back out of the SF2 working workbook and record
+/// them as `absent` events, so a reset database can recover its attendance.
+///
+/// Additive and idempotent: an "X" becomes an event only when the database
+/// does not already record that learner absent for that day.
+#[tauri::command]
+pub async fn import_sf2_attendance_from_workbook(
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: String,
+) -> std::result::Result<Sf2AttendanceImportOutcome, String> {
+    let audit_pool = pool.inner().clone();
+    let pool = audit_pool.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        service::import_absent_marks_from_workbook(pool, &class_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+
+    let metadata_json = audit_metadata_json(serde_json::json!({
+        "classId": outcome.class_id.as_str(),
+        "reportMonth": outcome.report_month.as_str(),
+        "scannedCells": outcome.scanned_cells,
+        "imported": outcome.imported,
+        "alreadyRecorded": outcome.already_recorded,
+        "datesWithMarks": outcome.dates_with_marks,
+    }))?;
+    record_command_audit(
+        &audit_pool,
+        "sf2_workbook",
+        None,
+        "import_attendance",
+        "Imported SF2 attendance marks from the workbook",
+        Some(metadata_json),
+    )?;
+    Ok(outcome)
+}
+
 #[tauri::command]
 pub fn sync_sf2_roster(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,

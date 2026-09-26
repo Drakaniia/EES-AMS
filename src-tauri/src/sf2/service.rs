@@ -5,6 +5,7 @@
 //   - excel_service.rs       — export, preview & workbook settings
 //   - validation_service.rs  — import validation orchestration
 
+pub use super::attendance_import::import_absent_marks_from_workbook;
 pub use super::attendance_service::{
     set_all_students_present, set_preview_attendance, set_preview_attendance_lightweight,
     sync_and_open_sf2_workbook, sync_attendance_to_sf2_workbook,

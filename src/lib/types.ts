@@ -201,6 +201,17 @@ export interface RestoreResult {
 	warnings: string[];
 }
 
+/**
+ * What "wipe all data" destroyed, and where the safety copy it takes first
+ * landed. `preWipeBackupPath` is null when the backup could not be written.
+ */
+export interface WipeOutcome {
+	deletedStudents: number;
+	deletedClasses: number;
+	deletedEvents: number;
+	preWipeBackupPath: string | null;
+}
+
 export interface ServerInfo {
 	localIp: string;
 	port: number;
@@ -300,6 +311,22 @@ export interface Sf2CloseDaySummary {
 	date: string;
 	presentCount: number;
 	absentCount: number;
+}
+
+/**
+ * Result of reading "X" absence marks back out of the SF2 working workbook.
+ * `imported` counts absences newly recorded; `alreadyRecorded` counts workbook
+ * marks the database already knew about, so re-running is a safe no-op.
+ */
+export interface Sf2AttendanceImportOutcome {
+	classId: string;
+	reportMonth: string;
+	scannedCells: number;
+	imported: number;
+	alreadyRecorded: number;
+	datesWithMarks: number;
+	mappedRows: number;
+	mappedDates: number;
 }
 
 export interface Sf2TemplateSummary {

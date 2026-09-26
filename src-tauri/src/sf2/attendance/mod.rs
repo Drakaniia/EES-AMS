@@ -1,4 +1,5 @@
 pub(crate) mod attendance_events;
+pub(crate) mod attendance_import;
 pub(crate) mod attendance_marks;
 pub(crate) mod attendance_service;
 

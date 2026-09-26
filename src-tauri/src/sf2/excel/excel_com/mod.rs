@@ -1,3 +1,4 @@
+pub mod attendance_scan;
 pub mod calendar;
 pub mod com_session;
 pub mod learners;
@@ -10,6 +11,7 @@ pub mod workbook_utils;
 pub mod worksheet;
 
 // Re-export public API surface (used by excel.rs)
+pub use attendance_scan::read_cell_texts;
 pub use workbook::WorkbookSession;
 pub use workbook_analysis::analyze_workbook;
 pub use workbook_io::{write_formulas, write_marks, write_marks_force, write_metadata};
