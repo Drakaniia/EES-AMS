@@ -1,5 +1,10 @@
 #[cfg(target_os = "windows")]
 pub(crate) mod excel_com;
+// The gate is platform-independent on purpose: the *serialisation* is testable
+// with no Excel installed. Off Windows nothing acquires it, because there is no
+// COM path to serialise.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub(crate) mod excel_lock;
 pub(crate) mod excel_preview;
 pub(crate) mod excel_service;
 pub(crate) mod excel_service_helpers;
