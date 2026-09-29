@@ -107,46 +107,7 @@ pub fn import_all(
     }
 
     for event in events {
-        let session_key = event.session_key.clone().unwrap_or_else(|| {
-            let local_date = event
-                .timestamp
-                .with_timezone(&chrono::Local)
-                .format("%Y-%m-%d");
-            let class_key = event
-                .class_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .unwrap_or("unassigned");
-            format!("{local_date}|{class_key}|day")
-        });
-
-        transaction
-            .execute(
-                "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-                 ON CONFLICT(id) DO UPDATE SET
-                    student_id = excluded.student_id,
-                    class_id = excluded.class_id,
-                    event_type = excluded.event_type,
-                    timestamp = excluded.timestamp,
-                    note = excluded.note,
-                    session_key = excluded.session_key,
-                    override_reason = excluded.override_reason,
-                    updated_at = excluded.updated_at",
-                params![
-                    event.id.0.to_string(),
-                    event.student_id.0.to_string(),
-                    event.class_id,
-                    "in",
-                    event.timestamp.timestamp(),
-                    event.note,
-                    session_key,
-                    event.override_reason,
-                    event.updated_at.map(|timestamp| timestamp.timestamp()),
-                ],
-            )
-            .map_err(|e| e.to_string())?;
+        insert_imported_event(&transaction, &event)?;
     }
 
     if let Some(mut settings) = settings.into_iter().next() {
@@ -235,6 +196,63 @@ pub fn import_all(
     .map_err(|e| e.to_string())?;
 
     transaction.commit().map_err(|e| e.to_string())
+}
+
+/// Insert one exported attendance event, preserving its `event_type`.
+///
+/// The event type used to be hardcoded to `"in"` on this path, which made
+/// `Export JSON` → `wipe all` → `Import JSON` silently rewrite every recorded
+/// absence as a present. Absence is the only record of an X mark, so that
+/// round-trip was a one-click data-loss path; the type now round-trips.
+///
+/// `session_key` is still derived when an older export omitted it, because the
+/// fallback is deterministic on the event's own local date and class and
+/// therefore does not change what the event means.
+fn insert_imported_event(
+    transaction: &rusqlite::Transaction<'_>,
+    event: &AttendanceEvent,
+) -> std::result::Result<(), String> {
+    let session_key = event.session_key.clone().unwrap_or_else(|| {
+        let local_date = event
+            .timestamp
+            .with_timezone(&chrono::Local)
+            .format("%Y-%m-%d");
+        let class_key = event
+            .class_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("unassigned");
+        format!("{local_date}|{class_key}|day")
+    });
+
+    transaction
+        .execute(
+            "INSERT INTO events (id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 ON CONFLICT(id) DO UPDATE SET
+                    student_id = excluded.student_id,
+                    class_id = excluded.class_id,
+                    event_type = excluded.event_type,
+                    timestamp = excluded.timestamp,
+                    note = excluded.note,
+                    session_key = excluded.session_key,
+                    override_reason = excluded.override_reason,
+                    updated_at = excluded.updated_at",
+            params![
+                event.id.0.to_string(),
+                event.student_id.0.to_string(),
+                event.class_id,
+                event.event_type.as_db_value(),
+                event.timestamp.timestamp(),
+                event.note,
+                session_key,
+                event.override_reason,
+                event.updated_at.map(|timestamp| timestamp.timestamp()),
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -452,3 +470,7 @@ pub async fn export_json_with_folder(
 
     Ok(file_path_buf.to_string_lossy().to_string())
 }
+
+#[cfg(test)]
+#[path = "__tests__/data_transfer_tests.rs"]
+mod tests;
