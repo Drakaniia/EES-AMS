@@ -4,13 +4,53 @@ use crate::domain::models::Session;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
+use std::collections::BTreeSet;
 use std::path::Path;
 
-/// Current SQLite schema version.
-pub const CURRENT_SCHEMA_VERSION: i32 = 18;
+// brief-S1: `CURRENT_SCHEMA_VERSION` moved down to the `schema_v24` block below
+// the migration files, because v24's owner defines the number. The one here is
+// removed, not shadowed - two definitions of the version is exactly the drift
+// this is meant to prevent.
 
 /// How many pre-migration snapshots to keep beside the live database.
-const SNAPSHOT_HISTORY: usize = 3;
+///
+/// Five, not three: the two migrations that rebuild a table and can destroy
+/// attendance records are v11 and v17, so a user who has installed updates
+/// across both of those needs both snapshots still on disk (spec §9.4).
+const SNAPSHOT_HISTORY: usize = 5;
+
+/// Row-count probe for the rebuild assertions below. Lives in a `.sql` file
+/// with the rest of the migration SQL; `{table}` is substituted by
+/// [`row_count`] from a hard-coded literal, never from user input.
+const ROW_COUNT_SQL: &str = include_str!("../../sf2/sql/row_count.sql");
+
+/// Column-existence probe for the idempotent `ADD COLUMN` guard in
+/// [`execute_migration_ddl`]. `{table}` and `{column}` are both substituted
+/// from hard-coded literals in this module or from a statement in one of the
+/// migration files it runs - never from user input.
+const COLUMN_EXISTS_SQL: &str = include_str!("../../sf2/sql/column_exists.sql");
+
+/// Column-list probe for the rebuild assertions below. `{table}` is substituted
+/// by [`table_columns`] from a hard-coded literal, never from user input.
+const TABLE_COLUMNS_SQL: &str = include_str!("../../sf2/sql/table_columns.sql");
+
+/// v19 - one row per month workbook file.
+const MIGRATE_TO_V19_SQL: &str = include_str!("../../sf2/sql/migrate_to_v19.sql");
+/// v20 - one roster per month file, plus the DepEd learner ID.
+const MIGRATE_TO_V20_SQL: &str = include_str!("../../sf2/sql/migrate_to_v20.sql");
+/// v21 - one day-number grid per month file.
+const MIGRATE_TO_V21_SQL: &str = include_str!("../../sf2/sql/migrate_to_v21.sql");
+/// v22 - settings for the per-month model, the D16 override column, backfill.
+const MIGRATE_TO_V22_SQL: &str = include_str!("../../sf2/sql/migrate_to_v22.sql");
+
+// brief-S1: v24 - `sf2_month_date_mappings` regains its `sheet_name` column
+// (spec section 0 A4: one workbook, twelve month worksheets).
+//
+// The version number is owned by the module that owns the migration body, so the
+// two cannot drift. v23 is the school-year label and stays where it is; v24 runs
+// after it and is independent of it.
+//
+pub const CURRENT_SCHEMA_VERSION: i32 = crate::sf2::month::schema_v24::SCHEMA_VERSION;
 
 /// Initialize the database with schema and migrations
 pub fn init_db<P: AsRef<Path>>(path: P) -> Result<DbPool> {
@@ -120,6 +160,340 @@ fn prune_snapshots(parent: &Path, file_name: &str) {
     }
 }
 
+/// Count the rows currently in `table`.
+///
+/// Used to bracket a table rebuild: read the count before the `execute_batch`
+/// and again after it, then hand both to [`assert_row_count_preserved`]. The
+/// SQL itself lives in `sf2/sql/row_count.sql`; only the table name - always a
+/// literal from this module or its tests - is substituted here.
+fn row_count(conn: &rusqlite::Connection, table: &str) -> Result<i64> {
+    let sql = ROW_COUNT_SQL.replace("{table}", table);
+    let count = conn.query_row(&sql, [], |row| row.get::<_, i64>(0))?;
+    Ok(count)
+}
+
+/// Fail the migration when a table rebuild did not carry every row across.
+///
+/// A migration that silently drops rows is the failure mode that costs this app
+/// its attendance marks: the `events` table *is* the record of every X, and a
+/// rebuild that loses rows looks fine until the first mark is written. Making
+/// it an error means the damage surfaces at install time - next to the
+/// pre-migration snapshot - instead of at the first attendance mark.
+///
+/// `migration_label` names the migration for the log line, e.g. `"v11"`.
+pub(crate) fn assert_row_count_preserved(
+    table: &str,
+    before: i64,
+    after: i64,
+    migration_label: &str,
+) -> Result<()> {
+    if before == after {
+        return Ok(());
+    }
+    log::error!(
+        "migration {migration_label} lost rows from `{table}`: {before} before, {after} after"
+    );
+    Err(AppError::Internal(format!(
+        "migration {migration_label} lost rows from table `{table}`: {before} rows before the \
+         rebuild, {after} rows after. Refusing to continue on a database that no longer holds \
+         every attendance record. Restore the pre-migration snapshot stored next to the database \
+         file and report this."
+    )))
+}
+
+/// The columns `table` currently has.
+///
+/// Read before a table rebuild and again after it, so
+/// [`assert_columns_preserved`] can tell whether the rebuild dropped anything
+/// the table used to carry. The SQL lives in `sf2/sql/table_columns.sql`; only
+/// the table name - always a literal from this module or its tests - is
+/// substituted here.
+fn table_columns(conn: &rusqlite::Connection, table: &str) -> Result<BTreeSet<String>> {
+    let sql = TABLE_COLUMNS_SQL.replace("{table}", table);
+    let mut statement = conn.prepare(&sql)?;
+    let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+    rows.collect::<rusqlite::Result<BTreeSet<String>>>()
+        .map_err(Into::into)
+}
+
+/// Fail the migration when a table rebuild dropped a column.
+///
+/// The row-count assertion next to this one catches lost *rows*. It cannot see a
+/// lost *column*, and a v11 replay against a table a newer build had already
+/// extended is exactly that: `migrate_to_v11.sql` rebuilds `students` with five
+/// columns and `events` with six, so replaying it over a v14+ table silently
+/// drops `session_key`, `override_reason` and `updated_at` from `events` and
+/// `gender` and `sf2_learner_id` from `students`. The exception audit trail those
+/// three columns carry is then unreadable, and the identities the per-month model
+/// depends on are gone - with no error anywhere.
+///
+/// Row counts and column lists are the same failure seen from two sides, and both
+/// have to be checked: a rebuild can preserve every row and still destroy what
+/// was in them.
+///
+/// Every table is reported in one error rather than the first one to fail. An
+/// operator restoring from the pre-migration snapshot needs to know the whole
+/// list of what was at risk, and finding out one table at a time is a worse
+/// experience than a slightly longer message.
+pub(crate) fn assert_columns_preserved(
+    tables: &[(&str, &BTreeSet<String>, &BTreeSet<String>)],
+    migration_label: &str,
+) -> Result<()> {
+    let mut lost_all = Vec::new();
+    for (table, before, after) in tables {
+        for column in before.difference(after) {
+            lost_all.push(format!("`{table}`.`{column}`"));
+        }
+    }
+    if lost_all.is_empty() {
+        return Ok(());
+    }
+    let lost = lost_all.join(", ");
+    log::error!("migration {migration_label} dropped columns: {lost}");
+    Err(AppError::Internal(format!(
+        "migration {migration_label} dropped column(s) {lost}. That database was written by a \
+         newer build than the one running this migration, and continuing would destroy attendance \
+         data those columns hold. Restore the pre-migration snapshot stored next to the database \
+         file and report this."
+    )))
+}
+
+/// One statement read out of a migration `.sql` file.
+struct MigrationStatement {
+    /// The `-- name: <label>` marker above the statement, when it has one.
+    ///
+    /// Unmarked statements are the file's DDL and run once. Marked statements
+    /// are data work that runs once per calendar month with the file's
+    /// placeholders bound, and are looked up by name.
+    name: Option<String>,
+    sql: String,
+}
+
+/// Split a migration file into statements, keeping the `-- name:` markers.
+///
+/// The splitter is line-oriented: a line whose first non-space characters are
+/// `--` is a comment and is dropped, unless it is inside a string literal, and
+/// a `-- name: <label>` line names the statement that follows it. Semicolons
+/// inside a string literal do not end a statement.
+///
+/// Everything after a statement's closing `;` on the same line is discarded,
+/// which is what makes a trailing `-- explain what this column holds` safe. The
+/// cost is that a migration file may not put two statements on one line; none of
+/// them do.
+///
+/// Migration files therefore must not wrap a string literal across lines either.
+/// None of them do.
+fn parse_migration_statements(file: &str) -> Vec<MigrationStatement> {
+    let mut statements = Vec::new();
+    let mut sql = String::new();
+    let mut name: Option<String> = None;
+    let mut quote: Option<char> = None;
+
+    for line in file.lines() {
+        if quote.is_none() {
+            let trimmed = line.trim_start();
+            if let Some(marker) = trimmed.strip_prefix("-- name:") {
+                name = Some(marker.trim().to_string());
+                continue;
+            }
+            if trimmed.starts_with("--") {
+                continue;
+            }
+        }
+
+        let mut ended = false;
+        for ch in line.chars() {
+            if ended {
+                break;
+            }
+            if let Some(open) = quote {
+                sql.push(ch);
+                if ch == open {
+                    quote = None;
+                }
+                continue;
+            }
+            match ch {
+                '\'' | '"' => {
+                    quote = Some(ch);
+                    sql.push(ch);
+                }
+                ';' => {
+                    push_migration_statement(&mut statements, &mut sql, name.take());
+                    ended = true;
+                }
+                _ => sql.push(ch),
+            }
+        }
+        sql.push('\n');
+    }
+    push_migration_statement(&mut statements, &mut sql, name.take());
+
+    statements
+}
+
+fn push_migration_statement(
+    statements: &mut Vec<MigrationStatement>,
+    sql: &mut String,
+    name: Option<String>,
+) {
+    if !sql.trim().is_empty() {
+        statements.push(MigrationStatement {
+            name,
+            sql: sql.trim().to_string(),
+        });
+    }
+    sql.clear();
+}
+
+/// The `(table, column)` an `ALTER TABLE ... ADD COLUMN` statement adds, if the
+/// statement is one. Keyword matching is case-insensitive.
+fn added_column(sql: &str) -> Option<(String, String)> {
+    const TABLE: &str = "ALTER TABLE ";
+    const COLUMN: &str = " ADD COLUMN ";
+
+    let trimmed = sql.trim();
+    if trimmed.len() < TABLE.len() || !trimmed[..TABLE.len()].eq_ignore_ascii_case(TABLE) {
+        return None;
+    }
+    let rest = &trimmed[TABLE.len()..];
+    let keyword_start = rest
+        .as_bytes()
+        .windows(COLUMN.len())
+        .position(|window| window.eq_ignore_ascii_case(COLUMN.as_bytes()))?;
+    let after_keyword = keyword_start + COLUMN.len() - 1;
+    let table = rest[..keyword_start].trim();
+    let column = rest[after_keyword..].split_whitespace().next()?;
+    if table.is_empty() {
+        return None;
+    }
+    Some((table.to_string(), column.to_string()))
+}
+
+/// Does `table` already have `column`?
+fn column_exists(conn: &rusqlite::Connection, table: &str, column: &str) -> Result<bool> {
+    let sql = COLUMN_EXISTS_SQL
+        .replace("{table}", table)
+        .replace("{column}", column);
+    let matches: i64 = conn.query_row(&sql, [], |row| row.get(0))?;
+    Ok(matches > 0)
+}
+
+/// Run a migration file's unmarked DDL statements, in order, skipping any
+/// `ADD COLUMN` whose column is already present.
+///
+/// SQLite has no `ADD COLUMN IF NOT EXISTS`, and a migration is replayed
+/// whenever the process died between the last successful statement and the
+/// `PRAGMA user_version` write that follows it. Without this guard, that replay
+/// aborts on "duplicate column name" and the app no longer starts at all - the
+/// worst possible outcome for a migration whose whole purpose is to make the
+/// app safer.
+fn execute_migration_ddl(conn: &rusqlite::Connection, file: &str) -> Result<()> {
+    for statement in parse_migration_statements(file)
+        .into_iter()
+        .filter(|statement| statement.name.is_none())
+    {
+        if let Some((table, column)) = added_column(&statement.sql) {
+            if column_exists(conn, &table, &column)? {
+                log::info!(
+                    "migration: column `{table}`.`{column}` already exists, skipping the add"
+                );
+                continue;
+            }
+        }
+        conn.execute_batch(&statement.sql)?;
+    }
+    Ok(())
+}
+
+/// Migrate database to version 19 (one row per month workbook file)
+fn migrate_to_v19(conn: &rusqlite::Connection) -> Result<()> {
+    execute_migration_ddl(conn, MIGRATE_TO_V19_SQL)
+}
+
+/// Migrate database to version 20 (one roster per month file + DepEd learner ID)
+fn migrate_to_v20(conn: &rusqlite::Connection) -> Result<()> {
+    execute_migration_ddl(conn, MIGRATE_TO_V20_SQL)
+}
+
+/// Migrate database to version 21 (one day-number grid per month file)
+fn migrate_to_v21(conn: &rusqlite::Connection) -> Result<()> {
+    execute_migration_ddl(conn, MIGRATE_TO_V21_SQL)
+}
+
+/// Migrate database to version 22 (per-month settings, the D16 override column,
+/// and the backfill of the legacy single-template row)
+///
+/// The backfill is what keeps an install working before the split runs
+/// (edge case E14). Every mapping it copies is counted before and after, with
+/// the same assertion the v11 and v17 rebuilds use: a backfill that quietly
+/// drops a mapping is a hard error, because a missing date mapping is the
+/// precondition for the whole destructive-sync chain in spec §4.
+fn migrate_to_v22(conn: &rusqlite::Connection) -> Result<()> {
+    execute_migration_ddl(conn, MIGRATE_TO_V22_SQL)?;
+    backfill_legacy_template_into_month_rows(conn)
+}
+
+/// Copy the legacy single-template row into the per-month tables, once per
+/// calendar month of the school year.
+///
+/// The legacy model is one workbook per class with a mutable `report_month`, so
+/// each legacy row has exactly one month to become. Both mapping copies are
+/// bracketed by [`assert_row_count_preserved`], and every statement is written
+/// to be a no-op when replayed.
+fn backfill_legacy_template_into_month_rows(conn: &rusqlite::Connection) -> Result<()> {
+    let statements = parse_migration_statements(MIGRATE_TO_V22_SQL);
+    let named = |name: &str| -> Result<String> {
+        statements
+            .iter()
+            .find(|statement| statement.name.as_deref() == Some(name))
+            .map(|statement| statement.sql.clone())
+            .ok_or_else(|| {
+                AppError::Internal(format!(
+                    "migrate_to_v22.sql is missing its `{name}` statement"
+                ))
+            })
+    };
+
+    for month in 1..=12_u32 {
+        let month_name = crate::sf2::calendar::sf2_month_name(month);
+        // Every canonical name is ASCII and at least three characters long.
+        let Some(month_abbr) = month_name.get(..3) else {
+            continue;
+        };
+        let month_number = format!("{month:02}");
+        let bind = |sql: &str| -> String {
+            sql.replace("{month_name}", month_name)
+                .replace("{month_abbr}", month_abbr)
+                .replace("{month_number}", &month_number)
+        };
+        let count = |name: &str| -> Result<i64> {
+            let sql = bind(&named(name)?);
+            Ok(conn.query_row(&sql, [], |row| row.get::<_, i64>(0))?)
+        };
+
+        for name in ["template", "students", "dates"] {
+            conn.execute_batch(&bind(&named(name)?))?;
+        }
+
+        let label = format!("v22 backfill ({month_name})");
+        assert_row_count_preserved(
+            "sf2_month_student_mappings",
+            count("students_expected")?,
+            count("students_actual")?,
+            &label,
+        )?;
+        assert_row_count_preserved(
+            "sf2_month_date_mappings",
+            count("dates_expected")?,
+            count("dates_actual")?,
+            &label,
+        )?;
+    }
+
+    Ok(())
+}
+
 /// Run all pending database migrations on an existing SQLite connection.
 pub fn migrate_db(conn: &rusqlite::Connection) -> Result<()> {
     // Check if we need to run migrations
@@ -224,6 +598,57 @@ pub fn migrate_db(conn: &rusqlite::Connection) -> Result<()> {
 
     if user_version < 18 {
         migrate_to_v18(conn)?;
+        conn.execute(
+            &format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"),
+            [],
+        )?;
+    }
+
+    if user_version < 19 {
+        migrate_to_v19(conn)?;
+        conn.execute(
+            &format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"),
+            [],
+        )?;
+    }
+
+    if user_version < 20 {
+        migrate_to_v20(conn)?;
+        conn.execute(
+            &format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"),
+            [],
+        )?;
+    }
+
+    if user_version < 21 {
+        migrate_to_v21(conn)?;
+        conn.execute(
+            &format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"),
+            [],
+        )?;
+    }
+
+    if user_version < 22 {
+        migrate_to_v22(conn)?;
+        conn.execute(
+            &format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"),
+            [],
+        )?;
+    }
+
+    if user_version < 23 {
+        migrate_to_v23(conn)?;
+        conn.execute(
+            &format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"),
+            [],
+        )?;
+    }
+
+    // brief-S1: v24 - the `sheet_name` column and its backfill. The body lives in
+    // `crate::sf2::month::schema_v24` because that module owns the version number
+    // above; this is the registration and nothing else.
+    if user_version < crate::sf2::month::schema_v24::SCHEMA_VERSION {
+        crate::sf2::month::schema_v24::migrate_to_v24(conn)?;
         conn.execute(
             &format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"),
             [],
@@ -609,8 +1034,53 @@ fn migrate_to_v10(conn: &rusqlite::Connection) -> Result<()> {
 }
 
 /// Migrate database to version 11 (single IN attendance and no external student number)
+///
+/// Rebuilt `students` and `events`. The rebuild used to delete every non-'in'
+/// attendance event, which destroyed absences on any database that crossed
+/// v10 -> v11 carrying data written by a newer build; the upgrade now deletes
+/// only event types this schema does not know about
+/// (`purge_unknown_event_types.sql`), and the row counts around the rebuild
+/// prove nothing was lost.
+///
+/// That delete is the one step of this migration that is *meant* to change the
+/// `events` row count, so it runs first and outside the bracket. Counting
+/// before it would make the guard reject the very deletion it exists to make
+/// safe, and would blind the guard to the rebuild - which is the part that
+/// actually risks dropping rows.
+///
+/// The **column** lists are asserted over the same bracket, and that is the half
+/// a row count cannot see. Both rebuilds are written from the v11 shape, so a
+/// database whose `user_version` was lost while its tables had already been
+/// extended by a newer build would come out of this migration with
+/// `session_key` / `override_reason` / `updated_at` and `gender` /
+/// `sf2_learner_id` silently gone. Nothing would error, and the exception audit
+/// trail would be unreadable afterwards.
 fn migrate_to_v11(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(include_str!("../../sf2/sql/purge_unknown_event_types.sql"))?;
+
+    let students_before = row_count(conn, "students")?;
+    let events_before = row_count(conn, "events")?;
+    let student_columns_before = table_columns(conn, "students")?;
+    let event_columns_before = table_columns(conn, "events")?;
+
     conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v11.sql"))?;
+
+    assert_row_count_preserved(
+        "students",
+        students_before,
+        row_count(conn, "students")?,
+        "v11",
+    )?;
+    assert_row_count_preserved("events", events_before, row_count(conn, "events")?, "v11")?;
+    let student_columns_after = table_columns(conn, "students")?;
+    let event_columns_after = table_columns(conn, "events")?;
+    assert_columns_preserved(
+        &[
+            ("students", &student_columns_before, &student_columns_after),
+            ("events", &event_columns_before, &event_columns_after),
+        ],
+        "v11",
+    )?;
     Ok(())
 }
 
@@ -650,8 +1120,15 @@ fn migrate_to_v16(conn: &rusqlite::Connection) -> Result<()> {
 /// 'in' and 'absent'. Absence is now stored as its own record (a student marked
 /// absent from the attendance page or SF2 preview) instead of being derived from
 /// a missing 'in' record, so other students are never auto-recorded.
+///
+/// The `events` row count is asserted across the rebuild: losing a single
+/// attendance record here would be permanent and invisible.
 fn migrate_to_v17(conn: &rusqlite::Connection) -> Result<()> {
+    let events_before = row_count(conn, "events")?;
+
     conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v17.sql"))?;
+
+    assert_row_count_preserved("events", events_before, row_count(conn, "events")?, "v17")?;
     Ok(())
 }
 
@@ -660,3 +1137,197 @@ fn migrate_to_v18(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(include_str!("../../sf2/sql/migrate_to_v18.sql"))?;
     Ok(())
 }
+
+/// Migrate database to version 23 (one canonical school-year label)
+///
+/// ## The defect this closes
+///
+/// A month row is looked up by exact equality on
+/// `(active_class_id, school_year, report_month)`, and the question "which
+/// school year does this class actually have months for" is answered by a GLOB
+/// for `[0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]`. Both were written against
+/// `2026-2027`. A user who types the DepEd form's own rendering of the same
+/// year - `2026 - 2027`, spaces around the dash - stores a label that matches no
+/// row and passes no GLOB: the whole per-month table becomes silently
+/// unreachable and every read falls back to the legacy tables, for a whole
+/// school year, with nothing reporting an error.
+///
+/// ## Why this is Rust and not a `.sql` file
+///
+/// Because the canonical form is defined by
+/// [`normalize_school_year`](crate::sf2::month::first_school_day::normalize_school_year),
+/// which is also what the read and write paths apply. Re-implementing that
+/// parser in SQL would give the backfill and the normaliser two independent
+/// definitions of "canonical" - the two-format bug reappearing one layer down,
+/// where it would be even harder to see. Calling the one function means the
+/// stored rows and the rows a read looks for cannot be spelled differently, by
+/// construction.
+///
+/// ## What it will not do
+///
+/// A label with fewer than two four-digit years is left exactly as it is, so a
+/// row the user has not finished typing survives. And a row is never deleted
+/// except where two rows for the same month would collapse onto one canonical
+/// label - see [`collapse_duplicate_month_rows`].
+fn migrate_to_v23(conn: &rusqlite::Connection) -> Result<()> {
+    use crate::sf2::month::first_school_day::normalize_school_year;
+
+    for table in ["sf2_templates", "sf2_month_templates"] {
+        let Some(sql) = column_bearing_school_year_update(table) else {
+            continue;
+        };
+        let mut statement = conn
+            .prepare(&format!(
+                "SELECT DISTINCT school_year FROM {table} WHERE school_year <> ''"
+            ))
+            .map_err(|error| AppError::Internal(format!("v23 could not read {table}: {error}")))?;
+        let labels = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|error| AppError::Internal(format!("v23 could not read {table}: {error}")))?
+            .collect::<rusqlite::Result<Vec<String>>>()
+            .map_err(|error| AppError::Internal(format!("v23 could not read {table}: {error}")))?;
+
+        for label in labels {
+            let canonical = normalize_school_year(&label);
+            if canonical == label {
+                continue;
+            }
+            let updated = conn.execute(&sql, params![canonical, label]);
+            match updated {
+                Ok(rows) if rows > 0 => log::info!(
+                    "v23: rewrote the school year {label:?} as {canonical:?} in {table} ({rows} row(s))"
+                ),
+                Ok(_) => {}
+                // The one place a rewrite can conflict: two rows for the same
+                // month, stored under two spellings of the same year. That is
+                // the duplication this defect produces, and it is handled below
+                // rather than swallowed.
+                Err(error) => {
+                    if table == "sf2_month_templates" {
+                        collapse_duplicate_month_rows(conn, &label, &canonical)?;
+                    } else {
+                        return Err(AppError::Internal(format!(
+                            "v23 could not rewrite the school year {label:?} in {table}: {error}"
+                        )));
+                    }
+                }
+            }
+        }
+    }
+
+    normalise_settings_school_year(conn)?;
+    Ok(())
+}
+
+/// The `UPDATE` for one SF2 table, or `None` when that table does not exist yet.
+///
+/// A v18 database mid-chain may not have the per-month table; skipping is right,
+/// because nothing in it stores a school year that then goes un-normalised.
+fn column_bearing_school_year_update(table: &str) -> Option<String> {
+    if !matches!(table, "sf2_templates" | "sf2_month_templates") {
+        return None;
+    }
+    Some(format!(
+        "UPDATE {table} SET school_year = ?1 WHERE school_year = ?2"
+    ))
+}
+
+/// Two rows for one month, stored under two spellings of the same year.
+///
+/// Collapsing them is a repair, not a cleanup: the duplicate is unreachable by
+/// every per-month read, so the month has been showing the legacy tables all
+/// along, and leaving both rows would leave a month that cannot be represented
+/// at all. The row that survives is the **most recently imported** one, because
+/// that is the one whose `source_path`/`first_school_day` the app last wrote.
+///
+/// Logged loudly, because deleting a row is the one destructive thing this
+/// migration does and it must never be silent.
+fn collapse_duplicate_month_rows(
+    conn: &rusqlite::Connection,
+    spaced: &str,
+    canonical: &str,
+) -> Result<()> {
+    let duplicates: Vec<(String, i64)> = {
+        let mut statement = conn
+            .prepare(
+                "SELECT id, imported_at FROM sf2_month_templates
+                 WHERE school_year = ?1 OR school_year = ?2
+                 ORDER BY imported_at ASC, id ASC",
+            )
+            .map_err(|error| {
+                AppError::Internal(format!("v23 could not read the month rows: {error}"))
+            })?;
+        let rows = statement
+            .query_map(params![spaced, canonical], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .map_err(|error| {
+                AppError::Internal(format!("v23 could not read the month rows: {error}"))
+            })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|error| {
+                AppError::Internal(format!("v23 could not read the month rows: {error}"))
+            })?
+    };
+
+    // Keep the newest, drop the rest - but only the ones that are duplicates of
+    // each other, which is every row beyond the first for a given month.
+    for (id, imported_at) in duplicates.iter().skip(1) {
+        let removed = conn
+            .execute("DELETE FROM sf2_month_templates WHERE id = ?1", params![id])
+            .map_err(|error| {
+                AppError::Internal(format!(
+                    "v23 could not collapse the duplicate month row: {error}"
+                ))
+            })?;
+        log::warn!(
+            "v23: removed the older duplicate month row {id} (imported {imported_at}) so that \
+             {spaced:?} and {canonical:?} can share one canonical school year; its date and \
+             student mappings were removed with it. {removed} row(s) deleted."
+        );
+    }
+    Ok(())
+}
+
+/// Keep the app-level `settings.school_year` in step with the SF2 tables.
+///
+/// It is the copy the user typed and the frontend shows, so leaving it behind
+/// would let the two disagree again - which is the bug this migration exists to
+/// close, restated somewhere else.
+fn normalise_settings_school_year(conn: &rusqlite::Connection) -> Result<()> {
+    use crate::sf2::month::first_school_day::normalize_school_year;
+
+    let stored: Option<String> = conn
+        .query_row(
+            "SELECT school_year FROM settings WHERE id = 'app'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| AppError::Internal(format!("v23 could not read the settings: {error}")))?;
+    let Some(stored) = stored else {
+        return Ok(());
+    };
+    let canonical = normalize_school_year(&stored);
+    if canonical == stored {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE settings SET school_year = ?1 WHERE id = 'app'",
+        params![canonical],
+    )
+    .map_err(|error| {
+        AppError::Internal(format!(
+            "v23 could not rewrite the settings school year: {error}"
+        ))
+    })?;
+    log::info!("v23: rewrote the app settings' school year {stored:?} as {canonical:?}");
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "__tests__/migration_tests.rs"]
+mod tests;
+
+#[cfg(test)]
+#[path = "__tests__/month_migration_tests.rs"]
+mod month_migration_tests;

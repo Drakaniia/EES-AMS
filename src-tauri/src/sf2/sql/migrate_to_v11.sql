@@ -1,7 +1,8 @@
 PRAGMA foreign_keys = OFF;
 
-DELETE FROM events
-WHERE event_type <> 'in';
+-- The guarded delete of event types this schema does not know about lives in
+-- `purge_unknown_event_types.sql` and runs before this batch, so the row-count
+-- guard in `migrate_to_v11` brackets only the rebuild below.
 
 DROP TABLE IF EXISTS students_v11;
 
@@ -34,7 +35,12 @@ CREATE TABLE events_v11 (
     id TEXT PRIMARY KEY NOT NULL,
     student_id TEXT NOT NULL,
     class_id TEXT,
-    event_type TEXT NOT NULL CHECK(event_type IN ('in')),
+    -- The CHECK admits 'absent' (introduced by the v17 event model) so the
+    -- rebuild below can carry absence rows across instead of dropping them.
+    -- Widening the historical v11 CHECK is deliberate: preserving the marks
+    -- outranks preserving the old schema shape, and v17 rebuilds this table
+    -- again with the same pair of accepted values.
+    event_type TEXT NOT NULL CHECK(event_type IN ('in', 'absent')),
     timestamp INTEGER NOT NULL,
     note TEXT,
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
@@ -42,8 +48,7 @@ CREATE TABLE events_v11 (
 
 INSERT INTO events_v11 (id, student_id, class_id, event_type, timestamp, note)
 SELECT id, student_id, class_id, event_type, timestamp, note
-FROM events
-WHERE event_type = 'in';
+FROM events;
 
 DROP TABLE events;
 ALTER TABLE events_v11 RENAME TO events;
