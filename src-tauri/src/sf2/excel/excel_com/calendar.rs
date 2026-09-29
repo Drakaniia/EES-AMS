@@ -6,15 +6,30 @@ use crate::sf2::excel::excel_com::worksheet::{
     cell_text, rename_sheet_unique, set_sf2_cell, worksheet_cell,
 };
 use crate::sf2::models::Sf2WorkbookMetadata;
+use crate::sf2::month::workbook_builder::{
+    day_numbers_for_slots, days_without_a_slot, MonthDaySlot,
+};
 use chrono::{Datelike, NaiveDate};
 
 const EXCEL_SHEET_VISIBLE: i32 = -1;
-const EXCEL_SHEET_HIDDEN: i32 = 0;
 const EXCEL_ALIGN_LEFT: i32 = -4131;
 
+/// Write the month's day numbers into the one worksheet a month file holds.
+///
+/// A month file is created with a single `"{MONTH} {year}"` tab (spec D4), so
+/// there is nothing to hide, rename or clear: the target sheet is the sheet.
+/// The eleven-hidden-tab loop that used to live here - clearing row 6, renaming
+/// to `__SF2_HIDDEN_{n}`, and setting `Visible = 0` on every other month tab -
+/// was the entire cost of a month switch, and it is gone because the eleven
+/// other tabs are gone. A month switch is now a SQL read
+/// (`crate::sf2::month_preview`); this function only runs when a month file is
+/// written.
+///
+/// What remains is the date-header writer: find this month's sheet, make sure
+/// it is visible and correctly named, write the day numbers across the merged
+/// weekday pairs, and activate it.
 pub fn configure_sf2_calendar(
     monthly_sheets: &[ComObject],
-    sf2_sheets: &[ComObject],
     metadata: &Sf2WorkbookMetadata,
 ) -> Result<()> {
     let report_month = month_number(&metadata.report_month);
@@ -47,24 +62,6 @@ pub fn configure_sf2_calendar(
     )?;
     let _ = target_sheet.method("Activate", Vec::new());
 
-    let target_index = target_sheet.get_i32("Index")?;
-    let mut hidden_index = 1;
-    for sheet in sf2_sheets {
-        if sheet.get_i32("Index")? == target_index {
-            continue;
-        }
-
-        clear_sf2_month_dates(sheet)?;
-        let sheet_name = sheet.get_string("Name")?;
-        if month_number(&sheet_name) > 0
-            && super::workbook_utils::year_from_sheet_name(&sheet_name) > 0
-        {
-            rename_sheet_unique(sheet, &format!("__SF2_HIDDEN_{hidden_index}"))?;
-        }
-        sheet.put_i4("Visible", EXCEL_SHEET_HIDDEN)?;
-        hidden_index += 1;
-    }
-
     Ok(())
 }
 
@@ -96,35 +93,39 @@ fn set_sf2_month_dates(
         ));
     }
 
-    let monday_anchor =
-        first_school_date - chrono::Duration::days(date_weekday_index(first_school_date).unwrap());
+    // The same pure layout the month-file builder uses, so a date-header write
+    // here and a `sf2_month_date_mappings` row there cannot disagree about which
+    // day sits in which column. Two copies of this arithmetic is how a day's
+    // absence ends up in a column the AMOUNT formulas do not count.
+    let month_slots: Vec<MonthDaySlot> = slots
+        .iter()
+        .map(|slot| MonthDaySlot {
+            column: slot.column as u32,
+            week_index: slot.week_index as u32,
+            weekday_index: slot.weekday_index as u32,
+        })
+        .collect();
 
-    for slot in slots {
-        let mut value = String::new();
-        for day in first_school_day..=last_day {
-            let Some(date) = NaiveDate::from_ymd_opt(year, month, day) else {
-                continue;
-            };
-            let Some(weekday_index) = date_weekday_index(date) else {
-                continue;
-            };
-            let week_index = (date - monday_anchor).num_days() / 7;
-            if week_index == i64::from(slot.week_index) && weekday_index == slot.weekday_index {
-                value = day.to_string();
-                break;
-            }
-        }
-
-        set_sf2_date_cell(sheet, slot.column, &value)?;
+    for (column, day) in day_numbers_for_slots(year, month, first_school_day, &month_slots) {
+        let value = day.map_or_else(String::new, |day| day.to_string());
+        set_sf2_date_cell(sheet, column as i32, &value)?;
     }
 
-    Ok(())
-}
-
-fn clear_sf2_month_dates(sheet: &ComObject) -> Result<()> {
-    for slot in sf2_weekday_slots(sheet)? {
-        set_sf2_cell(sheet, 6, slot.column, "", true)?;
+    // The DepEd grid is 25 labelled day cells - five weeks of Monday..Friday -
+    // and `AM` (ABSENT) is the very next column, so a sixth week has nowhere to
+    // go. A month needs at most 23, so this is empty; it is logged rather than
+    // assumed because a silently missing day column is a day the user cannot
+    // record an absence on.
+    let dropped = days_without_a_slot(year, month, first_school_day, &month_slots);
+    if !dropped.is_empty() {
+        log::warn!(
+            "SF2 month {month} {year} has {} school day(s) the DepEd form has no column for: \
+             {:?}. These days cannot hold an X and cannot be recorded.",
+            dropped.len(),
+            dropped
+        );
     }
+
     Ok(())
 }
 

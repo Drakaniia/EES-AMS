@@ -79,7 +79,6 @@ pub fn write_metadata(workbook_path: &Path, metadata: &Sf2WorkbookMetadata) -> R
         with_workbook(&workbook_path, false, true, |excel, workbook| {
             let sheets = workbook.get_object("Worksheets")?;
             let sheet_count = sheets.get_i32("Count")?;
-            let mut sf2_sheets = Vec::new();
             let mut monthly_sheets = Vec::new();
             let mut sheets_updated = 0usize;
 
@@ -95,7 +94,6 @@ pub fn write_metadata(workbook_path: &Path, metadata: &Sf2WorkbookMetadata) -> R
                 if month_number(&sheet_name) > 0 && year_from_sheet_name(&sheet_name) > 0 {
                     monthly_sheets.push(sheet.clone());
                 }
-                sf2_sheets.push(sheet.clone());
 
                 set_sf2_cell(&sheet, 3, 6, &metadata.school_id, true)?;
                 set_sf2_cell(&sheet, 3, 13, &metadata.school_year, true)?;
@@ -110,7 +108,7 @@ pub fn write_metadata(workbook_path: &Path, metadata: &Sf2WorkbookMetadata) -> R
             }
 
             if metadata.configure_calendar && !monthly_sheets.is_empty() {
-                configure_sf2_calendar(&monthly_sheets, &sf2_sheets, &metadata)?;
+                configure_sf2_calendar(&monthly_sheets, &metadata)?;
             }
 
             excel.calculate_full_rebuild()?;
@@ -181,34 +179,6 @@ impl WorkbookSession {
         Ok(())
     }
 
-    /// Clear the attendance grid (columns F–AL) for learner rows on a sheet
-    /// using `Range.ClearContents()` — two COM calls per sheet instead of
-    /// one per cell. The TOTAL rows (male/female/combined) are NOT touched;
-    /// they are handled separately via `clear_total_cell_marks`.
-    pub fn clear_attendance_grid(
-        &self,
-        sheet_name: &str,
-        male_total_row: u32,
-        female_total_row: u32,
-    ) -> Result<()> {
-        let sheets = self.workbook.get_object("Worksheets")?;
-        let sheet = sheets.get_object_with_args("Item", vec![ComVariant::bstr(sheet_name)])?;
-
-        // Male learner rows: 8 to (male_total_row - 1)
-        // Skip if zero male students (male_total_row == 8 means no male slots).
-        if male_total_row > 8 {
-            clear_range(&sheet, 8, male_total_row - 1, 6, 38)?;
-        }
-
-        // Female learner rows: (male_total_row + 1) to (female_total_row - 1)
-        let female_start = male_total_row + 1;
-        if female_total_row > female_start {
-            clear_range(&sheet, female_start, female_total_row - 1, 6, 38)?;
-        }
-
-        Ok(())
-    }
-
     /// Clear TOTAL Per Day rows (male, female, combined) across all weekday
     /// columns (F-AL) using `Range.ClearContents()`. This replaces the
     /// per-cell `clear_total_cell_marks` pattern with 3 COM calls per sheet.
@@ -231,7 +201,6 @@ impl WorkbookSession {
     pub fn write_metadata(&self, metadata: &Sf2WorkbookMetadata) -> Result<()> {
         let sheets = self.workbook.get_object("Worksheets")?;
         let sheet_count = sheets.get_i32("Count")?;
-        let mut sf2_sheets = Vec::new();
         let mut monthly_sheets = Vec::new();
         let mut sheets_updated = 0usize;
 
@@ -246,7 +215,6 @@ impl WorkbookSession {
             if month_number(&sheet_name) > 0 && year_from_sheet_name(&sheet_name) > 0 {
                 monthly_sheets.push(sheet.clone());
             }
-            sf2_sheets.push(sheet.clone());
 
             set_sf2_cell(&sheet, 3, 6, &metadata.school_id, true)?;
             set_sf2_cell(&sheet, 3, 13, &metadata.school_year, true)?;
@@ -261,7 +229,7 @@ impl WorkbookSession {
         }
 
         if metadata.configure_calendar && !monthly_sheets.is_empty() {
-            configure_sf2_calendar(&monthly_sheets, &sf2_sheets, metadata)?;
+            configure_sf2_calendar(&monthly_sheets, metadata)?;
         }
 
         self.calculate()?;

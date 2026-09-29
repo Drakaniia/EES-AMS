@@ -195,38 +195,6 @@ pub(crate) fn parse_date(date: &str) -> Result<NaiveDate> {
         .map_err(|_| AppError::InvalidInput(format!("invalid date: {date}")))
 }
 
-/// Decide whether attendance marks must be rewritten to the Excel working copy.
-///
-/// Returns `true` when at least one attendance event was recorded (or updated)
-/// *after* the last successful sync, meaning the workbook is stale and Excel
-/// automation must run. Returns `false` when the workbook is already in sync,
-/// so `sync_and_open_sf2_workbook` can skip the slow Excel write entirely.
-///
-/// `last_synced_at` is the timestamp (seconds) of the last successful mark
-/// write; `None` means the workbook has never been synced, so we must sync.
-/// `latest_event_at` is the most recent attendance event timestamp for the
-/// class, or `None` when the class has no attendance events at all.
-///
-/// The `None`/`None` case is the dangerous one. A reset or rebuilt database has
-/// no events *and* keeps the old `last_synced_at`, which used to report "in
-/// sync" — so the app never rewrote the workbook and the two diverged
-/// permanently: the grid showed nothing while the workbook still held marks
-/// that only the workbook knew about. With no events to write there is still
-/// something to reconcile, so the workbook is treated as stale and cleared
-/// back into agreement with the (empty) database.
-pub(crate) fn attendance_changed_since(
-    last_synced_at: Option<i64>,
-    latest_event_at: Option<i64>,
-) -> bool {
-    let Some(latest_event_at) = latest_event_at else {
-        return last_synced_at.is_some();
-    };
-    match last_synced_at {
-        None => true,
-        Some(synced) => latest_event_at > synced,
-    }
-}
-
 #[cfg(test)]
 #[path = "../__tests__/calendar_tests.rs"]
 mod tests;

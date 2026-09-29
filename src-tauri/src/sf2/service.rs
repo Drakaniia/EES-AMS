@@ -11,14 +11,18 @@ pub use super::attendance_service::{
     sync_and_open_sf2_workbook, sync_attendance_to_sf2_workbook,
 };
 
-pub use super::template_ops::{
-    create_workbook_from_template, set_report_month, set_report_month_with_progress,
-};
+pub use super::template_ops::create_workbook_from_template;
 pub use super::template_update::update_workbook_settings;
 
 pub use super::roster_sync::sync_workbook_roster_for_class;
 
 pub use super::excel_preview::export_preview;
+
+// `set_report_month` / `set_report_month_with_progress` are gone with the Excel
+// month-switch path (spec §7.2). The read that replaced them is
+// `crate::sf2::month_preview::month_preview`, reached from the command layer
+// directly because it is not a "service" over shared mutable state - it is a
+// query, and the command is the query.
 
 pub use super::excel_service::{
     export_readiness, export_workbook, open_workbook, workbook_settings,

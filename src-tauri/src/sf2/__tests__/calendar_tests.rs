@@ -1,56 +1,84 @@
-use super::*;
+use std::path::{Path, PathBuf};
 
-// ── attendance_changed_since ────────────────────────────────────────
-
-#[test]
-fn no_events_after_a_sync_still_requires_sync() {
-    // A rebuilt/reset database has no events but keeps the old last_synced_at.
-    // Reporting "in sync" here left the workbook holding marks the app had no
-    // record of, permanently, because nothing ever rewrote it.
-    assert!(
-        attendance_changed_since(Some(1000), None),
-        "an empty database must still reconcile the workbook back to agreement"
-    );
+/// Every `.rs` file under the crate's `src`, so the assertion below is over the
+/// whole tree rather than over the files that used to name the deleted shortcut.
+fn rust_sources(root: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                found.push(path);
+            }
+        }
+    }
+    found.sort();
+    found
 }
 
-#[test]
-fn no_events_and_never_synced_skips_sync() {
-    // Nothing has ever been written and there is nothing to write, so opening
-    // the workbook must stay instant.
-    assert!(
-        !attendance_changed_since(None, None),
-        "a never-synced workbook with no events has nothing to reconcile"
-    );
+fn crate_src() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
 }
 
-#[test]
-fn never_synced_with_events_requires_sync() {
-    assert!(
-        attendance_changed_since(None, Some(500)),
-        "if the workbook was never synced but has events, we must sync"
-    );
-}
+// ── acceptance #19 ───────────────────────────────────────────────────
 
+/// Spec §7.2 / acceptance #19: the "has anything changed since the last sync?"
+/// helper and its `None`/`None` heuristic are gone.
+///
+/// The heuristic reported "in sync" for a database with no attendance events and
+/// no `last_synced_at`, and "clear it back to agreement" for a database that had
+/// events but nothing newer than the last sync. Both readings are row counts, and
+/// a row count is not evidence: they are what let spec §4's chain reach a total
+/// clear. The §9.1 `SyncPermit` guard replaced them - `Proven` means the database
+/// holds every `X` the workbook shows, and anything less is `Stale` or
+/// `Unmeasured`, neither of which writes. There is no count-based shortcut left
+/// to reintroduce, so the name must not come back.
+///
+/// This is a grep, deliberately, and it is a grep over the *whole tree including
+/// comments* - the acceptance criterion is `grep -rn ... src-tauri/` returning
+/// nothing, and leaving the name in a doc comment would be a way of keeping the
+/// greppable form alive next to a re-introduction. A function this easy to
+/// re-add is one an agent optimising for speed will reach for, and a
+/// compile-time check cannot see it: the function compiles perfectly well, it is
+/// just wrong.
+///
+/// This test does not name the symbol either. A test that has to grep for it
+/// would be the one place still naming it.
 #[test]
-fn event_after_last_sync_requires_sync() {
+fn the_deleted_sync_shortcut_is_gone_from_the_whole_crate() {
+    let needle = ["attendance", "changed", "since"].concat();
+    let sources = rust_sources(&crate_src());
     assert!(
-        attendance_changed_since(Some(1000), Some(1001)),
-        "an event newer than the last sync means the workbook is stale"
+        !sources.is_empty(),
+        "the source walk found nothing; the test is not testing anything"
     );
-}
 
-#[test]
-fn event_equal_to_last_sync_skips_sync() {
-    assert!(
-        !attendance_changed_since(Some(1000), Some(1000)),
-        "an event exactly at the last sync time is already written"
-    );
-}
+    let mut offenders = Vec::new();
+    for path in &sources {
+        let Ok(code) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        for (number, line) in code.lines().enumerate() {
+            if line.contains(&needle) {
+                offenders.push(format!(
+                    "{}:{}: {}",
+                    path.display(),
+                    number + 1,
+                    line.trim()
+                ));
+            }
+        }
+    }
 
-#[test]
-fn event_before_last_sync_skips_sync() {
     assert!(
-        !attendance_changed_since(Some(1000), Some(999)),
-        "events older than the last sync are already reflected"
+        offenders.is_empty(),
+        "the last-sync shortcut is deleted (spec acceptance #19), but its name is still in:\n{}",
+        offenders.join("\n")
     );
 }

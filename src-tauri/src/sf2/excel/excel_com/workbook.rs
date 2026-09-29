@@ -13,6 +13,10 @@ pub struct WorkbookSession {
 
 impl WorkbookSession {
     /// Open a workbook and return a session handle.
+    ///
+    /// Builds the session directly, so - like `with_workbook` - it is only
+    /// correct inside a `run_excel_task` closure, where the process-wide gate is
+    /// already held. `batch_operations` is its only caller.
     pub(super) fn open(path: &Path, read_only: bool) -> Result<Self> {
         let excel = ExcelSession::new()?;
         let workbook = excel.open_workbook(path, read_only)?;

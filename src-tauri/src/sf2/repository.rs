@@ -1,4 +1,4 @@
-use crate::domain::error::Result;
+use crate::domain::error::{AppError, Result};
 use crate::infrastructure::database::DbPool;
 use crate::sf2::models::{
     Sf2DateMappingRecord, Sf2StudentMappingRecord, Sf2TemplateRecord, Sf2TemplateSummary,
@@ -17,6 +17,25 @@ const LATEST_TEMPLATE_FOR_CLASS_SQL: &str = include_str!("./sql/latest_template_
 const STUDENT_MAPPINGS_FOR_TEMPLATE_SQL: &str =
     include_str!("./sql/student_mappings_for_template.sql");
 const DATE_MAPPINGS_FOR_TEMPLATE_SQL: &str = include_str!("./sql/date_mappings_for_template.sql");
+const LEGACY_DATE_MAPPINGS_IN_MONTH_SQL: &str =
+    include_str!("./sql/legacy_date_mappings_in_month.sql");
+
+/// Reject a workbook analysis that produced no calendar dates before it can
+/// delete the mappings the database already holds.
+///
+/// The Excel analysis only reads *visible* monthly sheets, so it returns an
+/// empty set whenever the target sheet failed to become visible or could not be
+/// renamed to a parseable `MONTH YEAR` name. Committing that empty set deletes
+/// every date mapping for the template, which is the signature of the
+/// destructive-sync chain: no mappings means no weekday columns, an empty
+/// reports grid, and a total workbook clear with nothing to write back.
+const EMPTY_DATE_ANALYSIS_MESSAGE: &str =
+    "The SF2 workbook produced no calendar dates. The existing mappings were left untouched.";
+
+/// Same guard for a roster analysis that came back empty. Deleting the student
+/// mappings on that result would unmap every learner in the class.
+const EMPTY_ROSTER_ANALYSIS_MESSAGE: &str =
+    "The SF2 workbook produced no learners. The existing mappings were left untouched.";
 
 pub struct Sf2Repository {
     pool: DbPool,
@@ -107,12 +126,28 @@ impl Sf2Repository {
         Ok(())
     }
 
+    /// Refresh a template's metadata and replace its student + date mappings.
+    ///
+    /// Rejects a degenerate workbook analysis (no dates, or no learners)
+    /// *before* the transaction deletes anything, so a failed Excel analysis
+    /// can never commit an empty mapping set over a good one.
     pub fn update_template_with_mappings(
         &self,
         template: &Sf2TemplateRecord,
         students: &[Sf2StudentMappingRecord],
         dates: &[Sf2DateMappingRecord],
     ) -> Result<()> {
+        if dates.is_empty() {
+            return Err(AppError::InvalidInput(
+                EMPTY_DATE_ANALYSIS_MESSAGE.to_string(),
+            ));
+        }
+        if students.is_empty() {
+            return Err(AppError::InvalidInput(
+                EMPTY_ROSTER_ANALYSIS_MESSAGE.to_string(),
+            ));
+        }
+
         let mut conn = self.pool.get()?;
         let transaction = conn.transaction()?;
 
@@ -137,7 +172,7 @@ impl Sf2Repository {
             ],
         )?;
         if rows_updated == 0 {
-            return Err(crate::domain::error::AppError::InvalidInput(
+            return Err(AppError::InvalidInput(
                 "Selected SF2 workbook was not found".to_string(),
             ));
         }
@@ -200,28 +235,16 @@ impl Sf2Repository {
             .map_err(Into::into)
     }
 
-    /// Lightweight update of only the active report month for a template.
-    /// Intentionally does NOT touch the Excel workbook — switching the active
-    /// month is a pure DB change (the workbook is multi-sheet) so the reports
-    /// page can switch months instantly without Excel automation.
-    pub fn set_report_month(&self, template_id: &str, report_month: &str) -> Result<()> {
-        let conn = self.pool.get()?;
-        let rows = conn.execute(
-            "UPDATE sf2_templates SET report_month = ?2 WHERE id = ?1",
-            params![template_id, report_month],
-        )?;
-        if rows == 0 {
-            return Err(crate::domain::error::AppError::InvalidInput(
-                "Selected SF2 workbook was not found".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
     /// Record the timestamp (seconds) of the last successful attendance→Excel
-    /// sync so `sync_and_open_sf2_workbook` can skip Excel when nothing changed.
-    /// Pass `None` to reset (e.g. after a lightweight toggle), forcing a full
-    /// re-sync on the next open.
+    /// sync, so the Settings and Reports surfaces can say when the mirror was
+    /// last reconciled. Pass `None` to reset (e.g. after a lightweight toggle).
+    ///
+    /// This is a *record* now, not a decision input. It used to gate the Excel
+    /// write through a "has any event landed since the last sync?" shortcut,
+    /// which compared it against the newest event timestamp and treated "no
+    /// events, ever synced" as "in sync" - a row count standing in for evidence.
+    /// The §9.1 guard decides, and it reads the workbook (spec §7.2, acceptance
+    /// #19).
     pub fn set_last_synced_at(&self, template_id: &str, synced_at: Option<i64>) -> Result<()> {
         let conn = self.pool.get()?;
         conn.execute(
@@ -229,25 +252,6 @@ impl Sf2Repository {
             params![template_id, synced_at],
         )?;
         Ok(())
-    }
-
-    /// Most recent attendance event timestamp (seconds) for a class, or `None`
-    /// when the class has no events yet.
-    pub fn latest_event_timestamp(&self, class_id: &str) -> Result<Option<i64>> {
-        let conn = self.pool.get()?;
-        // MAX(timestamp) returns NULL when the class has no events.  We read as
-        // Option<i64> so that a NULL result produces Ok(None) instead of crashing
-        // with "Invalid column type Null".
-        match conn.query_row(
-            "SELECT MAX(timestamp) FROM events WHERE class_id = ?1",
-            params![class_id],
-            |row| row.get::<_, Option<i64>>(0),
-        ) {
-            Ok(Some(ts)) => Ok(Some(ts)),
-            Ok(None) => Ok(None),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e.into()),
-        }
     }
 
     pub fn latest_template_for_class(&self, class_id: &str) -> Result<Option<Sf2TemplateRecord>> {
@@ -301,6 +305,38 @@ impl Sf2Repository {
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
+
+    /// One month of a template's day-number grid, as a closed date range.
+    ///
+    /// `sf2_date_mappings` is not scoped to a month - it is keyed by a full
+    /// `YYYY-MM-DD` and a template analysed across a school year holds a row per
+    /// day it ever saw. This is the month-scoped read, and it exists so that a
+    /// caller serving one month physically cannot be handed another's columns.
+    ///
+    /// `start_date` and `end_date` are inclusive `YYYY-MM-DD` bounds in
+    /// fixed-width ISO form, which is what makes the `>=` / `<=` comparison a
+    /// chronological one.
+    pub fn date_mappings_in_month(
+        &self,
+        template_id: &str,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<Sf2DateMappingRecord>> {
+        let conn = self.pool.get()?;
+        let mut statement = conn.prepare(LEGACY_DATE_MAPPINGS_IN_MONTH_SQL)?;
+        let rows = statement.query_map(params![template_id, start_date, end_date], |row| {
+            Ok(Sf2DateMappingRecord {
+                template_id: row.get(0)?,
+                sheet_name: row.get(1)?,
+                date: row.get(2)?,
+                column_letter: row.get(3)?,
+                column_index: row.get::<_, u32>(4)?,
+            })
+        })?;
+
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
 }
 
 #[must_use]
@@ -322,13 +358,17 @@ pub fn template_summary(record: Sf2TemplateRecord) -> Sf2TemplateSummary {
 }
 
 fn read_template_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<Sf2TemplateRecord> {
+    let school_year: String = row.get(5)?;
     Ok(Sf2TemplateRecord {
         id: row.get(0)?,
         source_path: row.get(1)?,
         source_hash: row.get(2)?,
         school_id: row.get(3)?,
         school_name: row.get(4)?,
-        school_year: row.get(5)?,
+        // Normalised on read so the legacy table and the per-month table can
+        // never hand the caller two spellings of the same school year - the
+        // two are compared against each other in `month_preview` and `heal`.
+        school_year: crate::sf2::month::first_school_day::normalize_school_year(&school_year),
         report_month: row.get(6)?,
         grade_level: row.get(7)?,
         section: row.get(8)?,
@@ -340,3 +380,7 @@ fn read_template_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<Sf2Template
         last_synced_at: row.get(14)?,
     })
 }
+
+#[cfg(test)]
+#[path = "__tests__/repository_tests.rs"]
+mod tests;

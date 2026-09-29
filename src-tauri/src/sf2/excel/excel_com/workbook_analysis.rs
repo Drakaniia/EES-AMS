@@ -48,7 +48,7 @@ pub fn analyze_workbook(path: &Path) -> Result<Sf2WorkbookAnalysis> {
                 sheet_infos.push(crate::sf2::models::Sf2WorkbookSheet {
                     name: sheet_name.clone(),
                     visible,
-                    used_range: used_range_address.to_string_value(),
+                    used_range: used_range_address.to_string_value()?,
                 });
 
                 if visible != EXCEL_SHEET_VISIBLE {
@@ -230,7 +230,7 @@ impl WorkbookSession {
             sheet_infos.push(crate::sf2::models::Sf2WorkbookSheet {
                 name: sheet_name.clone(),
                 visible,
-                used_range: used_range_address.to_string_value(),
+                used_range: used_range_address.to_string_value()?,
             });
 
             if visible != EXCEL_SHEET_VISIBLE {

@@ -107,7 +107,7 @@ fn ensure_not_formula(sheet: &ComObject, target: &ComObject) -> Result<()> {
                 crate::sf2::excel::excel_com::com_session::ComVariant::bool(false),
             ],
         )
-        .map(|value| value.to_string_value())
+        .and_then(|value| value.to_string_value())
         .unwrap_or_else(|_| "?".to_string());
     Err(AppError::Internal(format!(
         "Refusing to overwrite formula cell {sheet_name}!{address}"
