@@ -27,6 +27,8 @@ const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const GOOGLE_DRIVE_FILES_URL: &str = "https://www.googleapis.com/drive/v3/files";
 const GOOGLE_DRIVE_UPLOAD_URL: &str = "https://www.googleapis.com/upload/drive/v3/files";
+const SQLITE_MIME: &str = "application/x-sqlite3";
+const ZIP_MIME: &str = "application/zip";
 
 // ── Private Types ─────────────────────────────────────────────────────
 
@@ -104,6 +106,11 @@ pub fn upload_latest_backup_to_google_drive(app_dir: &Path) -> Result<BackupStat
     super::backup_ops::get_status(app_dir)
 }
 
+/// Upload a backup to Google Drive.
+///
+/// Drive's model is one object per upload, and a backup is now a *folder*, so
+/// a folder is packed into a ZIP first. A legacy flat `.db` is still uploaded
+/// as a single object, unchanged.
 pub(crate) fn upload_backup_to_google_drive(
     state: &mut BackupState,
     source_path: &Path,
@@ -113,22 +120,32 @@ pub(crate) fn upload_backup_to_google_drive(
     };
 
     let access_token = refresh_google_access_token()?;
-    let file_name = source_path
+    let stem = source_path
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| anyhow::anyhow!("backup file name is invalid"))?;
+
+    let (object_name, mime, bytes) = if source_path.is_dir() {
+        let bytes = super::zip_writer::zip_directory_to_bytes(source_path).with_context(|| {
+            format!("failed to archive backup folder {}", source_path.display())
+        })?;
+        (format!("{stem}.zip"), ZIP_MIME, bytes)
+    } else {
+        let bytes = fs::read(source_path)
+            .with_context(|| format!("failed to read backup {}", source_path.display()))?;
+        (stem.to_string(), SQLITE_MIME, bytes)
+    };
+
     let metadata = serde_json::json!({
-        "name": file_name,
+        "name": object_name,
         "parents": [google_drive.folder_id]
     });
-    let bytes = fs::read(source_path)
-        .with_context(|| format!("failed to read backup {}", source_path.display()))?;
     let metadata_part = reqwest::blocking::multipart::Part::text(metadata.to_string())
         .mime_str("application/json")
         .context("failed to build Google Drive metadata upload")?;
     let file_part = reqwest::blocking::multipart::Part::bytes(bytes)
-        .file_name(file_name.to_string())
-        .mime_str("application/x-sqlite3")
+        .file_name(object_name.clone())
+        .mime_str(mime)
         .context("failed to build Google Drive backup upload")?;
     let form = reqwest::blocking::multipart::Form::new()
         .part("metadata", metadata_part)
