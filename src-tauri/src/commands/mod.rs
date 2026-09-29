@@ -8,6 +8,7 @@ mod csv_export;
 mod data_transfer;
 mod settings;
 mod sf2;
+mod sf2_diagnose;
 mod students;
 mod updates;
 
@@ -21,6 +22,7 @@ pub use csv_export::*;
 pub use data_transfer::*;
 pub use settings::*;
 pub use sf2::*;
+pub use sf2_diagnose::*;
 pub use students::*;
 pub use updates::*;
 
@@ -31,6 +33,7 @@ use crate::infrastructure::database::{
     record_audit_event, AuditEventInput, AuditRepository, ClassRepository, EventRepository,
     SettingsRepository, StudentRepository,
 };
+use crate::sf2::heal::Sf2HealOutcome;
 use crate::sf2::models::{
     Sf2AttendanceImportOutcome, Sf2ExportPreview, Sf2ExportReadiness, Sf2ExportResult,
     Sf2ImportSummary, Sf2ImportValidation, Sf2TemplateDraft, Sf2WorkbookSettings,

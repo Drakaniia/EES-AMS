@@ -12,19 +12,25 @@ use commands::{
     check_for_updates,
     choose_backup_sync_folder,
     choose_restore_backup,
+    choose_restore_database_file,
     clear_audit_events,
     clear_backup_sync_folder,
     connect_google_drive_backup,
     create_backup_now,
     create_class,
+    create_sf2_month_file,
     create_sf2_workbook_from_template,
     create_student,
     create_students,
+    create_workbooks_backup_now,
     delete_branding_logo,
     delete_class,
     delete_event,
     delete_events,
     delete_student,
+    // Read-only mark diagnostic (spec §0 A5). Writes to neither the workbook
+    // nor the database; see `commands/sf2_diagnose.rs`.
+    diagnose_sf2_marks,
     disconnect_google_drive_backup,
     download_update,
     export_all,
@@ -41,9 +47,14 @@ use commands::{
     get_settings,
     get_sf2_export_preview,
     get_sf2_export_readiness,
+    get_sf2_launch_month,
+    get_sf2_month_preview,
     get_sf2_workbook_settings,
     get_student,
     get_update_status,
+    // Startup self-heal (spec D6, D8, §8): one command, run from `setup` on its
+    // own thread so launch is never blocked on a COM pass over the workbook.
+    heal_current_month_workbook,
     import_all,
     import_sf2_attendance_from_workbook,
     import_sf2_workbook,
@@ -71,7 +82,6 @@ use commands::{
     save_branding_logo,
     save_settings,
     set_sf2_preview_attendance,
-    set_sf2_report_month,
     sync_and_open_sf2_workbook,
     sync_sf2_attendance,
     sync_sf2_roster,
@@ -137,6 +147,7 @@ pub fn run() {
             wipe_all,
             get_backup_status,
             create_backup_now,
+            create_workbooks_backup_now,
             list_backups,
             open_backup_folder,
             choose_backup_sync_folder,
@@ -145,6 +156,7 @@ pub fn run() {
             disconnect_google_drive_backup,
             upload_latest_backup_to_google_drive,
             choose_restore_backup,
+            choose_restore_database_file,
             restore_backup,
             validate_sf2_workbook_import,
             import_sf2_workbook,
@@ -153,16 +165,24 @@ pub fn run() {
             update_sf2_workbook_settings,
             get_sf2_export_readiness,
             get_sf2_export_preview,
+            // Instant month switching (spec D9, §7): three read-only commands and
+            // one create. No `set_sf2_report_month` - a switch no longer writes.
+            get_sf2_launch_month,
+            get_sf2_month_preview,
+            create_sf2_month_file,
             set_sf2_preview_attendance,
-            set_sf2_report_month,
             toggle_sf2_preview_attendance,
             sync_and_open_sf2_workbook,
             sync_sf2_attendance,
             import_sf2_attendance_from_workbook,
             sync_sf2_roster,
             present_all_sf2_preview_attendance,
+            heal_current_month_workbook,
             export_sf2_workbook,
             open_sf2_workbook,
+            // Read-only mark diagnostic (spec §0 A5). Writes to neither the
+            // workbook nor the database; see `commands/sf2_diagnose.rs`.
+            diagnose_sf2_marks,
             kill_all_excel_processes,
             // Updater commands
             check_for_updates,
@@ -201,6 +221,14 @@ pub fn run() {
             // Add database pool to Tauri state
             app.manage(pool.clone());
             backup::service::spawn_backup_scheduler(pool.clone(), app_dir.clone());
+
+            // Startup self-heal (spec D6, D8, §8.2, acceptance #15). Spawned
+            // after `init_db` because it reads the month rows, and deliberately
+            // not awaited: it opens Excel, and a COM pass over forty learners on
+            // the startup path is a multi-second hang. The spawner claims the
+            // once-per-launch latch before the thread exists, so this line is
+            // idempotent even if `setup` ever runs twice.
+            sf2::heal::spawn_heal_at_startup(app.handle().clone(), pool.clone());
 
             Ok(())
         })

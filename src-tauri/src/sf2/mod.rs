@@ -1,9 +1,14 @@
 // ── Domain submodules ─────────────────────────────────────────────────────
 pub(crate) mod attendance;
 pub(crate) mod calendar;
+pub(crate) mod diagnose;
 pub mod excel;
+pub(crate) mod guard;
+pub mod heal;
 pub mod logic;
 pub mod models;
+pub mod month;
+pub mod month_preview;
 mod naming;
 mod preview;
 pub(crate) mod progress;
@@ -15,6 +20,10 @@ pub(crate) mod template;
 mod validation;
 pub(crate) mod validation_service;
 mod workbook_files;
+
+#[cfg(test)]
+#[path = "__tests__/orphan_tests.rs"]
+mod orphan_tests;
 
 // ── Backward-compatible re-exports ────────────────────────────────────────
 // These keep `crate::sf2::module_name::Item` paths working for code that
