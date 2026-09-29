@@ -1,4 +1,6 @@
 use super::*;
+use crate::sf2::month::Sf2MonthTemplate;
+use crate::sf2::month_preview::{Sf2LaunchMonth, Sf2MonthGridPreview};
 
 /// Kill all running EXCEL.EXE processes so orphaned background instances
 /// don't prevent the SF2 workbook from opening. Returns the count of
@@ -146,19 +148,82 @@ pub fn update_sf2_workbook_settings(
     Ok(summary)
 }
 
+/// Read one month of the SF2 reports from SQL. This is the whole month switch
+/// (spec D9, §7.1, acceptance #8-#10).
+///
+/// Read-only by construction: no Excel, no COM, no write, and - deliberately -
+/// no `sf2-progress` event, so a switch has nothing to show a modal over. The
+/// frontend caches the result per `(class, school year, month)`, so switching
+/// back to a month already read costs nothing at all.
 #[tauri::command]
-pub async fn set_sf2_report_month(
+pub fn get_sf2_month_preview(
     app: tauri::AppHandle,
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
-    class_id: String,
+    class_id: Option<String>,
+    school_year: Option<String>,
     report_month: String,
-) -> std::result::Result<(), String> {
+) -> std::result::Result<Sf2MonthGridPreview, String> {
     let pool = pool.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        service::set_report_month_with_progress(&app, pool, &class_id, &report_month)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    let workbook_dir = crate::sf2::month_preview::workbook_dir(&app).map_err(|e| e.to_string())?;
+    crate::sf2::month_preview::month_preview(
+        &pool,
+        &workbook_dir,
+        class_id.as_deref(),
+        school_year.as_deref(),
+        &report_month,
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Which month to open on launch, and whether a create may be offered (spec D5,
+/// acceptance #12, edge cases E1 and E2).
+///
+/// Read-only. Today's calendar month, falling back to
+/// `settings.last_report_month` when today's month has no file, with both months
+/// named in the result so the fallback is never silent.
+#[tauri::command]
+pub fn get_sf2_launch_month(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: Option<String>,
+) -> std::result::Result<Sf2LaunchMonth, String> {
+    let pool = pool.inner().clone();
+    let workbook_dir = crate::sf2::month_preview::workbook_dir(&app).map_err(|e| e.to_string())?;
+    crate::sf2::month_preview::launch_month(
+        &pool,
+        &workbook_dir,
+        class_id.as_deref(),
+        chrono::Local::now().date_naive(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Write one month's worksheet into the one workbook, so the user can switch to
+/// that month in one click (spec edge case E1).
+///
+/// Under §0 A1 there is no per-month file to create: a month is a worksheet in
+/// the workbook the class already has. This adds the `{MONTH} {year}` worksheet,
+/// lays that month's day grid over it and writes the absences the database holds.
+/// The other eleven worksheets are untouched.
+///
+/// Refuses for a month with no school days (E2), and never writes a mark: the
+/// absences come from `events`, so a month nobody has recorded anything in gets an
+/// empty grid.
+#[tauri::command]
+pub fn create_sf2_month_file(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+    class_id: Option<String>,
+    report_month: String,
+) -> std::result::Result<Sf2MonthTemplate, String> {
+    let pool = pool.inner().clone();
+    let workbook_dir = crate::sf2::month_preview::workbook_dir(&app).map_err(|e| e.to_string())?;
+    crate::sf2::month_preview::create_month_worksheet_in_dir(
+        &pool,
+        &workbook_dir,
+        class_id.as_deref(),
+        &report_month,
+    )
     .map_err(|e| e.to_string())
 }
 
@@ -244,6 +309,29 @@ pub async fn import_sf2_attendance_from_workbook(
         Some(metadata_json),
     )?;
     Ok(outcome)
+}
+
+/// Compare the current month's SF2 workbook against the database and record the
+/// absences the database is missing (spec §8.2, §8.3; acceptance #15).
+///
+/// This is the *command* entry point: explicit, repeatable, and blocking — it
+/// opens Excel. App startup does not call it directly; it goes through
+/// `sf2::heal::spawn_heal_at_startup`, which claims the once-per-launch latch and
+/// spawns the run without joining it, so a launch is never blocked on a COM pass
+/// over forty learners.
+///
+/// Additive only, and read-only on the workbook: an `X` becomes an `absent` event
+/// unless the database already records that learner absent for that day, and no
+/// Excel writer is reachable from the heal. That is the whole reason it is safe
+/// to run with nobody watching. Every outcome is `Ok`, including "could not
+/// measure" — an unreadable workbook is a state §9.1's guard already refuses a
+/// write on, not a failure of this command.
+#[tauri::command]
+pub fn heal_current_month_workbook(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+) -> std::result::Result<Sf2HealOutcome, String> {
+    crate::sf2::heal::heal_current_month_workbook(&app, pool.inner()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

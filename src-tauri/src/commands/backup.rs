@@ -36,6 +36,30 @@ pub fn list_backups(app: tauri::AppHandle) -> std::result::Result<Vec<BackupSumm
     backup_service::list_backups(&app_dir).map_err(|e| e.to_string())
 }
 
+/// D13 "Back up workbooks now": copies the SF2 workbooks into their own backup
+/// folder without duplicating the database.
+#[tauri::command]
+pub fn create_workbooks_backup_now(
+    app: tauri::AppHandle,
+    pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
+) -> std::result::Result<BackupStatus, String> {
+    let app_dir = app_data_dir(&app)?;
+    let status = backup_service::create_workbooks_backup(&app_dir).map_err(|e| e.to_string())?;
+    let metadata_json = audit_metadata_json(serde_json::json!({
+        "path": status.last_workbooks_backup_path.as_deref(),
+        "syncFolderPath": status.sync_folder_path.as_deref(),
+    }))?;
+    record_command_audit(
+        pool.inner(),
+        "data_export",
+        None,
+        "workbooks_backup",
+        "Created manual SF2 workbooks backup",
+        Some(metadata_json),
+    )?;
+    Ok(status)
+}
+
 #[tauri::command]
 pub fn open_backup_folder(app: tauri::AppHandle) -> std::result::Result<String, String> {
     let app_dir = app_data_dir(&app)?;
@@ -93,8 +117,28 @@ pub fn upload_latest_backup_to_google_drive(
     backup_service::upload_latest_backup_to_google_drive(&app_dir).map_err(|e| e.to_string())
 }
 
+/// Let the user pick a backup to restore.
+///
+/// Picks a backup *folder* — the shape every backup written today has, and the
+/// only one that carries the SF2 workbooks. `preview_backup` also accepts the
+/// legacy flat `*.db` shape; [`choose_restore_database_file`] is the picker
+/// for those.
 #[tauri::command]
 pub async fn choose_restore_backup(
+    app: tauri::AppHandle,
+) -> std::result::Result<Option<BackupPreview>, String> {
+    let Some(folder_path) = pick_folder(&app)? else {
+        return Ok(None);
+    };
+
+    backup_service::preview_backup(&folder_path)
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
+/// Let the user pick a legacy flat `*.db` backup written by the previous build.
+#[tauri::command]
+pub async fn choose_restore_database_file(
     app: tauri::AppHandle,
 ) -> std::result::Result<Option<BackupPreview>, String> {
     let Some(file_path) = pick_database_file(&app)? else {
