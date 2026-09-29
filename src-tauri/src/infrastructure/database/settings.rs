@@ -103,9 +103,48 @@ impl SettingsRepository {
         };
         settings.branding_title = branding_title;
 
+        // A targeted upsert, and the reason is the class of bug rather than the
+        // three columns it bites today.
+        //
+        // `INSERT OR REPLACE` with a column list is a *whole-row* replace: SQLite
+        // deletes the existing row and inserts a new one built from the listed
+        // columns, and every column left off the list comes back at its DEFAULT -
+        // NULL, for the three v22 columns. `sf2_split_completed_at` going NULL
+        // re-runs the entire 12-month split on the next launch, which rewrites
+        // every month file, so a save from the Settings page was a destructive
+        // action. The next column anyone adds to `settings` would have been
+        // destroyed the same way, with no error and no test failing.
+        //
+        // `ON CONFLICT(id) DO UPDATE SET` names exactly the columns this method
+        // owns, so a column the `Settings` model does not carry is left alone
+        // whether it exists today or is added by a later migration. The next
+        // column is then safe by construction rather than by remembering to add
+        // it to a list.
         transaction.execute(
-            "INSERT OR REPLACE INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode, school_id, school_name, school_year, report_month, grade_level, section, adviser_name, school_head_name, branding_logo_path, branding_title)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+            "INSERT INTO settings (id, day_start, day_end, late_after, quarter, q1_start, q1_end, q2_start, q2_end, q3_start, q3_end, attendance_mode, school_id, school_name, school_year, report_month, grade_level, section, adviser_name, school_head_name, branding_logo_path, branding_title)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
+             ON CONFLICT(id) DO UPDATE SET
+                day_start = excluded.day_start,
+                day_end = excluded.day_end,
+                late_after = excluded.late_after,
+                quarter = excluded.quarter,
+                q1_start = excluded.q1_start,
+                q1_end = excluded.q1_end,
+                q2_start = excluded.q2_start,
+                q2_end = excluded.q2_end,
+                q3_start = excluded.q3_start,
+                q3_end = excluded.q3_end,
+                attendance_mode = excluded.attendance_mode,
+                school_id = excluded.school_id,
+                school_name = excluded.school_name,
+                school_year = excluded.school_year,
+                report_month = excluded.report_month,
+                grade_level = excluded.grade_level,
+                section = excluded.section,
+                adviser_name = excluded.adviser_name,
+                school_head_name = excluded.school_head_name,
+                branding_logo_path = excluded.branding_logo_path,
+                branding_title = excluded.branding_title",
             params![
                 settings.id.as_str(),
                 settings.day_start.as_str(),

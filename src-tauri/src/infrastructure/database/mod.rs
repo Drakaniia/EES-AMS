@@ -7,6 +7,10 @@ mod rows;
 mod settings;
 mod students;
 
+#[cfg(test)]
+#[path = "__tests__/settings_tests.rs"]
+mod settings_tests;
+
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 
