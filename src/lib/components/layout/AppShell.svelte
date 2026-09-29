@@ -2,6 +2,11 @@
 	import { fullPreviewStore } from '$lib/stores/full-preview.svelte';
 	import TitleBar from '$lib/components/ui/TitleBar.svelte';
 	import CommandPalette from '$lib/components/ui/CommandPalette.svelte';
+	// What the app has to say at startup: the SF2 self-heal's outcome (spec §8.2
+	// step 6, acceptance #15) and the E3 "classes started on" prompt. Both are
+	// started by Rust before the webview exists or asked of the whole install, so
+	// neither can be surfaced from a route.
+	import Sf2StartupToast from '$lib/components/ui/Sf2StartupToast.svelte';
 
 	let { children } = $props();
 </script>
@@ -29,4 +34,5 @@
 	</main>
 
 	<CommandPalette />
+	<Sf2StartupToast />
 </div>
