@@ -394,7 +394,7 @@ fn batch_operations_multiple_ops_succeed() {
         let sheets = workbook.get_object("Worksheets")?;
         let sheet = sheets.get_object_with_args("Item", vec![ComVariant::bstr("JULY 2026")])?;
         let cell = sheet.get_object_with_args("Range", vec![ComVariant::bstr("A1")])?;
-        let value = cell.get("Value2")?.to_string_value();
+        let value = cell.get("Value2")?.to_string_value()?;
         assert_eq!(
             value, "Test",
             "cell A1 should contain 'Test' after write_marks"

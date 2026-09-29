@@ -16,6 +16,7 @@ fn make_student(id: &str, name: &str, gender: Option<StudentGender>) -> Student 
         gender,
         card_serial: None,
         class_id: None,
+        sf2_learner_id: None,
         created_at: Utc::now(),
     }
 }

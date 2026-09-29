@@ -96,6 +96,21 @@ pub struct Student {
     pub card_serial: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub class_id: Option<String>,
+    /// The DepEd learner ID, the school's own record of this child (spec §6.3,
+    /// v20).
+    ///
+    /// This is the only identity between the app and the school that survives
+    /// both a rename and a roster reshuffle, and matching on it first is what
+    /// stops one student's X marks being re-pointed at another when the roster
+    /// is re-sorted between two month files (E7).
+    ///
+    /// Nullable, and usually NULL: the bundled template merges the DepEd ID cell
+    /// into the "No." cell, so on that template the value reads as the item
+    /// number and is rejected as implausible - which is correct. Matching then
+    /// falls back to the normalized name and finally to the row. `None` is an
+    /// honest "the school did not tell us", never a zero or a guess.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sf2_learner_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 

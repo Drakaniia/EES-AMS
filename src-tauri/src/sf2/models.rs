@@ -24,6 +24,13 @@ pub struct Sf2WorkbookLearner {
     pub row_index: u32,
     pub name: String,
     pub gender_block: Option<String>,
+    /// The DepEd learner ID read from the workbook (spec §6.3).
+    ///
+    /// `None` when the workbook has no ID to give - which includes the bundled
+    /// template, whose learner-ID cell is merged into the "No." cell. See
+    /// `sf2::month::student_repo::deped_learner_id_from_cells`.
+    #[serde(default)]
+    pub sf2_learner_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

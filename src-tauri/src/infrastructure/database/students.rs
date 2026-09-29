@@ -31,7 +31,7 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         let students = if let Some(class_id) = class_id {
             let mut stmt = conn.prepare(
-                "SELECT id, name, gender, card_serial, class_id, created_at
+                "SELECT id, name, gender, card_serial, class_id, created_at, sf2_learner_id
                  FROM students 
                  WHERE class_id = ?1 
                  ORDER BY name ASC",
@@ -40,7 +40,7 @@ impl StudentRepository {
             rows.collect::<std::result::Result<Vec<_>, _>>()?
         } else {
             let mut stmt = conn.prepare(
-                "SELECT id, name, gender, card_serial, class_id, created_at
+                "SELECT id, name, gender, card_serial, class_id, created_at, sf2_learner_id
                  FROM students 
                  ORDER BY name ASC",
             )?;
@@ -56,7 +56,7 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         let student = conn
             .query_row(
-                "SELECT id, name, gender, card_serial, class_id, created_at
+                "SELECT id, name, gender, card_serial, class_id, created_at, sf2_learner_id
                  FROM students 
                  WHERE id = ?1",
                 params![id.0.to_string()],
@@ -73,7 +73,7 @@ impl StudentRepository {
         let conn = self.pool.get()?;
         let student = conn
             .query_row(
-                "SELECT id, name, gender, card_serial, class_id, created_at
+                "SELECT id, name, gender, card_serial, class_id, created_at, sf2_learner_id
                  FROM students 
                  WHERE card_serial = ?1",
                 params![serial],
@@ -102,6 +102,12 @@ impl StudentRepository {
             gender: req.gender,
             card_serial,
             class_id,
+            // The DepEd learner ID is not part of `CreateStudentRequest`: nothing
+            // the user types in the Students page knows it. It arrives from the
+            // SF2 roster, through `Sf2MonthStudentRepo::set_student_learner_ids`.
+            // A create therefore starts without one, which is honest - the school
+            // has not told us yet.
+            sf2_learner_id: None,
             created_at: Utc::now(),
         };
 
@@ -181,6 +187,7 @@ impl StudentRepository {
                 gender,
                 card_serial,
                 class_id,
+                sf2_learner_id: None,
                 created_at: Utc::now(),
             };
 
@@ -251,6 +258,11 @@ impl StudentRepository {
 
         let mut conn = self.pool.get()?;
         let transaction = conn.transaction()?;
+        // `sf2_learner_id` is deliberately absent from this statement. It is not
+        // part of `UpdateStudentRequest`, so naming it here would mean either
+        // overwriting the school's own record with NULL on every name change, or
+        // threading it through a request the Students page has no field for. The
+        // SF2 roster owns that column, and the statement leaves it alone.
         transaction.execute(
             "UPDATE students 
              SET name = ?1, gender = ?2, card_serial = ?3, class_id = ?4

@@ -102,6 +102,11 @@ pub(super) fn student_from_row(row: &Row<'_>) -> rusqlite::Result<Student> {
         gender: StudentGender::from_db_value(row.get::<_, Option<String>>(2)?.as_deref()),
         card_serial: row.get(3)?,
         class_id: row.get(4)?,
+        // Read by name, not by position: the DepEd learner ID was added in v20,
+        // long after the other six, and a positional read would make every
+        // SELECT in `students.rs` responsible for getting the order right. The
+        // name is the only thing that can survive the next column.
+        sf2_learner_id: row.get("sf2_learner_id")?,
         created_at: DateTime::from_timestamp(row.get::<_, i64>(5)?, 0)
             .unwrap()
             .with_timezone(&Utc),
