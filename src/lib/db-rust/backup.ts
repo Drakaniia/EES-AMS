@@ -56,6 +56,14 @@ export async function createBackupNow(): Promise<BackupStatus> {
 	return await invoke('create_backup_now');
 }
 
+/**
+ * "Back up workbooks now": copies the SF2 workbooks into their own backup
+ * folder without duplicating the database.
+ */
+export async function createWorkbooksBackupNow(): Promise<BackupStatus> {
+	return await invoke('create_workbooks_backup_now');
+}
+
 export async function listBackups(): Promise<BackupSummary[]> {
 	return await invoke('list_backups');
 }
@@ -84,8 +92,14 @@ export async function uploadLatestBackupToGoogleDrive(): Promise<BackupStatus> {
 	return await invoke('upload_latest_backup_to_google_drive');
 }
 
+/** Pick a backup folder to restore. */
 export async function chooseRestoreBackup(): Promise<BackupPreview | null> {
 	return await invoke('choose_restore_backup');
+}
+
+/** Pick a legacy flat `*.db` backup written by a build before workbooks were backed up. */
+export async function chooseRestoreDatabaseFile(): Promise<BackupPreview | null> {
+	return await invoke('choose_restore_database_file');
 }
 
 export async function restoreBackup(sourcePath: string): Promise<RestoreResult> {

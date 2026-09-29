@@ -33,49 +33,11 @@ export async function getClass(id: string): Promise<Class | undefined> {
 	};
 }
 
-export async function saveClass(classData: Class, isUpdate: boolean = false): Promise<Class> {
-	let backendClass: Class;
-
-	if (isUpdate) {
-		backendClass = await invoke('update_class', {
-			id: classData.id,
-			req: {
-				name: classData.name,
-				room: classData.room,
-				dayStart: classData.dayStart,
-				dayEnd: classData.dayEnd,
-				lateAfter: classData.lateAfter,
-				sessions: classData.sessions,
-				days: classData.days
-			}
-		});
-	} else {
-		backendClass = await invoke('create_class', {
-			req: {
-				name: classData.name,
-				room: classData.room,
-				dayStart: classData.dayStart,
-				dayEnd: classData.dayEnd,
-				lateAfter: classData.lateAfter,
-				sessions: classData.sessions,
-				days: classData.days
-			}
-		});
-	}
-
-	return {
-		id: backendClass.id,
-		name: backendClass.name,
-		room: backendClass.room,
-		dayStart: backendClass.dayStart,
-		dayEnd: backendClass.dayEnd,
-		lateAfter: backendClass.lateAfter,
-		sessions: backendClass.sessions,
-		days: backendClass.days,
-		createdAt: backendClass.createdAt
-	};
-}
-
-export async function deleteClass(id: string): Promise<void> {
-	return await invoke('delete_class', { id });
-}
+/**
+ * Every class on record. Read-only from the UI (spec §12.1, D15, D18).
+ *
+ * `create_class` / `update_class` / `delete_class` are still registered in Rust
+ * and still reachable by anyone who invokes them; Settings simply no longer
+ * offers a way to, because the per-month model is one class by design (D2) and a
+ * CRUD screen over a single row is a control that can only misfire.
+ */

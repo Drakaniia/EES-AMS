@@ -1,17 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
 	Sf2ImportSummary,
-	Sf2ImportValidation,
 	Sf2TemplateDraft,
 	Sf2WorkbookSettings,
 	Sf2ExportPreview,
 	Sf2ExportReadiness,
-	Sf2ExportResult,
-	Sf2AttendanceImportOutcome
+	Sf2ExportResult
 } from '../types';
 export type {
 	Sf2ImportSummary,
-	Sf2ImportValidation,
 	Sf2TemplateDraft,
 	Sf2WorkbookSettings,
 	Sf2ExportPreview,
@@ -19,29 +16,8 @@ export type {
 	Sf2PreviewStudentRow,
 	Sf2ExportReadiness,
 	Sf2ExportResult,
-	Sf2ValidationDuplicate,
-	Sf2ValidationLearner,
-	Sf2ValidationStudent,
-	Sf2CloseDaySummary,
-	Sf2AttendanceImportOutcome
+	Sf2CloseDaySummary
 } from '../types';
-
-export async function validateSf2WorkbookImport(): Promise<Sf2ImportValidation> {
-	return await invoke('validate_sf2_workbook_import');
-}
-
-export async function importSf2Workbook(
-	sourcePath: string,
-	proceedAnyway: boolean
-): Promise<Sf2ImportSummary> {
-	return await invoke('import_sf2_workbook', { sourcePath, proceedAnyway });
-}
-
-export async function createSf2WorkbookFromTemplate(
-	draft: Sf2TemplateDraft
-): Promise<Sf2ImportSummary> {
-	return await invoke('create_sf2_workbook_from_template', { draft });
-}
 
 export async function getSf2WorkbookSettings(classId?: string): Promise<Sf2WorkbookSettings> {
 	return await invoke('get_sf2_workbook_settings', { classId: classId || null });
@@ -51,15 +27,6 @@ export async function updateSf2WorkbookSettings(
 	draft: Sf2TemplateDraft
 ): Promise<Sf2ImportSummary> {
 	return await invoke('update_sf2_workbook_settings', { draft });
-}
-
-/**
- * Switch the active SF2 report month for a class WITHOUT touching the Excel
- * workbook. Pure DB change so the reports page can switch months instantly and
- * avoid the slow Excel automation that `updateSf2WorkbookSettings` runs.
- */
-export async function setSf2ReportMonth(classId: string, reportMonth: string): Promise<void> {
-	await invoke('set_sf2_report_month', { classId, reportMonth });
 }
 
 export async function getSf2ExportReadiness(classId?: string): Promise<Sf2ExportReadiness> {
@@ -76,24 +43,14 @@ export async function syncSf2Attendance(classId: string): Promise<void> {
 }
 
 /**
- * Read the "X" absence marks back out of the SF2 working workbook and record
- * them as absences in the app.
- *
- * The workbook is the school's official record, so it is the only surviving
- * copy of a day's absences when the app's database has been reset — names and
- * SF2 details are rebuilt from the workbook automatically, but attendance marks
- * used to be write-only. Additive and idempotent: an "X" is only recorded when
- * the database does not already have that learner absent for that day.
- */
-export async function importSf2AttendanceFromWorkbook(
-	classId: string
-): Promise<Sf2AttendanceImportOutcome> {
-	return await invoke('import_sf2_attendance_from_workbook', { classId });
-}
-
-/** Sync the class roster to the SF2 working workbook.
+ * Sync the class roster to the SF2 working workbook.
  *  For bundled templates this re-assigns all students to available row slots.
- *  For imported workbooks this returns a clear explanation. */
+ *  For imported workbooks this returns a clear explanation.
+ *
+ * Kept, and re-wired, per spec §12.4: the *Sync Roster* button in Settings is
+ * gone (D18), but `report-page-state.svelte.ts` still calls this on the Open SF2
+ * path, so the command and its wrapper stay until that caller goes.
+ */
 export async function syncSf2Roster(classId: string): Promise<void> {
 	await invoke('sync_sf2_roster', { classId });
 }
