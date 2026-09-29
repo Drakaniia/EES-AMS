@@ -2,9 +2,156 @@ use crate::domain::error::Result;
 use crate::infrastructure::database::{DbPool, EventRepository, StudentRepository};
 use crate::sf2::attendance::{absent_student_ids, present_student_ids};
 use crate::sf2::logic::{attendance_marks_for_day, Sf2CellMark, Sf2StudentMapping};
-use crate::sf2::models::{Sf2DateMappingRecord, Sf2StudentMappingRecord, Sf2TemplateRecord};
+use crate::sf2::models::{Sf2DateMappingRecord, Sf2StudentMappingRecord};
 
 use std::collections::{HashMap, HashSet};
+
+/// First day column of the DepEd SF2 attendance block - column `F`.
+pub const SF2_ATTENDANCE_FIRST_COLUMN: i32 = 6;
+
+/// Last day column of the DepEd SF2 attendance block - column `AL`.
+pub const SF2_ATTENDANCE_LAST_COLUMN: i32 = 38;
+
+/// One cell of the attendance block, addressed the way Excel addresses it.
+///
+/// Both sides of the guard speak this vocabulary - "what the database holds",
+/// "what the workbook holds", "what this sync is allowed to clear" - so a
+/// comparison can never accidentally mix two different shapes of data.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Sf2GridCell {
+    pub sheet_name: String,
+    pub column_letter: String,
+    pub row_index: u32,
+}
+
+impl Sf2GridCell {
+    /// The A1 address, e.g. `AL47`.
+    #[must_use]
+    pub fn address(&self) -> String {
+        format!("{}{}", self.column_letter, self.row_index)
+    }
+
+    /// The `(sheet, address)` pair Excel and the COM layer both key on.
+    #[must_use]
+    pub fn key(&self) -> (String, String) {
+        (self.sheet_name.clone(), self.address())
+    }
+
+    /// Recover a cell from a generated mark, e.g. `("JULY 2026", "AL47")`.
+    ///
+    /// `None` for anything that does not end in a row number, which is never a
+    /// cell of the attendance block.
+    #[must_use]
+    pub fn from_mark(mark: &Sf2CellMark) -> Option<Self> {
+        let column_len = mark
+            .cell_address
+            .find(|character: char| !character.is_ascii_alphabetic())?;
+        if column_len == 0 {
+            return None;
+        }
+        let row_index: u32 = mark.cell_address[column_len..].parse().ok()?;
+        Some(Self {
+            sheet_name: mark.sheet_name.clone(),
+            column_letter: mark.cell_address[..column_len].to_string(),
+            row_index,
+        })
+    }
+}
+
+/// Every day column of the SF2 attendance block, `F` through `AL`.
+///
+/// The whole block, not just the columns a month happens to map: an `X` left in
+/// a column with no date behind it is still a mark, and the diff has to be able
+/// to see it in order to leave it alone.
+#[must_use]
+pub fn attendance_block_columns() -> Vec<String> {
+    (SF2_ATTENDANCE_FIRST_COLUMN..=SF2_ATTENDANCE_LAST_COLUMN)
+        .map(column_number_to_letter)
+        .collect()
+}
+
+/// The cells a sync is responsible for: the mapped learner rows × the mapped
+/// day columns of the report month.
+///
+/// This is the ceiling on what any sync may blank, and the same set the guard
+/// measures. A month with no mappings produces an empty scope - so the
+/// degenerate analysis of spec §4 step 2 yields an empty clear set rather than
+/// a wiped grid.
+#[must_use]
+pub fn attendance_scope_cells(
+    student_mappings: &[Sf2StudentMappingRecord],
+    date_mappings: &[Sf2DateMappingRecord],
+) -> Vec<Sf2GridCell> {
+    let rows = mapped_attendance_rows(student_mappings.iter().map(|m| m.row_index));
+    let mut cells = Vec::with_capacity(rows.len() * date_mappings.len());
+    for date in date_mappings {
+        for row_index in &rows {
+            cells.push(Sf2GridCell {
+                sheet_name: date.sheet_name.clone(),
+                column_letter: date.column_letter.clone(),
+                row_index: *row_index,
+            });
+        }
+    }
+    cells
+}
+
+/// The cells a sync may blank, computed from the diff (spec §9.2).
+///
+/// ```text
+/// to_clear = { cells the database says should be blank }
+///          - { cells the database says should hold X }
+/// ```
+///
+/// narrowed to the cells that actually hold an `X` right now.
+///
+/// A cell that holds an `X` the database still proves is left alone - the user
+/// did not mark that student present, so nothing may remove that mark. A cell
+/// outside `scope` is left alone, because the app cannot place a mark it has no
+/// mapping for. An already-blank cell is not written to at all.
+///
+/// The result is a subset of the `X` marks the workbook really holds, so it can
+/// never be the whole grid: an empty mapping set, a degenerate database or a
+/// caller that forgot the guard all yield the same bounded answer. This is the
+/// structural half of the fix - the over-broad clear is not merely guarded, it
+/// is no longer expressible.
+#[must_use]
+pub fn differential_clear_marks(
+    scope: &[Sf2GridCell],
+    db_x_cells: &[Sf2GridCell],
+    workbook_x_cells: &[Sf2GridCell],
+) -> Vec<Sf2CellMark> {
+    let scope: HashSet<&Sf2GridCell> = scope.iter().collect();
+    let db_x: HashSet<&Sf2GridCell> = db_x_cells.iter().collect();
+
+    let mut marks: Vec<Sf2GridMarkOrderKey> = workbook_x_cells
+        .iter()
+        .filter(|cell| scope.contains(*cell) && !db_x.contains(*cell))
+        .map(|cell| Sf2GridMarkOrderKey {
+            sheet_name: cell.sheet_name.clone(),
+            address: cell.address(),
+        })
+        .collect();
+    marks.sort_unstable();
+    marks.dedup();
+
+    marks
+        .into_iter()
+        .map(|cell| Sf2CellMark {
+            sheet_name: cell.sheet_name,
+            cell_address: cell.address,
+            value: String::new(),
+        })
+        .collect()
+}
+
+/// A sort key that orders clear marks by sheet then address, so the generated
+/// COM writes go out in a stable order run after run.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Sf2GridMarkOrderKey {
+    sheet_name: String,
+    address: String,
+}
 
 /// Generate attendance Excel marks for a set of days.
 ///
@@ -58,59 +205,6 @@ pub(crate) fn export_marks(
     }
 
     Ok(marks)
-}
-
-/// Clear all attendance marks for the given date mappings and student mappings.
-/// Generates empty cell marks for every combination of sheet × weekday column × attendance row,
-/// ensuring stale marks from the bundled template or previous months are erased before
-/// writing new ones.
-pub(crate) fn clear_attendance_marks_for_records(
-    template: &Sf2TemplateRecord,
-    date_mappings: &[Sf2DateMappingRecord],
-    student_mappings: &[Sf2StudentMappingRecord],
-) -> Vec<Sf2CellMark> {
-    let row_indices = if crate::sf2::calendar_service::template_owns_roster(template) {
-        let row_slots = crate::sf2::calendar_service::template_roster_slots();
-        attendance_grid_rows(
-            &row_slots,
-            student_mappings.iter().map(|mapping| mapping.row_index),
-        )
-    } else {
-        mapped_attendance_rows(student_mappings.iter().map(|mapping| mapping.row_index))
-    };
-
-    // Get the unique set of visible sheet names from the date mappings.
-    let sheet_names: Vec<&str> = date_mappings
-        .iter()
-        .map(|m| m.sheet_name.as_str())
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect();
-
-    if sheet_names.is_empty() {
-        return Vec::new();
-    }
-
-    // Generate column letters for ALL standard DepEd SF2 weekday columns (F through AL).
-    // This ensures stale marks are cleared even from weekday columns that have no
-    // valid date in the report month (e.g. Monday/Tuesday in the first week when
-    // the month starts mid-week).
-    let all_column_letters: Vec<String> = (6..=38).map(column_number_to_letter).collect();
-
-    let mut marks =
-        Vec::with_capacity(sheet_names.len() * all_column_letters.len() * row_indices.len());
-    for sheet_name in &sheet_names {
-        for col_letter in &all_column_letters {
-            for row_index in &row_indices {
-                marks.push(Sf2CellMark {
-                    sheet_name: sheet_name.to_string(),
-                    cell_address: format!("{col_letter}{row_index}"),
-                    value: String::new(),
-                });
-            }
-        }
-    }
-    marks
 }
 
 /// Convert a 1-based column index to an Excel column letter (e.g., 1 -> A, 26 -> Z, 27 -> AA).
@@ -408,23 +502,6 @@ pub(crate) fn learner_absent_present_formula_marks(
     }
 
     (formula_marks, static_marks)
-}
-
-pub(crate) fn attendance_grid_rows<I>(
-    row_slots: &[crate::sf2::calendar_service::TemplateRosterSlot],
-    extra_rows: I,
-) -> Vec<u32>
-where
-    I: IntoIterator<Item = u32>,
-{
-    let mut rows = row_slots
-        .iter()
-        .map(|slot| slot.row_index)
-        .collect::<Vec<_>>();
-    rows.extend(extra_rows);
-    rows.sort_unstable();
-    rows.dedup();
-    rows
 }
 
 pub(crate) fn mapped_attendance_rows<I>(rows: I) -> Vec<u32>

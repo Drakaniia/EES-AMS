@@ -103,26 +103,52 @@ pub(crate) fn has_absent_event_for_day(
     class_id: &str,
     date: NaiveDate,
 ) -> Result<bool> {
+    has_event_of_type_for_day(pool, student_id, class_id, date, AttendanceType::Absent)
+}
+
+/// True when the student already has an explicit `in` record for that local day.
+///
+/// The counterpart to [`has_absent_event_for_day`], and the reason the unattended
+/// self-heal is able to be additive (D1, spec §8.3). A blank SF2 cell means
+/// "present" (`SF2_PRESENT_MARK` is `""`), so a workbook `X` over a day the app
+/// holds a `present` for is the app and the school disagreeing - and which of the
+/// two is right is not something an unattended process is entitled to decide.
+/// See `heal::import_recovered_marks`.
+pub(crate) fn has_present_event_for_day(
+    pool: &crate::infrastructure::database::DbPool,
+    student_id: &str,
+    class_id: &str,
+    date: NaiveDate,
+) -> Result<bool> {
+    has_event_of_type_for_day(pool, student_id, class_id, date, AttendanceType::In)
+}
+
+/// True when the student has an explicit record of `event_type` for that local day.
+///
+/// The shared predicate behind the two questions above. An event with no
+/// `class_id` counts as belonging to the class, which is how a learner marked
+/// outside a class switch is stored - the same rule
+/// `set_attendance_event_for_day` deletes by, so "is there a record?" and "what
+/// would this write replace?" can never disagree.
+pub(crate) fn has_event_of_type_for_day(
+    pool: &crate::infrastructure::database::DbPool,
+    student_id: &str,
+    class_id: &str,
+    date: NaiveDate,
+    event_type: AttendanceType,
+) -> Result<bool> {
     let (day_start_timestamp, day_end_timestamp) = local_day_bounds_timestamps_for_date(date)?;
+    let query = HAS_EVENT_OF_TYPE_FOR_DAY.replace("{event_type}", event_type.as_db_value());
     let conn = pool.get()?;
     let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM events
-         WHERE student_id = ?1
-         AND event_type = ?2
-         AND timestamp >= ?3
-         AND timestamp < ?4
-         AND (class_id IS NULL OR class_id = ?5)",
-        params![
-            student_id,
-            AttendanceType::Absent.as_db_value(),
-            day_start_timestamp,
-            day_end_timestamp,
-            class_id
-        ],
+        &query,
+        params![student_id, day_start_timestamp, day_end_timestamp, class_id],
         |row| row.get(0),
     )?;
     Ok(count > 0)
 }
+
+const HAS_EVENT_OF_TYPE_FOR_DAY: &str = include_str!("../sql/has_event_of_type_for_day.sql");
 
 pub(crate) fn local_day_bounds_timestamps_for_date(date: NaiveDate) -> Result<(i64, i64)> {
     let next_day = date.succ_opt().ok_or_else(|| {

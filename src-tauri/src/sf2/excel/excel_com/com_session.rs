@@ -1,4 +1,5 @@
 use crate::domain::error::{AppError, Result};
+use crate::sf2::excel::excel_lock::{in_excel_section, with_excel_serialisation};
 use std::cell::Cell;
 use std::path::Path;
 use windows::core::{BSTR, GUID, PCWSTR};
@@ -11,22 +12,42 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Ole::DISPID_PROPERTYPUT;
 use windows::Win32::System::Variant::{
     VariantClear, VARENUM, VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_BOOL, VT_BSTR,
-    VT_DISPATCH, VT_EMPTY, VT_I2, VT_I4, VT_I8, VT_INT, VT_NULL, VT_R4, VT_R8, VT_UI2, VT_UI4,
-    VT_UI8, VT_UINT,
+    VT_DISPATCH, VT_EMPTY, VT_ERROR, VT_I2, VT_I4, VT_I8, VT_INT, VT_NULL, VT_R4, VT_R8, VT_UI2,
+    VT_UI4, VT_UI8, VT_UINT,
 };
 
 const LOCALE_USER_DEFAULT: u32 = 0x0400;
 
 // ── COM Threading ────────────────────────────────────────────────────────────
 
+/// The one way into Excel, and therefore the only place the process-wide gate is
+/// taken (spec §8.2).
+///
+/// The order below is the whole design:
+///
+/// 1. The nesting check runs on the **calling** thread. A thread-local does not
+///    cross a spawn, so a nested `run_excel_task` has to be recognised before the
+///    spawn or it would spawn a fresh thread, find the gate held by the task it
+///    was called from, and wait for a join that cannot complete. Detected here it
+///    runs inline instead, on the COM apartment this thread already has.
+/// 2. The spawn keeps the COM apartment - and the wait for the gate - off the
+///    caller's thread. A task that loses the race to a user-initiated COM
+///    operation blocks *there*. That is what keeps §8.2's startup promise: the
+///    user is never the one waiting, the self-heal is.
+/// 3. The gate is taken inside the spawned thread, after the apartment is up, and
+///    released before the join returns. Nothing outside Excel is ever serialised,
+///    so the section stays as short as a COM call can be.
 pub(crate) fn run_excel_task<T, F>(task: F) -> Result<T>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T> + Send + 'static,
 {
+    if in_excel_section() {
+        return with_excel_serialisation(task);
+    }
     std::thread::spawn(move || {
         let _apartment = ComApartment::init()?;
-        task()
+        with_excel_serialisation(task)
     })
     .join()
     .map_err(|_| AppError::Internal("Excel automation thread panicked".to_string()))?
@@ -57,6 +78,15 @@ impl Drop for ComApartment {
 
 // ── Workbook Session Management ──────────────────────────────────────────────
 
+/// Open a workbook, run `action` against it, then close and quit.
+///
+/// **Not an entry point.** This helper builds an [`ExcelSession`] directly, so it
+/// inherits the caller's place in the critical section rather than opening one of
+/// its own - which is why it does *not* go through `run_excel_task`: a second
+/// acquisition there would be a nested one. It is therefore only correct when
+/// called from inside a `run_excel_task` closure, and the test
+/// `every_in_lock_helper_is_only_called_inside_a_section` asserts that over the
+/// whole crate.
 pub(crate) fn with_workbook<T, F>(
     path: &Path,
     read_only: bool,
@@ -199,7 +229,7 @@ impl ComObject {
     }
 
     pub fn get_string(&self, name: &str) -> Result<String> {
-        Ok(self.get(name)?.to_string_value())
+        self.get(name)?.to_string_value()
     }
 
     pub fn get_i32(&self, name: &str) -> Result<i32> {
@@ -358,29 +388,62 @@ impl ComVariant {
         Ok(ComObject { dispatch })
     }
 
-    pub fn to_string_value(&self) -> String {
+    /// The variant's text, or an error when Excel answered with anything that
+    /// is not text.
+    ///
+    /// ## Why this is fallible, and why it used not to be
+    ///
+    /// This used to return `String` and render every unhandled `VARENUM` -
+    /// including `VT_ERROR` - as the empty string. That is the defect the
+    /// destructive-sync guard was built to prevent, arriving through the back
+    /// door: `Application.Evaluate` does not throw when Excel cannot evaluate a
+    /// formula, it returns a `VT_ERROR` variant, and the old reader turned that
+    /// into "". A row mask built from "" is the empty string, an empty mask is
+    /// zero `X` marks, and zero `X` marks is `SyncPermit::Proven` for *any*
+    /// month - so a formula Excel happened to reject became permission to erase
+    /// the attendance grid.
+    ///
+    /// An error variant now stays an error, so a caller on the measurement path
+    /// cannot accidentally read it as a value. A caller that genuinely wants the
+    /// lenient behaviour has to say so out loud, which is the point.
+    ///
+    /// `VT_EMPTY` and `VT_NULL` are **not** errors: an empty cell is a
+    /// legitimate answer, and a `1 x 1` read of one is the normal case.
+    pub fn to_string_value(&self) -> Result<String> {
         match self.variant_type() {
-            VT_BSTR => unsafe { self.0.Anonymous.Anonymous.Anonymous.bstrVal.to_string() },
-            VT_I4 => unsafe { self.0.Anonymous.Anonymous.Anonymous.lVal.to_string() },
-            VT_I2 => unsafe { self.0.Anonymous.Anonymous.Anonymous.iVal.to_string() },
-            VT_I8 => unsafe { self.0.Anonymous.Anonymous.Anonymous.llVal.to_string() },
-            VT_INT => unsafe { self.0.Anonymous.Anonymous.Anonymous.intVal.to_string() },
-            VT_UI2 => unsafe { self.0.Anonymous.Anonymous.Anonymous.uiVal.to_string() },
-            VT_UI4 => unsafe { self.0.Anonymous.Anonymous.Anonymous.ulVal.to_string() },
-            VT_UI8 => unsafe { self.0.Anonymous.Anonymous.Anonymous.ullVal.to_string() },
-            VT_UINT => unsafe { self.0.Anonymous.Anonymous.Anonymous.uintVal.to_string() },
-            VT_R4 => unsafe { self.0.Anonymous.Anonymous.Anonymous.fltVal.to_string() },
-            VT_R8 => unsafe { self.0.Anonymous.Anonymous.Anonymous.dblVal.to_string() },
-            VT_BOOL => {
-                if self.to_bool().unwrap_or(false) {
-                    "true".to_string()
-                } else {
-                    "false".to_string()
-                }
-            }
-            VT_EMPTY | VT_NULL => String::new(),
-            _ => String::new(),
+            VT_BSTR => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.bstrVal.to_string() }),
+            VT_I4 => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.lVal.to_string() }),
+            VT_I2 => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.iVal.to_string() }),
+            VT_I8 => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.llVal.to_string() }),
+            VT_INT => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.intVal.to_string() }),
+            VT_UI2 => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.uiVal.to_string() }),
+            VT_UI4 => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.ulVal.to_string() }),
+            VT_UI8 => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.ullVal.to_string() }),
+            VT_UINT => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.uintVal.to_string() }),
+            VT_R4 => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.fltVal.to_string() }),
+            VT_R8 => Ok(unsafe { self.0.Anonymous.Anonymous.Anonymous.dblVal.to_string() }),
+            VT_BOOL => Ok(if self.to_bool().unwrap_or(false) {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            }),
+            VT_EMPTY | VT_NULL => Ok(String::new()),
+            _ => Err(self.unexpected_text_type()),
         }
+    }
+
+    /// Why a variant could not be read as text, in terms an operator can act on.
+    fn unexpected_text_type(&self) -> AppError {
+        let is_error = self.variant_type() == VT_ERROR;
+        AppError::Internal(format!(
+            "Excel returned {}{}, not a value that can be read as text",
+            self.variant_type_name(),
+            if is_error {
+                " (an Excel error value - the formula could not be evaluated)"
+            } else {
+                ""
+            }
+        ))
     }
 
     pub fn to_i32(&self) -> Result<i32> {

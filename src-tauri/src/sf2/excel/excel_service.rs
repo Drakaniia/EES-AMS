@@ -2,7 +2,8 @@ use crate::domain::error::{AppError, Result};
 use crate::infrastructure::database::{ClassRepository, DbPool};
 use crate::sf2::excel;
 use crate::sf2::models::{
-    Sf2ExportReadiness, Sf2ExportResult, Sf2TemplateRecord, Sf2WorkbookSettings,
+    Sf2DateMappingRecord, Sf2ExportReadiness, Sf2ExportResult, Sf2StudentMappingRecord,
+    Sf2TemplateRecord, Sf2WorkbookSettings,
 };
 use crate::sf2::naming::class_name;
 use crate::sf2::repository::{template_summary, Sf2Repository};
@@ -170,6 +171,57 @@ pub fn export_readiness(pool: DbPool, class_id: Option<String>) -> Result<Sf2Exp
     })
 }
 
+/// What the export path is allowed to do about this month's workbook
+/// (spec §9.1, acceptance #2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ExportGuardOutcome {
+    /// `Proven`: the database holds every `X` the workbook shows. Export.
+    Write,
+    /// `Stale` after the recovery import: refuse, and say how many marks the
+    /// workbook holds that the app has no record of. No output file is written.
+    Refuse(String),
+    /// `Unmeasured`: the workbook could not be measured, so nothing is written.
+    /// The workbook is shown read-only and the reason is returned.
+    ReadOnly(String),
+}
+
+/// The export path's answer to the destructive-sync guard.
+///
+/// The three write paths now share one guard call,
+/// [`crate::sf2::guard::run_write_guard`], so the export cannot drift from the
+/// open and preview paths: it asks the same question of the same evidence and
+/// acts on the same table. This function is the seam the behaviour is tested
+/// through, because `export_workbook` itself needs a live `AppHandle` for the
+/// save dialog.
+pub(crate) fn export_guard_outcome(
+    pool: &DbPool,
+    template: &Sf2TemplateRecord,
+    student_mappings: &[Sf2StudentMappingRecord],
+    date_mappings: &[Sf2DateMappingRecord],
+) -> ExportGuardOutcome {
+    use crate::sf2::guard::{export_refused_message, run_write_guard, SyncAction};
+
+    match run_write_guard(pool, template, student_mappings, date_mappings) {
+        Ok(SyncAction::Rewrite { .. }) => ExportGuardOutcome::Write,
+        Ok(SyncAction::Aborted { message }) => {
+            ExportGuardOutcome::Refuse(export_refused_message(&message))
+        }
+        Ok(SyncAction::ReadOnly { reason }) => ExportGuardOutcome::ReadOnly(reason),
+        // `guard_before_write` resolves `Stale` before it returns, so this arm
+        // is unreachable today. It stays, and it refuses rather than writes, so a
+        // future permit variant cannot fall through into an export.
+        Ok(SyncAction::ImportThenRecheck { missing, .. }) => ExportGuardOutcome::Refuse(
+            export_refused_message(&crate::sf2::guard::stale_abort_message(missing.len())),
+        ),
+        // A guard that could not run is `Unmeasured` in everything but name. The
+        // write paths log and skip; the export has a user waiting on a file, so
+        // it says why there is not one.
+        Err(error) => ExportGuardOutcome::ReadOnly(format!(
+            "The SF2 workbook could not be checked against the app: {error}"
+        )),
+    }
+}
+
 pub fn export_workbook(
     app: tauri::AppHandle,
     pool: DbPool,
@@ -214,6 +266,25 @@ pub fn export_workbook(
         return Err(AppError::InvalidInput(unmapped_roster_issue(
             &unmapped_students,
         )));
+    }
+
+    // The destructive-sync guard, and it sits above *everything* that writes or
+    // produces a file: the save dialog, the mark write, the copy. Spec
+    // acceptance #2 is "the export is refused with a message naming the count
+    // mismatch. No output file is written", and a guard placed below any of those
+    // would satisfy the letter of it while still having written the grid.
+    match export_guard_outcome(&pool, &template, &student_mappings, &mapped_dates) {
+        ExportGuardOutcome::Write => {}
+        ExportGuardOutcome::Refuse(message) => return Err(AppError::InvalidInput(message)),
+        ExportGuardOutcome::ReadOnly(reason) => {
+            log::warn!("refusing the SF2 export and opening read-only: {reason}");
+            // The marks exist and refusing to clear them is no reason to hide
+            // them: the user gets the same read-only window the open path gives.
+            let _ = crate::sf2::guard::read_only::open_workbook_read_only(&working_copy_path);
+            return Err(AppError::InvalidInput(format!(
+                "The export was not written. {reason}"
+            )));
+        }
     }
 
     let output_path = save_workbook_path(&app, &template)?;

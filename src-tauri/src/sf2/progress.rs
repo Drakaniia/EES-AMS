@@ -1,6 +1,6 @@
 use crate::domain::error::{AppError, Result};
 use crate::infrastructure::database::DbPool;
-use crate::sf2::attendance_marks;
+use crate::sf2::attendance_marks::{self, Sf2GridCell};
 use crate::sf2::excel;
 use crate::sf2::logic::Sf2CellMark;
 use crate::sf2::models::{Sf2DateMappingRecord, Sf2StudentMappingRecord, Sf2TemplateRecord};
@@ -149,16 +149,6 @@ fn write_template_marks_for_mappings_impl(
         .cloned()
         .collect::<Vec<_>>();
 
-    let sf2_repo = Sf2Repository::new(pool.clone());
-    let all_date_mappings = sf2_repo.date_mappings_for_template(&template.id)?;
-    let clear_date_mappings: Vec<Sf2DateMappingRecord> = if all_date_mappings.is_empty() {
-        date_mappings.to_vec()
-    } else {
-        sf2_date_mappings_for_report_month(template, &all_date_mappings)
-    };
-
-    let owns_roster = crate::sf2::roster_parser::template_owns_roster(template);
-
     // ── Attendance marks (sparse "X" for absent students) ───────────
     let attendance_marks = if export_days.is_empty() || student_mappings.is_empty() {
         Vec::new()
@@ -173,43 +163,21 @@ fn write_template_marks_for_mappings_impl(
     };
     let attendance_mark_count = attendance_marks.len();
 
-    // ── Clear marks ─────────────────────────────────────────────────
-    // Bundled templates: use Range.ClearContents() per sheet (2 COM
-    // calls per sheet) instead of per-cell writes (~1,400+ COM calls).
-    // Imported templates: fall back to per-cell clear marks.
-    let clear_marks: Vec<Sf2CellMark> = if !owns_roster {
-        attendance_marks::clear_attendance_marks_for_records(
-            template,
-            &clear_date_mappings,
-            student_mappings,
-        )
-    } else {
-        Vec::new()
-    };
-
-    // Unique sheet names for bulk clear (bundled templates only).
-    let bulk_sheets: Vec<String> = if owns_roster {
-        clear_date_mappings
-            .iter()
-            .map(|m| m.sheet_name.clone())
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect()
-    } else {
-        Vec::new()
-    };
-
-    // Row positions for bulk clear (only needed for bundled templates).
-    let male_count = student_mappings
-        .iter()
-        .filter(|m| m.gender_block.as_deref() == Some("MALE"))
-        .count();
-    let female_count = student_mappings
-        .iter()
-        .filter(|m| m.gender_block.as_deref() == Some("FEMALE"))
-        .count();
-    let (male_total_row, female_total_row, _combined_total_row) =
-        crate::sf2::roster_parser::bundled_template_total_rows(male_count, female_count);
+    // ── Differential clear (spec §9.2) ───────────────────────────────
+    //
+    // The cells to blank are computed from the diff, never from the grid's
+    // shape. A cell that holds an "X" the database cannot produce is blanked;
+    // a cell the database still proves is left alone; a cell outside this
+    // month's mapped rows and day columns is left alone. That makes an
+    // over-broad clear impossible even for a caller that skipped the guard -
+    // which is what turns "the grid went blank" from a data-loss event into a
+    // non-event.
+    let clear_marks = differential_clear_marks_for_write(
+        &workbook_path,
+        student_mappings,
+        date_mappings,
+        &attendance_marks,
+    )?;
 
     // ── ABSENT/PRESENT formula marks ────────────────────────────────
     let formula_marks_opt = compute_absent_present_marks(template, student_mappings, date_mappings);
@@ -230,34 +198,16 @@ fn write_template_marks_for_mappings_impl(
         let formula_chunks = formula_marks.len().div_ceil(CHUNK_SIZE);
         let static_chunks = static_marks.len().div_ceil(CHUNK_SIZE);
         // INVARIANT: total_units must equal the sum of every phase's unit count
-        // below (sheet clears + chunked per-cell writes). Keep it in sync when
+        // below (diff clears + chunked per-cell writes). Keep it in sync when
         // adding or removing phases so the 61–69% mapping stays accurate.
-        let total_units =
-            (bulk_sheets.len() + clear_chunks + marks_chunks + formula_chunks + static_chunks)
-                .max(1);
+        let total_units = (clear_chunks + marks_chunks + formula_chunks + static_chunks).max(1);
         let mut units_done = 0usize;
 
         // Move the bar as soon as the write phase starts, before the first
-        // sheet/chunk completes, so it never feels paused at 60%.
+        // chunk completes, so it never feels paused at 60%.
         emit_write_step(&progress, 0, total_units, "Preparing the workbook…");
 
-        // Phase 1: Bulk-clear attendance grid (bundled templates).
-        for (index, sheet_name) in bulk_sheets.iter().enumerate() {
-            session.clear_attendance_grid(sheet_name, male_total_row, female_total_row)?;
-            units_done += 1;
-            emit_write_step(
-                &progress,
-                units_done,
-                total_units,
-                &format!(
-                    "Clearing attendance grid (sheet {}/{})…",
-                    index + 1,
-                    bulk_sheets.len()
-                ),
-            );
-        }
-
-        // Phase 2: Per-cell clear marks (imported templates).
+        // Phase 1: Blanks the X marks the database cannot account for.
         if clear_chunks > 0 {
             for (index, chunk) in clear_marks.chunks(CHUNK_SIZE).enumerate() {
                 session.write_marks_force(chunk)?;
@@ -266,12 +216,12 @@ fn write_template_marks_for_mappings_impl(
                     &progress,
                     units_done,
                     total_units,
-                    &format!("Clearing previous marks ({}/{})…", index + 1, clear_chunks),
+                    &format!("Clearing withdrawn marks ({}/{})…", index + 1, clear_chunks),
                 );
             }
         }
 
-        // Phase 3: Sparse attendance "X" marks.
+        // Phase 2: Sparse attendance "X" marks.
         if marks_chunks > 0 {
             for (index, chunk) in attendance_marks.chunks(CHUNK_SIZE).enumerate() {
                 session.write_marks_force(chunk)?;
@@ -285,7 +235,7 @@ fn write_template_marks_for_mappings_impl(
             }
         }
 
-        // Phase 4: AM/AO formulas (non-fatal on failure — matches
+        // Phase 3: AM/AO formulas (non-fatal on failure — matches
         // the original warn! semantics).
         if formula_chunks > 0 {
             for (index, chunk) in formula_marks.chunks(CHUNK_SIZE).enumerate() {
@@ -316,6 +266,45 @@ fn write_template_marks_for_mappings_impl(
     })?;
 
     Ok(attendance_mark_count)
+}
+
+/// The blank marks this sync is allowed to write, or an error when the workbook
+/// could not be measured.
+///
+/// Failing to measure is a hard error on purpose. The clear is a *subtraction*,
+/// and a subtraction with no measured set would either blank the whole scope or,
+/// worse, once someone adds a fallback, nothing at all - silently. Refusing the
+/// write is the only answer that cannot lose a mark.
+fn differential_clear_marks_for_write(
+    workbook_path: &std::path::Path,
+    student_mappings: &[Sf2StudentMappingRecord],
+    date_mappings: &[Sf2DateMappingRecord],
+    attendance_marks: &[Sf2CellMark],
+) -> Result<Vec<Sf2CellMark>> {
+    let db_x_cells = attendance_marks
+        .iter()
+        .filter_map(Sf2GridCell::from_mark)
+        .collect::<Vec<_>>();
+
+    let scan = crate::sf2::guard::evaluate::measure_workbook_marks(
+        workbook_path,
+        student_mappings,
+        date_mappings,
+    );
+    // A scan that could not be read clears nothing. `x_cells()` is `None` here,
+    // and an empty workbook list is the only thing the differential clear treats
+    // as "nothing to blank", so the two must not be allowed to converge.
+    let Some(x_cells) = scan.x_cells() else {
+        return Err(crate::domain::error::AppError::Internal(
+            crate::sf2::guard::WORKBOOK_NOT_READABLE.to_string(),
+        ));
+    };
+
+    Ok(attendance_marks::differential_clear_marks(
+        &attendance_marks::attendance_scope_cells(student_mappings, date_mappings),
+        &db_x_cells,
+        x_cells,
+    ))
 }
 
 /// Compute ABSENT/PRESENT (AM/AO) formula marks without opening Excel.
