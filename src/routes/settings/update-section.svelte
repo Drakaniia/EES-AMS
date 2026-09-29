@@ -10,7 +10,8 @@
 		Download,
 		ExternalLink,
 		RefreshCw,
-		RotateCcw
+		RotateCcw,
+		TriangleAlert
 	} from 'lucide-svelte';
 
 	const RELEASE_BASE = 'https://github.com/Drakaniia/EES-AMS/releases/tag/app-v';
@@ -42,6 +43,21 @@
 	</div>
 
 	<div class="space-y-4">
+		{#if updateStore.attendanceWarning}
+			<div
+				class="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
+			>
+				<div class="flex items-center gap-2 font-semibold">
+					<TriangleAlert class="size-4 shrink-0" aria-hidden="true" />
+					Attendance records went missing
+				</div>
+				<p class="mt-1">{updateStore.attendanceWarning}</p>
+				<p class="mt-2">
+					Open Data Management below to review your backups before recording more attendance.
+				</p>
+			</div>
+		{/if}
+
 		<div class="flex items-center justify-between gap-2">
 			<div class="min-w-0">
 				<p class="label-mono text-xs text-muted-foreground">Current version</p>

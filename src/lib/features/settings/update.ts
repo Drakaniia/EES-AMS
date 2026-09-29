@@ -20,6 +20,12 @@ export interface UpdateStatus {
 	stagedVersion?: string | null;
 	stagedNotes?: string | null;
 	stagedPubDate?: string | null;
+	/**
+	 * Set when the attendance record count fell between the previously installed
+	 * version and this one. The message names the pre-install backup to restore
+	 * from. Loud on purpose: silent data loss is the failure this guards against.
+	 */
+	attendanceWarning?: string | null;
 }
 
 /**

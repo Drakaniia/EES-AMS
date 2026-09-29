@@ -39,6 +39,11 @@ class UpdateStore {
 	progress = $state<UpdateProgress | null>(null);
 	error = $state<string | null>(null);
 	failedStage = $state<UpdateFailedStage | null>(null);
+	/**
+	 * Set when the attendance record count fell between the previously installed
+	 * version and this one. Reported loudly, never swallowed.
+	 */
+	attendanceWarning = $state<string | null>(null);
 
 	hasStagedUpdate = $derived(this.stagedVersion !== null);
 	/** Orange dot on the Settings nav item: update available OR staged. */
@@ -58,6 +63,7 @@ class UpdateStore {
 		try {
 			const staged = await getUpdateStatus();
 			this.currentVersion = staged.currentVersion;
+			this.attendanceWarning = staged.attendanceWarning ?? null;
 			if (staged.stagedVersion) {
 				this.stagedVersion = staged.stagedVersion;
 				this.stagedNotes = staged.stagedNotes ?? null;
