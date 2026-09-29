@@ -117,6 +117,9 @@ pub struct UpdateStatus {
     pub staged_version: Option<String>,
     pub staged_notes: Option<String>,
     pub staged_pub_date: Option<String>,
+    /// §9.4: set when the attendance record count fell between the previous
+    /// version and this one, naming the pre-install backup to restore from.
+    pub attendance_warning: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -186,6 +189,14 @@ pub async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, Stri
 #[tauri::command]
 pub fn get_update_status(app: tauri::AppHandle) -> Result<UpdateStatus, String> {
     let current_version = app.package_info().version.to_string();
+    // The warning outlives the staged marker: it is about what the *installed*
+    // version did to the attendance records, not about a pending download.
+    let attendance_warning = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .as_deref()
+        .and_then(read_attendance_warning);
 
     let Some(marker) = read_staged_marker(&app)? else {
         return Ok(UpdateStatus {
@@ -193,6 +204,7 @@ pub fn get_update_status(app: tauri::AppHandle) -> Result<UpdateStatus, String> 
             staged_version: None,
             staged_notes: None,
             staged_pub_date: None,
+            attendance_warning,
         });
     };
 
@@ -204,6 +216,7 @@ pub fn get_update_status(app: tauri::AppHandle) -> Result<UpdateStatus, String> 
             staged_version: None,
             staged_notes: None,
             staged_pub_date: None,
+            attendance_warning,
         });
     }
 
@@ -212,6 +225,7 @@ pub fn get_update_status(app: tauri::AppHandle) -> Result<UpdateStatus, String> 
         staged_version: Some(marker.version),
         staged_notes: marker.notes,
         staged_pub_date: marker.pub_date,
+        attendance_warning,
     })
 }
 
@@ -334,17 +348,37 @@ async fn install_staged_inner(app: &tauri::AppHandle) -> Result<(), String> {
         }
     };
 
-    // Safeguard: snapshot the database before the installer runs. The update
-    // only replaces app binaries, but a fresh backup gives a rollback point if
-    // anything goes wrong; refuse to install when the snapshot fails.
+    // Safeguard: snapshot the database *and* the SF2 workbooks before the
+    // installer runs. The update only replaces app binaries, but a fresh backup
+    // gives a rollback point if anything goes wrong; refuse to install when the
+    // snapshot fails.
+    //
+    // `create_manual_backup` writes a full backup folder, so the workbooks are
+    // inside it: the X marks are now covered by the same policy as the
+    // database, and the same `?` fails the install when either cannot be
+    // captured.
     let pool = app.state::<DbPool>().inner();
     let app_dir = app
         .path()
         .app_data_dir()
         .map_err(|error| format!("Failed to resolve app data directory: {error}"))?;
-    backup_service::create_manual_backup(pool, &app_dir)
-        .map_err(|error| format!("Pre-install backup failed: {error}"))?;
-    log::info!("created pre-install database backup");
+    let pre_install = backup_service::create_backup_at(
+        pool,
+        &app_dir,
+        crate::backup::models::BackupKind::PreInstall,
+        chrono::Local::now(),
+    )
+    .map_err(|error| format!("Pre-install backup failed: {error}"))?;
+    log::info!(
+        "created pre-install backup at {} ({} workbook(s))",
+        pre_install.path,
+        pre_install.workbook_count
+    );
+
+    // §9.4 items 2 and 3: compare this version's attendance counts against the
+    // baseline recorded when the previous version first ran, then re-baseline
+    // to this version so the next update compares against the right thing.
+    check_attendance_fingerprint(pool, &app_dir, &pre_install.path)?;
 
     let bytes = std::fs::read(&marker.file)
         .map_err(|error| format!("Failed to read staged update: {error}"))?;
@@ -352,6 +386,89 @@ async fn install_staged_inner(app: &tauri::AppHandle) -> Result<(), String> {
         .install(&bytes)
         .map_err(|error| format!("Install failed: {error}"))?;
     Ok(())
+}
+
+/// Compare the live attendance counts against the recorded baseline and, if
+/// absences went backwards, record a loud warning for the Updates panel.
+///
+/// The warning is recorded rather than returned: the update itself must not be
+/// blocked by it, because the user is the one who asked to update and may be
+/// mid-way through a legitimate re-entry. It is surfaced on the Updates panel
+/// until the next install, pointing at the pre-install backup that holds the
+/// records.
+fn check_attendance_fingerprint(
+    pool: &DbPool,
+    app_dir: &std::path::Path,
+    pre_install_backup_path: &str,
+) -> Result<(), String> {
+    let conn = pool
+        .get()
+        .map_err(|error| format!("Failed to open the database for the update check: {error}"))?;
+
+    let current = match backup_service::read_db_fingerprint(&conn) {
+        Ok(fingerprint) => fingerprint,
+        Err(error) => {
+            log::warn!("could not read the attendance fingerprint: {error}");
+            return Ok(());
+        }
+    };
+
+    let previous = match backup_service::load_db_fingerprint(app_dir) {
+        Ok(previous) => previous,
+        Err(error) => {
+            log::warn!("could not read the stored attendance fingerprint: {error}");
+            return Ok(());
+        }
+    };
+
+    let notice = previous
+        .as_ref()
+        .and_then(|previous| {
+            crate::backup::fingerprint::DbFingerprint::decrease_notice(previous, &current)
+        })
+        .map(|notice| format!("{notice} The pre-install backup is at {pre_install_backup_path}."));
+
+    if let Some(ref notice) = notice {
+        log::error!("{notice}");
+    }
+
+    write_attendance_warning(app_dir, notice.as_deref());
+
+    // Re-baseline even when the comparison failed, so a transient read error
+    // does not make every future update report the same drop.
+    if let Err(error) = backup_service::record_db_fingerprint(app_dir, &current) {
+        log::warn!("could not re-baseline the attendance fingerprint: {error}");
+    }
+
+    Ok(())
+}
+
+fn attendance_warning_path(app_dir: &std::path::Path) -> PathBuf {
+    app_dir.join("attendance-warning.json")
+}
+
+fn write_attendance_warning(app_dir: &std::path::Path, notice: Option<&str>) {
+    let path = attendance_warning_path(app_dir);
+    let result = match notice {
+        Some(notice) => std::fs::write(&path, serde_json::json!({ "message": notice }).to_string()),
+        None => match std::fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        },
+    };
+    if let Err(error) = result {
+        log::warn!("could not update the attendance warning file: {error}");
+    }
+}
+
+fn read_attendance_warning(app_dir: &std::path::Path) -> Option<String> {
+    let raw = std::fs::read_to_string(attendance_warning_path(app_dir)).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    value
+        .get("message")
+        .and_then(|message| message.as_str())
+        .map(str::to_string)
 }
 
 /// Opens a URL in the system browser (used for release notes links).
