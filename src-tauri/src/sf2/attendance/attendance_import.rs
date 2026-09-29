@@ -50,6 +50,14 @@ pub struct Sf2AttendanceImportOutcome {
 /// the database but absent from the workbook are never removed here; the next
 /// workbook sync reconciles the two directions, after which `last_synced_at`
 /// is cleared so that sync actually runs.
+///
+/// **Known difference from the startup self-heal, deliberate.** This import does
+/// *not* refuse to overwrite a recorded `present`: the workbook is the school's
+/// official record, and this is a user-initiated action, so workbook-wins is the
+/// authority order the teacher would expect from a button they pressed.
+/// `heal::import_recovered_marks` makes the opposite trade, because nobody is
+/// watching it. See the note there; the two paths are meant to differ and neither
+/// is a bug in the other.
 pub fn import_absent_marks_from_workbook(
     pool: DbPool,
     class_id: &str,
