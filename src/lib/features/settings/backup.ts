@@ -78,5 +78,8 @@ export function backupKindLabel(kind: BackupKind) {
 	if (kind === 'auto') return 'Auto';
 	if (kind === 'manual') return 'Manual';
 	if (kind === 'pre_restore') return 'Pre-restore';
+	if (kind === 'pre_wipe') return 'Pre-wipe';
+	if (kind === 'pre_install') return 'Pre-update';
+	if (kind === 'manual_workbooks') return 'Workbooks';
 	return 'Unknown';
 }

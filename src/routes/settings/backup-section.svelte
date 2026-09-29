@@ -14,7 +14,8 @@
 		Download,
 		Upload,
 		SlidersHorizontal,
-		Minimize2
+		Minimize2,
+		FileSpreadsheet
 	} from 'lucide-svelte';
 	import {
 		backupKindLabel,
@@ -104,6 +105,32 @@
 					</button>
 
 					<button
+						onclick={() => backupState.onCreateWorkbooksBackupNow()}
+						disabled={backupState.workbooksBackupBusy || backupState.backupBusy}
+						class="group flex items-center gap-4 rounded-2xl border border-border bg-surface/40 p-5 text-left transition-all hover:border-primary/40 hover:bg-surface active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						<span
+							class="grid size-11 shrink-0 place-items-center rounded-xl border border-border bg-background text-muted-foreground transition-colors group-hover:text-foreground"
+						>
+							{#if backupState.workbooksBackupBusy}
+								<Spinner />
+							{:else}
+								<FileSpreadsheet class="size-5" aria-hidden="true" />
+							{/if}
+						</span>
+						<span class="min-w-0">
+							<span class="block text-sm font-semibold">
+								{backupState.workbooksBackupBusy
+									? 'Backing Up Workbooks...'
+									: 'Back Up Workbooks Now'}
+							</span>
+							<span class="mt-0.5 block text-xs text-muted-foreground">
+								Save just the SF2 Excel files, without copying the database
+							</span>
+						</span>
+					</button>
+
+					<button
 						onclick={() => backupState.onChooseRestoreBackup()}
 						disabled={backupState.restoreChoosing || backupState.restoreBusy}
 						class="group flex items-center gap-4 rounded-2xl border border-border bg-surface/40 p-5 text-left transition-all hover:border-primary/40 hover:bg-surface active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
@@ -122,7 +149,7 @@
 								{backupState.restoreChoosing ? 'Checking...' : 'Restore Backup'}
 							</span>
 							<span class="mt-0.5 block text-xs text-muted-foreground">
-								Import a previous backup to recover your data
+								Restore a backup folder, including its SF2 workbooks
 							</span>
 						</span>
 					</button>
@@ -160,6 +187,18 @@
 						{backupState.backupBusy ? 'Backing Up...' : 'Back Up Now'}
 					</button>
 					<button
+						onclick={() => backupState.onCreateWorkbooksBackupNow()}
+						disabled={backupState.workbooksBackupBusy || backupState.backupBusy}
+						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						{#if backupState.workbooksBackupBusy}
+							<Spinner />
+						{:else}
+							<FileSpreadsheet class="size-4" aria-hidden="true" />
+						{/if}
+						{backupState.workbooksBackupBusy ? 'Backing Up...' : 'Back Up Workbooks Now'}
+					</button>
+					<button
 						onclick={() => backupState.onChooseRestoreBackup()}
 						disabled={backupState.restoreChoosing || backupState.restoreBusy}
 						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
@@ -170,6 +209,19 @@
 							<RotateCcw class="size-4" aria-hidden="true" />
 						{/if}
 						{backupState.restoreChoosing ? 'Checking...' : 'Restore Backup'}
+					</button>
+					<button
+						onclick={() => backupState.onChooseRestoreLegacyFile()}
+						disabled={backupState.restoreChoosing || backupState.restoreBusy}
+						title="Backups made before workbook backup existed are a single .db file, not a folder"
+						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						{#if backupState.restoreChoosing}
+							<Spinner />
+						{:else}
+							<RotateCcw class="size-4" aria-hidden="true" />
+						{/if}
+						Restore Older .db Backup
 					</button>
 					<button
 						onclick={() => backupState.onOpenBackupFolder()}
@@ -231,6 +283,13 @@
 								</div>
 							</div>
 							<div class="rounded-md border border-border bg-surface px-3 py-2">
+								<div class="font-semibold">SF2 workbook backups</div>
+								<div class="mt-0.5 text-xs text-muted-foreground">
+									Every backup folder also copies the SF2 Excel workbooks, with an X-mark count per
+									file.
+								</div>
+							</div>
+							<div class="rounded-md border border-border bg-surface px-3 py-2">
 								<div class="font-semibold">JSON merge import</div>
 								<div class="mt-0.5 text-xs text-muted-foreground">
 									Merges students, attendance, classes, settings, and audit data.
@@ -239,7 +298,7 @@
 							<div class="rounded-md border border-border bg-surface px-3 py-2">
 								<div class="font-semibold">Local safety backups</div>
 								<div class="mt-0.5 text-xs text-muted-foreground">
-									Automatic, manual, and pre-restore SQLite backup files.
+									Automatic, manual, pre-restore, and pre-update backup folders.
 								</div>
 							</div>
 						</div>
@@ -249,7 +308,7 @@
 						<div class="flex items-center justify-between gap-3">
 							<div class="label-mono">Latest Local Backups</div>
 							<span class="font-mono text-xs text-muted-foreground">
-								{backupState.backupSummaries.length} files
+								{backupState.backupSummaries.length} entries
 							</span>
 						</div>
 						{#if backupState.backupSummaries.length === 0}
@@ -265,6 +324,11 @@
 													{formatBackupTimestamp(backup.createdAt)} /
 													{formatBackupBytes(backup.sizeBytes)}
 												</div>
+												{#if backup.workbookCount > 0}
+													<div class="mt-0.5 font-mono text-[11px] text-muted-foreground">
+														{backup.workbookCount} workbook(s) · {backup.totalXCount} X mark(s)
+													</div>
+												{/if}
 											</div>
 											<span
 												class="shrink-0 rounded-pill border border-border bg-background px-2 py-1 font-mono text-[10px] font-bold text-primary"

@@ -1,36 +1,48 @@
-import { goto } from '$app/navigation';
-import { resolve } from '$app/paths';
-import { sf2ValidationReportText } from '$lib/features/settings/sf2-validation';
 import {
-	newSf2WorkbookDraftFields,
-	sf2DraftFromWorkbookSettings,
-	sf2ImportedSettingsDraftDefaults,
-	sf2ImportedSettingsReviewNotice,
-	sf2TemplateDraftFromFields,
-	shouldPromptForSf2SettingsUpdate,
-	type Sf2DraftDefaults,
-	type Sf2WorkbookDraftFields
-} from '$lib/features/settings/sf2-workbook';
-import {
-	createSf2WorkbookFromTemplate,
-	getSf2WorkbookSettings,
-	importSf2Workbook,
-	updateSf2WorkbookSettings,
-	validateSf2WorkbookImport,
-	type Class,
-	type Sf2ImportSummary,
-	type Sf2ImportValidation,
-	type Sf2TemplateDraft,
-	type Sf2WorkbookSettings
+	getSf2LaunchMonth,
+	getSf2SchoolCalendarSettings,
+	listSf2MonthWorkbooks,
+	runSf2WorkbookSplit,
+	setSf2SchoolStartDate
 } from '$lib/features/settings/native';
-import { Sf2ProgressManager } from './sf2-progress.svelte';
+import {
+	isSchoolStartDateValid,
+	normalizeSchoolStartDate,
+	sf2MonthWorkbookRows,
+	sf2MonthWorkbookSummary,
+	sf2SplitIsComplete,
+	sf2SplitNeedsAttention,
+	sf2SplitSummary,
+	type Sf2MonthWorkbookRow
+} from '$lib/features/settings/sf2-months';
+import type { Sf2LaunchMonth, Sf2SplitOutcome } from '$lib/types';
 import type { Ctx } from './state-context';
 
 /**
- * SF2 workbook creation, import, and template-draft state and actions.
+ * Settings → SF2 Workbook (spec §12.1, D13, D16, D18).
  *
- * Singleton pattern: imported by both orchestrator and components.
- * The orchestrator calls `.init(ctx)` to wire cross-cutting services.
+ * ## What this screen is now
+ *
+ * Four things, replacing the three workflows D18 removed:
+ *
+ * 1. **Classes started on** - the one input every month's `first_school_day` is
+ *    derived from. It is empty until the teacher types it, and there is no
+ *    default: a guessed start date silently mis-dates every month file in the
+ *    school year, which is the exact class of bug this model exists to eliminate.
+ * 2. **Month workbooks** - twelve read-only rows: is the file there, how many X
+ *    were last counted in it, when was it last written.
+ * 3. **Back up workbooks now** - D13. Lives in Data Management, beside *Back Up
+ *    Now*, and already wired; this screen links to it rather than duplicating it.
+ * 4. **Re-run the workbook split** - §11, for a month that failed to split.
+ *
+ * ## What is gone, and why that is safe
+ *
+ * *Create From Template*, *Import SF2* and their validation flow are gone (D18).
+ * Both existed to get a workbook into the app from outside it; the per-month
+ * model replaced that with a file per month the app writes itself, and the marks
+ * the import used to recover now come back on their own at startup (§8.2). The
+ * dialogs and the state they needed are deleted, not left behind: a control with
+ * its label removed is worse than no control.
  */
 class Sf2State {
 	ctx!: Ctx;
@@ -39,267 +51,182 @@ class Sf2State {
 		this.ctx = ctx;
 	}
 
-	// ── State ──────────────────────────────────────────────────────────────────
-	sf2Importing = $state(false);
-	sf2TemplateCreating = $state(false);
-	sf2SettingsSaving = $state(false);
-	sf2TemplateClassId = $state('');
-	sf2ImportSummary = $state<Sf2ImportSummary | null>(null);
-	sf2Validation = $state<Sf2ImportValidation | null>(null);
-	sf2ValidationDialogOpen = $state(false);
-	sf2ValidationDetailsOpen = $state(false);
-	sf2TemplateDialogOpen = $state(false);
-	sf2TemplateDialogMode = $state<'create' | 'edit'>('create');
-	sf2TemplateDialogNotice = $state<string | null>(null);
+	// ── State ─────────────────────────────────────────────────────────────────
+	/** The month the app would open on, and whether it fell back (D5, E1). */
+	launch = $state<Sf2LaunchMonth | null>(null);
+	/** The twelve rows, as the backend stores them. Sorted for display below. */
+	months = $state<Awaited<ReturnType<typeof listSf2MonthWorkbooks>>>([]);
+	monthsLoading = $state(false);
+	/** Why the list could not be read, if it could not. Never swallowed. */
+	monthsError = $state<string | null>(null);
 
-	// ── Progress ────────────────────────────────────────────────────────────────
-	sf2Progress = new Sf2ProgressManager();
+	/** `YYYY-MM-DD`, or `''` when the teacher has never entered one. */
+	schoolStartDate = $state('');
+	/** True while the setting is still `NULL` in the database (edge case E3). */
+	needsSchoolStartDate = $state(false);
+	schoolStartDateLoading = $state(false);
+	schoolStartDateSaving = $state(false);
 
-	// ── Draft fields ───────────────────────────────────────────────────────────
-	sf2DraftSchoolId = $state('');
-	sf2DraftSchoolName = $state('');
-	sf2DraftSchoolYear = $state('');
-	sf2DraftReportMonth = $state('');
-	sf2DraftGradeLevel = $state('');
-	sf2DraftSection = $state('');
-	sf2DraftAdviserName = $state('');
-	sf2DraftSchoolHeadName = $state('');
-	sf2DraftFirstSchoolDay = $state(1);
+	splitRunning = $state(false);
+	splitOutcome = $state<Sf2SplitOutcome | null>(null);
 
-	// ── Helpers ─────────────────────────────────────────────────────────────────
+	// ── Derived ───────────────────────────────────────────────────────────────
+	/** Twelve rows, sorted SEPTEMBER → AUGUST, ready to render. */
+	monthRows = $derived.by<Sf2MonthWorkbookRow[]>(() => sf2MonthWorkbookRows(this.months));
+
+	/** The one-line state of the year, under the list. */
+	monthSummary = $derived(sf2MonthWorkbookSummary(this.monthRows));
+
+	/**
+	 * The E3 prompt, shown only while the start date is genuinely unset.
+	 *
+	 * Not shown because the field is empty - the field is empty on first render
+	 * and until the read lands. Shown because the *database* says `NULL`, which is
+	 * the only answer that means "nobody has been asked yet".
+	 */
+	showSchoolStartDatePrompt = $derived(this.needsSchoolStartDate);
+
+	splitSummary = $derived(this.splitOutcome ? sf2SplitSummary(this.splitOutcome) : '');
+	splitNeedsAttention = $derived(
+		this.splitOutcome ? sf2SplitNeedsAttention(this.splitOutcome) : []
+	);
+	splitComplete = $derived(this.splitOutcome ? sf2SplitIsComplete(this.splitOutcome) : false);
+
+	// ── Loading ───────────────────────────────────────────────────────────────
+	/**
+	 * Read the screen. Every read is independent and none of them blocks another,
+	 * so they go together and each one's failure is its own message.
+	 */
+	async load(): Promise<void> {
+		await Promise.all([this.loadSchoolStartDate(), this.loadMonths(), this.loadLaunch()]);
+	}
+
+	private async loadLaunch(): Promise<void> {
+		try {
+			// `classId` left out on purpose: the Settings screen has no class
+			// selector, and the backend resolves the only class on record.
+			this.launch = await getSf2LaunchMonth();
+		} catch {
+			// A fresh install with no class is an error on the backend and a
+			// non-event here - the list below will say the same thing in plainer
+			// words. The E1 banner is an addition to this screen, never a
+			// precondition for it.
+			this.launch = null;
+		}
+	}
+
+	private async loadSchoolStartDate(): Promise<void> {
+		this.schoolStartDateLoading = true;
+		try {
+			const settings = await getSf2SchoolCalendarSettings();
+			this.applySchoolStartDate(settings.schoolStartDate);
+			this.needsSchoolStartDate = !settings.schoolStartDate;
+		} catch (error) {
+			this.ctx.toast(
+				`Could not read "Classes started on": ${this.errorMessage(error, 'unknown error')}`,
+				false
+			);
+		} finally {
+			this.schoolStartDateLoading = false;
+		}
+	}
+
+	private applySchoolStartDate(value: string | null): void {
+		this.schoolStartDate = value ?? '';
+	}
+
+	private async loadMonths(): Promise<void> {
+		this.monthsLoading = true;
+		this.monthsError = null;
+		try {
+			this.months = await listSf2MonthWorkbooks();
+		} catch (error) {
+			// Shown in place of the list rather than as a toast, because it is a
+			// permanent state of the section until it can be read - a toast would
+			// have been gone before anyone looked this way.
+			this.months = [];
+			this.monthsError = this.errorMessage(error, 'the month list could not be read');
+		} finally {
+			this.monthsLoading = false;
+		}
+	}
+
+	// ── "Classes started on" ───────────────────────────────────────────────────
+	/**
+	 * Save the typed start date, or clear it.
+	 *
+	 * An invalid date is refused before the invoke, so a typo cannot reach the
+	 * column: every month's `first_school_day` is derived from this value, and a
+	 * bad one mis-dates the whole year. Clearing is allowed and is not a mistake -
+	 * the app goes back to asking (E3).
+	 */
+	async saveSchoolStartDate(): Promise<void> {
+		if (this.schoolStartDateSaving || this.schoolStartDateLoading) return;
+		if (!isSchoolStartDateValid(this.schoolStartDate)) {
+			this.ctx.toast('Enter the date as YYYY-MM-DD, or clear the field to unset it.', false);
+			return;
+		}
+
+		this.schoolStartDateSaving = true;
+		const value = normalizeSchoolStartDate(this.schoolStartDate);
+		try {
+			await setSf2SchoolStartDate(value);
+			this.applySchoolStartDate(value);
+			this.needsSchoolStartDate = value === null;
+			this.ctx.toast(
+				value
+					? 'Saved. Each month will be dated from this.'
+					: 'Cleared. The app will ask again until this is entered.'
+			);
+			// The months' own `first_school_day` is derived from this value, and
+			// the list shows whether each one is dated yet - so it is now stale.
+			await this.loadMonths();
+		} catch (error) {
+			this.ctx.toast(
+				`Could not save "Classes started on": ${this.errorMessage(error, 'unknown error')}`,
+				false
+			);
+		} finally {
+			this.schoolStartDateSaving = false;
+		}
+	}
+
+	// ── The split ─────────────────────────────────────────────────────────────
+	/**
+	 * Re-run §11 for the months that still need it.
+	 *
+	 * No confirmation, because the split is idempotent and refuses to rebuild a
+	 * month that is already split - pressing this twice is harmless, and a
+	 * confirmation dialog on a button that cannot do damage is one more thing
+	 * between a teacher and fixing a month.
+	 */
+	async onRunSplit(): Promise<void> {
+		if (this.splitRunning) return;
+		this.splitRunning = true;
+		try {
+			const outcome = await runSf2WorkbookSplit();
+			this.splitOutcome = outcome;
+			this.ctx.toast(
+				outcome.needsAttentionCount > 0
+					? `${outcome.verifiedCount} months ready, ${outcome.needsAttentionCount} need attention.`
+					: `All ${outcome.verifiedCount} months are ready.`
+			);
+			await Promise.all([this.loadMonths(), this.loadLaunch()]);
+		} catch (error) {
+			this.ctx.toast(
+				`The split could not run: ${this.errorMessage(error, 'unknown error')}`,
+				false
+			);
+		} finally {
+			this.splitRunning = false;
+		}
+	}
+
+	// ── Helpers ───────────────────────────────────────────────────────────────
 	private errorMessage(error: unknown, fallback: string): string {
 		if (error instanceof Error) return error.message;
 		if (typeof error === 'string') return error;
 		return fallback;
-	}
-
-	// ── SF2 Actions ────────────────────────────────────────────────────────────
-	async onImportSf2() {
-		if (this.sf2Importing) return;
-		this.sf2Importing = true;
-
-		// Show progress overlay before the validation dialog
-		await this.sf2Progress.setup('import');
-
-		try {
-			const validation = await validateSf2WorkbookImport();
-			this.sf2Validation = validation;
-
-			if (validation.hasDiscrepancies) {
-				this.sf2Progress.hide();
-				this.sf2ValidationDialogOpen = true;
-				this.sf2ValidationDetailsOpen = false;
-				this.ctx.toast('Student list mismatch detected. Review the SF2 validation report.', false);
-				return;
-			}
-
-			await this.runSf2Import(validation, false);
-		} catch (error) {
-			const msg = this.errorMessage(error, 'SF2 import failed');
-			this.ctx.toast(`SF2 import failed: ${msg}`, false);
-		} finally {
-			this.sf2Importing = false;
-			this.sf2Progress.hide();
-		}
-	}
-
-	async runSf2Import(validation: Sf2ImportValidation, proceedAnyway: boolean) {
-		const summary = await importSf2Workbook(validation.sourcePath, proceedAnyway);
-		await this.finishSf2Import(summary);
-	}
-
-	async finishSf2Import(summary: Sf2ImportSummary) {
-		this.sf2ImportSummary = summary;
-		this.sf2TemplateClassId = summary.classId;
-		this.sf2Validation = null;
-		this.sf2ValidationDialogOpen = false;
-		this.sf2ValidationDetailsOpen = false;
-		await this.ctx.reload();
-
-		try {
-			const settings = await getSf2WorkbookSettings(summary.classId);
-			if (shouldPromptForSf2SettingsUpdate(settings)) {
-				this.openImportedSf2SettingsReview(settings);
-				this.ctx.toast(`Imported ${summary.learnersFound} learners. Review SF2 settings first.`);
-				return;
-			}
-		} catch (error) {
-			const msg = this.errorMessage(error, 'SF2 settings check failed');
-			this.ctx.toast(
-				`Imported ${summary.learnersFound} learners, but settings check failed: ${msg}`,
-				false
-			);
-			return;
-		}
-
-		this.ctx.toast(`Imported ${summary.learnersFound} learners from SF2`);
-	}
-
-	async proceedWithSf2MismatchImport() {
-		if (!this.sf2Validation || this.sf2Importing) return;
-		this.sf2Importing = true;
-
-		// Set up progress for the actual import (validation dialog is hidden now)
-		await this.sf2Progress.setup('import');
-
-		try {
-			await this.runSf2Import(this.sf2Validation, true);
-		} catch (error) {
-			const msg = this.errorMessage(error, 'SF2 import failed');
-			this.ctx.toast(`SF2 import failed: ${msg}`, false);
-		} finally {
-			this.sf2Importing = false;
-			this.sf2Progress.hide();
-		}
-	}
-
-	cancelSf2ValidationImport() {
-		if (this.sf2Importing) return;
-		this.sf2Validation = null;
-		this.sf2ValidationDialogOpen = false;
-		this.sf2ValidationDetailsOpen = false;
-	}
-
-	downloadSf2ValidationReport() {
-		if (!this.sf2Validation) return;
-		const blob = new Blob([sf2ValidationReportText(this.sf2Validation)], {
-			type: 'text/plain;charset=utf-8'
-		});
-		const url = URL.createObjectURL(blob);
-		const link = document.createElement('a');
-		link.href = url;
-		link.download = 'sf2-validation-report.txt';
-		link.click();
-		URL.revokeObjectURL(url);
-	}
-
-	// ── Template Dialog ────────────────────────────────────────────────────────
-	async openSf2TemplateDialog(classes: Class[]) {
-		const classId = this.sf2TemplateClassId || classes[0]?.id || '';
-		if (classId) {
-			try {
-				const settings = await getSf2WorkbookSettings(classId);
-				this.populateSf2Draft(settings);
-				this.sf2TemplateDialogMode = 'edit';
-				this.sf2TemplateDialogNotice =
-					'An SF2 workbook already exists for this class. Update the saved workbook settings instead of creating a new SF2 copy.';
-				this.sf2TemplateDialogOpen = true;
-				this.ctx.toast(
-					'Existing SF2 workbook found. Update settings instead of creating a new one.',
-					false
-				);
-				return;
-			} catch {
-				// No workbook exists for this class yet.
-			}
-		}
-
-		this.sf2TemplateDialogMode = 'create';
-		this.sf2TemplateDialogNotice = null;
-		this.applySf2Draft({ ...newSf2WorkbookDraftFields(), classId });
-		this.sf2TemplateDialogOpen = true;
-	}
-
-	closeSf2TemplateDialog(force = false) {
-		if (!force && (this.sf2TemplateCreating || this.sf2SettingsSaving)) return;
-		this.sf2TemplateDialogOpen = false;
-		this.sf2TemplateDialogNotice = null;
-	}
-
-	openImportedSf2SettingsReview(settings: Sf2WorkbookSettings) {
-		const defaults = sf2ImportedSettingsDraftDefaults(settings);
-
-		this.sf2TemplateDialogMode = 'edit';
-		this.sf2TemplateDialogNotice = sf2ImportedSettingsReviewNotice(settings, defaults);
-		this.populateSf2Draft(settings, defaults);
-		this.sf2TemplateDialogOpen = true;
-	}
-
-	populateSf2Draft(settings: Sf2WorkbookSettings, defaults?: Partial<Sf2DraftDefaults>) {
-		this.applySf2Draft(sf2DraftFromWorkbookSettings(settings, defaults));
-	}
-
-	applySf2Draft(draft: Sf2WorkbookDraftFields) {
-		this.sf2TemplateClassId = draft.classId ?? '';
-		this.sf2DraftSchoolId = draft.schoolId;
-		this.sf2DraftSchoolName = draft.schoolName;
-		this.sf2DraftSchoolYear = draft.schoolYear;
-		this.sf2DraftReportMonth = draft.reportMonth;
-		this.sf2DraftGradeLevel = draft.gradeLevel;
-		this.sf2DraftSection = draft.section;
-		this.sf2DraftAdviserName = draft.adviserName;
-		this.sf2DraftSchoolHeadName = draft.schoolHeadName;
-		this.sf2DraftFirstSchoolDay = draft.firstSchoolDay;
-	}
-
-	sf2DraftPayload(): Sf2TemplateDraft {
-		const payload = sf2TemplateDraftFromFields(
-			{
-				classId: this.sf2TemplateClassId,
-				schoolId: this.sf2DraftSchoolId,
-				schoolName: this.sf2DraftSchoolName,
-				schoolYear: this.sf2DraftSchoolYear,
-				reportMonth: this.sf2DraftReportMonth,
-				gradeLevel: this.sf2DraftGradeLevel,
-				section: this.sf2DraftSection,
-				adviserName: this.sf2DraftAdviserName,
-				schoolHeadName: this.sf2DraftSchoolHeadName,
-				firstSchoolDay: this.sf2DraftFirstSchoolDay
-			},
-			this.sf2TemplateDialogMode
-		);
-		this.sf2DraftFirstSchoolDay = payload.firstSchoolDay ?? this.sf2DraftFirstSchoolDay;
-		return payload;
-	}
-
-	async onCreateSf2FromTemplate(event: SubmitEvent) {
-		event.preventDefault();
-		if (this.sf2TemplateCreating || this.sf2SettingsSaving) return;
-
-		const creating = this.sf2TemplateDialogMode === 'create';
-		if (creating) {
-			this.sf2TemplateCreating = true;
-		} else {
-			this.sf2SettingsSaving = true;
-		}
-
-		// Show progress overlay for create (2 backend steps)
-		if (creating) {
-			await this.sf2Progress.setup('create');
-		}
-
-		try {
-			const draft = this.sf2DraftPayload();
-			const summary = creating
-				? await createSf2WorkbookFromTemplate(draft)
-				: await updateSf2WorkbookSettings(draft);
-			this.sf2ImportSummary = summary;
-			this.sf2TemplateClassId = summary.classId;
-			this.closeSf2TemplateDialog(true);
-			await this.ctx.reload();
-			this.ctx.toast(
-				creating
-					? `Created SF2 working copy for ${summary.learnersFound} learners`
-					: `Updated SF2 workbook for ${summary.learnersFound} learners`
-			);
-		} catch (error) {
-			const msg = this.errorMessage(
-				error,
-				creating ? 'SF2 template setup failed' : 'SF2 update failed'
-			);
-			this.ctx.toast(`${creating ? 'SF2 template setup' : 'SF2 update'} failed: ${msg}`, false);
-		} finally {
-			this.sf2TemplateCreating = false;
-			this.sf2SettingsSaving = false;
-			if (creating) {
-				this.sf2Progress.hide();
-			}
-		}
-	}
-
-	startSf2Attendance() {
-		if (!this.sf2ImportSummary) return;
-		goto(resolve(`/attendance?classId=${this.sf2ImportSummary.classId}&manual=true`));
 	}
 }
 

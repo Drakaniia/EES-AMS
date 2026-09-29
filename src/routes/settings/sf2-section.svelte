@@ -1,267 +1,234 @@
 <script lang="ts">
-	import { sf2State, classState } from './settings-state.svelte';
+	import { sf2State } from './settings-state.svelte';
+	import { sf2MonthLabel } from '$lib/features/settings/sf2-months';
+	import { SF2_SCHOOL_START_DATE_PROMPT } from '$lib/features/settings/sf2-heal-toast';
+	import { isSchoolStartDateValid } from '$lib/features/settings/sf2-months';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
-	import Sf2ImportValidationDialog from './sf2-import-validation-dialog.svelte';
-	import Sf2TemplateDialog from './sf2-template-dialog.svelte';
-	import {
-		defaultSf2FirstSchoolDay,
-		defaultSf2SchoolYear,
-		isSf2SchoolDay,
-		normalizedSf2FirstSchoolDay
-	} from '$lib/features/settings/sf2-workbook';
+	import { FileSpreadsheet, RefreshCw, CalendarDays, TriangleAlert } from 'lucide-svelte';
+
+	const toneClasses: Record<string, string> = {
+		ready: 'text-foreground',
+		attention: 'text-destructive',
+		pending: 'text-muted-foreground'
+	};
 </script>
 
-<section class="order-3 space-y-5 rounded-2xl border border-border bg-card p-6">
-	<div class="flex flex-wrap items-start justify-between gap-4">
-		<div>
-			<h3 class="text-lg font-medium">SF2 Workbook</h3>
-			<p class="mt-1 text-sm text-muted-foreground">
-				Import the official SF2 .xls form, or create a first-month working copy from the bundled
-				template.
-			</p>
-		</div>
-		<div class="flex flex-wrap gap-2">
+<section id="sf2-workbooks" class="order-3 space-y-6 rounded-2xl border border-border bg-card p-6">
+	<div>
+		<h3 class="text-lg font-medium">SF2 Workbook</h3>
+		<p class="mt-1 text-sm text-muted-foreground">
+			One Excel file per month, each holding only that month. Nothing is imported by hand: the app
+			checks this month's file against its own records every time it starts, and recovers any mark
+			the file holds and the app does not.
+		</p>
+	</div>
+
+	<!-- ── Classes started on (D16, §11.1, edge case E3) ────────────────────── -->
+	<div class="space-y-3 rounded-xl border border-border bg-surface p-4">
+		<label for="sf2-school-start-date" class="flex items-center gap-2 text-sm font-semibold">
+			<CalendarDays class="size-4" aria-hidden="true" />
+			Classes started on
+		</label>
+		<p class="text-xs text-muted-foreground">
+			The real first day of classes. Every month file is dated from this one date, so a month's
+			attendance grid starts on the right day without being set up twelve times.
+		</p>
+		<div class="flex flex-wrap items-center gap-3">
+			<input
+				id="sf2-school-start-date"
+				type="date"
+				bind:value={sf2State.schoolStartDate}
+				disabled={sf2State.schoolStartDateLoading || sf2State.schoolStartDateSaving}
+				aria-invalid={!isSchoolStartDateValid(sf2State.schoolStartDate)}
+				aria-describedby="sf2-school-start-date-help"
+				class="rounded-pill border border-border bg-background px-4 py-2 text-sm disabled:opacity-60"
+			/>
 			<button
-				onclick={() => sf2State.openSf2TemplateDialog(classState.classes)}
-				disabled={sf2State.sf2TemplateCreating || sf2State.sf2SettingsSaving}
-				class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-			>
-				{#if sf2State.sf2TemplateCreating || sf2State.sf2SettingsSaving}
-					<Spinner />
-				{:else}
-					<svg
-						class="size-4"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-						<polyline points="14 2 14 8 20 8" />
-						<path d="M12 11v6" />
-						<path d="M9 14h6" />
-					</svg>
-				{/if}
-				{sf2State.sf2TemplateCreating
-					? 'Creating...'
-					: sf2State.sf2SettingsSaving
-						? 'Saving...'
-						: 'Create From Template'}
-			</button>
-			<button
-				onclick={() => sf2State.onImportSf2()}
-				disabled={sf2State.sf2Importing}
+				type="button"
+				onclick={() => sf2State.saveSchoolStartDate()}
+				disabled={sf2State.schoolStartDateLoading ||
+					sf2State.schoolStartDateSaving ||
+					!isSchoolStartDateValid(sf2State.schoolStartDate)}
 				class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
 			>
-				{#if sf2State.sf2Importing}
+				{#if sf2State.schoolStartDateSaving}
 					<Spinner />
-				{:else}
-					<svg
-						class="size-4"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-						<polyline points="14 2 14 8 20 8" />
-						<path d="M12 18v-6" />
-						<path d="m9 15 3 3 3-3" />
-					</svg>
 				{/if}
-				{sf2State.sf2Importing ? 'Importing...' : 'Import SF2'}
+				{sf2State.schoolStartDateSaving ? 'Saving…' : 'Save date'}
 			</button>
+			{#if sf2State.schoolStartDateLoading}
+				<span class="text-xs text-muted-foreground">Loading…</span>
+			{/if}
 		</div>
+		<p id="sf2-school-start-date-help" class="text-xs text-muted-foreground">
+			{#if !isSchoolStartDateValid(sf2State.schoolStartDate)}
+				<span class="text-destructive">Enter the date as YYYY-MM-DD.</span>
+			{:else if sf2State.showSchoolStartDatePrompt}
+				{SF2_SCHOOL_START_DATE_PROMPT}
+			{:else if sf2State.schoolStartDate}
+				Set to <span class="font-mono">{sf2State.schoolStartDate}</span>. Clear the field to unset
+				it.
+			{:else}
+				Not set. Months fall back to their own first day until this is entered.
+			{/if}
+		</p>
 	</div>
 
-	{#if sf2State.sf2ImportSummary}
-		<div class="space-y-4 border-t border-border pt-5">
-			<div class="grid gap-3 sm:grid-cols-4">
-				<div class="rounded-xl border border-border bg-surface p-4">
-					<div class="label-mono">Class</div>
-					<div class="mt-2 text-sm font-semibold">{sf2State.sf2ImportSummary.className}</div>
-				</div>
-				<div class="rounded-xl border border-border bg-surface p-4">
-					<div class="label-mono">Learners</div>
-					<div class="mt-2 text-2xl font-semibold">{sf2State.sf2ImportSummary.learnersFound}</div>
-				</div>
-				<div class="rounded-xl border border-border bg-surface p-4">
-					<div class="label-mono">Created</div>
-					<div class="mt-2 text-2xl font-semibold">
-						{sf2State.sf2ImportSummary.studentsCreated}
-					</div>
-				</div>
-				<div class="rounded-xl border border-border bg-surface p-4">
-					<div class="label-mono">Dates</div>
-					<div class="mt-2 text-2xl font-semibold">{sf2State.sf2ImportSummary.datesMapped}</div>
-				</div>
-			</div>
-			<div class="flex justify-end">
-				<button
-					onclick={() => sf2State.startSf2Attendance()}
-					class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
-				>
-					Start Attendance
-				</button>
-			</div>
-		</div>
-	{/if}
-</section>
-
-{#if sf2State.sf2Progress.visible}
-	<div
-		role="dialog"
-		aria-modal="true"
-		aria-label="SF2 {sf2State.sf2Progress.task} in progress"
-		class="fixed inset-x-0 top-8 bottom-0 z-[70] flex items-center justify-center bg-background/40"
-		tabindex="-1"
-	>
-		<div
-			class="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-8 text-center shadow-2xl"
-			role="status"
-			aria-live="polite"
-		>
-			<!-- Animated bouncing dots -->
-			<div class="flex items-center gap-1" aria-hidden="true">
-				<span class="loading-dot size-2.5 rounded-full bg-primary"></span>
-				<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 200ms"
-				></span>
-				<span class="loading-dot size-2.5 rounded-full bg-primary" style="animation-delay: 400ms"
-				></span>
-			</div>
-
-			<!-- Current message -->
-			<div class="space-y-1">
-				<p class="text-sm font-semibold text-foreground transition-all duration-500 ease-out">
-					{sf2State.sf2Progress.displayMessage ||
-						(sf2State.sf2Progress.task === 'import'
-							? 'Importing SF2 workbook…'
-							: 'Creating SF2 workbook…')}
+	<!-- ── Month workbooks (read-only) ──────────────────────────────────────── -->
+	<div class="space-y-3">
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div>
+				<h4 class="text-sm font-semibold">Month workbooks</h4>
+				<p class="mt-0.5 text-xs text-muted-foreground">
+					Twelve files, one per month, in school-year order. “Not measured” means nobody has counted
+					the marks in that file yet — it does not mean the file is empty.
 				</p>
 			</div>
-
-			<!-- Determinate progress bar -->
-			{#if sf2State.sf2Progress.total > 0}
-				<div class="w-full space-y-2">
-					<div
-						class="h-3 w-full overflow-hidden rounded-pill border border-primary/20 bg-background"
-						role="progressbar"
-						aria-valuemin="0"
-						aria-valuemax={sf2State.sf2Progress.total}
-						aria-valuenow={sf2State.sf2Progress.current}
-						aria-valuetext={`{Math.round((sf2State.sf2Progress.current / sf2State.sf2Progress.total) * 100)} percent`}
-					>
-						<div
-							class="h-full rounded-pill bg-primary transition-all duration-400 ease-out"
-							style="width: {sf2State.sf2Progress.total > 0
-								? Math.round((sf2State.sf2Progress.current / sf2State.sf2Progress.total) * 100)
-								: 0}%"
-						></div>
-					</div>
-					<div class="label-mono text-xs text-primary">
-						Step {sf2State.sf2Progress.current} of {sf2State.sf2Progress.total}
-					</div>
-				</div>
-			{:else}
-				<!-- Indeterminate progress when total is unknown -->
-				<div class="w-full">
-					<div
-						class="h-3 w-full overflow-hidden rounded-pill border border-primary/20 bg-background"
-						role="progressbar"
-						aria-label="Loading"
-					>
-						<div class="indeterminate-progress h-full rounded-pill bg-primary"></div>
-					</div>
-				</div>
-			{/if}
-
-			{#if sf2State.sf2Progress.current === sf2State.sf2Progress.total && sf2State.sf2Progress.total > 0}
-				<p class="text-xs text-muted-foreground">Finalizing…</p>
-			{/if}
+			<button
+				type="button"
+				onclick={() => sf2State.load()}
+				disabled={sf2State.monthsLoading}
+				title="Reload the month workbooks"
+				class="inline-flex size-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface disabled:opacity-60"
+			>
+				<RefreshCw class="size-4" aria-hidden="true" />
+				<span class="sr-only">Reload the month workbooks</span>
+			</button>
 		</div>
+
+		{#if sf2State.monthsLoading}
+			<div class="flex items-center gap-2 text-sm text-muted-foreground">
+				<Spinner />
+				Reading the month workbooks…
+			</div>
+		{:else if sf2State.monthsError}
+			<div
+				class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+			>
+				<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+				<div>
+					The month workbooks could not be read: {sf2State.monthsError}. Nothing was changed; the
+					files and the database are untouched.
+				</div>
+			</div>
+		{:else if sf2State.monthRows.length === 0}
+			<p class="text-sm text-muted-foreground">
+				No SF2 month workbooks yet. Use <em>Re-run the workbook split</em> below to build them from the
+				original workbook.
+			</p>
+		{:else}
+			<div class="overflow-x-auto rounded-xl border border-border">
+				<table class="w-full text-left text-sm">
+					<thead
+						class="border-b border-border bg-surface text-xs tracking-wide text-muted-foreground uppercase"
+					>
+						<tr>
+							<th scope="col" class="px-4 py-3 font-semibold">Month</th>
+							<th scope="col" class="px-4 py-3 font-semibold">File</th>
+							<th scope="col" class="px-4 py-3 font-semibold">X marks</th>
+							<th scope="col" class="px-4 py-3 font-semibold">Last sync</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-border">
+						{#each sf2State.monthRows as row (row.month)}
+							<tr>
+								<td class="px-4 py-3">
+									<div class="font-medium">{row.label}</div>
+									<div class="font-mono text-[11px] text-muted-foreground">
+										{#if row.undated}
+											Not dated
+										{:else if row.firstSchoolDayOverridden}
+											Starts day {row.firstSchoolDay} (set by hand)
+										{:else}
+											Starts day {row.firstSchoolDay}
+										{/if}
+									</div>
+								</td>
+								<td class="px-4 py-3">
+									<div class="font-mono text-[11px] text-muted-foreground">{row.fileName}</div>
+									<div class="text-xs {toneClasses[row.tone] ?? ''}">{row.fileState}</div>
+								</td>
+								<td class="px-4 py-3 font-mono text-xs">
+									{#if row.xCount === null}
+										<span class="text-muted-foreground">Not measured</span>
+									{:else}
+										{row.xCount}
+									{/if}
+								</td>
+								<td class="px-4 py-3 text-xs text-muted-foreground">{row.lastSynced}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<p class="text-xs text-muted-foreground">{sf2State.monthSummary}</p>
+		{/if}
 	</div>
-{/if}
 
-<Sf2ImportValidationDialog
-	bind:open={sf2State.sf2ValidationDialogOpen}
-	bind:validation={sf2State.sf2Validation}
-	bind:importing={sf2State.sf2Importing}
-	bind:detailsOpen={sf2State.sf2ValidationDetailsOpen}
-	onproceed={() => sf2State.proceedWithSf2MismatchImport()}
-	oncancel={() => sf2State.cancelSf2ValidationImport()}
-	ondownloadreport={() => sf2State.downloadSf2ValidationReport()}
-/>
+	<!-- ── E1: today's month has no file ────────────────────────────────────── -->
+	{#if sf2State.launch?.fellBack && sf2State.launch.todayCanCreate}
+		<div
+			class="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+		>
+			<div class="font-semibold">
+				Showing {sf2MonthLabel(sf2State.launch.month)} — today's month is
+				{sf2MonthLabel(sf2State.launch.todayMonth)} and it has no workbook yet.
+			</div>
+			<p>
+				Create {sf2MonthLabel(sf2State.launch.todayMonth)} from Reports to switch to it. Nothing is created
+				here: a month with no school days is never created for you.
+			</p>
+		</div>
+	{/if}
 
-<Sf2TemplateDialog
-	bind:open={sf2State.sf2TemplateDialogOpen}
-	bind:mode={sf2State.sf2TemplateDialogMode}
-	bind:notice={sf2State.sf2TemplateDialogNotice}
-	bind:creating={sf2State.sf2TemplateCreating}
-	bind:saving={sf2State.sf2SettingsSaving}
-	bind:schoolId={sf2State.sf2DraftSchoolId}
-	bind:schoolName={sf2State.sf2DraftSchoolName}
-	bind:schoolYear={sf2State.sf2DraftSchoolYear}
-	bind:reportMonth={sf2State.sf2DraftReportMonth}
-	bind:gradeLevel={sf2State.sf2DraftGradeLevel}
-	bind:section={sf2State.sf2DraftSection}
-	bind:adviserName={sf2State.sf2DraftAdviserName}
-	bind:schoolHeadName={sf2State.sf2DraftSchoolHeadName}
-	bind:firstSchoolDay={sf2State.sf2DraftFirstSchoolDay}
-	onselectReportMonth={(monthValue) => {
-		const schoolYear = sf2State.sf2DraftSchoolYear.trim() || defaultSf2SchoolYear();
-		sf2State.sf2DraftReportMonth = monthValue;
-		sf2State.sf2DraftSchoolYear = schoolYear;
-		sf2State.sf2DraftFirstSchoolDay = defaultSf2FirstSchoolDay(monthValue, schoolYear);
-	}}
-	onupdateSchoolYear={(value) => {
-		sf2State.sf2DraftSchoolYear = value;
-		sf2State.sf2DraftFirstSchoolDay = normalizedSf2FirstSchoolDay(
-			sf2State.sf2DraftReportMonth,
-			value,
-			sf2State.sf2DraftFirstSchoolDay
-		);
-	}}
-	onselectFirstSchoolDay={(day) => {
-		if (day === null) return;
-		if (!isSf2SchoolDay(sf2State.sf2DraftReportMonth, sf2State.sf2DraftSchoolYear, day)) return;
-		sf2State.sf2DraftFirstSchoolDay = day;
-	}}
-	onsubmit={(e) => sf2State.onCreateSf2FromTemplate(e)}
-	onclose={(force) => sf2State.closeSf2TemplateDialog(force)}
-/>
+	<!-- ── The split (§11, D14) ─────────────────────────────────────────────── -->
+	<div class="space-y-3 border-t border-border pt-5">
+		<div class="flex flex-wrap items-start justify-between gap-4">
+			<div class="min-w-0">
+				<h4 class="text-sm font-semibold">Re-run the workbook split</h4>
+				<p class="mt-0.5 max-w-xl text-xs text-muted-foreground">
+					Splits the original workbook into one file per month. Safe to run more than once: a month
+					that is already split is left alone, so marks written into it are never overwritten. The
+					original workbook is always kept.
+				</p>
+			</div>
+			<button
+				type="button"
+				onclick={() => sf2State.onRunSplit()}
+				disabled={sf2State.splitRunning}
+				class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+			>
+				{#if sf2State.splitRunning}
+					<Spinner />
+				{:else}
+					<FileSpreadsheet class="size-4" aria-hidden="true" />
+				{/if}
+				{sf2State.splitRunning ? 'Splitting…' : 'Re-run the workbook split'}
+			</button>
+		</div>
+		{#if sf2State.splitSummary}
+			<div
+				class="rounded-xl border p-4 text-sm {sf2State.splitComplete
+					? 'border-border bg-surface'
+					: 'border-amber-200 bg-amber-50 text-amber-900'}"
+			>
+				<div>{sf2State.splitSummary}</div>
+				{#if sf2State.splitNeedsAttention.length > 0}
+					<div class="mt-2 text-xs">
+						Needs attention: {sf2State.splitNeedsAttention.join(', ')}
+					</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
 
-<style>
-	.indeterminate-progress {
-		animation: indeterminate-slide 2s ease-in-out infinite;
-		width: 40%;
-	}
-	@keyframes indeterminate-slide {
-		0% {
-			transform: translateX(-100%);
-		}
-		100% {
-			transform: translateX(350%);
-		}
-	}
-
-	.loading-dot {
-		animation: dot-bounce 1.4s ease-in-out infinite both;
-	}
-
-	@keyframes dot-bounce {
-		0%,
-		80%,
-		100% {
-			transform: scale(0.4);
-			opacity: 0.3;
-		}
-		40% {
-			transform: scale(1);
-			opacity: 1;
-		}
-	}
-</style>
+	<!-- ── Back up workbooks now (D13, acceptance #16) ──────────────────────── -->
+	<div class="space-y-2 border-t border-border pt-5">
+		<h4 class="text-sm font-semibold">Back up workbooks now</h4>
+		<p class="max-w-xl text-xs text-muted-foreground">
+			Writes a folder holding just the SF2 Excel files and a manifest of how many marks each one
+			holds — no copy of the database. The button itself is in
+			<a href="#settings-backup" class="underline">Data Management</a>, beside <em>Back Up Now</em>.
+		</p>
+	</div>
+</section>

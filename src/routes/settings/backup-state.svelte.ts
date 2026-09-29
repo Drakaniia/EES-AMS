@@ -1,5 +1,6 @@
 import {
 	createBackupNow,
+	createWorkbooksBackupNow,
 	openBackupFolder,
 	chooseBackupSyncFolder,
 	clearBackupSyncFolder,
@@ -7,6 +8,7 @@ import {
 	disconnectGoogleDriveBackup,
 	uploadLatestBackupToGoogleDrive,
 	chooseRestoreBackup,
+	chooseRestoreDatabaseFile,
 	restoreBackup,
 	exportDatabase,
 	exportJsonWithFolder,
@@ -67,6 +69,7 @@ import type { Ctx } from './state-context';
 	backupStatus = $state<BackupStatus | null>(null);
 	backupSummaries = $state<BackupSummary[]>([]);
 	backupBusy = $state(false);
+	workbooksBackupBusy = $state(false);
 	backupFolderOpening = $state(false);
 	syncFolderBusy = $state(false);
 	googleDriveBusy = $state(false);
@@ -74,6 +77,18 @@ import type { Ctx } from './state-context';
 	restoreBusy = $state(false);
 	restorePreview = $state<BackupPreview | null>(null);
 	fileInput = $state<HTMLInputElement | null>(null);
+
+	/**
+	 * The workbook a restore would write, when it holds more absences than the
+	 * database it is paired with. Null whenever the pair is consistent.
+	 */
+	workbookAheadCount = $derived.by(() => {
+		const preview = this.restorePreview;
+		if (!preview || preview.workbooks.length === 0) return null;
+		const expected = Math.max(...preview.workbooks.map((workbook) => workbook.xCount));
+		if (expected <= 0 || preview.absentCount >= expected) return null;
+		return { expected, actual: preview.absentCount };
+	});
 
 	// ── Export ─────────────────────────────────────────────────────────────────
 	exportDialogOpen = $state(false);
@@ -129,6 +144,27 @@ import type { Ctx } from './state-context';
 			this.ctx.toast(`Backup failed: ${msg}`, false);
 		} finally {
 			this.backupBusy = false;
+		}
+	}
+
+	/**
+	 * D13 "Back up workbooks now": snapshots the SF2 workbooks on their own,
+	 * without copying the database. Reading each workbook's X-mark count needs
+	 * Excel, so this is slower than a plain database backup on a machine where
+	 * Excel has to start.
+	 */
+	async onCreateWorkbooksBackupNow() {
+		if (this.workbooksBackupBusy) return;
+		this.workbooksBackupBusy = true;
+		try {
+			this.backupStatus = await createWorkbooksBackupNow();
+			await this.reloadBackupSummaries();
+			this.ctx.toast('SF2 workbooks backed up');
+		} catch (error) {
+			const msg = this.errorMessage(error, 'Workbook backup failed');
+			this.ctx.toast(`Workbook backup failed: ${msg}`, false);
+		} finally {
+			this.workbooksBackupBusy = false;
 		}
 	}
 
@@ -232,6 +268,21 @@ import type { Ctx } from './state-context';
 		}
 	}
 
+	/** Restores from the flat `*.db` files a build before workbook backup wrote. */
+	async onChooseRestoreLegacyFile() {
+		if (this.restoreChoosing || this.restoreBusy) return;
+		this.restoreChoosing = true;
+		try {
+			const preview = await chooseRestoreDatabaseFile();
+			if (preview) this.restorePreview = preview;
+		} catch (error) {
+			const msg = this.errorMessage(error, 'Restore preview failed');
+			this.ctx.toast(`Restore preview failed: ${msg}`, false);
+		} finally {
+			this.restoreChoosing = false;
+		}
+	}
+
 	async onConfirmRestoreBackup() {
 		if (!this.restorePreview || this.restoreBusy) return;
 		this.restoreBusy = true;
@@ -239,7 +290,11 @@ import type { Ctx } from './state-context';
 			const result = await restoreBackup(this.restorePreview.sourcePath);
 			this.restorePreview = null;
 			await Promise.all([this.ctx.reload(), this.reloadBackups()]);
-			this.ctx.toast(`Database restored. Safety backup: ${result.preRestoreBackupPath}`);
+			const restored = result.workbooksRestored ? ' SF2 workbooks restored too.' : '';
+			this.ctx.toast(`Restored. Safety backup: ${result.preRestoreBackupPath}${restored}`);
+			for (const warning of result.warnings) {
+				this.ctx.toast(warning, false);
+			}
 		} catch (error) {
 			const msg = this.errorMessage(error, 'Restore failed');
 			this.ctx.toast(`Restore failed: ${msg}`, false);

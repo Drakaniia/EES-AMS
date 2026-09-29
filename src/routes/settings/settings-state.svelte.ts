@@ -20,7 +20,6 @@ import type { Ctx } from './state-context';
 class SettingsPageState implements Ctx {
 	constructor() {
 		// Wire cross-cutting services into sub-state singletons
-		classState.init(this);
 		backupState.init(this);
 		sf2State.init(this);
 		updateSectionState.init(this);
@@ -161,6 +160,11 @@ class SettingsPageState implements Ctx {
 		this.reload();
 		this.backupState.reloadBackups();
 		this.updateSectionState.start();
+		// Settings → SF2 Workbook is entirely read-driven (the month list, the
+		// start date, and whether today's month needs creating), and none of it is
+		// on the critical path for the rest of the page - so it loads alongside
+		// everything else rather than gating it.
+		void this.sf2State.load();
 	}
 
 	hasUnsavedGlobalSettings(): boolean {
