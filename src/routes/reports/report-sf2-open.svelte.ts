@@ -2,7 +2,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { errorMessage } from './report-state.svelte';
 import { killAllExcelProcesses, syncAndOpenSf2Workbook } from '$lib/db-rust';
-import type { Sf2ExportPreview } from '$lib/db-rust';
+import type { Sf2ExportPreview, Sf2MonthGridPreview } from '$lib/types';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -30,26 +30,45 @@ export const SF2_STALL_MESSAGES = [
 	'Just a moment longer!'
 ] as const;
 
-// ── Preview cache: eliminates redundant backend calls on month switch ──────────
-// When switching to a month that's already been loaded, returns instantly.
-// Key format: `${classId}:${reportMonth}`
+// ── Month preview cache ─────────────────────────────────────────────────────
+// A month read is already cheap, but a teacher flipping between a month and the
+// one before it should not pay for the same query twice, and the grid is the
+// hot thing on this page. Keyed on all three of the things that identify a
+// month file - class, school year, month - because two classes can each have an
+// OCTOBER, and one class has an OCTOBER in every school year it has ever been
+// used.
 
-const previewCache = new SvelteMap<string, Sf2ExportPreview>();
+const monthCache = new SvelteMap<string, Sf2MonthGridPreview>();
 
-export function cacheKey(classId: string, reportMonth: string): string {
-	return `${classId}:${reportMonth}`;
+export function monthCacheKey(classId: string, schoolYear: string, reportMonth: string): string {
+	return `${classId}:${schoolYear}:${reportMonth}`;
 }
 
-export function invalidateCacheForMonth(classId: string, reportMonth: string) {
-	previewCache.delete(cacheKey(classId, reportMonth));
+export function invalidateMonthCache(classId: string, schoolYear: string, reportMonth: string) {
+	monthCache.delete(monthCacheKey(classId, schoolYear, reportMonth));
 }
 
-export function invalidateAllCache() {
-	previewCache.clear();
+/**
+ * Drop every month of one class.
+ *
+ * Used after something that changes more than one month at a time - a roster
+ * sync, an export that rewrote the workbook. Naming one month would leave the
+ * other eleven holding pre-change rows, and a stale X mark on screen is worse
+ * than a slow one.
+ */
+export function invalidateClassMonths(classId: string) {
+	const prefix = `${classId}:`;
+	for (const key of [...monthCache.keys()]) {
+		if (key.startsWith(prefix)) monthCache.delete(key);
+	}
 }
 
-export function getPreviewCache(): SvelteMap<string, Sf2ExportPreview> {
-	return previewCache;
+export function invalidateAllMonthCache() {
+	monthCache.clear();
+}
+
+export function getMonthCache(): SvelteMap<string, Sf2MonthGridPreview> {
+	return monthCache;
 }
 
 // ── SF2 Open state machine ─────────────────────────────────────────────────────

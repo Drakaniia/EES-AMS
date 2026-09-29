@@ -8,7 +8,7 @@
 	import ReportSf2Progress from './report-sf2-progress.svelte';
 	import ReportSidebar from './ReportSidebar.svelte';
 	import ReportWorkbookDetailsDialog from './ReportWorkbookDetailsDialog.svelte';
-	import ReportMonthSwitchOverlay from './ReportMonthSwitchOverlay.svelte';
+	import ReportGridSkeleton from './ReportGridSkeleton.svelte';
 	import ReportLoadingStates from './ReportLoadingStates.svelte';
 	import { createReportPageState } from './report-page-state.svelte';
 
@@ -48,17 +48,34 @@
 <svelte:window onkeydown={page.onWindowKeydown} />
 
 <div class="flex h-full flex-col overflow-hidden">
+	<!--
+		Error and empty states only. This used to also own a full-page loader, which
+		covered the whole route while a month or a class loaded and is why switching
+		either felt like the app had hung (spec §7.4, acceptance #10). The grid now
+		skeletons itself and the sidebar stays interactive.
+	-->
 	<ReportLoadingStates
 		loading={page.loading}
 		loadError={page.loadError}
-		preview={page.preview}
+		hasGrid={page.hasGrid}
+		issues={page.preview?.issues ?? []}
 		onRetry={page.loadInitial}
 	/>
 
-	{#if !page.loading && !page.loadError && page.preview?.template}
-		{#if page.fullReviewOpen}
-			<section class="flex min-h-0 flex-1 flex-col overflow-hidden">
-				<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+	<!--
+		The layout is always up. On the very first read there is no sidebar to show
+		yet, but the grid area still holds its shape rather than the page going blank
+		and then jumping. A switch between months, or between classes, takes the same
+		path - only the grid's cells are replaced.
+	-->
+	{#if !page.loadError}
+		<section
+			class="grid min-h-0 flex-1 gap-5 overflow-hidden px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px]"
+		>
+			<div class="flex min-h-0 flex-col gap-5 pr-0 xl:pr-1">
+				{#if page.loading || page.gridPending || !page.preview?.template}
+					<ReportGridSkeleton label="Loading the month" />
+				{:else if page.fullReviewOpen}
 					<ReportTable
 						previewTemplateGradeLevel={page.preview.template.gradeLevel}
 						previewTemplateSection={page.preview.template.section}
@@ -75,13 +92,7 @@
 						onFullReviewOpen={page.onToggleFullReview}
 						onGenderFilterChange={(value) => (page.genderFilter = value)}
 					/>
-				</div>
-			</section>
-		{:else}
-			<section
-				class="grid min-h-0 flex-1 gap-5 overflow-hidden px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px]"
-			>
-				<div class="flex min-h-0 flex-col gap-5 pr-0 xl:pr-1">
+				{:else}
 					<ReportTable
 						previewTemplateGradeLevel={page.preview.template.gradeLevel}
 						previewTemplateSection={page.preview.template.section}
@@ -98,11 +109,21 @@
 						onFullReviewOpen={page.onToggleFullReview}
 						onGenderFilterChange={(value) => (page.genderFilter = value)}
 					/>
-				</div>
+				{/if}
+			</div>
 
+			{#if page.preview?.template && !page.loading && !page.fullReviewOpen}
 				<ReportSidebar
 					preview={page.preview}
-					previewRefreshing={page.previewRefreshing}
+					gridPending={page.gridPending}
+					classes={page.classes}
+					selectedClassId={page.activeClassId}
+					reportMonth={page.activeReportMonth}
+					creatingMonth={page.creatingMonth}
+					workbookXCount={page.monthGrid?.workbookScannedAt ? page.monthGrid.workbookXCount : null}
+					workbookScannedAt={page.monthGrid?.workbookScannedAt ?? null}
+					needsMonthCreate={page.needsMonthCreate}
+					createMonthName={page.launch?.todayMonth ?? ''}
 					selectedClass={page.selectedClass}
 					draftSchoolId={page.draft.schoolId}
 					draftSchoolYear={page.draft.schoolYear}
@@ -114,20 +135,21 @@
 					exportDisabled={page.exportDisabled}
 					exporting={page.exporting}
 					syncingRoster={page.syncingRoster}
-					importingAttendance={page.importingAttendance}
 					sf2OpenStatus={page.sf2Open.status}
 					workbookSettings={page.workbookSettings}
 					savingDetails={page.savingDetails}
 					activeClassId={page.activeClassId}
 					onOpenSf2={page.onOpenSf2}
 					onSyncRoster={page.onSyncRoster}
-					onImportAttendance={page.onImportAttendance}
+					onClassSelect={page.onClassSelect}
+					onCreateMonth={() => page.onCreateMonth()}
+					onRefresh={page.refreshCurrentMonth}
 					onRequestExport={page.requestExport}
 					onEditDetails={() => (page.workbookDetailsOpen = true)}
 					onSwitchMonth={() => (page.monthPickerOpen = true)}
 				/>
-			</section>
-		{/if}
+			{/if}
+		</section>
 	{/if}
 </div>
 
@@ -164,18 +186,10 @@
 
 <ReportMonthPicker
 	open={page.monthPickerOpen}
-	currentMonth={page.workbookSettings?.reportMonth || page.preview?.template?.reportMonth || ''}
+	currentMonth={page.activeReportMonth}
 	activeClassId={page.activeClassId}
 	onSelect={page.onMonthSelect}
 	onClose={() => (page.monthPickerOpen = false)}
-/>
-
-<ReportMonthSwitchOverlay
-	monthSwitchLoading={page.monthSwitchLoading}
-	monthSwitchMessage={page.monthSwitchMessage}
-	monthSwitchError={page.monthSwitchError}
-	monthSwitchProgressPercent={page.monthSwitchProgressPercent}
-	onDismissError={() => (page.monthSwitchError = null)}
 />
 
 <ReportSf2Progress

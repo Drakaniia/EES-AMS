@@ -1,5 +1,5 @@
 import { SvelteDate, SvelteMap } from 'svelte/reactivity';
-import type { Sf2PreviewDate } from '$lib/types';
+import type { Sf2MonthGridPreview, Sf2PreviewDate, Sf2ExportPreview } from '$lib/types';
 import { sf2MonthByValue, sf2ReportMonthLabel } from '$lib/features/settings/sf2-workbook';
 import type { Sf2PreviewCell, Sf2PreviewStudentRow } from '$lib/db-rust';
 
@@ -91,6 +91,86 @@ export function formatImportedAt(value?: number) {
 	});
 }
 
+// ── The passive workbook status line (spec §12.2) ─────────────────────────────
+
+/**
+ * The inputs of the status line, and the only two numbers in it.
+ *
+ * Both counts are the guard's own (`SyncPermit`'s `workbook_count` and
+ * `db_count`), scoped to this month's mapped learner rows × mapped day columns.
+ * `workbookXCount` is `null` for a month whose file has never been counted, and
+ * that is a third state, not zero: an unmeasured workbook is one the app cannot
+ * make any claim about, which is exactly what §9.1's `Unmeasured` default is for.
+ */
+export type WorkbookStatusCounts = {
+	/** Unix seconds, or `null` when the file has never been counted. */
+	scannedAt: number | null;
+	workbookXCount: number | null;
+	appXCount: number;
+};
+
+export type WorkbookStatusLine = {
+	/** The sentence, ready to render. */
+	text: string;
+	/**
+	 * `true` when both counts agree, `false` when they do not, `null` when the
+	 * workbook was never measured and there is nothing to compare.
+	 *
+	 * `false` is the state §9.1 exists for: the guard refuses every write, so the
+	 * line says so rather than leaving the teacher to find out from a refused
+	 * export.
+	 */
+	agrees: boolean | null;
+};
+
+/**
+ * "Last checked <time> · workbook has 12 X · app has 12" (spec §12.2).
+ *
+ * Passive by construction. This function reads two counts and a timestamp and
+ * returns a sentence — there is no path from it to a write, and no path from it
+ * to a repair. The repair already happened, unattended, at startup; what is left
+ * to show is the evidence for it.
+ *
+ * Written as a pure function rather than inline in the sidebar so the wording is
+ * testable, and so the two states a teacher must be able to tell apart — "the
+ * workbook has never been read" and "the workbook has been read and holds
+ * nothing" — cannot be collapsed into one another by a later edit.
+ */
+export function workbookStatusLine({
+	scannedAt,
+	workbookXCount,
+	appXCount
+}: WorkbookStatusCounts): WorkbookStatusLine {
+	if (workbookXCount === null) {
+		return {
+			text: `${appXCount} X in the app · this month's workbook has not been checked yet`,
+			agrees: null
+		};
+	}
+	return {
+		text: `Last checked ${formatCheckedAt(scannedAt)} · workbook has ${workbookXCount} X · app has ${appXCount}`,
+		agrees: workbookXCount === appXCount
+	};
+}
+
+/**
+ * A time for "last checked".
+ *
+ * `never` when the count is somehow present without a timestamp, which the
+ * backend cannot produce — the two are written together — but which a hand-edited
+ * payload or a future field default could, and "Last checked never" is a worse
+ * answer than a plain word.
+ */
+export function formatCheckedAt(value: number | null): string {
+	if (!value) return 'never';
+	return new SvelteDate(value * 1000).toLocaleString(undefined, {
+		month: 'short',
+		day: 'numeric',
+		hour: 'numeric',
+		minute: '2-digit'
+	});
+}
+
 export function cellKey(studentId: string, date: string) {
 	return `${studentId}:${date}`;
 }
@@ -171,6 +251,40 @@ export function reportMonthLabel(value: string) {
 	return sf2ReportMonthLabel(value) || 'Blank';
 }
 
+/**
+ * Project a month read onto the shape the rest of the Reports page already
+ * reads.
+ *
+ * The grid, the absent list, the export dialogs and the sidebar have always
+ * consumed `Sf2ExportPreview`. A month read returns the same information, so
+ * this is the one place the two meet - which is what keeps "which command
+ * produced this" out of the render path: the components cannot tell, and do not
+ * need to.
+ *
+ * `canExport` is deliberately the month's own `issues` rather than a stored
+ * flag. It is derived from whether the month is ready, and a stored flag would
+ * be a thing that can be true of a month whose file has since gone missing.
+ */
+export function monthGridToPreview(grid: Sf2MonthGridPreview): Sf2ExportPreview {
+	return {
+		template: grid.template,
+		classId: grid.classId,
+		className: grid.className,
+		sourcePath: grid.template?.sourcePath ?? grid.fileName,
+		dates: grid.dates,
+		students: grid.students,
+		absentList: grid.absentList,
+		mappedStudents: grid.mappedStudents,
+		mappedDates: grid.mappedDates,
+		presentCount: grid.presentCount,
+		absenceCount: grid.absenceCount,
+		unmappedStudentCount: grid.unmappedStudentCount,
+		canExport: grid.issues.length === 0,
+		issues: grid.issues,
+		warnings: grid.warnings
+	};
+}
+
 export function createMatrixWeekGroup(key: string): MatrixWeekGroup {
 	return {
 		key,
@@ -244,9 +358,39 @@ export function localDateKey(date: Date) {
 	return `${year}-${month}-${day}`;
 }
 
+/**
+ * The calendar year a month belongs to, from the first date that carries one.
+ *
+ * Only reached when the caller had no `reportYear` to give, which is a month with
+ * no dates at all - a month that has not been read. A month that *has* been read
+ * arrives with its own year and never comes through here.
+ */
+function inferReportYear(dates: Sf2PreviewDate[]): number {
+	const first = dates[0]?.date;
+	const fromFirst = first ? Number.parseInt(first.slice(0, 4), 10) : Number.NaN;
+	return Number.isFinite(fromFirst) ? fromFirst : new SvelteDate().getFullYear();
+}
+
+/**
+ * The weekday columns of one month, grouped into weeks.
+ *
+ * `reportYear` is the month's own calendar year, as the month read reported it.
+ * It is a parameter and not something worked out here, because a school year
+ * straddles two calendar years and the two rules that could be used to pick one
+ * disagree: the legacy SF2 rule wrapped at **June**, the school-year rule wraps
+ * at **September**, and for AUGUST they name different files. The browser is
+ * therefore never in the business of deciding - it draws the year the database
+ * gave it. Note that this function has no school-year parameter to apply a rule
+ * to, which is the point.
+ *
+ * When it is omitted it falls back to the first mapped date, and only failing
+ * that to the current year. Both fallbacks are for a month with no dates at all,
+ * which is a month that has not been read.
+ */
 export function buildMatrixWeekGroups(
 	dates: Sf2PreviewDate[],
-	reportMonth: string
+	reportMonth: string,
+	reportYear?: number
 ): MatrixWeekGroup[] {
 	const month = sf2MonthByValue(reportMonth);
 
@@ -257,8 +401,7 @@ export function buildMatrixWeekGroups(
 	}
 
 	if (month) {
-		const year =
-			dates.length > 0 ? Number(dates[0].date.split('-')[0]) : new SvelteDate().getFullYear();
+		const year = reportYear ?? inferReportYear(dates);
 		const dayCount = new SvelteDate(year, month.monthIndex + 1, 0).getDate();
 		// Index groups by week key for O(1) lookup
 		const groupsByKey = new SvelteMap<string, MatrixWeekGroup>();
@@ -341,46 +484,6 @@ export function headerReviewValue(
 ) {
 	const value = workbookSettings ? draftValue : draftValue || templateValue;
 	return value.trim() || 'Blank';
-}
-
-/**
- * Generate skeleton preview dates for a month — all weekdays with empty SF2
- * mappings. This lets the calendar grid render instantly after a month switch
- * before the full preview loads from the backend.
- */
-export function buildSkeletonDates(reportMonth: string, schoolYear?: string): Sf2PreviewDate[] {
-	const month = sf2MonthByValue(reportMonth);
-	if (!month) return [];
-
-	// Derive the calendar year from the school year if available
-	let year = new SvelteDate().getFullYear();
-	if (schoolYear) {
-		const startYear = parseInt(schoolYear.split('-')[0], 10);
-		if (!isNaN(startYear)) {
-			// If report month is June–December, use the start year;
-			// if January–May, use startYear + 1 (next calendar year)
-			year = month.monthIndex >= 5 ? startYear : startYear + 1;
-		}
-	}
-
-	const dayCount = new SvelteDate(year, month.monthIndex + 1, 0).getDate();
-	const dates: Sf2PreviewDate[] = [];
-
-	for (let day = 1; day <= dayCount; day += 1) {
-		const dateKey = localDateKey(new SvelteDate(year, month.monthIndex, day));
-		const weekdayIndexVal = weekdayIndexForDate(dateKey);
-		// Skip weekends
-		if (weekdayIndexVal < 0 || weekdayIndexVal > 4) continue;
-
-		dates.push({
-			date: dateKey,
-			sheetName: '',
-			columnLetter: '',
-			columnIndex: 0
-		});
-	}
-
-	return dates;
 }
 
 export function headerReviewMonthValue(

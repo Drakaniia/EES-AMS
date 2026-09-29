@@ -1,19 +1,20 @@
 import { onMount, onDestroy } from 'svelte';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import {
+	createSf2MonthFile,
 	exportSf2Workbook,
-	getSf2ExportPreview,
+	getSf2LaunchMonth,
+	getSf2MonthPreview,
 	getSf2WorkbookSettings,
-	importSf2AttendanceFromWorkbook,
 	listClasses,
 	presentAllSf2PreviewAttendance,
-	setSf2ReportMonth,
 	syncSf2Roster,
 	toggleSf2PreviewAttendance,
 	updateSf2WorkbookSettings,
 	type Class,
 	type Sf2ExportPreview,
+	type Sf2LaunchMonth,
+	type Sf2MonthGridPreview,
 	type Sf2PreviewCell,
 	type Sf2PreviewStudentRow,
 	type Sf2WorkbookSettings
@@ -22,25 +23,43 @@ import {
 import {
 	buildMatrixRows,
 	buildMatrixWeekGroups,
-	buildSkeletonDates,
 	cellKey,
 	errorMessage,
 	flattenMatrixSlots,
 	formatDate,
+	monthGridToPreview,
 	reportMonthLabel
 } from './report-state.svelte';
 
 import {
 	createSf2OpenState,
-	cacheKey,
-	getPreviewCache,
-	invalidateCacheForMonth,
-	invalidateAllCache
+	getMonthCache,
+	invalidateAllMonthCache,
+	invalidateClassMonths,
+	invalidateMonthCache,
+	monthCacheKey
 } from './report-sf2-open.svelte';
 
 import { createWorkbookDetailsDraft } from './report-workbook-details.svelte';
 import type ReportExportDialogs from './report-export-dialogs.svelte';
 
+/**
+ * Reports page state.
+ *
+ * The month switch is the whole point of this file. Switching a month is:
+ *
+ * ```text
+ * reportMonth = 'OCTOBER'
+ *   └─ $derived → matrixWeekGroups / matrixStudents recomputed from monthGrid
+ *   └─ one cached getSf2MonthPreview('OCTOBER')
+ * ```
+ *
+ * There is no `setSf2ReportMonth`, no Excel, no mutation, no progress listener
+ * and no modal. What used to be a full COM session - renaming eleven hidden
+ * tabs, re-analysing the workbook, rewriting COUNTIF and summary formulas, all
+ * behind a `ReportMonthSwitchOverlay` - is one read-only SQL query whose result
+ * is cached per `${classId}:${schoolYear}:${month}`.
+ */
 export function createReportPageState() {
 	const sf2Open = createSf2OpenState();
 	const draft = createWorkbookDetailsDraft();
@@ -51,13 +70,24 @@ export function createReportPageState() {
 	// never mutated in place, so deep proxying its thousands of cell objects only
 	// adds per-property reactive reads to the grid's hot render path.
 	let preview = $state.raw<Sf2ExportPreview | null>(null);
+	// The month read, kept alongside the projected preview so the page knows which
+	// month the grid belongs to and which year it is in. `reportYear` comes from
+	// the database, never from the browser's clock - see `report-state.svelte.ts`.
+	let monthGrid = $state.raw<Sf2MonthGridPreview | null>(null);
+	let launch = $state.raw<Sf2LaunchMonth | null>(null);
+	let reportMonth = $state('');
+	let schoolYear = $state('');
 	let workbookSettings = $state<Sf2WorkbookSettings | null>(null);
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
+	// The grid's own loading flag. Distinct from `loading` because a month or
+	// class switch must not blank the page: the sidebar, the month picker and the
+	// class selector all stay usable while this is true.
+	let gridPending = $state(false);
+	let creatingMonth = $state(false);
 	let genderFilter = $state<'all' | 'male' | 'female'>('all');
 	let exporting = $state(false);
 	let syncingRoster = $state(false);
-	let importingAttendance = $state(false);
 	let presentingAll = $state(false);
 	let savingDetails = $state(false);
 	let correctingCellKey = $state<string | null>(null);
@@ -66,24 +96,31 @@ export function createReportPageState() {
 	let fullReviewOpen = $state(false);
 	let workbookDetailsOpen = $state(false);
 	let monthPickerOpen = $state(false);
-	let monthSwitchLoading = $state(false);
-	let monthSwitchError = $state<string | null>(null);
-	let monthSwitchMessage = $state('');
-	let monthSwitchProgressPercent = $state(0);
-	let monthSwitchUnlisten: UnlistenFn | null = null;
-	let previewRefreshing = $state(false);
 	let modalSaving = $state(false);
 	let reportDialogs = $state<ReportExportDialogs | undefined>();
 
 	const activeClassId = $derived(
-		selectedClassId || preview?.classId || preview?.template?.classId || ''
+		selectedClassId || monthGrid?.classId || preview?.classId || preview?.template?.classId || ''
 	);
 	const selectedClass = $derived(classes.find((item) => item.id === activeClassId));
 	const exportDisabled = $derived(
 		!preview?.canExport || exporting || savingDetails || !activeClassId
 	);
-	const activeReportMonth = $derived(draft.reportMonth || preview?.template?.reportMonth || '');
-	const matrixWeekGroups = $derived(buildMatrixWeekGroups(preview?.dates ?? [], activeReportMonth));
+	const activeReportMonth = $derived(
+		reportMonth || draft.reportMonth || preview?.template?.reportMonth || ''
+	);
+	/**
+	 * The month the grid is drawing, and the year it is drawing it in.
+	 *
+	 * `reportYear` is the read month's own year. `buildMatrixWeekGroups` falls
+	 * back to the first mapped date and then to the clock only when there is no
+	 * read at all, which is the skeleton case and not a month anyone will mistake
+	 * for a real one.
+	 */
+	const activeReportYear = $derived(monthGrid?.reportYear);
+	const matrixWeekGroups = $derived(
+		buildMatrixWeekGroups(preview?.dates ?? [], activeReportMonth, activeReportYear)
+	);
 	const matrixDates = $derived(flattenMatrixSlots(matrixWeekGroups));
 	// Built once per preview load / gender filter change: rows arrive with their
 	// cells already projected onto the visible date columns.
@@ -92,34 +129,44 @@ export function createReportPageState() {
 	);
 	const hasAbsentCells = $derived((preview?.absentList.length ?? 0) > 0);
 	const hasModalDraftChanges = $derived(draft.hasChanges(workbookSettings));
+	/** The grid has something to draw: a read landed, or a legacy preview did. */
+	const hasGrid = $derived(monthGrid !== null || preview !== null);
+	/** Is the app showing a month other than the one it was opened in? */
+	const needsMonthCreate = $derived(!!launch && launch.fellBack && launch.todayCanCreate);
 
 	onMount(() => {
 		loadInitial();
 	});
 	onDestroy(() => {
 		sf2Open.cleanup();
-		if (monthSwitchUnlisten) {
-			monthSwitchUnlisten();
-			monthSwitchUnlisten = null;
-		}
 	});
 
+	/**
+	 * First load: the class, the month to open (D5), then that month's grid.
+	 *
+	 * The launch month is resolved by the backend so the D5 fallback and the E1
+	 * warning are decided in one place, from the same rows the month read will
+	 * use. Two reads, no Excel.
+	 */
 	async function loadInitial() {
 		loading = true;
 		loadError = null;
 		try {
 			classes = await listClasses();
-			const current = await getSf2ExportPreview();
-			preview = current;
-			selectedClassId = current.classId ?? classes[0]?.id ?? '';
-			if (current.classId && current.template?.reportMonth) {
-				getPreviewCache().set(cacheKey(current.classId, current.template.reportMonth), current);
+			const classId = classes[0]?.id ?? '';
+			selectedClassId = classId;
+
+			if (!classId) {
+				return;
 			}
-			if (selectedClassId && selectedClassId !== current.classId) {
-				await loadReport(selectedClassId);
-			} else {
-				await loadWorkbookSettings(current.classId);
-			}
+
+			launch = await getSf2LaunchMonth(classId);
+			reportMonth = launch.month;
+			schoolYear = launch.schoolYear;
+			announceLaunch();
+
+			await loadMonth(classId, launch.schoolYear, launch.month);
+			await loadWorkbookSettings(classId);
 		} catch (error) {
 			const msg = errorMessage(error, 'Failed to load reports');
 			loadError = msg;
@@ -129,40 +176,147 @@ export function createReportPageState() {
 		}
 	}
 
-	async function loadReport(classId?: string) {
-		const cid = classId || selectedClassId || preview?.classId || preview?.template?.classId || '';
-		if (!cid) return;
+	/**
+	 * Say out loud when the app is not showing today's month.
+	 *
+	 * Edge case E1, in the spec's own words: *"Showing <MONTH>. Create
+	 * <TODAY'S MONTH> to switch."* The offer to create is a button in the
+	 * sidebar rather than an action on the toast, because the toast is gone
+	 * before anyone has finished reading it and the sidebar is where they will be
+	 * looking anyway.
+	 */
+	function announceLaunch() {
+		if (!launch) return;
+		if (launch.fellBack) {
+			reportDialogs?.showToast(
+				`Showing ${reportMonthLabel(launch.month)}. ` +
+					(launch.todayCanCreate
+						? `Create ${reportMonthLabel(launch.todayMonth)} to switch.`
+						: `${reportMonthLabel(launch.todayMonth)} has no SF2 workbook yet.`)
+			);
+		}
+		for (const issue of launch.issues) {
+			reportDialogs?.showToast(issue, false);
+		}
+	}
 
-		const reportMonth = activeReportMonth;
-		const key = cacheKey(cid, reportMonth);
-
-		const cached = getPreviewCache().get(key);
+	/**
+	 * Read one month, from the cache when it is already there.
+	 *
+	 * This is the only thing a month switch calls. It is `await`ed so the caller
+	 * can report a failure, but the grid is not blocked on it: `reportMonth` is
+	 * set first and the `$derived` chain repaints from whatever is on screen while
+	 * the read is in flight.
+	 */
+	async function loadMonth(classId: string, year: string, month: string) {
+		if (!classId || !month) return;
+		const cache = getMonthCache();
+		const key = monthCacheKey(classId, year, month);
+		const cached = cache.get(key);
 		if (cached) {
-			preview = cached;
-			if (cached.classId) selectedClassId = cached.classId;
-			await loadWorkbookSettings(cached.classId ?? cid);
+			applyMonth(cached);
 			return;
 		}
+		const grid = await getSf2MonthPreview(month, classId, year);
+		cache.set(key, grid);
+		applyMonth(grid);
+	}
 
-		const [nextPreview, settings] = await Promise.all([
-			getSf2ExportPreview(classId),
-			cid ? getSf2WorkbookSettings(cid).catch(() => null) : Promise.resolve(null)
-		]);
+	function applyMonth(grid: Sf2MonthGridPreview) {
+		monthGrid = grid;
+		reportMonth = grid.month;
+		// The read reports the school year it actually resolved. Taking it from the
+		// read rather than keeping whatever the previous class used is what stops
+		// a class switch from looking in the wrong year.
+		schoolYear = grid.schoolYear || schoolYear;
+		preview = monthGridToPreview(grid);
+		if (grid.classId) selectedClassId = grid.classId;
+	}
 
-		await new Promise((resolve) => setTimeout(resolve, 0));
-		preview = nextPreview;
-		if (nextPreview.classId) selectedClassId = nextPreview.classId;
+	/**
+	 * Switch month. Instant, and nothing else.
+	 *
+	 * The selected month is applied to state *before* the read is awaited, so the
+	 * grid's weekday headers change on the same frame as the click. If the read
+	 * then fails the selection is rolled back, because a header claiming one month
+	 * over another month's marks is worse than a failed switch.
+	 */
+	async function onMonthSelect(monthValue: string) {
+		monthPickerOpen = false;
+		await switchToMonth(monthValue);
+	}
 
-		const cacheMonth = nextPreview.template?.reportMonth || reportMonth;
-		if (cacheMonth) {
-			getPreviewCache().set(cacheKey(cid, cacheMonth), nextPreview);
+	async function switchToMonth(monthValue: string) {
+		const classId = activeClassId;
+		if (!classId || !monthValue) return;
+		const previousMonth = activeReportMonth;
+		if (monthValue === previousMonth && monthGrid) return;
+
+		// The instant part: state changes now, the grid repaints from it, and the
+		// read happens underneath.
+		reportMonth = monthValue;
+		draft.onFieldChange('draftReportMonth', monthValue);
+		gridPending = true;
+		try {
+			await loadMonth(classId, schoolYear, monthValue);
+			reportDialogs?.showToast(`Switched to ${reportMonthLabel(monthValue)}`);
+		} catch (error) {
+			const msg = errorMessage(error, 'Failed to load the month');
+			reportMonth = previousMonth;
+			draft.onFieldChange('draftReportMonth', previousMonth);
+			reportDialogs?.showToast(`Could not switch month: ${msg}`, false);
+		} finally {
+			gridPending = false;
 		}
-		if (settings) {
-			workbookSettings = settings;
-			draft.hydrate(settings);
-		} else {
-			workbookSettings = null;
-			draft.clear();
+	}
+
+	/**
+	 * Switch class. Also instant, and also a read (spec §7.4).
+	 *
+	 * The sidebar stays interactive throughout: `gridPending` only gates the grid,
+	 * so the class selector, the month picker and the workbook identity panel all
+	 * keep responding while the new class's month is being read.
+	 */
+	async function onClassSelect(classId: string) {
+		if (!classId || classId === activeClassId) return;
+		selectedClassId = classId;
+		gridPending = true;
+		try {
+			// An empty school year, so the read resolves the new class's own year
+			// rather than reusing the previous class's.
+			await loadMonth(classId, '', reportMonth);
+			await loadWorkbookSettings(classId);
+		} catch (error) {
+			const msg = errorMessage(error, 'Failed to load the class');
+			reportDialogs?.showToast(`Could not switch class: ${msg}`, false);
+		} finally {
+			gridPending = false;
+		}
+	}
+
+	/**
+	 * The one-click create of edge case E1.
+	 *
+	 * Offered only for a month that has school days and no file. It is a separate
+	 * command from the read, deliberately: a switch never writes, and this is not
+	 * a switch.
+	 */
+	async function onCreateMonth(monthValue?: string) {
+		const classId = activeClassId;
+		const month = monthValue || launch?.todayMonth || launch?.month || '';
+		if (!classId || !month || creatingMonth) return;
+		creatingMonth = true;
+		try {
+			await createSf2MonthFile(month, classId);
+			invalidateMonthCache(classId, schoolYear, month);
+			reportDialogs?.showToast(`Created ${reportMonthLabel(month)}.`);
+			await switchToMonth(month);
+			if (launch) launch = { ...launch, todayCanCreate: false };
+		} catch (error) {
+			const msg = errorMessage(error, 'Could not create the month');
+			reportDialogs?.showToast(`Could not create ${reportMonthLabel(month)}: ${msg}`, false);
+		} finally {
+			creatingMonth = false;
 		}
 	}
 
@@ -196,14 +350,29 @@ export function createReportPageState() {
 		);
 	}
 
+	/** Re-read the month on screen, dropping its cached copy first. */
+	async function refreshCurrentMonth() {
+		if (!activeClassId || !activeReportMonth) return;
+		invalidateMonthCache(activeClassId, schoolYear, activeReportMonth);
+		gridPending = true;
+		try {
+			await loadMonth(activeClassId, schoolYear, activeReportMonth);
+		} catch (error) {
+			const msg = errorMessage(error, 'Failed to refresh');
+			reportDialogs?.showToast(`Could not refresh: ${msg}`, false);
+		} finally {
+			gridPending = false;
+		}
+	}
+
 	async function onPresentAll() {
 		if (!activeClassId || !preview?.template || presentingAll) return;
 		presentingAll = true;
 		try {
 			const count = await presentAllSf2PreviewAttendance(activeClassId);
-			invalidateCacheForMonth(activeClassId, activeReportMonth);
+			invalidateClassMonths(activeClassId);
 			reportDialogs?.showToast(`All students cleared to Present (${count} marks cleared)`);
-			await loadReport(activeClassId);
+			await refreshCurrentMonth();
 		} catch (error) {
 			const msg = errorMessage(error, 'Present All failed');
 			reportDialogs?.showToast(`Could not mark all present: ${msg}`, false);
@@ -214,45 +383,28 @@ export function createReportPageState() {
 
 	/**
 	 * Pull the "X" marks back out of the SF2 working workbook and record them as
-	 * absences. The workbook is the school's official record, so it is the only
-	 * surviving copy of a day's marks when the app's database has been rebuilt.
+	 * absences.
+	 *
+	 * The workbook is the school's official record, so it is the only surviving
+	 * copy of a day's marks when the app's database has been rebuilt. That is
+	 * exactly what the startup self-heal now does, unattended, at every launch
+	 * (spec D6, §8.2, acceptance #15) — additively, with nothing to click. The
+	 * button that used to live here is gone (acceptance #14): a manual repair for
+	 * something that has already run by the time the page is on screen is a
+	 * control that only works by accident.
+	 *
+	 * The service behind it, `attendance_import::import_absent_marks_from_workbook`,
+	 * stays reachable from Rust.
 	 */
-	async function onImportAttendance() {
-		if (!activeClassId || !preview?.template || importingAttendance) return;
-		importingAttendance = true;
-		try {
-			const outcome = await importSf2AttendanceFromWorkbook(activeClassId);
-			invalidateCacheForMonth(activeClassId, activeReportMonth);
-			await loadReport(activeClassId);
-			if (outcome.imported > 0) {
-				reportDialogs?.showToast(
-					`Imported ${outcome.imported} X mark${outcome.imported === 1 ? '' : 's'} from the workbook` +
-						(outcome.alreadyRecorded > 0 ? ` (${outcome.alreadyRecorded} already recorded)` : '') +
-						'.'
-				);
-			} else if (outcome.alreadyRecorded > 0) {
-				reportDialogs?.showToast(
-					`All ${outcome.alreadyRecorded} X mark${outcome.alreadyRecorded === 1 ? '' : 's'} in the workbook are already recorded.`
-				);
-			} else {
-				reportDialogs?.showToast('No X marks found in the workbook for this report month.');
-			}
-		} catch (error) {
-			const msg = errorMessage(error, 'Attendance import failed');
-			reportDialogs?.showToast(`Could not import X marks: ${msg}`, false);
-		} finally {
-			importingAttendance = false;
-		}
-	}
 
 	async function onSyncRoster() {
 		if (!activeClassId || !preview?.template || syncingRoster) return;
 		syncingRoster = true;
 		try {
 			await syncSf2Roster(activeClassId);
-			invalidateAllCache();
+			invalidateAllMonthCache();
 			reportDialogs?.showToast('Roster synced! All students mapped to SF2 workbook.');
-			await loadReport(activeClassId);
+			await refreshCurrentMonth();
 		} catch (error) {
 			const msg = errorMessage(error, 'Roster sync failed');
 			reportDialogs?.showToast(`Could not sync roster: ${msg}`, false);
@@ -285,9 +437,9 @@ export function createReportPageState() {
 		exportLoadingOpen = true;
 		try {
 			const result = await exportSf2Workbook(activeClassId);
-			invalidateCacheForMonth(activeClassId, activeReportMonth);
+			invalidateMonthCache(activeClassId, schoolYear, activeReportMonth);
 			reportDialogs?.showToast(`SF2 exported and opened: ${result.outputPath}`);
-			await loadReport(activeClassId);
+			await refreshCurrentMonth();
 		} catch (error) {
 			const msg = errorMessage(error, 'SF2 export failed');
 			reportDialogs?.showToast(`SF2 export failed: ${msg}`, false);
@@ -305,9 +457,9 @@ export function createReportPageState() {
 		modalSaving = true;
 		try {
 			await updateSf2WorkbookSettings(payload);
-			invalidateAllCache();
+			invalidateAllMonthCache();
 			if (successMessage) reportDialogs?.showToast(successMessage);
-			await loadReport(payload.classId);
+			await refreshCurrentMonth();
 			return true;
 		} catch (error) {
 			const msg = errorMessage(error, 'SF2 workbook update failed');
@@ -316,168 +468,6 @@ export function createReportPageState() {
 		} finally {
 			savingDetails = false;
 			modalSaving = false;
-		}
-	}
-
-	const MONTH_SWITCH_MESSAGES = [
-		'Preparing your attendance report…',
-		'Updating the workbook calendar…',
-		'Applying attendance records…',
-		'Almost there…',
-		'Finalizing changes…'
-	] as const;
-
-	$effect(() => {
-		if (monthSwitchLoading) {
-			// If we have real progress from the backend (>0%), skip the static
-			// message cycling — the backend messages have priority.
-			if (monthSwitchProgressPercent > 0) {
-				return;
-			}
-			// Fallback: cycle through reassuring messages while waiting for
-			// the backend to start reporting progress.
-			let index = -1;
-			const advance = () => {
-				index = (index + 1) % MONTH_SWITCH_MESSAGES.length;
-				monthSwitchMessage = MONTH_SWITCH_MESSAGES[index];
-			};
-			advance();
-			const timer = setInterval(advance, 3000);
-			return () => clearInterval(timer);
-		}
-	});
-
-	async function onMonthSelect(monthValue: string) {
-		draft.onFieldChange('draftReportMonth', monthValue);
-		monthPickerOpen = false;
-		await onReportMonthChange();
-	}
-
-	async function onReportMonthChange() {
-		// Guard against concurrent month switches
-		if (monthSwitchLoading) return;
-		monthSwitchLoading = true;
-
-		const previousReportMonth =
-			workbookSettings?.reportMonth || preview?.template?.reportMonth || '';
-		const nextMonth = draft.reportMonth;
-		if (!nextMonth || nextMonth === previousReportMonth) return;
-		if (!activeClassId) {
-			draft.onFieldChange('draftReportMonth', previousReportMonth);
-			return;
-		}
-
-		// Clean up any stale listener from a previous run
-		if (monthSwitchUnlisten) {
-			monthSwitchUnlisten();
-			monthSwitchUnlisten = null;
-		}
-
-		invalidateCacheForMonth(activeClassId, previousReportMonth);
-		monthSwitchLoading = true;
-		monthSwitchError = null;
-		monthSwitchProgressPercent = 0;
-		monthSwitchMessage = 'Preparing your attendance report…';
-
-		// Set up progress listener for the month switch backend operation
-		try {
-			monthSwitchUnlisten = await listen<{
-				task: string;
-				current: number;
-				total: number;
-				message: string;
-			}>('sf2-progress', (event) => {
-				if (event.payload.task === 'month_switch') {
-					if (event.payload.message) {
-						monthSwitchMessage = event.payload.message;
-					}
-					if (event.payload.total > 0) {
-						monthSwitchProgressPercent = Math.round(
-							(event.payload.current / event.payload.total) * 100
-						);
-					}
-				}
-			});
-		} catch {
-			monthSwitchUnlisten = null;
-			// Listener setup failed; continue without progress updates
-		}
-
-		await new Promise((resolve) => setTimeout(resolve, 0));
-
-		const switchStartTime = Date.now();
-
-		// Step 1: Persist month switch via backend
-		try {
-			await setSf2ReportMonth(activeClassId, nextMonth);
-		} catch (error) {
-			// Month switch failed — clean up and roll back
-			if (monthSwitchUnlisten) {
-				monthSwitchUnlisten();
-				monthSwitchUnlisten = null;
-			}
-			const msg = errorMessage(error, 'Failed to switch report month');
-			monthSwitchError = msg;
-			reportDialogs?.showToast(`Could not switch month: ${msg}`, false);
-			draft.onFieldChange('draftReportMonth', previousReportMonth);
-			monthSwitchLoading = false;
-			return;
-		}
-
-		// ── Optimistic skeleton ────────────────────────────────────────────
-		// Replace the preview with a lightweight skeleton immediately so the
-		// calendar grid renders with the new month's dates. The overlay hides
-		// and real attendance data fills in asynchronously below.
-		const schoolYear = workbookSettings?.schoolYear || preview?.template?.schoolYear || '';
-		const skeletonDates = buildSkeletonDates(nextMonth, schoolYear);
-		preview = {
-			template: preview?.template ? { ...preview.template, reportMonth: nextMonth } : undefined,
-			classId: activeClassId,
-			className: preview?.className || '',
-			sourcePath: preview?.sourcePath,
-			dates: skeletonDates,
-			students: [],
-			absentList: [],
-			mappedStudents: 0,
-			mappedDates: 0,
-			presentCount: 0,
-			absenceCount: 0,
-			unmappedStudentCount: 0,
-			canExport: false,
-			issues: [],
-			warnings: []
-		};
-
-		// Signal that the preview is being loaded in the background —
-		// the sidebar should show pulsing skeleton indicators.
-		previewRefreshing = true;
-
-		// Dismiss the overlay — the skeleton calendar is now visible
-		if (monthSwitchUnlisten) {
-			monthSwitchUnlisten();
-			monthSwitchUnlisten = null;
-		}
-		const elapsed = Date.now() - switchStartTime;
-		if (elapsed < 500) {
-			await new Promise((resolve) => setTimeout(resolve, 500 - elapsed));
-		}
-		monthSwitchLoading = false;
-
-		// Step 2: Load real preview data (replaces skeleton when ready)
-		// Failure here does NOT roll back the month — the backend already
-		// committed the change. The skeleton stays visible and the error
-		// is shown via toast so the user can retry.
-		try {
-			await loadReport(activeClassId);
-			reportDialogs?.showToast(`Switched to ${reportMonthLabel(nextMonth)}`);
-		} catch (error) {
-			const msg = errorMessage(error, 'Failed to load preview');
-			reportDialogs?.showToast(
-				`Month switched but preview load failed: ${msg}. Try refreshing.`,
-				false
-			);
-		} finally {
-			previewRefreshing = false;
 		}
 	}
 
@@ -496,8 +486,8 @@ export function createReportPageState() {
 		correctingCellKey = key;
 		try {
 			await toggleSf2PreviewAttendance(preview.classId, row.studentId, cell.date, markPresent);
-			invalidateCacheForMonth(preview.classId, activeReportMonth);
-			await loadReport(activeClassId);
+			invalidateMonthCache(activeClassId, schoolYear, activeReportMonth);
+			await loadMonth(activeClassId, schoolYear, activeReportMonth);
 			reportDialogs?.showToast(
 				`${row.studentName} marked ${markPresent ? 'present' : 'absent'} for ${formatDate(cell.date)}`
 			);
@@ -530,6 +520,24 @@ export function createReportPageState() {
 		set preview(v) {
 			preview = v;
 		},
+		get monthGrid() {
+			return monthGrid;
+		},
+		get launch() {
+			return launch;
+		},
+		get reportMonth() {
+			return reportMonth;
+		},
+		set reportMonth(v) {
+			reportMonth = v;
+		},
+		get schoolYear() {
+			return schoolYear;
+		},
+		set schoolYear(v) {
+			schoolYear = v;
+		},
 		get workbookSettings() {
 			return workbookSettings;
 		},
@@ -548,6 +556,15 @@ export function createReportPageState() {
 		set loadError(v) {
 			loadError = v;
 		},
+		get gridPending() {
+			return gridPending;
+		},
+		set gridPending(v) {
+			gridPending = v;
+		},
+		get creatingMonth() {
+			return creatingMonth;
+		},
 		get genderFilter() {
 			return genderFilter;
 		},
@@ -565,12 +582,6 @@ export function createReportPageState() {
 		},
 		set syncingRoster(v) {
 			syncingRoster = v;
-		},
-		get importingAttendance() {
-			return importingAttendance;
-		},
-		set importingAttendance(v) {
-			importingAttendance = v;
 		},
 		get presentingAll() {
 			return presentingAll;
@@ -620,30 +631,6 @@ export function createReportPageState() {
 		set monthPickerOpen(v) {
 			monthPickerOpen = v;
 		},
-		get monthSwitchLoading() {
-			return monthSwitchLoading;
-		},
-		set monthSwitchLoading(v) {
-			monthSwitchLoading = v;
-		},
-		get monthSwitchError() {
-			return monthSwitchError;
-		},
-		set monthSwitchError(v) {
-			monthSwitchError = v;
-		},
-		get monthSwitchMessage() {
-			return monthSwitchMessage;
-		},
-		set monthSwitchMessage(v) {
-			monthSwitchMessage = v;
-		},
-		get monthSwitchProgressPercent() {
-			return monthSwitchProgressPercent;
-		},
-		set monthSwitchProgressPercent(v) {
-			monthSwitchProgressPercent = v;
-		},
 		get modalSaving() {
 			return modalSaving;
 		},
@@ -668,6 +655,9 @@ export function createReportPageState() {
 		get activeReportMonth() {
 			return activeReportMonth;
 		},
+		get activeReportYear() {
+			return activeReportYear;
+		},
 		get matrixWeekGroups() {
 			return matrixWeekGroups;
 		},
@@ -683,23 +673,27 @@ export function createReportPageState() {
 		get hasModalDraftChanges() {
 			return hasModalDraftChanges;
 		},
-		get previewRefreshing() {
-			return previewRefreshing;
+		get hasGrid() {
+			return hasGrid;
+		},
+		get needsMonthCreate() {
+			return needsMonthCreate;
 		},
 		loadInitial,
-		loadReport,
+		loadMonth,
 		loadWorkbookSettings,
 		onOpenSf2,
 		retrySf2Open,
 		killAndRetrySf2Open,
 		onPresentAll,
-		onImportAttendance,
 		onSyncRoster,
+		onCreateMonth,
+		onMonthSelect,
+		onClassSelect,
+		refreshCurrentMonth,
 		requestExport,
 		confirmExport,
 		saveWorkbookDetails,
-		onMonthSelect,
-		onReportMonthChange,
 		onToggleFullReview,
 		onWindowKeydown,
 		toggleAttendance
