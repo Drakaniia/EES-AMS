@@ -119,7 +119,7 @@ function monthStudents(dates: Sf2PreviewDate[], specs: StudentSpec[]): Sf2Previe
 
 /** The row shape of a month whose mappings resolved to nothing. */
 function unmappedStudents(dates: Sf2PreviewDate[], specs: StudentSpec[]): Sf2PreviewStudentRow[] {
-	return specs.map((spec, index) => ({
+	return specs.map((spec) => ({
 		studentId: spec.id,
 		studentName: spec.name,
 		workbookName: '',

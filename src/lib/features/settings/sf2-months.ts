@@ -210,9 +210,9 @@ export function sf2SplitSummaryFromCounts(verified: number, needsAttention: numb
 	// safe to run without reading the spec, so it is in both sentences rather than
 	// only the cheerful one.
 	if (needsAttention === 0) {
-		return `All ${verified} months are ready in one workbook. The original workbook is kept in sf2-workbooks\_legacy.`;
+		return `All ${verified} months are ready in one workbook. The original workbook is kept in sf2-workbooks_legacy.`;
 	}
-	return `${verified} months are ready, ${needsAttention} need attention. The original workbook is kept in sf2-workbooks\_legacy.`;
+	return `${verified} months are ready, ${needsAttention} need attention. The original workbook is kept in sf2-workbooks_legacy.`;
 }
 
 /** The months a human still has to do something about, named the way the report does. */
