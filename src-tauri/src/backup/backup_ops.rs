@@ -1,7 +1,7 @@
 use super::file_ops::{
     backup_dir, copy_path_recursive, is_app_backup_file, is_app_backup_folder, load_state,
     resolve_backup_database, save_state, summary_from_path, unique_backup_path, BackupState,
-    SYNC_BACKUP_DIR_NAME,
+    BACKUP_PREFIX, SYNC_BACKUP_DIR_NAME,
 };
 use super::fingerprint::read_db_fingerprint;
 use super::manifest::{
@@ -23,6 +23,7 @@ use rusqlite::{Connection, DatabaseName, OpenFlags};
 use std::{
     fs,
     path::{Path, PathBuf},
+    time::{Duration, SystemTime},
 };
 
 // ── Public API ────────────────────────────────────────────────────────
@@ -471,14 +472,60 @@ fn count_absent_events(conn: &Connection) -> Result<i64> {
         .map_err(Into::into)
 }
 
+/// How long a `.tmp` entry is left alone before it counts as abandoned.
+///
+/// A backup in flight is also a `.tmp` entry, so the sweep must not touch one
+/// that another window (or another machine sharing the folder) may be writing.
+const STALE_TEMP_AGE: Duration = Duration::from_secs(60 * 60);
+
 pub fn enforce_retention(app_dir: &Path) -> Result<()> {
+    let backup_root = backup_dir(app_dir);
     let backups = list_backups(app_dir)?;
     for backup in backups.into_iter().skip(RETENTION_LIMIT) {
         let path = PathBuf::from(&backup.path);
         remove_if_exists(&path)
             .with_context(|| format!("failed to remove old backup {}", backup.path))?;
     }
+    remove_stale_temp_entries(&backup_root);
     Ok(())
+}
+
+/// Delete leftover `.tmp` files and folders from backups that failed part-way.
+///
+/// They are deliberately invisible to `list_backups` — a half-written folder is
+/// not a backup — which also means retention never prunes them: without this
+/// sweep every failure leaves a full copy of the database behind forever.
+fn remove_stale_temp_entries(backup_root: &Path) {
+    let Ok(entries) = fs::read_dir(backup_root) else {
+        return;
+    };
+    let Some(cutoff) = SystemTime::now().checked_sub(STALE_TEMP_AGE) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if !name.starts_with(BACKUP_PREFIX) || !name.ends_with(".tmp") {
+            continue;
+        }
+        let Ok(modified) = entry.metadata().and_then(|metadata| metadata.modified()) else {
+            continue;
+        };
+        if modified > cutoff {
+            continue;
+        }
+        if let Err(error) = remove_if_exists(&path) {
+            log::warn!(
+                "failed to remove abandoned backup {}: {error}",
+                path.display()
+            );
+        } else {
+            log::info!("removed abandoned backup {}", path.display());
+        }
+    }
 }
 
 // ── Core Backup ───────────────────────────────────────────────────────

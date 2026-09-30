@@ -8,6 +8,7 @@ use chrono::{Duration, Local};
 use std::{
     fs,
     path::{Path, PathBuf},
+    time::SystemTime,
 };
 
 // ── Harness ───────────────────────────────────────────────────────────
@@ -1053,6 +1054,53 @@ fn previewing_a_backup_ahead_of_this_build_is_still_refused() {
         error.to_string().contains("newer than this app supports"),
         "ahead={ahead}, {error}"
     );
+}
+
+// ── Temp entries are cleaned up ────────────────────────────────────────
+
+#[test]
+fn a_successful_backup_leaves_no_temp_entry_behind() {
+    let app = TempApp::new();
+    app.write_live_workbook("SF2-SEPTEMBER-2026.xls");
+
+    backup_ops::create_backup_at(app.pool(), app.path(), BackupKind::Manual, Local::now())
+        .expect("create backup");
+
+    let leftovers = fs::read_dir(file_ops::backup_dir(app.path()))
+        .expect("read the backup directory")
+        .flatten()
+        .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
+        .count();
+    assert_eq!(leftovers, 0, "the temp folder must become the backup");
+}
+
+#[test]
+fn retention_sweeps_abandoned_temp_entries_and_spares_live_ones() {
+    let app = TempApp::new();
+    let dir = file_ops::backup_dir(app.path());
+    fs::create_dir_all(&dir).expect("create backups dir");
+
+    let abandoned = dir.join("attendance-auto-20200101_010101.db.tmp");
+    fs::write(&abandoned, b"orphan").expect("write the orphan");
+    let two_hours_ago = SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(2 * 60 * 60))
+        .expect("a timestamp two hours back");
+    fs::File::options()
+        .write(true)
+        .open(&abandoned)
+        .expect("open the orphan for a timestamp")
+        .set_times(fs::FileTimes::new().set_modified(two_hours_ago))
+        .expect("backdate the orphan");
+
+    // A backup that is running right now is also a `.tmp` entry, and must not be
+    // deleted out from under the process writing it.
+    let in_flight = dir.join("attendance-auto-20200101_010102.db.tmp");
+    fs::write(&in_flight, b"live").expect("write the in-flight copy");
+
+    backup_ops::enforce_retention(app.path()).expect("enforce retention");
+
+    assert!(!abandoned.exists(), "the orphan must be swept");
+    assert!(in_flight.exists(), "a fresh temp entry must survive");
 }
 
 // ── Google Drive: the folder is zipped ─────────────────────────────────
