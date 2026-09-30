@@ -71,9 +71,11 @@ pub fn ensure_daily_backup_at(pool: &DbPool, app_dir: &Path, now: DateTime<Local
 
 fn record_backup_error(app_dir: &Path, error: anyhow::Error) {
     let mut state = load_state(app_dir).unwrap_or_default();
-    state.last_error = Some(error.to_string());
+    // The whole chain, not just the outermost context: this string is what the
+    // user reads on the Data Management panel when a backup fails.
+    state.last_error = Some(format!("{error:#}"));
     if let Err(write_error) = save_state(app_dir, &state) {
         log::warn!("failed to record backup error: {write_error}");
     }
-    log::warn!("automatic backup failed: {error}");
+    log::warn!("automatic backup failed: {error:#}");
 }

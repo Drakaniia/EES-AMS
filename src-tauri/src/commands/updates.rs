@@ -368,7 +368,10 @@ async fn install_staged_inner(app: &tauri::AppHandle) -> Result<(), String> {
         crate::backup::models::BackupKind::PreInstall,
         chrono::Local::now(),
     )
-    .map_err(|error| format!("Pre-install backup failed: {error}"))?;
+    // `{error:#}` prints the whole anyhow chain, not just the outermost context:
+    // the reason a backup was refused is several layers down (integrity check,
+    // schema version, a missing table) and this string is all the user sees.
+    .map_err(|error| format!("Pre-install backup failed: {error:#}"))?;
     log::info!(
         "created pre-install backup at {} ({} workbook(s))",
         pre_install.path,

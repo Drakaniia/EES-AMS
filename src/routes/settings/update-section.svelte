@@ -16,6 +16,11 @@
 
 	const RELEASE_BASE = 'https://github.com/Drakaniia/EES-AMS/releases/tag/app-v';
 
+	// The failure text is deliberately not line-clamped: the reason a backup or
+	// install was refused sits at the end of the message chain ("created backup
+	// failed validation: Backup schema version 22 is newer than this app
+	// supports (18)"), not in the first two lines.
+
 	const isBusy = $derived(
 		updateStore.status === 'checking' || updateStore.status === 'downloading'
 	);
@@ -212,7 +217,7 @@
 							: "Couldn't check for updates"}
 				</div>
 				{#if updateStore.error}
-					<p class="line-clamp-2 text-xs text-muted-foreground">{updateStore.error}</p>
+					<p class="text-xs break-words text-muted-foreground">{updateStore.error}</p>
 				{/if}
 				<button
 					type="button"

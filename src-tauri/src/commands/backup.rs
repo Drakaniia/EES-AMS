@@ -3,7 +3,7 @@ use super::*;
 #[tauri::command]
 pub fn get_backup_status(app: tauri::AppHandle) -> std::result::Result<BackupStatus, String> {
     let app_dir = app_data_dir(&app)?;
-    backup_service::get_status(&app_dir).map_err(|e| e.to_string())
+    backup_service::get_status(&app_dir).map_err(chain)
 }
 
 #[tauri::command]
@@ -12,8 +12,7 @@ pub fn create_backup_now(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
 ) -> std::result::Result<BackupStatus, String> {
     let app_dir = app_data_dir(&app)?;
-    let status =
-        backup_service::create_manual_backup(pool.inner(), &app_dir).map_err(|e| e.to_string())?;
+    let status = backup_service::create_manual_backup(pool.inner(), &app_dir).map_err(chain)?;
     let metadata_json = audit_metadata_json(serde_json::json!({
         "path": status.last_backup_path.as_deref(),
         "syncFolderPath": status.sync_folder_path.as_deref(),
@@ -33,7 +32,7 @@ pub fn create_backup_now(
 #[tauri::command]
 pub fn list_backups(app: tauri::AppHandle) -> std::result::Result<Vec<BackupSummary>, String> {
     let app_dir = app_data_dir(&app)?;
-    backup_service::list_backups(&app_dir).map_err(|e| e.to_string())
+    backup_service::list_backups(&app_dir).map_err(chain)
 }
 
 /// D13 "Back up workbooks now": copies the SF2 workbooks into their own backup
@@ -44,7 +43,7 @@ pub fn create_workbooks_backup_now(
     pool: tauri::State<'_, Pool<SqliteConnectionManager>>,
 ) -> std::result::Result<BackupStatus, String> {
     let app_dir = app_data_dir(&app)?;
-    let status = backup_service::create_workbooks_backup(&app_dir).map_err(|e| e.to_string())?;
+    let status = backup_service::create_workbooks_backup(&app_dir).map_err(chain)?;
     let metadata_json = audit_metadata_json(serde_json::json!({
         "path": status.last_workbooks_backup_path.as_deref(),
         "syncFolderPath": status.sync_folder_path.as_deref(),
@@ -63,7 +62,7 @@ pub fn create_workbooks_backup_now(
 #[tauri::command]
 pub fn open_backup_folder(app: tauri::AppHandle) -> std::result::Result<String, String> {
     let app_dir = app_data_dir(&app)?;
-    let status = backup_service::get_status(&app_dir).map_err(|e| e.to_string())?;
+    let status = backup_service::get_status(&app_dir).map_err(chain)?;
     let backup_dir = PathBuf::from(status.local_backup_dir);
 
     fs::create_dir_all(&backup_dir)
@@ -79,10 +78,10 @@ pub async fn choose_backup_sync_folder(
 ) -> std::result::Result<BackupStatus, String> {
     let app_dir = app_data_dir(&app)?;
     let Some(folder_path) = pick_folder(&app)? else {
-        return backup_service::get_status(&app_dir).map_err(|e| e.to_string());
+        return backup_service::get_status(&app_dir).map_err(chain);
     };
 
-    backup_service::set_sync_folder(&app_dir, Some(folder_path)).map_err(|e| e.to_string())
+    backup_service::set_sync_folder(&app_dir, Some(folder_path)).map_err(chain)
 }
 
 #[tauri::command]
@@ -90,7 +89,7 @@ pub fn clear_backup_sync_folder(
     app: tauri::AppHandle,
 ) -> std::result::Result<BackupStatus, String> {
     let app_dir = app_data_dir(&app)?;
-    backup_service::set_sync_folder(&app_dir, None).map_err(|e| e.to_string())
+    backup_service::set_sync_folder(&app_dir, None).map_err(chain)
 }
 
 #[tauri::command]
@@ -98,7 +97,7 @@ pub fn connect_google_drive_backup(
     app: tauri::AppHandle,
 ) -> std::result::Result<BackupStatus, String> {
     let app_dir = app_data_dir(&app)?;
-    backup_service::connect_google_drive(&app_dir).map_err(|e| e.to_string())
+    backup_service::connect_google_drive(&app_dir).map_err(chain)
 }
 
 #[tauri::command]
@@ -106,7 +105,7 @@ pub fn disconnect_google_drive_backup(
     app: tauri::AppHandle,
 ) -> std::result::Result<BackupStatus, String> {
     let app_dir = app_data_dir(&app)?;
-    backup_service::disconnect_google_drive(&app_dir).map_err(|e| e.to_string())
+    backup_service::disconnect_google_drive(&app_dir).map_err(chain)
 }
 
 #[tauri::command]
@@ -114,7 +113,7 @@ pub fn upload_latest_backup_to_google_drive(
     app: tauri::AppHandle,
 ) -> std::result::Result<BackupStatus, String> {
     let app_dir = app_data_dir(&app)?;
-    backup_service::upload_latest_backup_to_google_drive(&app_dir).map_err(|e| e.to_string())
+    backup_service::upload_latest_backup_to_google_drive(&app_dir).map_err(chain)
 }
 
 /// Let the user pick a backup to restore.
@@ -133,7 +132,7 @@ pub async fn choose_restore_backup(
 
     backup_service::preview_backup(&folder_path)
         .map(Some)
-        .map_err(|e| e.to_string())
+        .map_err(chain)
 }
 
 /// Let the user pick a legacy flat `*.db` backup written by the previous build.
@@ -147,7 +146,7 @@ pub async fn choose_restore_database_file(
 
     backup_service::preview_backup(&file_path)
         .map(Some)
-        .map_err(|e| e.to_string())
+        .map_err(chain)
 }
 
 #[tauri::command]
@@ -158,8 +157,8 @@ pub fn restore_backup(
 ) -> std::result::Result<RestoreResult, String> {
     let app_dir = app_data_dir(&app)?;
     let source_path = PathBuf::from(source_path);
-    let result = backup_service::restore_backup(pool.inner(), &app_dir, &source_path)
-        .map_err(|e| e.to_string())?;
+    let result =
+        backup_service::restore_backup(pool.inner(), &app_dir, &source_path).map_err(chain)?;
     let metadata_json = audit_metadata_json(serde_json::json!({
         "sourcePath": source_path.to_string_lossy(),
         "preRestoreBackupPath": result.pre_restore_backup_path.as_str(),

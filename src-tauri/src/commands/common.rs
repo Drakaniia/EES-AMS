@@ -1,5 +1,13 @@
 use super::*;
 
+/// Render an `anyhow` error for a Tauri command. Errors from the backup layer are
+/// chains whose outermost context is generic ("created backup failed validation"),
+/// so `{:#}` prints the whole chain: the panel shows the real reason — integrity
+/// check, schema version, missing table — instead of the wrapper.
+pub(super) fn chain(error: anyhow::Error) -> String {
+    format!("{error:#}")
+}
+
 pub(super) fn audit_metadata_json(value: serde_json::Value) -> std::result::Result<String, String> {
     serde_json::to_string(&value)
         .map_err(|error| format!("Failed to serialize audit metadata: {error}"))
