@@ -215,7 +215,7 @@ pub fn backup_database_to_path(pool: &DbPool, destination: &Path) -> Result<()> 
             None::<fn(rusqlite::backup::Progress)>,
         )
         .with_context(|| format!("failed to export database {}", temp_path.display()))?;
-    preview_backup(&temp_path).context("exported database failed validation")?;
+    inspect_backup(&temp_path, true).context("exported database failed validation")?;
 
     if destination.exists() {
         fs::remove_file(destination)
@@ -254,6 +254,18 @@ pub fn set_sync_folder(app_dir: &Path, folder_path: Option<PathBuf>) -> Result<B
 /// Both shapes go through the same validation and the same counts — a legacy
 /// backup is a real database and deserves a real preview, not a row of zeros.
 pub fn preview_backup(source_path: &Path) -> Result<BackupPreview> {
+    inspect_backup(source_path, false)
+}
+
+/// `allow_ahead` decides how a schema newer than this build is treated. Snapshotting
+/// the live database passes `true`: the copy is a faithful image of what is already
+/// on disk, and refusing it here deadlocks the update — the pre-install backup fails,
+/// so the install never runs, so the version that reads the database never arrives.
+/// A database ahead of the app is exactly the state left behind by a build from a
+/// later branch, or by a rollback to an older installer. Restoring passes `false`:
+/// a database this app cannot read is refused up front, before anything touches the
+/// live data.
+fn inspect_backup(source_path: &Path, allow_ahead: bool) -> Result<BackupPreview> {
     if !source_path.exists() {
         bail!("Backup does not exist: {}", source_path.display());
     }
@@ -320,20 +332,27 @@ pub fn preview_backup(source_path: &Path) -> Result<BackupPreview> {
         .with_context(|| format!("failed to open backup {}", database_path.display()))?;
     run_integrity_check(&conn)?;
 
+    let current_version = crate::infrastructure::database::CURRENT_SCHEMA_VERSION;
     let schema_version = read_schema_version(&conn)?;
-    if schema_version > crate::infrastructure::database::CURRENT_SCHEMA_VERSION {
-        bail!(
-            "Backup schema version {schema_version} is newer than this app supports ({})",
-            crate::infrastructure::database::CURRENT_SCHEMA_VERSION
+    if schema_version > current_version {
+        if !allow_ahead {
+            bail!("Backup schema version {schema_version} is newer than this app supports ({current_version})");
+        }
+        log::warn!(
+            "snapshot schema version {schema_version} is newer than this app supports \
+             ({current_version}); keeping the copy anyway"
         );
+        warnings.push(format!(
+            "This backup is schema version {schema_version}, newer than this app supports \
+             ({current_version}). Restoring it needs the newer version of the app."
+        ));
     }
 
     require_core_tables(&conn)?;
 
-    if schema_version < crate::infrastructure::database::CURRENT_SCHEMA_VERSION {
+    if schema_version < current_version {
         warnings.push(format!(
-            "Backup will be migrated from schema version {schema_version} to {} during restore.",
-            crate::infrastructure::database::CURRENT_SCHEMA_VERSION
+            "Backup will be migrated from schema version {schema_version} to {current_version} during restore."
         ));
     }
 
@@ -501,8 +520,10 @@ pub(crate) fn create_backup_at(
         .with_context(|| format!("failed to create backup {}", database_path.display()))?;
 
     // Validate the exported copy before anything else is written into the
-    // folder: a backup that cannot be opened is not a backup.
-    let preview = preview_backup(&database_path).context("created backup failed validation")?;
+    // folder: a backup that cannot be opened is not a backup. A schema ahead of
+    // this build is allowed — see [`inspect_backup`].
+    let preview =
+        inspect_backup(&database_path, true).context("created backup failed validation")?;
 
     // Copying the workbooks is allowed to fail the whole backup. A folder that
     // silently lacks the X marks is the failure mode this task exists to stop.

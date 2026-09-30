@@ -997,6 +997,64 @@ fn a_drop_in_absences_is_reported_and_a_rise_is_not() {
     assert!(fingerprint::DbFingerprint::decrease_notice(&previous, &grown).is_none());
 }
 
+// ── A database ahead of the running app ───────────────────────────────
+//
+// What a build from a later branch — or a rollback to an older installer —
+// leaves on disk: the schema is newer than the running binary understands. A
+// backup must still be possible in that state; refusing one deadlocks the
+// update, because the pre-install backup is what gates the install that would
+// bring the version able to read the database.
+
+fn bump_live_schema_ahead_of_the_app(app: &TempApp) -> i32 {
+    let ahead = crate::infrastructure::database::CURRENT_SCHEMA_VERSION + 1;
+    let conn = app.pool.get().expect("connection");
+    conn.execute_batch(&format!("PRAGMA user_version = {ahead};"))
+        .expect("bump the live schema version");
+    ahead
+}
+
+#[test]
+fn a_database_ahead_of_this_build_is_still_backed_up() {
+    let app = TempApp::new();
+    let ahead = bump_live_schema_ahead_of_the_app(&app);
+
+    let summary =
+        backup_ops::create_backup_at(app.pool(), app.path(), BackupKind::PreInstall, Local::now())
+            .expect("a newer schema must not fail the backup");
+
+    let folder = PathBuf::from(&summary.path);
+    let copy = rusqlite::Connection::open_with_flags(
+        manifest::backup_db_path(&folder),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .expect("open the backup copy");
+    let copied_version: i32 = copy
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("read the copy's schema version");
+
+    assert_eq!(
+        copied_version, ahead,
+        "the copy must carry the live schema, not a downgraded one"
+    );
+}
+
+#[test]
+fn previewing_a_backup_ahead_of_this_build_is_still_refused() {
+    let app = TempApp::new();
+    let ahead = bump_live_schema_ahead_of_the_app(&app);
+    let summary =
+        backup_ops::create_backup_at(app.pool(), app.path(), BackupKind::Manual, Local::now())
+            .expect("create backup");
+
+    let error = backup_ops::preview_backup(&PathBuf::from(&summary.path))
+        .expect_err("restoring a database this build cannot read must be refused");
+
+    assert!(
+        error.to_string().contains("newer than this app supports"),
+        "ahead={ahead}, {error}"
+    );
+}
+
 // ── Google Drive: the folder is zipped ─────────────────────────────────
 
 #[test]
