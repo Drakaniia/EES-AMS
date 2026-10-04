@@ -53,7 +53,7 @@ import {
 	setAttendanceEventForDay
 } from './attendance-events';
 import { emptyImportOutcome, importAbsentMarks } from './attendance-import';
-import { monthAbsences, resolveMonthWriteContext } from './write-context';
+import { monthAbsences, monthPresences, resolveMonthWriteContext } from './write-context';
 import type { Sf2MonthWriteContext } from './write-context';
 import { exportAttendanceMarks, writeOpenMonthIntoWorkbook } from './attendance-write';
 import { attendanceScopeCells, gridCellFromMark, type Sf2GridCell } from './attendance-marks';
@@ -231,7 +231,8 @@ async function runOpenGuard(params: {
 			dbCellsFor(context, dates, await loadAbsences()),
 			measured.xCells,
 			cellLabels(context.roster, dates),
-			WORKBOOK_NOT_READABLE
+			WORKBOOK_NOT_READABLE,
+			await forgivenCells(context, dates, students)
 		);
 	};
 
@@ -254,7 +255,8 @@ async function runOpenGuard(params: {
 	return { action, workbook, absent: await loadAbsences() };
 }
 
-/** The database's `X` cells over remapped dates, for the guard to compare. */ function dbCellsFor(
+/** The database's `X` cells over remapped dates, for the guard to compare. */
+function dbCellsFor(
 	context: Sf2MonthWriteContext,
 	dates: Sf2MonthWriteContext['dates'],
 	absent: Map<string, Set<string>>
@@ -266,6 +268,33 @@ async function runOpenGuard(params: {
 	})
 		.map(gridCellFromMark)
 		.filter((cell): cell is Sf2GridCell => cell !== undefined);
+}
+
+/**
+ * Scope cells the database explicitly marks present, keyed like the guard's.
+ *
+ * A workbook `X` on one of these is a stale mark from before the teacher's
+ * correction — the rewrite clears it instead of the import resurrecting the
+ * absence (which is what deleted the correction and restored the `X`).
+ */
+async function forgivenCells(
+	context: Sf2MonthWriteContext,
+	dates: Sf2MonthWriteContext['dates'],
+	students: Student[]
+): Promise<Set<string>> {
+	const present = await monthPresences(context, students);
+	const studentByRow = new Map(
+		context.roster.filter((mapping) => mapping.rowIndex > 0).map((mapping) => [mapping.rowIndex, mapping.studentId])
+	);
+	const forgiven = new Set<string>();
+	for (const date of dates) {
+		const ids = present.get(date.date);
+		if (ids === undefined) continue;
+		for (const [rowIndex, studentId] of studentByRow) {
+			if (ids.has(studentId)) forgiven.add(`${date.sheetName ?? ''}!${date.columnLetter}${rowIndex}`);
+		}
+	}
+	return forgiven;
 }
 
 /** Open a workbook, or `undefined` when it cannot be read (guard: Unmeasured). */

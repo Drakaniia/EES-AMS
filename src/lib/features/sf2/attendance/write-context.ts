@@ -31,7 +31,7 @@ import {
 	type Sf2TemplateRecord
 } from '$lib/features/sf2/repository';
 import { firstSchoolDayFromMappings } from '$lib/features/sf2/metadata';
-import { absentStudentIds } from './attendance-events';
+import { absentStudentIds, presentStudentIds } from './attendance-events';
 import type { Sf2OpenLayout } from './attendance-write';
 
 /** Shown when a month is asked for that no name can resolve. */
@@ -291,4 +291,31 @@ export async function monthAbsences(
 	students: readonly Student[]
 ): Promise<Map<string, Set<string>>> {
 	return absentIdsByDate(context.dates, await listEvents(), students, context.classId);
+}
+
+/**
+ * The explicit-present lookup a guard needs, read once.
+ *
+ * Present-by-default days leave no record, so a day with no `in` event says
+ * nothing; a day *with* one is a teacher's explicit correction, and a workbook
+ * `X` over it is a stale mark the rewrite may clear rather than a mark the
+ * import must resurrect.
+ */
+export function presentIdsByDate(
+	dates: readonly Sf2MonthDateMappingRecord[],
+	events: readonly AttendanceEvent[],
+	students: readonly Student[],
+	classId: string
+): Map<string, Set<string>> {
+	return new Map(
+		dates.map((date) => [date.date, presentStudentIds(events, students, classId, date.date)])
+	);
+}
+
+/** The explicit-present lookup for one month's guard, read once. */
+export async function monthPresences(
+	context: Sf2MonthWriteContext,
+	students: readonly Student[]
+): Promise<Map<string, Set<string>>> {
+	return presentIdsByDate(context.dates, await listEvents(), students, context.classId);
 }

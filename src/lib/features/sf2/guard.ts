@@ -66,6 +66,9 @@ export type SyncAction =
 	| { kind: 'ReadOnly'; reason: string }
 	| { kind: 'Aborted'; message: string };
 
+/** No workbook cells forgiven: the pre-correction behaviour. */
+const EMPTY_KEYS: ReadonlySet<string> = new Set();
+
 /**
  * The whole permit decision, with no workbook and no database in sight.
  *
@@ -75,20 +78,25 @@ export type SyncAction =
  * `Proven` requires **both**: `db_count >= workbook_count` AND every workbook
  * X is one the database can produce. Counts alone do not prove *which* absences
  * are held.
+ *
+ * `forgivenKeys` are workbook cells the database explicitly marks present (a
+ * teacher's correction, never present-by-default silence): they are stale marks
+ * the rewrite may clear, not marks the import must resurrect.
  */
 export function decide(
 	dbXCells: readonly Sf2GridCell[],
 	workbookX: readonly Sf2GridCell[] | undefined,
 	labels: ReadonlyMap<string, [string, string]>,
-	reason: string
+	reason: string,
+	forgivenKeys: ReadonlySet<string> = EMPTY_KEYS
 ): SyncPermit {
 	if (workbookX === undefined) return { kind: 'Unmeasured', reason };
 
 	const dbKeys = new Set(dbXCells.map(gridCellKey));
-	if (
-		dbXCells.length >= workbookX.length &&
-		workbookX.every((cell) => dbKeys.has(gridCellKey(cell)))
-	) {
+	const unexplained = workbookX.filter(
+		(cell) => !dbKeys.has(gridCellKey(cell)) && !forgivenKeys.has(gridCellKey(cell))
+	);
+	if (unexplained.length === 0) {
 		return { kind: 'Proven', dbCount: dbXCells.length, workbookCount: workbookX.length };
 	}
 
@@ -96,15 +104,13 @@ export function decide(
 		kind: 'Stale',
 		dbCount: dbXCells.length,
 		workbookCount: workbookX.length,
-		missing: workbookX
-			.filter((cell) => !dbKeys.has(gridCellKey(cell)))
-			.map(
-				(cell) =>
-					labels.get(gridCellKey(cell)) ?? [
-						`learner row ${cell.rowIndex}`,
-						`unmapped column ${cell.columnLetter}`
-					]
-			)
+		missing: unexplained.map(
+			(cell) =>
+				labels.get(gridCellKey(cell)) ?? [
+					`learner row ${cell.rowIndex}`,
+					`unmapped column ${cell.columnLetter}`
+				]
+		)
 	};
 }
 
