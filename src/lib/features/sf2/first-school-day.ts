@@ -15,14 +15,12 @@
  * the whole derivation is a function of its arguments — which matters, because a
  * wrong day here silently mis-dates a month file.
  *
- * ## `school_start_date` is not defaulted
+ * ## `school_start_date` defaults to June
  *
- * There is no "typical Philippine school year" fallback here. An unset
- * `school_start_date` stays unset and {@link deriveFirstSchoolDay} returns
- * `undefined`; the caller falls back to the legacy per-month value and prompts
- * once ({@link needsSchoolStartDatePrompt}, spec edge case E3). A guessed default
- * would be wrong for every school that does not start on that Monday, and nothing
- * downstream would notice.
+ * A stored `school_start_date` still wins when present, but an unset one falls
+ * back to {@link defaultSchoolStartDate} — June 1st of the school year's start
+ * year — instead of prompting. Classes start in June, so every month of the
+ * school year is dated from its own first weekday with no setup step.
  */
 
 import { normalizeSchoolYear } from '$lib/db/migrations';
@@ -39,8 +37,6 @@ import { normalizeSchoolStartDate } from '$lib/features/settings/sf2-months';
 export const SCHOOL_YEAR_START_MONTH = 9;
 
 /** Shown once, when the real start date has not been entered yet (spec E3). */
-export const SCHOOL_START_DATE_PROMPT =
-	"Enter the date classes started so each month's SF2 can be dated automatically.";
 
 /**
  * What the `first_school_day` column holds when nothing is known.
@@ -132,6 +128,26 @@ export function schoolYearYears(schoolYear: string): number[] {
 /** The first four-digit year in a school-year label, e.g. `2026` for `2026-2027`. */
 export function schoolYearStartYear(schoolYear: string): number | undefined {
 	return schoolYearYears(schoolYear)[0];
+}
+
+/**
+ * The month classes start. Every month file is dated from June 1st of the
+ * school year's start year, so no start-date setup is needed.
+ */
+export const CLASS_START_MONTH = 6;
+
+/**
+ * June 1st of the school year's start year — the default `school_start_date`
+ * when none is stored. `deriveFirstSchoolDay` advances it to the first
+ * weekday, so June is dated from its first school day and every later month
+ * from its own first weekday.
+ */
+export function defaultSchoolStartDate(
+	schoolYear: string,
+	fallbackYear?: number
+): Date | undefined {
+	const startYear = schoolYearStartYear(schoolYear) ?? fallbackYear ?? currentYear();
+	return naiveDate(startYear, CLASS_START_MONTH, 1);
 }
 
 /**

@@ -211,11 +211,11 @@ describe('getSf2LaunchMonth', () => {
 		await db().execute(`UPDATE settings SET last_report_month = 'MAY'`);
 	});
 
-	test('opens on June, the month classes start', async () => {
-		await insertMonthTemplate({ reportMonth: 'JUNE', reportYear: 2027 });
+	test('opens on today’s month when it has a workbook', async () => {
+		await insertMonthTemplate({ reportMonth: TODAY_MONTH, reportYear: TODAY_YEAR });
 		const launch = await getSf2LaunchMonth('class-1');
-		expect(launch.month).toBe('JUNE');
-		expect(launch.reportYear).toBe(2027);
+		expect(launch.month).toBe(TODAY_MONTH);
+		expect(launch.reportYear).toBe(TODAY_YEAR);
 		expect(launch.fellBack).toBe(false);
 		expect(launch.todayMonth).toBe(TODAY_MONTH);
 	});
@@ -236,18 +236,18 @@ describe('getSf2LaunchMonth', () => {
 	test('says so when there is nothing to fall back on', async () => {
 		const launch = await getSf2LaunchMonth('class-1');
 		expect(launch.fellBack).toBe(true);
-		expect(launch.month).toBe('JUNE');
-		// One line for "no workbook for June or the last one used", one for E2
-		// because the start date is unset so no month can be dated.
-		expect(launch.issues.join(' ')).toContain('No SF2 workbook exists for JUNE');
-		expect(launch.issues).toContain(NO_SCHOOL_DAYS_MESSAGE);
+		expect(launch.month).toBe(TODAY_MONTH);
+		// One line for "no workbook for this month or the last one used". Months are
+		// dated from June by default, so every month has school days.
+		expect(launch.issues.join(' ')).toContain(`No SF2 workbook exists for ${TODAY_MONTH}`);
+		expect(launch.issues).not.toContain(NO_SCHOOL_DAYS_MESSAGE);
 	});
 
-	test('reports the unset start date rather than guessing a day', async () => {
+	test('dates months from June by default instead of asking for a start date', async () => {
 		const launch = await getSf2LaunchMonth('class-1');
-		expect(launch.needsSchoolStartDate).toBe(true);
-		expect(launch.hasSchoolDays).toBe(false);
-		expect(launch.canCreate).toBe(false);
+		expect(launch.needsSchoolStartDate).toBe(false);
+		expect(launch.hasSchoolDays).toBe(true);
+		expect(launch.canCreate).toBe(true);
 	});
 });
 

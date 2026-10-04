@@ -1,14 +1,10 @@
 import { describeError } from '$lib/db';
 import {
 	getSf2LaunchMonth,
-	getSf2SchoolCalendarSettings,
 	listSf2MonthWorkbooks,
-	runSf2WorkbookSplit,
-	setSf2SchoolStartDate
+	runSf2WorkbookSplit
 } from '$lib/features/settings/native';
 import {
-	isSchoolStartDateValid,
-	normalizeSchoolStartDate,
 	sf2MonthWorkbookRows,
 	sf2MonthWorkbookSummary,
 	sf2SplitIsComplete,
@@ -24,17 +20,14 @@ import type { Ctx } from './state-context';
  *
  * ## What this screen is now
  *
- * Four things, replacing the three workflows D18 removed:
+ * Three things, replacing the three workflows D18 removed:
  *
- * 1. **Classes started on** - the one input every month's `first_school_day` is
- *    derived from. It is empty until the teacher types it, and there is no
- *    default: a guessed start date silently mis-dates every month file in the
- *    school year, which is the exact class of bug this model exists to eliminate.
- * 2. **Month workbooks** - twelve read-only rows: is the file there, how many X
- *    were last counted in it, when was it last written.
- * 3. **Back up workbooks now** - D13. Lives in Data Management, beside *Back Up
+ * 1. **Month workbooks** - twelve read-only rows: is the file there, how many X
+ *    were last counted in it, when was it last written. Every month is dated
+ *    from June, the month classes start, so no start-date setup is needed.
+ * 2. **Back up workbooks now** - D13. Lives in Data Management, beside *Back Up
  *    Now*, and already wired; this screen links to it rather than duplicating it.
- * 4. **Re-run the workbook split** - §11, for a month that failed to split.
+ * 3. **Re-run the workbook split** - §11, for a month that failed to split.
  *
  * ## What is gone, and why that is safe
  *
@@ -61,13 +54,6 @@ class Sf2State {
 	/** Why the list could not be read, if it could not. Never swallowed. */
 	monthsError = $state<string | null>(null);
 
-	/** `YYYY-MM-DD`, or `''` when the teacher has never entered one. */
-	schoolStartDate = $state('');
-	/** True while the setting is still `NULL` in the database (edge case E3). */
-	needsSchoolStartDate = $state(false);
-	schoolStartDateLoading = $state(false);
-	schoolStartDateSaving = $state(false);
-
 	splitRunning = $state(false);
 	splitOutcome = $state<Sf2SplitOutcome | null>(null);
 
@@ -77,15 +63,6 @@ class Sf2State {
 
 	/** The one-line state of the year, under the list. */
 	monthSummary = $derived(sf2MonthWorkbookSummary(this.monthRows));
-
-	/**
-	 * The E3 prompt, shown only while the start date is genuinely unset.
-	 *
-	 * Not shown because the field is empty - the field is empty on first render
-	 * and until the read lands. Shown because the *database* says `NULL`, which is
-	 * the only answer that means "nobody has been asked yet".
-	 */
-	showSchoolStartDatePrompt = $derived(this.needsSchoolStartDate);
 
 	splitSummary = $derived(this.splitOutcome ? sf2SplitSummary(this.splitOutcome) : '');
 	splitNeedsAttention = $derived(
@@ -99,7 +76,7 @@ class Sf2State {
 	 * so they go together and each one's failure is its own message.
 	 */
 	async load(): Promise<void> {
-		await Promise.all([this.loadSchoolStartDate(), this.loadMonths(), this.loadLaunch()]);
+		await Promise.all([this.loadMonths(), this.loadLaunch()]);
 	}
 
 	private async loadLaunch(): Promise<void> {
@@ -116,26 +93,6 @@ class Sf2State {
 		}
 	}
 
-	private async loadSchoolStartDate(): Promise<void> {
-		this.schoolStartDateLoading = true;
-		try {
-			const settings = await getSf2SchoolCalendarSettings();
-			this.applySchoolStartDate(settings.schoolStartDate);
-			this.needsSchoolStartDate = !settings.schoolStartDate;
-		} catch (error) {
-			this.ctx.toast(
-				`Could not read "Classes started on": ${this.errorMessage(error, 'unknown error')}`,
-				false
-			);
-		} finally {
-			this.schoolStartDateLoading = false;
-		}
-	}
-
-	private applySchoolStartDate(value: string | null): void {
-		this.schoolStartDate = value ?? '';
-	}
-
 	private async loadMonths(): Promise<void> {
 		this.monthsLoading = true;
 		this.monthsError = null;
@@ -149,46 +106,6 @@ class Sf2State {
 			this.monthsError = this.errorMessage(error, 'the month list could not be read');
 		} finally {
 			this.monthsLoading = false;
-		}
-	}
-
-	// ── "Classes started on" ───────────────────────────────────────────────────
-	/**
-	 * Save the typed start date, or clear it.
-	 *
-	 * An invalid date is refused before the invoke, so a typo cannot reach the
-	 * column: every month's `first_school_day` is derived from this value, and a
-	 * bad one mis-dates the whole year. Clearing is allowed and is not a mistake -
-	 * the app goes back to asking (E3).
-	 */
-	async saveSchoolStartDate(): Promise<void> {
-		if (this.schoolStartDateSaving || this.schoolStartDateLoading) return;
-		if (!isSchoolStartDateValid(this.schoolStartDate)) {
-			this.ctx.toast('Enter the date as YYYY-MM-DD, or clear the field to unset it.', false);
-			return;
-		}
-
-		this.schoolStartDateSaving = true;
-		const value = normalizeSchoolStartDate(this.schoolStartDate);
-		try {
-			await setSf2SchoolStartDate(value);
-			this.applySchoolStartDate(value);
-			this.needsSchoolStartDate = value === null;
-			this.ctx.toast(
-				value
-					? 'Saved. Each month will be dated from this.'
-					: 'Cleared. The app will ask again until this is entered.'
-			);
-			// The months' own `first_school_day` is derived from this value, and
-			// the list shows whether each one is dated yet - so it is now stale.
-			await this.loadMonths();
-		} catch (error) {
-			this.ctx.toast(
-				`Could not save "Classes started on": ${this.errorMessage(error, 'unknown error')}`,
-				false
-			);
-		} finally {
-			this.schoolStartDateSaving = false;
 		}
 	}
 

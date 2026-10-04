@@ -154,8 +154,8 @@ class SettingsPageState implements Ctx {
 		this.reload();
 		this.backupState.reloadBackups();
 		this.updateSectionState.start();
-		// Settings → SF2 Workbook is entirely read-driven (the month list, the
-		// start date, and whether today's month needs creating), and none of it is
+		// Settings → SF2 Workbook is entirely read-driven (the month list and
+		// whether today's month needs creating), and none of it is
 		// on the critical path for the rest of the page - so it loads alongside
 		// everything else rather than gating it.
 		void this.sf2State.load();

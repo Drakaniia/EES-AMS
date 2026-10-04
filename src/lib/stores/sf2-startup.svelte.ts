@@ -1,19 +1,10 @@
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
-import { getSf2LaunchMonth, runSf2WorkbookSplit } from '$lib/api';
-import { SF2_SCHOOL_START_DATE_PROMPT } from '$lib/features/settings/sf2-heal-toast';
+import { runSf2WorkbookSplit } from '$lib/api';
 
 /**
- * The one thing the app has to say at startup that no route owns: the E3 prompt
- * (spec �11.1). "Enter the date classes started" is a question about the whole
- * install, asked until it is answered, and it is decided by
- * `getSf2LaunchMonth`'s `needsSchoolStartDate` - a read that needs no new backend
- * command and no workbook write.
- *
- * ## Why it tolerates silence
- *
- * `start()` is fire-and-forget and never rejects the app. A launch that produces
- * no message is a normal launch, not a failed one.
+ * The one thing the app has to say at startup that no route owns: the
+ * workbook-split notice (§11).
  */
 class Sf2StartupStore {
 	message = $state<string | null>(null);
@@ -25,39 +16,12 @@ class Sf2StartupStore {
 	private timer: ReturnType<typeof setTimeout> | null = null;
 
 	/**
-	 * Ask for the start date, once per launch, until it is answered.
-	 *
-	 * Read-only and cheap: `getSf2LaunchMonth` is a SQL read with no workbook
-	 * write, and a fresh install with no class is an error on the backend - which
-	 * is not a reason to prompt about a workbook that does not exist yet, so the
-	 * error is swallowed and the launch is left as it was.
-	 */
-	private async askForSchoolStartDate(): Promise<void> {
-		try {
-			const launch = await getSf2LaunchMonth();
-			if (!launch.needsSchoolStartDate) return;
-			this.show({
-				message: SF2_SCHOOL_START_DATE_PROMPT,
-				actionLabel: 'Set the date',
-				onAction: () => {
-					void goto(resolve('/settings') + '#settings-sf2');
-				}
-			});
-		} catch {
-			// No class, or the database is not readable. Neither is this prompt's
-			// business, and the Settings screen asks the same question the moment
-			// the app is usable.
-		}
-	}
-
-	/**
 	 * Ask once per launch. Safe to call more than once - the second call is a
 	 * no-op, so a re-mounted shell cannot end up asking twice.
 	 */
 	async start(): Promise<void> {
 		if (this.started) return;
 		this.started = true;
-		void this.askForSchoolStartDate();
 		void this.ensureSplit();
 	}
 
@@ -93,7 +57,7 @@ class Sf2StartupStore {
 		this.actionLabel = notice.actionLabel;
 		this.onAction = notice.onAction;
 
-		// A quiet note about the start date is not worth waiting for.
+		// A quiet split note is not worth waiting for.
 		if (this.timer) clearTimeout(this.timer);
 		this.timer = setTimeout(() => this.dismiss(), 10_000);
 	}

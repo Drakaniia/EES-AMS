@@ -161,8 +161,8 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  * Returns `null` for blank and for anything that is not a real calendar date, so
  * "cleared" and "typed something wrong" both land as `null` and the field keeps
  * whatever was there rather than writing a value nobody meant. It never returns a
- * default: an unset start date is a state the app handles by asking
- * ([`SF2_SCHOOL_START_DATE_PROMPT`](../sf2-heal-toast)), and a guessed one is the
+ * default: an unset start date is a state the app handles by dating months
+ * from June, and a guessed one is the
  * bug this whole model exists to prevent.
  */
 export function normalizeSchoolStartDate(value: string): string | null {

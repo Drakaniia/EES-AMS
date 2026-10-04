@@ -110,14 +110,3 @@ export function sf2HealNotice(outcome: Sf2HealOutcome): Sf2HealNotice | null {
 
 	return null;
 }
-
-/**
- * The E3 prompt, as a sentence the Settings screen can show beside the empty
- * *Classes started on* field.
- *
- * Rust holds the same words in `SCHOOL_START_DATE_PROMPT`; they are kept in step
- * by hand, and the field shows the copy rather than inventing a second phrasing
- * beside it.
- */
-export const SF2_SCHOOL_START_DATE_PROMPT =
-	"Enter the date classes started so each month's SF2 can be dated automatically.";

@@ -586,7 +586,7 @@ export interface Sf2LaunchMonth {
 	 * that is already on record.
 	 */
 	todayCanCreate: boolean;
-	/** True while the real start date has not been entered (edge case E3). */
+	/** Always false: months are dated from June by default, so no start date is asked for. Kept on the wire. */
 	needsSchoolStartDate: boolean;
 	issues: string[];
 }

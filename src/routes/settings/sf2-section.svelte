@@ -3,10 +3,8 @@
 	import { sf2ImportState } from './sf2-import-state.svelte';
 	import Sf2ImportDialog from './sf2-import-dialog.svelte';
 	import { sf2MonthLabel } from '$lib/features/settings/sf2-months';
-	import { SF2_SCHOOL_START_DATE_PROMPT } from '$lib/features/settings/sf2-heal-toast';
-	import { isSchoolStartDateValid } from '$lib/features/settings/sf2-months';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
-	import { FileSpreadsheet, RefreshCw, CalendarDays, TriangleAlert } from 'lucide-svelte';
+	import { FileSpreadsheet, RefreshCw, TriangleAlert } from 'lucide-svelte';
 
 	const toneClasses: Record<string, string> = {
 		ready: 'text-foreground',
@@ -25,57 +23,6 @@
 			One Excel file per month, each holding only that month. Start a class from the template or
 			adopt a school workbook above; the app also checks this month's file against its own records
 			every time it starts, and recovers any mark the file holds and the app does not.
-		</p>
-	</div>
-
-	<!-- ── Classes started on (D16, §11.1, edge case E3) ────────────────────── -->
-	<div class="space-y-3 rounded-xl border border-border bg-surface p-4">
-		<label for="sf2-school-start-date" class="flex items-center gap-2 text-sm font-semibold">
-			<CalendarDays class="size-4" aria-hidden="true" />
-			Classes started on
-		</label>
-		<p class="text-xs text-muted-foreground">
-			The real first day of classes. Every month file is dated from this one date, so a month's
-			attendance grid starts on the right day without being set up twelve times.
-		</p>
-		<div class="flex flex-wrap items-center gap-3">
-			<input
-				id="sf2-school-start-date"
-				type="date"
-				bind:value={sf2State.schoolStartDate}
-				disabled={sf2State.schoolStartDateLoading || sf2State.schoolStartDateSaving}
-				aria-invalid={!isSchoolStartDateValid(sf2State.schoolStartDate)}
-				aria-describedby="sf2-school-start-date-help"
-				class="rounded-pill border border-border bg-background px-4 py-2 text-sm disabled:opacity-60"
-			/>
-			<button
-				type="button"
-				onclick={() => sf2State.saveSchoolStartDate()}
-				disabled={sf2State.schoolStartDateLoading ||
-					sf2State.schoolStartDateSaving ||
-					!isSchoolStartDateValid(sf2State.schoolStartDate)}
-				class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-			>
-				{#if sf2State.schoolStartDateSaving}
-					<Spinner />
-				{/if}
-				{sf2State.schoolStartDateSaving ? 'Saving…' : 'Save date'}
-			</button>
-			{#if sf2State.schoolStartDateLoading}
-				<span class="text-xs text-muted-foreground">Loading…</span>
-			{/if}
-		</div>
-		<p id="sf2-school-start-date-help" class="text-xs text-muted-foreground">
-			{#if !isSchoolStartDateValid(sf2State.schoolStartDate)}
-				<span class="text-destructive">Enter the date as YYYY-MM-DD.</span>
-			{:else if sf2State.showSchoolStartDatePrompt}
-				{SF2_SCHOOL_START_DATE_PROMPT}
-			{:else if sf2State.schoolStartDate}
-				Set to <span class="font-mono">{sf2State.schoolStartDate}</span>. Clear the field to unset
-				it.
-			{:else}
-				Not set. Months fall back to their own first day until this is entered.
-			{/if}
 		</p>
 	</div>
 

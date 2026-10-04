@@ -83,6 +83,7 @@ import {
 import { dayNumbersForSlots, sf2MonthName } from '$lib/features/sf2/calendar';
 import {
 	currentYear,
+	defaultSchoolStartDate,
 	FIRST_SCHOOL_DAY_UNDETERMINED,
 	gridAnchorDay,
 	parseIsoDate,
@@ -809,7 +810,8 @@ export async function mergeWorkbookYear(job: MergeJob): Promise<Sf2SplitOutcome>
 	const schoolStartDateRow = await getDriver().queryOne<{ school_start_date: string | null }>(
 		getSchoolStartDateSql
 	);
-	const schoolStartDate = parseIsoDate(schoolStartDateRow?.school_start_date ?? '');
+	const schoolStartDate =
+		parseIsoDate(schoolStartDateRow?.school_start_date ?? '') ?? defaultSchoolStartDate(schoolYear);
 
 	const builds: MonthSheetBuild[] = [];
 	const resolvedDays: (number | undefined)[] = [];

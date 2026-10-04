@@ -6,6 +6,7 @@ import { listStudents } from '$lib/db/repos/students';
 import { sf2MonthName, sf2MonthNumber } from '$lib/features/sf2/calendar';
 import {
 	currentYear,
+	defaultSchoolStartDate,
 	deriveFirstSchoolDay,
 	gridAnchorDay,
 	isSchoolDay,
@@ -217,16 +218,22 @@ function canonicalMonth(reportMonth: string): { month: string; monthNumber: numb
 }
 
 /**
- * The stored `school_start_date` as a `Date`, or `undefined` when it is unset or
- * unreadable.
+ * The stored `school_start_date` as a `Date`, defaulting to June 1st of the
+ * school year's start year when unset or unreadable.
  *
- * A value the parser cannot read is "we do not know" — edge case E3, the prompt
- * once — and never a guess in either direction.
+ * Classes start in June, so the default dates every month of the school year
+ * from its own first weekday with no setup step.
  */
-function storedStartDate(settings: Sf2SchoolCalendarSettings): Date | undefined {
-	return settings.schoolStartDate === null
-		? undefined
-		: (parseIsoDate(settings.schoolStartDate) ?? undefined);
+function storedStartDate(
+	settings: Sf2SchoolCalendarSettings,
+	schoolYear?: string
+): Date | undefined {
+	const parsed =
+		settings.schoolStartDate === null
+			? undefined
+			: (parseIsoDate(settings.schoolStartDate) ?? undefined);
+	if (parsed !== undefined) return parsed;
+	return schoolYear === undefined ? undefined : defaultSchoolStartDate(schoolYear);
 }
 
 // â”€â”€ The one workbook on disk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -555,7 +562,7 @@ export async function getSf2MonthPreview(
 	const { month, monthNumber } = canonicalMonth(reportMonth);
 	const resolvedClassId = await resolveClassId(classId);
 	const resolvedSchoolYear = await resolveSchoolYear(resolvedClassId, schoolYear);
-	const schoolStartDate = storedStartDate(await getSf2SchoolCalendarSettings());
+	const schoolStartDate = storedStartDate(await getSf2SchoolCalendarSettings(), resolvedSchoolYear);
 
 	const template = await findMonthTemplate(resolvedClassId, resolvedSchoolYear, month);
 	// The stored year wins. Recomputing it here is how a month file and a legacy
@@ -696,7 +703,7 @@ export async function getSf2LaunchMonth(classId?: string): Promise<Sf2LaunchMont
 	const resolvedClassId = await resolveClassId(classId);
 	const schoolYear = await resolveSchoolYear(resolvedClassId, undefined);
 	const settings = await getSf2SchoolCalendarSettings();
-	const schoolStartDate = storedStartDate(settings);
+	const schoolStartDate = storedStartDate(settings, schoolYear);
 
 	const today = new Date();
 	const todayNumber = today.getMonth() + 1;
@@ -837,7 +844,7 @@ export async function createSf2MonthFile(
 	const { month, monthNumber } = canonicalMonth(reportMonth);
 	const resolvedClassId = await resolveClassId(classId);
 	const schoolYear = await resolveSchoolYear(resolvedClassId, undefined);
-	const schoolStartDate = storedStartDate(await getSf2SchoolCalendarSettings());
+	const schoolStartDate = storedStartDate(await getSf2SchoolCalendarSettings(), schoolYear);
 	const reportYear = reportYearForSchoolMonth(schoolYear, monthNumber, currentYear());
 
 	// E2, checked before anything else so it is refused for the right reason.
