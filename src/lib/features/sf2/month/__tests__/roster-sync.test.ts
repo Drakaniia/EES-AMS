@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
+import ExcelJS from 'exceljs';
 import { db, insertMonthTemplate, useMonthTestDb } from './schema';
 import { loadTemplate, WORKBOOK_PATH } from '$lib/features/excel/__tests__/template-fixture';
 import { getCellTextAt, openWorkbook } from '$lib/features/excel/workbook';
+import { totalsOn } from '$lib/features/sf2/attendance/attendance-write';
 import { syncMonthRosterForClass } from '../roster-sync';
 import type { Worksheet } from 'exceljs';
 
@@ -86,8 +88,8 @@ describe('syncMonthRosterForClass', () => {
 
 		expect(await syncMonthRosterForClass(CLASS_ID)).toBe(22);
 
-		// 21 male slots shipped with the form, so the 22nd learner needs two more
-		// rows spliced in above the MALE TOTAL.
+		// 21 male slots shipped with the form, so the 22nd learner needs one
+		// more row spliced in above the MALE TOTAL.
 		const rows = await mappings();
 		expect(rows).toHaveLength(22);
 		expect(rows.at(-1)).toEqual({
@@ -96,5 +98,68 @@ describe('syncMonthRosterForClass', () => {
 			gender_block: 'MALE'
 		});
 		expect(getCellTextAt(await juneSheet(), 'C29')).toBe('MAN 21');
+	});
+
+	test('a class that still fits its slots is not grown when a learner is added', async () => {
+		// 15 boys on rows 8-22 and 10 girls on rows 30-39, then one more boy:
+		// six free male slots remain, so no row may move and no merge may go.
+		await seedJuneMonth();
+		for (let index = 0; index < 15; index += 1) {
+			const row = 8 + index;
+			await addStudent(`m${index}`, `MAN ${String(index).padStart(2, '0')}`, 'male');
+			await seedMapping(`m${index}`, `MAN ${String(index).padStart(2, '0')}`, row, 'MALE');
+		}
+		for (let index = 0; index < 10; index += 1) {
+			const row = 30 + index;
+			await addStudent(`f${index}`, `LASS ${String(index).padStart(2, '0')}`, 'female');
+			await seedMapping(`f${index}`, `LASS ${String(index).padStart(2, '0')}`, row, 'FEMALE');
+		}
+		await addStudent('new', 'YBANEZ, ALISTAIR M', 'male');
+
+		expect(await syncMonthRosterForClass(CLASS_ID)).toBe(26);
+
+		const rows = await mappings();
+		expect(rows.find((row) => row.student_id === 'new')).toEqual({
+			student_id: 'new',
+			row_index: 23,
+			gender_block: 'MALE'
+		});
+
+		const sheet = await juneSheet();
+		// The TOTAL rows never moved…
+		const totals = totalsOn(sheet);
+		expect(totals.maleTotalRow).toBe(29);
+		expect(totals.femaleTotalRow).toBe(49);
+		expect(totals.combinedTotalRow).toBe(50);
+		expect(getCellTextAt(sheet, 'C23')).toBe('YBANEZ, ALISTAIR M');
+		expect(getCellTextAt(sheet, 'C29')).toContain('MALE');
+		expect(getCellTextAt(sheet, 'C30')).toBe('LASS 00');
+		// …and the form is still one merged form: every merge survived and the
+		// sampled slaves are still merge slaves, not smeared literal copies.
+		expect(sheet.model.merges.length).toBe(681);
+		for (const address of ['G8', 'D30', 'AG56']) {
+			expect(sheet.getCell(address).type, address).toBe(ExcelJS.ValueType.Merge);
+		}
+	});
+
+	test('a genuine growth keeps every merge and styles the new rows like learner rows', async () => {
+		await seedJuneMonth();
+		for (let index = 0; index < 22; index += 1) {
+			await addStudent(`m${index}`, `MAN ${String(index).padStart(2, '0')}`, 'male');
+		}
+		await seedMapping('m0', 'MAN 00', 8, 'MALE');
+
+		expect(await syncMonthRosterForClass(CLASS_ID)).toBe(22);
+
+		const sheet = await juneSheet();
+		const totals = totalsOn(sheet);
+		expect(totals.maleTotalRow).toBe(30);
+		expect(totals.femaleTotalRow).toBe(50);
+		expect(totals.combinedTotalRow).toBe(51);
+		expect(getCellTextAt(sheet, 'C30')).toContain('MALE');
+		expect(sheet.model.merges.length).toBe(681);
+		// The spliced-in row draws like the learner row above it.
+		expect(sheet.getRow(29).height).toBe(19.5);
+		expect(sheet.getCell('F29').border.left?.style).toBe('medium');
 	});
 });
