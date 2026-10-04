@@ -13,9 +13,9 @@
  *
  * ## No Excel process (spec D14)
  *
- * Writing is ExcelJS; opening is `@tauri-apps/plugin-opener`. `killAllExcelProcesses`
- * exists only as a throwing stub so the one live call site keeps compiling while its
- * button is deleted — see the handover table.
+ * Writing is ExcelJS; opening is `@tauri-apps/plugin-opener`. Nothing here
+ * spawns or kills an Excel process — there is no `kill all Excel` command, so no
+ * "kill Excel and retry" button either.
  */
 
 import { openPath } from '@tauri-apps/plugin-opener';
@@ -349,15 +349,4 @@ async function openWithOs(path: string): Promise<void> {
 	} catch (thrown) {
 		throw internal(`failed to open ${path}: ${asAppError(thrown).detail}`);
 	}
-}
-
-/**
- * D14 removed the Excel process this killed. The export is kept as a throwing stub
- * rather than an omission so the single live call site
- * (`report-sf2-open.svelte.ts:278`, the "Kill Excel and retry" button) keeps
- * compiling while that button is deleted; the throw is the loudest possible signal
- * that the retry it powers no longer exists.
- */
-export async function killAllExcelProcesses(): Promise<number> {
-	throw invalidInput('Excel is no longer driven by this app');
 }

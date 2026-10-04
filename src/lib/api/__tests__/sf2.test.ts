@@ -3,7 +3,6 @@ import {
 	getSf2ExportPreview,
 	getSf2ExportReadiness,
 	getSf2WorkbookSettings,
-	killAllExcelProcesses,
 	toggleSf2PreviewAttendance
 } from '$lib/api/sf2';
 import { addEvent } from '$lib/api/events';
@@ -150,15 +149,6 @@ describe('toggleSf2PreviewAttendance', () => {
 		await expect(
 			toggleSf2PreviewAttendance(CLASS_ID, 'not-a-student', days[0] ?? '', false)
 		).rejects.toMatchObject({ kind: 'InvalidInput' });
-	});
-});
-
-describe('killAllExcelProcesses', () => {
-	it('rejects: D14 means there is no Excel process to kill', async () => {
-		await expect(killAllExcelProcesses()).rejects.toMatchObject({
-			kind: 'InvalidInput',
-			detail: 'Excel is no longer driven by this app'
-		});
 	});
 });
 

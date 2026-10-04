@@ -2,9 +2,8 @@
 // resolves here, with the same names and the same signatures.
 //
 // Deliberately absent, and each one is a call site to delete rather than a
-// behaviour to reimplement (migration spec D10/D14/D15):
+// behaviour to reimplement (migration spec D10/D15):
 //
-// - `killAllExcelProcesses` is a throwing stub here (spec D14) — see './sf2'.
 // - The whole of the SF2 startup self-heal: `healCurrentMonthWorkbook`,
 //   `onSf2HealOutcome`, `SF2_HEAL_OUTCOME_EVENT` (spec D15).
 // - `chooseBackupSyncFolder`, `clearBackupSyncFolder`,

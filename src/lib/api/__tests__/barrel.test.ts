@@ -65,7 +65,6 @@ const SURVIVED = [
 	'openSf2Workbook',
 	'presentAllSf2PreviewAttendance',
 	'syncAndOpenSf2Workbook',
-	'killAllExcelProcesses',
 	// sf2 months
 	'getSf2MonthPreview',
 	'getSf2LaunchMonth',
