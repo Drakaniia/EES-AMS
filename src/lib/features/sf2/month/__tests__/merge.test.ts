@@ -7,7 +7,7 @@
  * what is asserted is what a teacher would open.
  */
 
-import type { Workbook, Worksheet } from 'exceljs';
+import type { Worksheet } from 'exceljs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
 	getCellText,

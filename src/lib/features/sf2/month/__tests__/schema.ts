@@ -175,7 +175,7 @@ export function db(): SqlDriver {
 }
 
 /** A month row with only the columns every read needs set. */
-export function monthTemplate(overrides: {
+function monthTemplate(overrides: {
 	id?: string;
 	classId?: string;
 	schoolYear?: string;
