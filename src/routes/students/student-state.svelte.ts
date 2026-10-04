@@ -2,12 +2,12 @@ import type { StudentGender } from '$lib/api';
 
 export type EntryMode = 'single' | 'bulk';
 
-export type GenderOption = {
+type GenderOption = {
 	value: StudentGender;
 	label: string;
 };
 
-export type EntryModeTab = {
+type EntryModeTab = {
 	value: EntryMode;
 	label: string;
 };

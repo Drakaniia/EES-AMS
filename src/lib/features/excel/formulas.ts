@@ -193,7 +193,7 @@ export function combinedDailyPresentTotal(
  * differs per column - boys, girls, combined - so it is passed alongside the
  * counts rather than assumed.
  */
-export type Sf2RegisteredLearnerInputs = {
+type Sf2RegisteredLearnerInputs = {
 	/** Row 53, enrolment. */
 	enrolment: number;
 	/** Row 55, late enrolment. */

@@ -36,14 +36,14 @@ export interface Sf2MonthStudentMapping {
 }
 
 /** The workbook half of a learner, as a read path needs it to be identified. */
-export interface Sf2WorkbookLearnerIdentity {
+interface Sf2WorkbookLearnerIdentity {
 	name: string;
 	rowIndex: number;
 	sf2LearnerId?: string;
 }
 
 /** Which rule identified a learner. */
-export type Sf2LearnerMatchKind = 'learnerId' | 'normalizedName' | 'rowIndex';
+type Sf2LearnerMatchKind = 'learnerId' | 'normalizedName' | 'rowIndex';
 
 /** One identified learner, and which rule found them. */
 export interface Sf2LearnerMatch {

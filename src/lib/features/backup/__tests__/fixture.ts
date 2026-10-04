@@ -19,7 +19,7 @@ export const ROOT = '/EES-AMS';
 export const WORKBOOKS_DIR = `${ROOT}/workbooks`;
 
 /** The slice of the file system the backup tests actually read and write. */
-export type BackupDisk = Pick<
+type BackupDisk = Pick<
 	MemoryFileSystem,
 	'readFile' | 'readTextFile' | 'writeFileAtomic' | 'exists'
 >;

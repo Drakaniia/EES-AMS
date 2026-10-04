@@ -18,7 +18,7 @@ export interface UpdateInfo {
 /**
  * Installed + staged update state. No network involved.
  */
-export interface UpdateStatus {
+interface UpdateStatus {
 	currentVersion: string;
 	stagedVersion?: string | null;
 	stagedNotes?: string | null;

@@ -9,7 +9,7 @@ import {
 	type UpdateProgress
 } from '$lib/features/settings/update';
 
-export type UpdateStatusKind =
+type UpdateStatusKind =
 	| 'unknown'
 	| 'checking'
 	| 'upToDate'
@@ -19,7 +19,7 @@ export type UpdateStatusKind =
 	| 'deferred'
 	| 'failed';
 
-export type UpdateFailedStage = 'check' | 'download' | 'install';
+type UpdateFailedStage = 'check' | 'download' | 'install';
 
 /** Minimum interval between manual refresh clicks. */
 const REFRESH_COOLDOWN_MS = 10_000;

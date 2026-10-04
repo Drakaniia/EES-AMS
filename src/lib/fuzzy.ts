@@ -11,7 +11,7 @@
  * highlight them later.
  */
 
-export interface FuzzyMatch {
+interface FuzzyMatch {
 	/** Higher is better. Always positive for a successful match. */
 	score: number;
 	/** Indices (in `text`, case-insensitive) of the matched characters. */

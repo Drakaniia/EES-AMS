@@ -22,7 +22,7 @@
  */
 
 /** The only task the app reports on. Kept so a UI filter cannot drift. */
-export type Sf2ProgressTask = 'open';
+type Sf2ProgressTask = 'open';
 
 export type Sf2ProgressUpdate = {
 	task: Sf2ProgressTask;

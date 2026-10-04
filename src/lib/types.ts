@@ -659,7 +659,7 @@ export type Sf2HealOutcome =
  * `needsAttention` means the legacy workbook is still the authority for that
  * month.
  */
-export type Sf2SplitMonthStatus = 'verified' | 'alreadyMerged' | 'needsAttention';
+type Sf2SplitMonthStatus = 'verified' | 'alreadyMerged' | 'needsAttention';
 
 /** One month of the school year, as the Settings screen renders it. */
 export interface Sf2SplitMonthOutcome {

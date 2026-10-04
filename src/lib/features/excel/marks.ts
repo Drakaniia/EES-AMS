@@ -24,7 +24,7 @@ import type { Sf2CellMark, Sf2WorkbookMetadata } from './types';
 export type { Sf2TotalRows };
 
 /** How `applyMarks` should treat a cell that already holds a formula. */
-export type ApplyMarksOptions = {
+type ApplyMarksOptions = {
 	/**
 	 * Whether a literal mark may replace an existing formula.
 	 *

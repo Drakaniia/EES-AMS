@@ -52,7 +52,7 @@ export async function importValidationFromAnalysis(
  * of nothing, which is why this is computed once, here, instead of at each call
  * site.
  */
-export type Sf2RosterGeometry = {
+type Sf2RosterGeometry = {
 	maleCount: number;
 	femaleCount: number;
 	/** Rows the template has to grow by, per gender block. */
