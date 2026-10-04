@@ -337,6 +337,52 @@ export function materialiseSharedFormulas(sheet: Worksheet): void {
 	});
 }
 
+/**
+ * Insert `count` blank rows at `at`, keeping merged cells intact.
+ *
+ * ExcelJS's own `spliceRows` moves merged slaves by copying their master's
+ * text into every cell (`rDst.values = rSrc.values`) and re-points them with
+ * `cell.merge()`, which never reaches the sheet's merge index — the file then
+ * opens with smeared duplicate text and silently dropped merges. So the merges
+ * come off first and go back on shifted afterwards, while no cell holds a
+ * merge value.
+ *
+ * A merge below the insertion shifts by `count`; one above it stays; one
+ * straddling it keeps its top row and extends by `count`. Inserted rows copy
+ * the style and height of `templateRow` (default: the row above the
+ * insertion), because an unformatted learner row is a row the form stops
+ * drawing.
+ */
+export function spliceRowsPreservingMerges(
+	sheet: Worksheet,
+	at: number,
+	count: number,
+	templateRow?: number
+): void {
+	if (count <= 0) return;
+	const merges = [...sheet.model.merges];
+	for (const range of merges) sheet.unMergeCells(range);
+	sheet.spliceRows(at, 0, ...Array.from({ length: count }, () => []));
+	for (const range of merges) {
+		const [from, to] = range.split(':');
+		const start = parseAddress(from);
+		const end = parseAddress(to ?? from);
+		const moved = (row: number): number => (row >= at ? row + count : row);
+		const newEnd = start.row < at && end.row >= at ? end.row + count : moved(end.row);
+		sheet.mergeCells(
+			`${cellAddress(moved(start.row), start.column)}:${cellAddress(newEnd, end.column)}`
+		);
+	}
+	const template = sheet.getRow(templateRow ?? at - 1);
+	for (let row = at; row < at + count; row += 1) {
+		const inserted = sheet.getRow(row);
+		inserted.height = template.height;
+		template.eachCell({ includeEmpty: true }, (cell, column) => {
+			inserted.getCell(column).style = cell.style;
+		});
+	}
+}
+
 /** The `F`–`AL` day grid of one sheet, read once. */
 export type Sf2DayGrid = {
 	/** The mark in each day column of one row, keyed by row then column letter. */

@@ -48,10 +48,8 @@ import {
 	SF2_WEEKDAY_ROW
 } from '$lib/features/excel/constants';
 import {
-	cellAddress,
 	cellText,
 	columnNumber,
-	eachPopulatedCell,
 	formulaOf,
 	formulaResult,
 	getSheet,
@@ -59,7 +57,7 @@ import {
 	materialiseSharedFormulas,
 	monthNumber,
 	openWorkbook,
-	parseAddress,
+	spliceRowsPreservingMerges,
 	writableDayColumns
 } from '$lib/features/excel/workbook';
 import { countAbsentMarks } from '$lib/features/excel/formulas';
@@ -366,11 +364,18 @@ export function copyFormSheet(donor: Worksheet, sheet: Worksheet): void {
 		if (source.height !== undefined) sheet.getRow(row).height = source.height;
 	}
 
-	eachPopulatedCell(donor, (cell, row) => {
-		const target = sheet.getRow(row).getCell(Number(cell.col));
-		target.style = cell.style;
-		const formula = formulaOf(cell);
-		target.value = formula === undefined ? cell.value : { formula, result: formulaResult(cell) };
+	// includeEmpty: the day grid is ~1300 bordered-but-empty cells (fills, fonts,
+	// borders with no value), and eachPopulatedCell skips every one of them - so a
+	// month built by copying alone lost its grid lines, fonts and fills. Cells with
+	// neither value nor style are still skipped, so a copy materialises no bloat.
+	donor.eachRow({ includeEmpty: true }, (row) => {
+		row.eachCell({ includeEmpty: true }, (cell) => {
+			if (cell.value == null && Object.keys(cell.style).length === 0) return;
+			const target = sheet.getRow(row.number).getCell(Number(cell.col));
+			target.style = cell.style;
+			const formula = formulaOf(cell);
+			target.value = formula === undefined ? cell.value : { formula, result: formulaResult(cell) };
+		});
 	});
 
 	// Merges last: the values above went onto the top-left cells, which is the only
@@ -385,21 +390,6 @@ export function copyFormSheet(donor: Worksheet, sheet: Worksheet): void {
 }
 
 /**
- * A merged range's A1 pair with its rows moved down by `shift` rows.
- *
- * ExcelJS stores a merge as a range string (`"A64:X67"`), so shifting one is
- * re-addressing its two ends - the columns are untouched by a row insertion.
- */
-function shiftRange(range: string, shift: number): string {
-	const [from, to] = range.split(':');
-	const start = parseAddress(from);
-	const end = parseAddress(to ?? from);
-	const moved = (address: { row: number; column: number }) =>
-		cellAddress(address.row + shift, address.column);
-	return shift === 0 ? range : `${moved(start)}:${moved(end)}`;
-}
-
-/**
  * Grow one worksheet's roster to hold `extraMale` more males and `extraFemale`
  * more females.
  *
@@ -408,21 +398,6 @@ function shiftRange(range: string, shift: number): string {
  * Appending instead would put the twenty-second male on top of the MALE TOTAL
  * row. `maleTotalRow` / `femaleTotalRow` are the *current* positions; pass
  * nothing for a fresh template.
- *
- * The merges come off first and go back on afterwards, because ExcelJS's
- * `spliceRows` cannot be trusted with a merged worksheet: it assigns the rows by
- * `rDst.values = rSrc.values`, and a merge slave's value *is* its master's, so
- * the master text lands in every cell of the merge's rectangle; and it re-points
- * the slaves with `cell.merge(...)` without touching the sheet's merge index, so
- * `model.merges` keeps reporting the ranges while the serialiser never writes
- * them. Both losses are silent - the file opens, and the roster block below the
- * MALE TOTAL row is a plain grid with the guidelines smeared down four rows.
- * Unmerged, only literal values move, and the ranges are re-applied below on the
- * rows the insertion pushed them to.
- *
- * A merge that straddles the insertion row keeps its top row and grows by the
- * insert count. That is what a total block spanning a boundary wants anyway:
- * its content belongs to the block below.
  *
  * Shared formulas are materialised first, because moving a shared formula's
  * master without its clones leaves the workbook unserialisable.
@@ -437,24 +412,10 @@ export function growRosterRows(
 	if (extraMale <= 0 && extraFemale <= 0) return;
 	materialiseSharedFormulas(sheet);
 
-	const merges = [...sheet.model.merges];
-	for (const range of merges) sheet.unMergeCells(range);
-
 	// Males first: the female divider then sits `extraMale` rows lower, and the
 	// female insert does not move the male block a second time.
-	for (let index = 0; index < extraMale; index += 1) sheet.spliceRows(maleTotalRow, 0, []);
-	for (let index = 0; index < extraFemale; index += 1)
-		sheet.spliceRows(femaleTotalRow + extraMale, 0, []);
-
-	for (const range of merges) {
-		const shift =
-			parseAddress(range.split(':')[0]).row >= femaleTotalRow
-				? extraMale + extraFemale
-				: parseAddress(range.split(':')[0]).row >= maleTotalRow
-					? extraMale
-					: 0;
-		sheet.mergeCells(shiftRange(range, shift));
-	}
+	spliceRowsPreservingMerges(sheet, maleTotalRow, extraMale);
+	spliceRowsPreservingMerges(sheet, femaleTotalRow + extraMale, extraFemale);
 }
 
 /**

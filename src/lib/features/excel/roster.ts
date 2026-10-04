@@ -16,7 +16,13 @@ import {
 	SF2_ITEM_NUMBER_COLUMN,
 	SF2_NAME_COLUMN
 } from './constants';
-import { getCellText, materialiseSharedFormulas, sf2MonthlySheets, setCellText } from './workbook';
+import {
+	getCellText,
+	materialiseSharedFormulas,
+	setCellText,
+	sf2MonthlySheets,
+	spliceRowsPreservingMerges
+} from './workbook';
 import type { Sf2LearnerRow } from './types';
 
 const MALE_BLOCK = 'M';
@@ -158,13 +164,10 @@ export function expandRosterRows(
 	let touched = 0;
 	for (const sheet of sf2MonthlySheets(workbook)) {
 		materialiseSharedFormulas(sheet);
-		if (extraMaleRows > 0) {
-			for (let index = 0; index < extraMaleRows; index += 1) sheet.spliceRows(maleTotalRow, 0, []);
-		}
+		if (extraMaleRows > 0) spliceRowsPreservingMerges(sheet, maleTotalRow, extraMaleRows);
 		if (extraFemaleRows > 0) {
 			// The female divider sits below everything the male insert pushed down.
-			const femaleBase = femaleTotalRow + extraMaleRows;
-			for (let index = 0; index < extraFemaleRows; index += 1) sheet.spliceRows(femaleBase, 0, []);
+			spliceRowsPreservingMerges(sheet, femaleTotalRow + extraMaleRows, extraFemaleRows);
 		}
 		touched += 1;
 	}
