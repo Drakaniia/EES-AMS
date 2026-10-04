@@ -44,7 +44,7 @@ export type Sf2SheetAnalysis = {
 	rowCount: number;
 	columnCount: number;
 	mergedRanges: string[];
-	/** First non-empty cells, for the diagnose view. */
+	/** First non-empty cells, formula cells preferred over plain text. */
 	sampleCells: Sf2SampleCell[];
 	hasProtection: boolean;
 };
@@ -63,9 +63,4 @@ export type Sf2LearnerRow = {
 	name: string;
 	learnerId?: string;
 	gender?: 'M' | 'F';
-};
-
-export type Sf2WorkbookPaths = {
-	workbookPath: string;
-	templatePath?: string;
 };

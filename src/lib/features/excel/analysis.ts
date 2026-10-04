@@ -16,7 +16,7 @@ import type { Sf2SampleCell, Sf2SheetAnalysis, Sf2WorkbookAnalysis } from './typ
 export const SAMPLE_CELL_LIMIT = 12;
 
 /**
- * First cells worth showing in a diagnose view.
+ * The first cells of a sheet worth sampling, formula cells first.
  *
  * Formula cells come first: a count that is wrong is almost always a formula
  * pointing at the wrong range, and the plain text of the form tells the teacher
@@ -49,7 +49,7 @@ function sampleCells(sheet: Worksheet): Sf2SampleCell[] {
 }
 
 /** Sheet inventory for one worksheet. */
-export function analyzeSheet(sheet: Worksheet, index: number): Sf2SheetAnalysis {
+function analyzeSheet(sheet: Worksheet, index: number): Sf2SheetAnalysis {
 	return {
 		name: sheet.name,
 		index,
