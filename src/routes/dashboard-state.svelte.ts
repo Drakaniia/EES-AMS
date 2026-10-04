@@ -1,5 +1,5 @@
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity';
-import type { AttendanceEvent, Student, Class } from '$lib/db-rust';
+import type { AttendanceEvent, Student, Class } from '$lib/api';
 
 export function getActiveClass(classes: Class[]): Class | null {
 	const now = new SvelteDate();

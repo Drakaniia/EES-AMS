@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Calendar, ExternalLink, Pencil, Plus, RefreshCw, Save, UserX } from 'lucide-svelte';
+	import { Calendar, ExternalLink, Pencil, Plus, Save, UserX } from 'lucide-svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import {
 		reportMonthLabel,
@@ -7,7 +7,7 @@
 		formatDate,
 		workbookStatusLine
 	} from './report-state.svelte';
-	import type { Class, Sf2ExportPreview, Sf2WorkbookSettings } from '$lib/db-rust';
+	import type { Class, Sf2ExportPreview, Sf2WorkbookSettings } from '$lib/api';
 
 	type Props = {
 		preview: Sf2ExportPreview | null;
@@ -46,16 +46,13 @@
 		draftSchoolHeadName: string;
 		exportDisabled: boolean;
 		exporting: boolean;
-		syncingRoster: boolean;
 		sf2OpenStatus: string;
 		workbookSettings: Sf2WorkbookSettings | null;
 		savingDetails: boolean;
 		activeClassId: string;
 		onOpenSf2?: () => void;
-		onSyncRoster?: () => void;
 		onClassSelect?: (classId: string) => void;
 		onCreateMonth?: () => void;
-		onRefresh?: () => void;
 		onRequestExport?: () => void;
 		onEditDetails?: () => void;
 		onSwitchMonth?: () => void;
@@ -82,16 +79,13 @@
 		draftSchoolHeadName,
 		exportDisabled,
 		exporting,
-		syncingRoster,
 		sf2OpenStatus,
 		workbookSettings,
 		savingDetails,
 		activeClassId,
 		onOpenSf2,
-		onSyncRoster,
 		onClassSelect,
 		onCreateMonth,
-		onRefresh,
 		onRequestExport,
 		onEditDetails,
 		onSwitchMonth
@@ -203,20 +197,6 @@
 				<ExternalLink class="size-4" aria-hidden="true" />
 				{sf2OpenStatus === 'syncing' ? 'Opening...' : 'Open SF2'}
 			</button>
-			<button
-				type="button"
-				onclick={onSyncRoster}
-				disabled={!preview?.template || syncingRoster || !activeClassId}
-				class="control-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-				aria-label="Sync class roster to SF2 workbook"
-			>
-				{#if syncingRoster}
-					<Spinner />
-				{:else}
-					<RefreshCw class="size-4" aria-hidden="true" />
-				{/if}
-				{syncingRoster ? 'Syncing...' : 'Sync Roster'}
-			</button>
 			<!-- Export button: show skeleton pulsing when the grid is re-reading -->
 			{#if gridPending}
 				<button
@@ -238,15 +218,6 @@
 					{exporting ? 'Exporting...' : 'Review Export'}
 				</button>
 			{/if}
-			<button
-				type="button"
-				onclick={onRefresh}
-				disabled={gridPending || !activeClassId}
-				class="control-ring inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-border bg-background text-xs font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-			>
-				<RefreshCw class="size-3.5" aria-hidden="true" />
-				Re-read this month
-			</button>
 		</div>
 	</div>
 

@@ -5,7 +5,7 @@
 		type Student,
 		type AttendanceEvent,
 		type Settings
-	} from '$lib/db-rust';
+	} from '$lib/api';
 	import { filterAttendanceEventsForQuarter } from '$lib/student-analytics';
 	import Dialog from '../ui/Dialog.svelte';
 

@@ -1,7 +1,8 @@
 import { SvelteDate, SvelteMap } from 'svelte/reactivity';
+import { errorMessage as appErrorMessage, type AppError } from '$lib/db';
 import type { Sf2MonthGridPreview, Sf2PreviewDate, Sf2ExportPreview } from '$lib/types';
 import { sf2MonthByValue, sf2ReportMonthLabel } from '$lib/features/settings/sf2-workbook';
-import type { Sf2PreviewCell, Sf2PreviewStudentRow } from '$lib/db-rust';
+import type { Sf2PreviewCell, Sf2PreviewStudentRow } from '$lib/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,12 @@ export type MatrixStudentRow = Omit<Sf2PreviewStudentRow, 'cells'> & {
 export function errorMessage(error: unknown, fallback: string) {
 	if (error instanceof Error) return error.message;
 	if (typeof error === 'string') return error;
+	// `$lib/db` throws plain `{ kind, detail }` objects, not `Error`s. Without this
+	// branch every database failure reaches the teacher as the generic fallback --
+	// which is the whole message, so the real reason is never shown.
+	if (typeof error === 'object' && error !== null && 'kind' in error && 'detail' in error) {
+		return appErrorMessage(error as AppError);
+	}
 	return fallback;
 }
 
@@ -97,7 +104,7 @@ export function formatImportedAt(value?: number) {
  * The inputs of the status line, and the only two numbers in it.
  *
  * Both counts are the guard's own (`SyncPermit`'s `workbook_count` and
- * `db_count`), scoped to this month's mapped learner rows × mapped day columns.
+ * `db_count`), scoped to this month's mapped learner rows � mapped day columns.
  * `workbookXCount` is `null` for a month whose file has never been counted, and
  * that is a third state, not zero: an unmeasured workbook is one the app cannot
  * make any claim about, which is exactly what §9.1's `Unmeasured` default is for.
@@ -217,7 +224,11 @@ export function buildMatrixRows(
 	for (const student of students) {
 		if (genderFilter !== 'all' && student.gender?.toLowerCase() !== genderFilter) continue;
 
-		const cellsByDate = new SvelteMap<string, Sf2PreviewCell>();
+		// A plain `Map`, not a `SvelteMap`: this map is a local that dies with the
+		// loop, so its reactivity is never observed — and the reactive proxy was
+		// ~96% of the cost of a month switch (40 allocations x 22 writes each).
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const cellsByDate = new Map<string, Sf2PreviewCell>();
 		for (const cell of student.cells) cellsByDate.set(cell.date, cell);
 
 		rows.push({

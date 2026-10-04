@@ -90,7 +90,7 @@
 
 {#if show}
 	<div
-		class="fixed top-4 right-4 z-[70] w-full max-w-sm"
+		class="fixed right-4 bottom-4 z-[70] w-full max-w-sm"
 		role={type === 'error' ? 'alert' : 'status'}
 		aria-live={type === 'error' ? 'assertive' : 'polite'}
 	>

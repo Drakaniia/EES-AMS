@@ -1,7 +1,7 @@
 <script lang="ts">
 	import DateRangePicker from '$lib/components/ui/DateRangePicker.svelte';
 	import StudentPicker from '$lib/components/ui/StudentPicker.svelte';
-	import type { Student, Class } from '$lib/db-rust';
+	import type { Student, Class } from '$lib/api';
 
 	let {
 		from,

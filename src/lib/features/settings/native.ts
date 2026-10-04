@@ -1,14 +1,10 @@
 export {
-	chooseBackupSyncFolder,
 	chooseRestoreBackup,
-	chooseRestoreDatabaseFile,
 	clearAuditEvents,
-	clearBackupSyncFolder,
-	connectGoogleDriveBackup,
 	createBackupNow,
 	createWorkbooksBackupNow,
 	createSf2MonthFile,
-	disconnectGoogleDriveBackup,
+	createSf2WorkbookFromTemplate,
 	exportDatabase,
 	exportJsonWithFolder,
 	getBackupStatus,
@@ -17,25 +13,22 @@ export {
 	getSf2SchoolCalendarSettings,
 	getSf2WorkbookSettings,
 	importAll,
+	importSf2Workbook,
 	listAuditEvents,
 	listBackups,
 	listClasses,
 	listSf2MonthWorkbooks,
 	openBackupFolder,
+	pickImportWorkbookFile,
 	restoreBackup,
 	runSf2WorkbookSplit,
 	saveSettings,
 	setSf2SchoolStartDate,
+	stageImportWorkbook,
 	updateSf2WorkbookSettings,
-	uploadLatestBackupToGoogleDrive,
-	wipeAll,
-	saveBrandingLogo,
-	pickBrandingLogo,
-	getBrandingLogoPath,
-	getDefaultLogoPath,
-	deleteBrandingLogo,
-	resetBranding
-} from '$lib/db-rust';
+	validateSf2WorkbookImportFile,
+	wipeAll
+} from '$lib/api';
 
 export type {
 	AuditEvent,
@@ -46,9 +39,12 @@ export type {
 	Class,
 	Session,
 	Settings,
+	Sf2ImportSummary,
+	Sf2ImportValidation,
 	Sf2LaunchMonth,
 	Sf2MonthPreview,
 	Sf2SchoolCalendarSettings,
 	Sf2SplitOutcome,
+	Sf2TemplateDraft,
 	Sf2WorkbookSettings
-} from '$lib/db-rust';
+} from '$lib/api';

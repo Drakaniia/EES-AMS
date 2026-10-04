@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
-vi.mock('$lib/db-rust', () => ({ listStudents: mocks.listStudents }));
+vi.mock('$lib/api', () => ({ listStudents: mocks.listStudents }));
 
 async function freshStore(): Promise<Store> {
 	// Test-only: module reload gives each test a pristine singleton,
@@ -101,7 +101,6 @@ describe('command palette store', () => {
 			'settings-classes',
 			'settings-sf2',
 			'settings-backup',
-			'settings-branding',
 			'settings-global',
 			'settings-update'
 		]) {

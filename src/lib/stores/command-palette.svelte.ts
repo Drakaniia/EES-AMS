@@ -1,5 +1,5 @@
 import { goto } from '$app/navigation';
-import { listStudents, type Student } from '$lib/db-rust';
+import { listStudents, type Student } from '$lib/api';
 import type { PaletteGroup, PaletteItem, PaletteGroupResult } from '$lib/command-palette';
 
 export type { PaletteGroup, PaletteItem, PaletteGroupResult };
@@ -69,7 +69,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 	},
 	{
 		id: 'settings-classes',
-		label: 'Settings · Classes & Schedule',
+		label: 'Settings � Classes & Schedule',
 		keywords: 'class room sessions schedule',
 		hint: '/settings',
 		group: 'Pages',
@@ -77,7 +77,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 	},
 	{
 		id: 'settings-sf2',
-		label: 'Settings · SF2 Workbook',
+		label: 'Settings � SF2 Workbook',
 		keywords: 'sf2 template excel import',
 		hint: '/settings',
 		group: 'Pages',
@@ -85,23 +85,15 @@ const PAGE_ITEMS: PaletteItem[] = [
 	},
 	{
 		id: 'settings-backup',
-		label: 'Settings · Data Management',
+		label: 'Settings � Data Management',
 		keywords: 'backup restore data google drive',
 		hint: '/settings',
 		group: 'Pages',
 		run: () => void goto('/settings#settings-backup')
 	},
 	{
-		id: 'settings-branding',
-		label: 'Settings · App Branding',
-		keywords: 'logo title appearance school name',
-		hint: '/settings',
-		group: 'Pages',
-		run: () => void goto('/settings#settings-branding')
-	},
-	{
 		id: 'settings-global',
-		label: 'Settings · Global Settings',
+		label: 'Settings � Global Settings',
 		keywords: 'defaults day start end late time zone',
 		hint: '/settings',
 		group: 'Pages',
@@ -109,7 +101,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 	},
 	{
 		id: 'settings-update',
-		label: 'Settings · Software Update',
+		label: 'Settings � Software Update',
 		keywords: 'update version upgrade',
 		hint: '/settings',
 		group: 'Pages',

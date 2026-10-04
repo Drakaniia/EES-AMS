@@ -12,6 +12,28 @@
 		"core:window:allow-is-maximized",
 		"core:window:allow-show",
 		"core:window:allow-hide",
-		"updater:default"
+		"updater:default",
+		"dialog:allow-open",
+		"dialog:allow-save",
+		"dialog:allow-message",
+		"opener:allow-open-url",
+		"opener:allow-default-urls",
+		"opener:allow-reveal-item-in-dir",
+		{
+			"identifier": "opener:allow-open-path",
+			"allow": [{ "path": "$DOCUMENT/EES-AMS/**" }, { "path": "$HOME/**" }]
+		},
+		"fs:allow-read-file",
+		"fs:allow-write-file",
+		"fs:allow-read-dir",
+		"fs:allow-mkdir",
+		"fs:allow-remove",
+		"fs:allow-rename",
+		"fs:allow-stat",
+		"fs:allow-exists",
+		{
+			"identifier": "fs:scope",
+			"allow": ["$DOCUMENT/EES-AMS", "$DOCUMENT/EES-AMS/**", "$APPDATA", "$APPDATA/**"]
+		}
 	]
 }

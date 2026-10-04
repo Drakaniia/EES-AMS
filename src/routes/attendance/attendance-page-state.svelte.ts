@@ -10,7 +10,7 @@ import {
 	type AttendanceType,
 	type Student,
 	type Class
-} from '$lib/db-rust';
+} from '$lib/api';
 import { fmtDate } from '$lib/csv';
 import { settingsStore } from '$lib/stores/settings.svelte';
 import { commandPaletteStore } from '$lib/stores/command-palette.svelte';

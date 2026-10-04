@@ -8,7 +8,7 @@
 	import AttendanceManualLogDialog from './attendance-manual-log-dialog.svelte';
 	import AttendanceDateNav from './attendance-date-nav.svelte';
 	import { attendanceState } from './attendance-page-state.svelte';
-	import type { Student, AttendanceType } from '$lib/db-rust';
+	import type { Student, AttendanceType } from '$lib/api';
 
 	onMount(() => {
 		void attendanceState.init();

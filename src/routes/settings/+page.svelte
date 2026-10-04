@@ -11,7 +11,6 @@
 	import GlobalConfigForm from './global-config-form.svelte';
 	import UpdateSection from './update-section.svelte';
 	import RestoreBackupDialog from './restore-backup-dialog.svelte';
-	import BrandingSection from './branding-section.svelte';
 
 	onMount(() => {
 		settingsState.init();
@@ -71,9 +70,6 @@
 				</div>
 				<!-- ── Right column ──────────────────────────────────────────── -->
 				<div class="space-y-6 lg:col-span-4">
-					<div id="settings-branding" class="scroll-mt-6">
-						<BrandingSection />
-					</div>
 					<div id="settings-global" class="scroll-mt-6">
 						<GlobalConfigForm />
 					</div>

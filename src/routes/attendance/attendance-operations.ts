@@ -8,7 +8,7 @@ import {
 	type CreateEventRequest,
 	type Class,
 	type Student
-} from '$lib/db-rust';
+} from '$lib/api';
 import {
 	eventTime,
 	attendanceTimestampForSelectedDate,

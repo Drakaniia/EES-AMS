@@ -1,4 +1,4 @@
-import type { StudentGender } from '$lib/db-rust';
+import type { StudentGender } from '$lib/api';
 
 export type EntryMode = 'single' | 'bulk';
 

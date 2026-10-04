@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Dialog from './Dialog.svelte';
-	import type { Student } from '$lib/db-rust';
+	import type { Student } from '$lib/api';
 
 	type Props = {
 		students: Student[];

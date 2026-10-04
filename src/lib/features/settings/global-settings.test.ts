@@ -23,93 +23,43 @@ const baseFields: GlobalSettingsFields = {
 
 const baseSettings: Settings = {
 	id: 'app',
-	...baseFields,
-	brandingLogoPath: null,
-	brandingTitle: 'EES AMS'
+	...baseFields
 };
 
 describe('buildGlobalSettingsPayload', () => {
-	it('includes brandingLogoPath and brandingTitle from fields', () => {
-		const payload = buildGlobalSettingsPayload({
-			...baseFields,
-			brandingLogoPath: '/some/path.png',
-			brandingTitle: 'Mrs. Santos'
-		});
-		expect(payload.brandingLogoPath).toBe('/some/path.png');
-		expect(payload.brandingTitle).toBe('Mrs. Santos');
-	});
-
-	it('defaults brandingLogoPath to null when not provided', () => {
-		const payload = buildGlobalSettingsPayload(baseFields);
-		expect(payload.brandingLogoPath).toBeNull();
-	});
-
-	it('defaults brandingTitle to EES AMS when not provided', () => {
-		const payload = buildGlobalSettingsPayload(baseFields);
-		expect(payload.brandingTitle).toBe('EES AMS');
+	it('carries the fields through with the app row id', () => {
+		const payload = buildGlobalSettingsPayload({ ...baseFields, dayStart: '09:00' });
+		expect(payload).toEqual({ id: 'app', ...baseFields, dayStart: '09:00' });
 	});
 });
 
 describe('normalizeGlobalSettings', () => {
-	it('preserves brandingLogoPath when set', () => {
-		const input: Settings = {
+	it('defaults a missing quarter window to the empty string', () => {
+		const normalized = normalizeGlobalSettings({
 			...baseSettings,
-			brandingLogoPath: '/assets/branding/user-abc.png'
-		};
-		const normalized = normalizeGlobalSettings(input);
-		expect(normalized.brandingLogoPath).toBe('/assets/branding/user-abc.png');
+			q2Start: undefined
+		});
+		expect(normalized.q2Start).toBe('');
 	});
 
-	it('defaults brandingLogoPath to null when undefined', () => {
-		const input: Settings = {
-			...baseSettings,
-			brandingLogoPath: undefined
-		};
-		const normalized = normalizeGlobalSettings(input);
-		expect(normalized.brandingLogoPath).toBeNull();
-	});
-
-	it('preserves brandingTitle when set', () => {
-		const input: Settings = {
-			...baseSettings,
-			brandingTitle: 'Room 201 - Grade 3'
-		};
-		const normalized = normalizeGlobalSettings(input);
-		expect(normalized.brandingTitle).toBe('Room 201 - Grade 3');
-	});
-
-	it('defaults brandingTitle to EES AMS when undefined', () => {
-		const input: Settings = {
-			...baseSettings,
-			brandingTitle: undefined
-		};
-		const normalized = normalizeGlobalSettings(input);
-		expect(normalized.brandingTitle).toBe('EES AMS');
+	it('preserves a present quarter window', () => {
+		const normalized = normalizeGlobalSettings({ ...baseSettings, q2Start: '2026-12-01' });
+		expect(normalized.q2Start).toBe('2026-12-01');
 	});
 });
 
 describe('globalSettingsEqual', () => {
-	it('returns true when branding fields match', () => {
-		const a: Settings = { ...baseSettings, brandingTitle: 'Custom' };
-		const b: Settings = { ...baseSettings, brandingTitle: 'Custom' };
-		expect(globalSettingsEqual(a, b)).toBe(true);
+	it('returns true for identical settings', () => {
+		expect(globalSettingsEqual(baseSettings, { ...baseSettings })).toBe(true);
 	});
 
-	it('returns false when brandingTitle differs', () => {
-		const a: Settings = { ...baseSettings, brandingTitle: 'Custom A' };
-		const b: Settings = { ...baseSettings, brandingTitle: 'Custom B' };
-		expect(globalSettingsEqual(a, b)).toBe(false);
+	it('returns false when a quarter window differs', () => {
+		expect(globalSettingsEqual(baseSettings, { ...baseSettings, q2Start: '2026-12-01' })).toBe(
+			false
+		);
 	});
 
-	it('returns false when brandingLogoPath differs', () => {
-		const a: Settings = { ...baseSettings, brandingLogoPath: '/a.png' };
-		const b: Settings = { ...baseSettings, brandingLogoPath: '/b.png' };
-		expect(globalSettingsEqual(a, b)).toBe(false);
-	});
-
-	it('returns true when both brandingLogoPath are null', () => {
-		const a: Settings = { ...baseSettings, brandingLogoPath: null };
-		const b: Settings = { ...baseSettings, brandingLogoPath: null };
-		expect(globalSettingsEqual(a, b)).toBe(true);
+	it('treats an undefined window as the same as an empty one', () => {
+		expect(globalSettingsEqual(baseSettings, { ...baseSettings, q3End: undefined })).toBe(true);
 	});
 });

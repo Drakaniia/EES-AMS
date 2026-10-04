@@ -16,7 +16,7 @@
 		type Student,
 		type AttendanceEvent,
 		type Class
-	} from '$lib/db-rust';
+	} from '$lib/api';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { fmtDate, fmtTime } from '$lib/csv';

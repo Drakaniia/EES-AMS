@@ -1,3 +1,4 @@
+import { describeError } from '$lib/db';
 import {
 	getSf2LaunchMonth,
 	getSf2SchoolCalendarSettings,
@@ -224,9 +225,7 @@ class Sf2State {
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 	private errorMessage(error: unknown, fallback: string): string {
-		if (error instanceof Error) return error.message;
-		if (typeof error === 'string') return error;
-		return fallback;
+		return describeError(error, fallback);
 	}
 }
 

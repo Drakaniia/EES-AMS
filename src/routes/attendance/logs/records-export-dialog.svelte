@@ -11,7 +11,7 @@
 		type AttendanceEvent,
 		type AttendanceAuditEntry,
 		type Class
-	} from '$lib/db-rust';
+	} from '$lib/api';
 	import { type StudentAttendance, primaryEvent, sessionKeyFor } from './records-state.svelte';
 
 	let {

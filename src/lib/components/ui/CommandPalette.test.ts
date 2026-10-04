@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
-vi.mock('$lib/db-rust', () => ({ listStudents: mocks.listStudents }));
+vi.mock('$lib/api', () => ({ listStudents: mocks.listStudents }));
 
 import { commandPaletteStore } from '$lib/stores/command-palette.svelte';
 

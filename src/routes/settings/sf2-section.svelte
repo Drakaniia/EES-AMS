@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { sf2State } from './settings-state.svelte';
+	import { sf2ImportState } from './sf2-import-state.svelte';
+	import Sf2ImportDialog from './sf2-import-dialog.svelte';
 	import { sf2MonthLabel } from '$lib/features/settings/sf2-months';
 	import { SF2_SCHOOL_START_DATE_PROMPT } from '$lib/features/settings/sf2-heal-toast';
 	import { isSchoolStartDateValid } from '$lib/features/settings/sf2-months';
@@ -11,15 +13,18 @@
 		attention: 'text-destructive',
 		pending: 'text-muted-foreground'
 	};
+
+	/** The grade levels the create form offers — the elementary school's own six. */
+	const GRADE_LEVELS = ['1', '2', '3', '4', '5', '6'];
 </script>
 
 <section id="sf2-workbooks" class="order-3 space-y-6 rounded-2xl border border-border bg-card p-6">
 	<div>
 		<h3 class="text-lg font-medium">SF2 Workbook</h3>
 		<p class="mt-1 text-sm text-muted-foreground">
-			One Excel file per month, each holding only that month. Nothing is imported by hand: the app
-			checks this month's file against its own records every time it starts, and recovers any mark
-			the file holds and the app does not.
+			One Excel file per month, each holding only that month. Start a class from the template or
+			adopt a school workbook above; the app also checks this month's file against its own records
+			every time it starts, and recovers any mark the file holds and the app does not.
 		</p>
 	</div>
 
@@ -74,6 +79,155 @@
 		</p>
 	</div>
 
+	<!-- ── Start / Import ───────────────────────────────────────────────────── -->
+	<div class="space-y-3 rounded-xl border border-border bg-surface p-4">
+		<div>
+			<h4 class="text-sm font-semibold">Start, import</h4>
+			<p class="mt-0.5 text-xs text-muted-foreground">
+				Create a fresh workbook from the DepEd template, or adopt a school workbook as the class
+				record. The roster follows the Students page on its own - a student added there is on the
+				grid here without a step in between.
+			</p>
+		</div>
+		<div class="flex flex-wrap items-center gap-2">
+			<label class="flex items-center gap-2 text-xs">
+				Class
+				<select
+					bind:value={sf2ImportState.selectedClassId}
+					class="rounded-pill border border-border bg-background px-3 py-2 text-sm"
+				>
+					<option value="">Derive from grade + section</option>
+					{#each sf2ImportState.availableClasses as c (c.id)}
+						<option value={c.id}>{c.name}</option>
+					{/each}
+				</select>
+			</label>
+			<button
+				type="button"
+				onclick={() => (sf2ImportState.showCreateForm = !sf2ImportState.showCreateForm)}
+				class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+			>
+				<FileSpreadsheet class="size-4" aria-hidden="true" />
+				Create from template
+			</button>
+			<button
+				type="button"
+				onclick={() => sf2ImportState.onPickImportFile()}
+				disabled={sf2ImportState.staging}
+				class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+			>
+				{#if sf2ImportState.staging}
+					<Spinner />
+				{/if}
+				{sf2ImportState.staging ? 'Reading…' : 'Import workbook'}
+			</button>
+		</div>
+
+		{#if sf2ImportState.showCreateForm}
+			<div class="grid grid-cols-2 gap-3">
+				<label class="text-xs">
+					School ID
+					<input
+						type="text"
+						bind:value={sf2ImportState.createDraft.schoolId}
+						class="mt-1 w-full rounded-pill border border-border bg-background px-4 py-2 text-sm"
+					/>
+				</label>
+				<label class="text-xs">
+					School name
+					<input
+						type="text"
+						bind:value={sf2ImportState.createDraft.schoolName}
+						class="mt-1 w-full rounded-pill border border-border bg-background px-4 py-2 text-sm"
+					/>
+				</label>
+				<label class="text-xs">
+					School year
+					<input
+						type="text"
+						bind:value={sf2ImportState.createDraft.schoolYear}
+						placeholder="2026-2027"
+						class="mt-1 w-full rounded-pill border border-border bg-background px-4 py-2 text-sm"
+					/>
+				</label>
+				<label class="text-xs">
+					Report month
+					<input
+						type="text"
+						bind:value={sf2ImportState.createDraft.reportMonth}
+						placeholder="SEPTEMBER"
+						class="mt-1 w-full rounded-pill border border-border bg-background px-4 py-2 text-sm"
+					/>
+				</label>
+				<label class="text-xs">
+					Grade level
+					<select
+						bind:value={sf2ImportState.createDraft.gradeLevel}
+						class="mt-1 w-full rounded-pill border border-border bg-background px-4 py-2 text-sm"
+					>
+						<option value="">Choose a grade</option>
+						{#each GRADE_LEVELS as grade (grade)}
+							<option value={grade}>{grade}</option>
+						{/each}
+					</select>
+				</label>
+				<label class="text-xs">
+					Section
+					<input
+						type="text"
+						bind:value={sf2ImportState.createDraft.section}
+						class="mt-1 w-full rounded-pill border border-border bg-background px-4 py-2 text-sm"
+					/>
+				</label>
+				<label class="text-xs">
+					Adviser name
+					<input
+						type="text"
+						bind:value={sf2ImportState.createDraft.adviserName}
+						class="mt-1 w-full rounded-pill border border-border bg-background px-4 py-2 text-sm"
+					/>
+				</label>
+				<label class="text-xs">
+					School head name
+					<input
+						type="text"
+						bind:value={sf2ImportState.createDraft.schoolHeadName}
+						class="mt-1 w-full rounded-pill border border-border bg-background px-4 py-2 text-sm"
+					/>
+				</label>
+			</div>
+			<label class="block text-xs">
+				Learner names, one per line
+				<textarea
+					bind:value={sf2ImportState.learnerNamesText}
+					rows="4"
+					class="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm"
+				></textarea>
+			</label>
+			<div>
+				<button
+					type="button"
+					onclick={() => sf2ImportState.onCreateFromTemplate()}
+					disabled={sf2ImportState.creating}
+					class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					{#if sf2ImportState.creating}
+						<Spinner />
+					{/if}
+					{sf2ImportState.creating ? 'Creating…' : 'Create workbook'}
+				</button>
+			</div>
+		{/if}
+	</div>
+
+	<Sf2ImportDialog
+		open={sf2ImportState.importDialogOpen}
+		validation={sf2ImportState.importReview?.validation ?? null}
+		busy={sf2ImportState.importing}
+		onProceed={() => sf2ImportState.onConfirmImport(true)}
+		onCancel={() => sf2ImportState.onCancelImport()}
+	/>
+
 	<!-- ── Month workbooks (read-only) ──────────────────────────────────────── -->
 	<div class="space-y-3">
 		<div class="flex flex-wrap items-center justify-between gap-3">
@@ -113,8 +267,8 @@
 			</div>
 		{:else if sf2State.monthRows.length === 0}
 			<p class="text-sm text-muted-foreground">
-				No SF2 month workbooks yet. Use <em>Re-run the workbook split</em> below to build them from the
-				original workbook.
+				No SF2 month workbooks yet. Import a school workbook above and they are built automatically
+				— <em>Re-run the workbook split</em> below is only the fallback when a month needs attention.
 			</p>
 		{:else}
 			<div class="overflow-x-auto rounded-xl border border-border">
@@ -187,7 +341,7 @@
 			<div class="min-w-0">
 				<h4 class="text-sm font-semibold">Re-run the workbook split</h4>
 				<p class="mt-0.5 max-w-xl text-xs text-muted-foreground">
-					Splits the original workbook into one file per month. Safe to run more than once: a month
+					Runs automatically on startup and after an import. Safe to run more than once: a month
 					that is already split is left alone, so marks written into it are never overwritten. The
 					original workbook is always kept.
 				</p>

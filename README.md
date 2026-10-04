@@ -158,7 +158,7 @@ cd src-tauri && cargo fmt
 
 ```bash
 # Frontend tests
-bun test
+bun run test
 
 # Backend tests
 cd src-tauri && cargo test

@@ -17,7 +17,7 @@
 		type AttendanceEvent,
 		type Class,
 		type Student
-	} from '$lib/db-rust';
+	} from '$lib/api';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { formatAttendanceDate, adjustDate } from '../attendance-state.svelte';
 

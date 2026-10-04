@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Student } from '$lib/db-rust';
+	import type { Student } from '$lib/api';
 
 	let {
 		deleteTarget,

@@ -1,5 +1,5 @@
-import { findStudentByCard } from '$lib/db-rust';
-import type { Student, AttendanceType } from '$lib/db-rust';
+import { findStudentByCard } from '$lib/api';
+import type { Student, AttendanceType } from '$lib/api';
 import type { AttendanceLogHandle } from './attendance-page-state.svelte';
 
 /**

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
-	import { AlertTriangle, CheckCircle2, CircleX } from 'lucide-svelte';
+	import { CheckCircle2, CircleX } from 'lucide-svelte';
 
 	type Sf2OpenStatus = 'idle' | 'syncing' | 'success' | 'error';
 
@@ -11,9 +11,7 @@
 		displayMessage: string;
 		progressPercent: number;
 		showWaitHint: boolean;
-		isExcelError?: boolean;
 		onRetry?: () => void;
-		onKillAndRetry?: () => void;
 		onClose?: () => void;
 	};
 
@@ -24,22 +22,9 @@
 		displayMessage,
 		progressPercent,
 		showWaitHint,
-		isExcelError = false,
 		onRetry,
-		onKillAndRetry,
 		onClose
 	}: Props = $props();
-
-	let showKillConfirm = $state(false);
-
-	function handleKillAndRetry() {
-		showKillConfirm = false;
-		onKillAndRetry?.();
-	}
-
-	function resetKillConfirm() {
-		showKillConfirm = false;
-	}
 </script>
 
 {#if status !== 'idle'}
@@ -68,37 +53,6 @@
 					<p class="text-sm leading-relaxed text-muted-foreground">{error}</p>
 				</div>
 
-				{#if isExcelError && onKillAndRetry && showKillConfirm}
-					<!-- Kill confirmation — sits above the button row for breathing room -->
-					<div class="flex w-full flex-col gap-3">
-						<div
-							class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-left"
-						>
-							<AlertTriangle class="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
-							<p class="text-xs leading-relaxed text-amber-800">
-								This will close <strong>all</strong> open Excel windows, including any unsaved work in
-								other spreadsheets. Make sure you've saved everything in Excel first.
-							</p>
-						</div>
-						<div class="flex justify-center gap-2">
-							<button
-								type="button"
-								onclick={resetKillConfirm}
-								class="control-ring rounded-md border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-surface"
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								onclick={handleKillAndRetry}
-								class="control-ring rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
-							>
-								Kill &amp; Retry
-							</button>
-						</div>
-					</div>
-				{/if}
-
 				<div class="flex gap-3">
 					<button
 						type="button"
@@ -107,15 +61,6 @@
 					>
 						Close
 					</button>
-					{#if isExcelError && onKillAndRetry && !showKillConfirm}
-						<button
-							type="button"
-							onclick={() => (showKillConfirm = true)}
-							class="control-ring rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100"
-						>
-							Force kill Excel
-						</button>
-					{/if}
 					<button
 						type="button"
 						onclick={onRetry}
@@ -186,7 +131,7 @@
 
 				<!-- Subtle "closing soon" hint when at 100% -->
 				{#if progressPercent >= 100}
-					<p class="text-xs text-muted-foreground">Finalizing…</p>
+					<p class="text-xs text-muted-foreground">Finalizing�</p>
 				{:else if showWaitHint}
 					<!-- Descriptive "please wait a little longer" hint shown when the
 						 backend has been silent for a few seconds (slow Excel write). -->
@@ -201,7 +146,7 @@
 							<span class="relative inline-flex size-2 rounded-full bg-primary"></span>
 						</span>
 						<span>
-							Excel is still working on the workbook in the background — this can take a little
+							Excel is still working on the workbook in the background � this can take a little
 							longer. Please wait a moment and keep this window open.
 						</span>
 					</div>

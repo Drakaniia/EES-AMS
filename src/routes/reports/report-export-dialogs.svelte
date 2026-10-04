@@ -3,7 +3,7 @@
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import TaskProgress from '$lib/components/ui/TaskProgress.svelte';
 	import { Save } from 'lucide-svelte';
-	import type { Sf2ExportPreview } from '$lib/db-rust';
+	import type { Sf2ExportPreview } from '$lib/api';
 
 	let {
 		exportDialogOpen = $bindable(false),

@@ -1,3 +1,4 @@
+import { describeError } from '$lib/db';
 import { settingsStore } from '$lib/stores/settings.svelte';
 import { listClasses, type Settings, type AttendanceMode } from '$lib/features/settings/native';
 import {
@@ -8,6 +9,7 @@ import {
 import { classState } from './class-state.svelte';
 import { backupState } from './backup-state.svelte';
 import { sf2State } from './sf2-state.svelte';
+import { sf2ImportState } from './sf2-import-state.svelte';
 import { quarterState } from './quarter-state.svelte';
 import { updateSectionState } from './update-state.svelte';
 import type { Ctx } from './state-context';
@@ -22,6 +24,7 @@ class SettingsPageState implements Ctx {
 		// Wire cross-cutting services into sub-state singletons
 		backupState.init(this);
 		sf2State.init(this);
+		sf2ImportState.init(this, () => sf2State.load());
 		updateSectionState.init(this);
 	}
 
@@ -29,6 +32,7 @@ class SettingsPageState implements Ctx {
 	classState = classState;
 	backupState = backupState;
 	sf2State = sf2State;
+	sf2ImportState = sf2ImportState;
 	quarterState = quarterState;
 	updateSectionState = updateSectionState;
 
@@ -37,8 +41,6 @@ class SettingsPageState implements Ctx {
 	defaultDayEnd = $state('15:00');
 	defaultLateAfter = $state('08:45');
 	attendanceMode = $state<AttendanceMode>('manual');
-	brandingLogoPath = $state<string | null>(null);
-	brandingTitle = $state('EES AMS');
 
 	savedGlobalSettingsSnapshot = $state<Settings | null>(null);
 	pendingGlobalSettingsReload = $state<Settings | null>(null);
@@ -63,9 +65,7 @@ class SettingsPageState implements Ctx {
 			q2Start: this.quarterState.q2Start,
 			q2End: this.quarterState.q2End,
 			q3Start: this.quarterState.q3Start,
-			q3End: this.quarterState.q3End,
-			brandingLogoPath: this.brandingLogoPath,
-			brandingTitle: this.brandingTitle
+			q3End: this.quarterState.q3End
 		});
 	}
 
@@ -82,8 +82,6 @@ class SettingsPageState implements Ctx {
 		this.quarterState.q2End = normalized.q2End ?? '';
 		this.quarterState.q3Start = normalized.q3Start ?? '';
 		this.quarterState.q3End = normalized.q3End ?? '';
-		this.brandingLogoPath = normalized.brandingLogoPath ?? null;
-		this.brandingTitle = normalized.brandingTitle ?? 'EES AMS';
 		this.savedGlobalSettingsSnapshot = normalized;
 		this.pendingGlobalSettingsReload = null;
 	}
@@ -150,9 +148,7 @@ class SettingsPageState implements Ctx {
 
 	// ── Helpers ─────────────────────────────────────────────────────────────────
 	errorMessage(error: unknown, fallback: string): string {
-		if (error instanceof Error) return error.message;
-		if (typeof error === 'string') return error;
-		return fallback;
+		return describeError(error, fallback);
 	}
 
 	// ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -165,6 +161,7 @@ class SettingsPageState implements Ctx {
 		// on the critical path for the rest of the page - so it loads alongside
 		// everything else rather than gating it.
 		void this.sf2State.load();
+		void this.sf2ImportState.loadClasses();
 	}
 
 	hasUnsavedGlobalSettings(): boolean {
@@ -197,4 +194,4 @@ export const settingsState = new SettingsPageState();
 // Components can `import { classState } from './settings-state.svelte'`
 // or `import { classState } from './class-state.svelte'` — both point to
 // the same instances created above.
-export { classState, backupState, sf2State, quarterState, updateSectionState };
+export { classState, backupState, sf2State, sf2ImportState, quarterState, updateSectionState };

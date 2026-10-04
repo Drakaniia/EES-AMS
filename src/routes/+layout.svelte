@@ -4,6 +4,7 @@
 	import UpdateNotification from '$lib/components/ui/UpdateNotification.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import ClickSpark from '$lib/components/ui/ClickSpark.svelte';
+	import { bootstrapApp } from '$lib/bootstrap';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
@@ -13,6 +14,11 @@
 		if (initialLoading) {
 			initialLoading.style.display = 'none';
 		}
+
+		// Fire-and-forget: the bindings above are needed before the first read, but
+		// nothing here blocks paint, and a backend that is not up yet surfaces as a
+		// failed read rather than a blank screen.
+		void bootstrapApp();
 	});
 </script>
 

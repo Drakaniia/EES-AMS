@@ -47,7 +47,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 
-vi.mock('$lib/db-rust', () => ({ listStudents: vi.fn(async () => []) }));
+vi.mock('$lib/api', () => ({ listStudents: vi.fn(async () => []) }));
 
 function renderAppShell() {
 	return render(AppShell, {

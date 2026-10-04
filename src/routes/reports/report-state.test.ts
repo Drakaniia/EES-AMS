@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { appError } from '$lib/db';
 import type { Sf2PreviewDate } from '$lib/types';
-import { buildMatrixWeekGroups, weekdayIndexForDate, matrixDateLabel } from './report-state.svelte';
+import {
+	buildMatrixWeekGroups,
+	weekdayIndexForDate,
+	matrixDateLabel,
+	errorMessage
+} from './report-state.svelte';
 
 describe('buildMatrixWeekGroups', () => {
 	it('creates dateKey slots for ALL weekdays even with empty dates array', () => {
@@ -129,5 +135,19 @@ describe('matrixDateLabel', () => {
 	it('formats date as weekday + day', () => {
 		const label = matrixDateLabel('2026-01-05');
 		expect(label).toContain('5');
+	});
+});
+
+describe('errorMessage', () => {
+	it('shows the message of a database AppError rather than the fallback', () => {
+		expect(errorMessage(appError('ClassNotFound', 'abc123'), 'Failed to load reports')).toBe(
+			'class not found: abc123'
+		);
+	});
+
+	it('still prefers a real Error and a plain string', () => {
+		expect(errorMessage(new Error('boom'), 'fallback')).toBe('boom');
+		expect(errorMessage('boom', 'fallback')).toBe('boom');
+		expect(errorMessage(undefined, 'fallback')).toBe('fallback');
 	});
 });

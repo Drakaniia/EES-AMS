@@ -6,12 +6,14 @@ import {
 	deleteStudent,
 	listClasses,
 	getSf2ExportReadiness,
+	refreshSf2MonthRoster,
 	type Student,
 	type StudentGender,
 	type CreateStudentRequest,
 	type Class,
 	type Sf2ExportReadiness
-} from '$lib/db-rust';
+} from '$lib/api';
+import { describeError } from '$lib/db';
 import { parseStudentNames, type EntryMode } from './student-state.svelte';
 
 class StudentPageState {
@@ -176,6 +178,26 @@ class StudentPageState {
 		this.entryMode = mode;
 	}
 
+	/**
+	 * Put a roster change onto the month's worksheets.
+	 *
+	 * The student is already saved by the time this runs, so a workbook that cannot be
+	 * written - most often because it is open in Excel - must not undo the save. It is
+	 * reported as its own message instead: the teacher has to know the SF2 grid is now
+	 * one learner short until they close the file and try again.
+	 */
+	private async syncMonthRoster(classId: string): Promise<void> {
+		if (classId === '') return;
+		try {
+			await refreshSf2MonthRoster(classId);
+		} catch (error) {
+			const msg = describeError(error, 'The SF2 workbook could not be updated');
+			this.toast(
+				`Saved, but the SF2 workbook was not updated: ${msg}. Close it in Excel and retry.`
+			);
+		}
+	}
+
 	handlePageChange(page: number) {
 		this.currentPage = page;
 	}
@@ -196,14 +218,18 @@ class StudentPageState {
 			const [s, c, readiness] = await Promise.all([
 				listStudents(),
 				listClasses(),
-				getSf2ExportReadiness()
+				// The roster does not depend on the SF2 workbook. On a first launch (or
+				// before any class exists) this read throws "No class is set up yet", and
+				// that must not take the whole class list down with it -- `canCreateStudents`
+				// already disables "Add student" while readiness is null.
+				getSf2ExportReadiness().catch(() => null)
 			]);
 			this.students = s;
 			this.classes = c;
 			this.sf2Readiness = readiness;
 			this.currentPage = 1;
 		} catch (err: unknown) {
-			const msg = err instanceof Error ? err.message : 'Database error';
+			const msg = describeError(err, 'Database error');
 			this.loadError = msg;
 			this.toast(`Failed to load students: ${msg}`);
 		} finally {
@@ -291,12 +317,13 @@ class StudentPageState {
 				];
 				const createdStudents = await createStudents(studentRequests);
 				this.students = [...createdStudents, ...this.students];
+				await this.syncMonthRoster(classId);
 				this.toast(
 					`${this.bulkStudentCount} ${this.bulkStudentCount === 1 ? 'student' : 'students'} added`
 				);
 				this.closeDialog();
 			} catch (error) {
-				const msg = error instanceof Error ? error.message : 'Failed to add students';
+				const msg = describeError(error, 'Failed to add students');
 				this.toast(`Error: ${msg}`);
 			} finally {
 				this.savingStudent = false;
@@ -331,11 +358,12 @@ class StudentPageState {
 			this.students = this.editing
 				? this.students.map((student) => (student.id === savedStudent.id ? savedStudent : student))
 				: [savedStudent, ...this.students];
+			await this.syncMonthRoster(savedStudent.classId ?? classId);
 			this.toast(this.editing ? 'Student updated' : 'Student added');
 			this.closeDialog();
 		} catch (error) {
 			console.error('Error saving student:', error);
-			const msg = error instanceof Error ? error.message : 'Failed to save student';
+			const msg = describeError(error, 'Failed to save student');
 
 			if (msg.includes('UNIQUE constraint failed') && msg.includes('card_serial')) {
 				this.toast('Card serial already registered to another student.');
@@ -349,8 +377,10 @@ class StudentPageState {
 
 	confirmDelete = async (target = this.deleteTarget) => {
 		if (!target) return;
+		const classId = target.classId ?? '';
 		await deleteStudent(target.id);
 		this.students = this.students.filter((student) => student.id !== target.id);
+		await this.syncMonthRoster(classId);
 		this.toast('Deleted');
 		this.deleteTarget = null;
 	};
@@ -375,7 +405,7 @@ class StudentPageState {
 			this.scanFor = null;
 			this.cardSerial = '';
 		} catch (error) {
-			const msg = error instanceof Error ? error.message : 'Failed to pair card';
+			const msg = describeError(error, 'Failed to pair card');
 			this.toast(`Card pairing failed: ${msg}`);
 		}
 	};

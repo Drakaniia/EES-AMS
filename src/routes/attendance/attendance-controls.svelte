@@ -2,7 +2,7 @@
 	import { ScanLine } from 'lucide-svelte';
 
 	import { fmtTime } from '$lib/csv';
-	import type { AttendanceType } from '$lib/db-rust';
+	import type { AttendanceType } from '$lib/api';
 	import type { LogLine } from './attendance-state.svelte';
 
 	let {

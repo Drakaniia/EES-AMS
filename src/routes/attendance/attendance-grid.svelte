@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Search, CheckCheck, Grid2X2, List, Check, X } from 'lucide-svelte';
 	import type { Snippet } from 'svelte';
-	import type { Student, AttendanceType } from '$lib/db-rust';
+	import type { Student, AttendanceType } from '$lib/api';
 	import type { ManualViewMode } from './attendance-state.svelte';
 	import { getStudentInitials } from './attendance-state.svelte';
 
@@ -74,7 +74,7 @@
 					<span class="inline-flex items-center gap-1.5">
 						<span class="size-2.5 rounded-sm border border-border bg-background" aria-hidden="true"
 						></span>
-						Pending · Present by default
+						Pending � Present by default
 					</span>
 				</div>
 			</div>
@@ -225,7 +225,7 @@
 					{@const status = onGetStudentStatus(student)}
 					<button
 						type="button"
-						title={`${student.name} - ${status.label} · Right-click to mark absent`}
+						title={`${student.name} - ${status.label} � Right-click to mark absent`}
 						aria-label={`${student.name}, ${status.label}`}
 						disabled={isProcessing || dateLoading}
 						onclick={() => onMarkStudent(student, action)}

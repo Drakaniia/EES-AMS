@@ -2,13 +2,7 @@ import {
 	createBackupNow,
 	createWorkbooksBackupNow,
 	openBackupFolder,
-	chooseBackupSyncFolder,
-	clearBackupSyncFolder,
-	connectGoogleDriveBackup,
-	disconnectGoogleDriveBackup,
-	uploadLatestBackupToGoogleDrive,
 	chooseRestoreBackup,
-	chooseRestoreDatabaseFile,
 	restoreBackup,
 	exportDatabase,
 	exportJsonWithFolder,
@@ -20,8 +14,8 @@ import {
 	type BackupSummary,
 	type BackupStatus
 } from '$lib/features/settings/native';
-import { googleDriveStatusLabel as backupGoogleDriveStatusLabel } from '$lib/features/settings/backup';
 import type { Ctx } from './state-context';
+import { errorMessage as appErrorMessage, type AppError } from '$lib/db';
 
 /**
  * Backup/restore, export/import, and wipe state and actions.
@@ -71,8 +65,6 @@ import type { Ctx } from './state-context';
 	backupBusy = $state(false);
 	workbooksBackupBusy = $state(false);
 	backupFolderOpening = $state(false);
-	syncFolderBusy = $state(false);
-	googleDriveBusy = $state(false);
 	restoreChoosing = $state(false);
 	restoreBusy = $state(false);
 	restorePreview = $state<BackupPreview | null>(null);
@@ -101,11 +93,14 @@ import type { Ctx } from './state-context';
 	private errorMessage(error: unknown, fallback: string): string {
 		if (error instanceof Error) return error.message;
 		if (typeof error === 'string') return error;
+		// `$lib/db` throws plain `{ kind, detail }` objects, not `Error`s. Without this
+		// branch every backup failure reaches the teacher as the generic fallback --
+		// `Failed to open backup folder: Failed to open backup folder` -- and the
+		// real reason is never shown.
+		if (typeof error === 'object' && error !== null && 'kind' in error && 'detail' in error) {
+			return appErrorMessage(error as AppError);
+		}
 		return fallback;
-	}
-
-	googleDriveStatusLabel(): string {
-		return backupGoogleDriveStatusLabel(this.backupStatus);
 	}
 
 	// ── Reload backup data ─────────────────────────────────────────────────────
@@ -182,98 +177,11 @@ import type { Ctx } from './state-context';
 		}
 	}
 
-	async onChooseBackupSyncFolder() {
-		if (this.syncFolderBusy) return;
-		this.syncFolderBusy = true;
-		try {
-			this.backupStatus = await chooseBackupSyncFolder();
-			this.ctx.toast(
-				this.backupStatus.syncFolderPath ? 'Local sync folder set' : 'Backup folder unchanged'
-			);
-		} catch (error) {
-			const msg = this.errorMessage(error, 'Sync folder selection failed');
-			this.ctx.toast(`Sync folder selection failed: ${msg}`, false);
-		} finally {
-			this.syncFolderBusy = false;
-		}
-	}
-
-	async onClearBackupSyncFolder() {
-		if (this.syncFolderBusy) return;
-		this.syncFolderBusy = true;
-		try {
-			this.backupStatus = await clearBackupSyncFolder();
-			this.ctx.toast('Backup sync folder cleared');
-		} catch (error) {
-			const msg = this.errorMessage(error, 'Failed to clear sync folder');
-			this.ctx.toast(`Failed to clear sync folder: ${msg}`, false);
-		} finally {
-			this.syncFolderBusy = false;
-		}
-	}
-
-	async onConnectGoogleDriveBackup() {
-		if (this.googleDriveBusy) return;
-		this.googleDriveBusy = true;
-		try {
-			this.backupStatus = await connectGoogleDriveBackup();
-			this.ctx.toast('Google Drive connected');
-		} catch (error) {
-			const msg = this.errorMessage(error, 'Google Drive connection failed');
-			this.ctx.toast(`Google Drive connection failed: ${msg}`, false);
-		} finally {
-			this.googleDriveBusy = false;
-		}
-	}
-
-	async onDisconnectGoogleDriveBackup() {
-		if (this.googleDriveBusy) return;
-		this.googleDriveBusy = true;
-		try {
-			this.backupStatus = await disconnectGoogleDriveBackup();
-			this.ctx.toast('Google Drive disconnected');
-		} catch (error) {
-			const msg = this.errorMessage(error, 'Google Drive disconnect failed');
-			this.ctx.toast(`Google Drive disconnect failed: ${msg}`, false);
-		} finally {
-			this.googleDriveBusy = false;
-		}
-	}
-
-	async onUploadLatestBackupToGoogleDrive() {
-		if (this.googleDriveBusy) return;
-		this.googleDriveBusy = true;
-		try {
-			this.backupStatus = await uploadLatestBackupToGoogleDrive();
-			this.ctx.toast('Latest backup uploaded to Google Drive');
-		} catch (error) {
-			const msg = this.errorMessage(error, 'Google Drive upload failed');
-			this.ctx.toast(`Google Drive upload failed: ${msg}`, false);
-		} finally {
-			this.googleDriveBusy = false;
-		}
-	}
-
 	async onChooseRestoreBackup() {
 		if (this.restoreChoosing || this.restoreBusy) return;
 		this.restoreChoosing = true;
 		try {
 			const preview = await chooseRestoreBackup();
-			if (preview) this.restorePreview = preview;
-		} catch (error) {
-			const msg = this.errorMessage(error, 'Restore preview failed');
-			this.ctx.toast(`Restore preview failed: ${msg}`, false);
-		} finally {
-			this.restoreChoosing = false;
-		}
-	}
-
-	/** Restores from the flat `*.db` files a build before workbook backup wrote. */
-	async onChooseRestoreLegacyFile() {
-		if (this.restoreChoosing || this.restoreBusy) return;
-		this.restoreChoosing = true;
-		try {
-			const preview = await chooseRestoreDatabaseFile();
 			if (preview) this.restorePreview = preview;
 		} catch (error) {
 			const msg = this.errorMessage(error, 'Restore preview failed');

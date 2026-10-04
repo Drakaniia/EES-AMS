@@ -2,7 +2,7 @@
 	import { Save } from 'lucide-svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import { reportMonthLabel } from './report-state.svelte';
-	import type { Sf2WorkbookSettings } from '$lib/db-rust';
+	import type { Sf2WorkbookSettings } from '$lib/api';
 
 	type Props = {
 		open: boolean;

@@ -85,8 +85,6 @@ export interface Settings {
 	q2End?: string;
 	q3Start?: string;
 	q3End?: string;
-	brandingLogoPath?: string | null;
-	brandingTitle?: string;
 }
 
 export interface CreateStudentRequest {
@@ -189,16 +187,7 @@ export interface BackupStatus {
 	retentionLimit: number;
 	lastBackupAt?: number;
 	lastBackupPath?: string;
-	syncFolderPath?: string;
 	lastError?: string;
-	lastSyncError?: string;
-	googleDriveConfigured: boolean;
-	googleDriveConnected: boolean;
-	googleDriveFolderId?: string;
-	googleDriveFolderName?: string;
-	lastGoogleDriveBackupAt?: number;
-	lastGoogleDriveFileId?: string;
-	lastGoogleDriveError?: string;
 	/** Most recent workbook-only backup, or undefined if none has been taken. */
 	lastWorkbooksBackupPath?: string;
 }
@@ -243,12 +232,6 @@ export interface WipeOutcome {
 	deletedClasses: number;
 	deletedEvents: number;
 	preWipeBackupPath: string | null;
-}
-
-export interface ServerInfo {
-	localIp: string;
-	port: number;
-	url: string;
 }
 
 /**

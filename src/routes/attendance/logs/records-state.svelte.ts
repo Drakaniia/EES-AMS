@@ -1,5 +1,5 @@
 import { SvelteDate } from 'svelte/reactivity';
-import type { AttendanceEvent, Class } from '$lib/db-rust';
+import type { AttendanceEvent, Class } from '$lib/api';
 import { fmtDate } from '$lib/csv';
 
 export type StudentAttendance = {

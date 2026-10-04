@@ -8,7 +8,6 @@ import {
 	getSf2WorkbookSettings,
 	listClasses,
 	presentAllSf2PreviewAttendance,
-	syncSf2Roster,
 	toggleSf2PreviewAttendance,
 	updateSf2WorkbookSettings,
 	type Class,
@@ -18,7 +17,7 @@ import {
 	type Sf2PreviewCell,
 	type Sf2PreviewStudentRow,
 	type Sf2WorkbookSettings
-} from '$lib/db-rust';
+} from '$lib/api';
 
 import {
 	buildMatrixRows,
@@ -87,7 +86,6 @@ export function createReportPageState() {
 	let creatingMonth = $state(false);
 	let genderFilter = $state<'all' | 'male' | 'female'>('all');
 	let exporting = $state(false);
-	let syncingRoster = $state(false);
 	let presentingAll = $state(false);
 	let savingDetails = $state(false);
 	let correctingCellKey = $state<string | null>(null);
@@ -149,6 +147,11 @@ export function createReportPageState() {
 	 * use. Two reads, no Excel.
 	 */
 	async function loadInitial() {
+		// Every visit rebuilds from the database. The month cache outlives the page,
+		// so without this a learner added on the Students page since the last visit
+		// would not be on the grid - which is the bug the roster sync used to need a
+		// button to clear.
+		invalidateAllMonthCache();
 		loading = true;
 		loadError = null;
 		try {
@@ -337,15 +340,13 @@ export function createReportPageState() {
 	}
 
 	async function onOpenSf2() {
-		await sf2Open.open(activeClassId, preview, (msg, ok) => reportDialogs?.showToast(msg, ok));
+		await sf2Open.open(activeClassId, activeReportMonth, preview, (msg, ok) =>
+			reportDialogs?.showToast(msg, ok)
+		);
 	}
 
-	async function retrySf2Open() {
-		await sf2Open.retry(activeClassId, preview, (msg, ok) => reportDialogs?.showToast(msg, ok));
-	}
-
-	async function killAndRetrySf2Open() {
-		await sf2Open.killAndRetry(activeClassId, preview, (msg, ok) =>
+	function retrySf2Open() {
+		return sf2Open.retry(activeClassId, activeReportMonth, preview, (msg, ok) =>
 			reportDialogs?.showToast(msg, ok)
 		);
 	}
@@ -397,21 +398,11 @@ export function createReportPageState() {
 	 * stays reachable from Rust.
 	 */
 
-	async function onSyncRoster() {
-		if (!activeClassId || !preview?.template || syncingRoster) return;
-		syncingRoster = true;
-		try {
-			await syncSf2Roster(activeClassId);
-			invalidateAllMonthCache();
-			reportDialogs?.showToast('Roster synced! All students mapped to SF2 workbook.');
-			await refreshCurrentMonth();
-		} catch (error) {
-			const msg = errorMessage(error, 'Roster sync failed');
-			reportDialogs?.showToast(`Could not sync roster: ${msg}`, false);
-		} finally {
-			syncingRoster = false;
-		}
-	}
+	/**
+	 * The roster sync that used to live here is gone for the same reason: the
+	 * Students page maps every save onto the month worksheets on the spot, so by the
+	 * time this page is on screen there is nothing left for a button to do.
+	 */
 
 	async function requestExport() {
 		if (exportDisabled) return;
@@ -577,12 +568,6 @@ export function createReportPageState() {
 		set exporting(v) {
 			exporting = v;
 		},
-		get syncingRoster() {
-			return syncingRoster;
-		},
-		set syncingRoster(v) {
-			syncingRoster = v;
-		},
 		get presentingAll() {
 			return presentingAll;
 		},
@@ -684,9 +669,7 @@ export function createReportPageState() {
 		loadWorkbookSettings,
 		onOpenSf2,
 		retrySf2Open,
-		killAndRetrySf2Open,
 		onPresentAll,
-		onSyncRoster,
 		onCreateMonth,
 		onMonthSelect,
 		onClassSelect,

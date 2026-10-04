@@ -1,6 +1,6 @@
 import { SvelteDate } from 'svelte/reactivity';
 import { fmtDate } from '$lib/csv';
-import type { AttendanceEvent, AttendanceType, Student, Class } from '$lib/db-rust';
+import type { AttendanceEvent, AttendanceType, Student, Class } from '$lib/api';
 
 export type LogLine = {
 	id: string;

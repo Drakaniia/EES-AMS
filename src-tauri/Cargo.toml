@@ -17,57 +17,25 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2.6.1", features = [] }
 
+# Zero hand-written Rust (spec D1): `src/lib.rs` registers plugins and does nothing
+# else. Every dependency below is either Tauri itself or an official plugin the
+# TypeScript backend imports from `@tauri-apps/plugin-*`.
 [dependencies]
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
+# `log`: `tauri_plugin_log::Builder::level` takes a `log::LevelFilter`.
+# `serde_json`: `tauri::generate_context!` expands to code that deserializes the
+#   config and capability files, so the macro fails to compile without it. Plain
+#   `serde` is not needed: nothing in `src/` derives or implements a trait.
 log = "0.4"
-tauri = { version = "2.11.1", features = [] }
+serde_json = "1.0"
+# `~` (not `^`) on every crate whose npm counterpart is installed: the Tauri CLI
+# refuses to build on a major.minor mismatch, so a floating requirement lets a
+# routine `cargo update` break `tauri build`.
+tauri = { version = "~2.12", features = [] }
+tauri-plugin-dialog = "~2.8"
+tauri-plugin-fs = "~2.6"
 tauri-plugin-log = "2"
+tauri-plugin-opener = "~2.7"
 tauri-plugin-updater = "2"
-tauri-plugin-dialog = "2"
-
-# Database
-rusqlite = { version = "0.32", features = ["bundled", "backup"] }
-r2d2 = "0.8"
-r2d2_sqlite = "0.25"
-
-# Error handling
-thiserror = "2.0"
-anyhow = "1.0"
-
-# Utilities
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.11", features = ["v4", "serde"] }
-base64 = "0.22"
-keyring = "3"
-open = "5"
-parking_lot = "0.12"
-rand = "0.8"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
-sha2 = "0.10"
-tokio = { version = "1", features = ["rt"] }
-url = "2"
-
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = [
-    "Win32_Foundation",
-    "Win32_System_Com",
-    "Win32_System_Diagnostics_ToolHelp",
-    "Win32_System_Ole",
-    "Win32_System_Threading",
-    "Win32_System_Variant",
-] }
-
-[features]
-default = []
-
-[dev-dependencies]
-tempfile = "3.8"
-mockall = "0.12"
-serial_test = "3.0"
-proptest = "1.4"
-criterion = "0.5"
-tauri = { version = "2.11.1", features = ["test"] }
 
 [profile.release]
 opt-level = 3

@@ -9,7 +9,7 @@
 		ChevronRight
 	} from 'lucide-svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
-	import type { Sf2PreviewStudentRow, Sf2PreviewCell } from '$lib/db-rust';
+	import type { Sf2PreviewStudentRow, Sf2PreviewCell } from '$lib/api';
 	import type {
 		MatrixWeekGroup,
 		MatrixDateSlot,
@@ -174,7 +174,7 @@
 </script>
 
 <div
-	class="flex min-h-0 flex-1 flex-col overflow-hidden {fullReview
+	class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden {fullReview
 		? 'rounded-none border-0 bg-background shadow-none'
 		: 'rounded-2xl border border-border bg-card shadow-sm'}"
 >

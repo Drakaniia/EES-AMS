@@ -15,7 +15,7 @@
 		type AttendanceEvent,
 		type Student,
 		type Class
-	} from '$lib/db-rust';
+	} from '$lib/api';
 	import { fmtDate, fmtTime } from '$lib/csv';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import {
@@ -267,7 +267,7 @@
 				<div class="min-w-0">
 					<div class="label-mono">Today completion</div>
 					<h2 class="mt-2 text-xl leading-tight font-black text-foreground">
-						{checkedIn.length} present / {absentCount} absent · {pendingCount} pending
+						{checkedIn.length} present / {absentCount} absent � {pendingCount} pending
 					</h2>
 					<p class="text-balance-safe mt-1 text-sm leading-6 text-muted-foreground">
 						{assignedClass

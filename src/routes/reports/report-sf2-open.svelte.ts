@@ -1,7 +1,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { errorMessage } from './report-state.svelte';
-import { killAllExcelProcesses, syncAndOpenSf2Workbook } from '$lib/db-rust';
+import { syncAndOpenSf2Workbook } from '$lib/api';
 import type { Sf2ExportPreview, Sf2MonthGridPreview } from '$lib/types';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -82,7 +82,6 @@ export function createSf2OpenState() {
 	let progressCurrent = $state(0);
 	let progressTotal = $state(10);
 	let error = $state<string | null>(null);
-	let isExcelError = $state(false);
 	let resultPath = $state<string | null>(null);
 	let cycleIndex = $state(0);
 	let lastBackendMsg = $state('');
@@ -206,17 +205,17 @@ export function createSf2OpenState() {
 	// declaration order in the return object.
 	const open: (
 		activeClassId: string,
+		reportMonth: string,
 		preview: Sf2ExportPreview | null,
 		showToast: ShowToastFn
-	) => Promise<void> = async (activeClassId, preview, showToast) => {
-		if (!activeClassId || !preview?.template || status === 'syncing') return;
+	) => Promise<void> = async (activeClassId, reportMonth, preview, showToast) => {
+		if (!activeClassId || !reportMonth || !preview?.template || status === 'syncing') return;
 
 		// Reset progress state
 		status = 'syncing';
 		progressCurrent = 0;
 		progressTotal = 10;
 		error = null;
-		isExcelError = false;
 		resultPath = null;
 		cycleIndex = 0;
 		lastCycleAt = 0;
@@ -233,7 +232,7 @@ export function createSf2OpenState() {
 		startMessageCycle();
 
 		try {
-			const path = await syncAndOpenSf2Workbook(activeClassId);
+			const path = await syncAndOpenSf2Workbook(activeClassId, reportMonth);
 			resultPath = path;
 			status = 'success';
 			stopMessageCycle();
@@ -245,15 +244,13 @@ export function createSf2OpenState() {
 			}, 1500);
 		} catch (err) {
 			stopMessageCycle();
-			const msg = errorMessage(err, 'Failed to update SF2 workbook');
-			if (msg.toLowerCase().includes('excel')) {
-				isExcelError = true;
-				error =
-					'Excel may have a stuck background process preventing the workbook ' +
-					'from opening. Kill all Excel processes to recover?';
-			} else {
-				error = `Could not sync attendance to the SF2 workbook: ${msg}`;
-			}
+			// The app never drives Excel, so there is no process of ours to clear.
+			// If the teacher has the workbook open the write failed and the file is
+			// untouched; the message says what to do about it (spec D14, D15).
+			error = `Could not sync attendance to the SF2 workbook: ${errorMessage(
+				err,
+				'Failed to update SF2 workbook'
+			)}`;
 			status = 'error';
 		}
 	};
@@ -261,33 +258,11 @@ export function createSf2OpenState() {
 	function close() {
 		status = 'idle';
 		error = null;
-		isExcelError = false;
-	}
-
-	async function killAndRetry(
-		activeClassId: string,
-		preview: Sf2ExportPreview | null,
-		showToast: ShowToastFn
-	) {
-		status = 'idle';
-		error = null;
-		isExcelError = false;
-		try {
-			const killed = await killAllExcelProcesses();
-			console.info(`killed ${killed} EXCEL.EXE process(es)`);
-			await new Promise((resolve) => setTimeout(resolve, 300));
-			await open(activeClassId, preview, showToast);
-		} catch {
-			error =
-				'Could not stop Excel processes. ' +
-				'Try manually ending EXCEL.EXE in Task Manager, then try again.';
-			isExcelError = true;
-			status = 'error';
-		}
 	}
 
 	async function retry(
 		activeClassId: string,
+		reportMonth: string,
 		preview: Sf2ExportPreview | null,
 		showToast: ShowToastFn
 	) {
@@ -295,7 +270,7 @@ export function createSf2OpenState() {
 		error = null;
 		// Small delay so the UI resets cleanly before re-triggering
 		await new Promise((resolve) => setTimeout(resolve, 50));
-		await open(activeClassId, preview, showToast);
+		await open(activeClassId, reportMonth, preview, showToast);
 	}
 
 	return {
@@ -311,9 +286,6 @@ export function createSf2OpenState() {
 		},
 		get error() {
 			return error;
-		},
-		get isExcelError() {
-			return isExcelError;
 		},
 		get resultPath() {
 			return resultPath;
@@ -331,7 +303,6 @@ export function createSf2OpenState() {
 		// Actions
 		open,
 		retry,
-		killAndRetry,
 		close,
 		cleanup
 	};

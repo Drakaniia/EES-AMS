@@ -17,8 +17,12 @@ src-tauri/target/
 Thumbs.db
 
 # Binary/docs
+# Stray workbook copies stay out; the bundled DepEd template the app ships is
+# committed because `workbook-files.ts` imports it with `?url`.
 *.xls
 *.xlsx
+!src-tauri/resources/sf2/*.xlsx
+/tools/sf2-diff/out/
 
 # Env
 .env

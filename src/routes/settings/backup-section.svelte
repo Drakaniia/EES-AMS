@@ -6,11 +6,6 @@
 		DatabaseBackup,
 		RotateCcw,
 		FolderOpen,
-		CloudUpload,
-		LogOut,
-		Cloud,
-		FolderSync,
-		Trash2,
 		Download,
 		Upload,
 		SlidersHorizontal,
@@ -19,7 +14,6 @@
 	} from 'lucide-svelte';
 	import {
 		backupKindLabel,
-		backupPathLabel,
 		formatBackupBytes,
 		formatBackupTimestamp
 	} from '$lib/features/settings/backup';
@@ -37,9 +31,8 @@
 					Your data is stored locally. Back up your records anytime, or restore a previous backup.
 				{:else}
 					Your data is stored locally. Automatic SQLite backups protect students, classes,
-					attendance records, settings, and SF2 workbook mappings. Connect Google Drive with full
-					Drive access to upload backups through browser sign-in, or use a local sync folder as a
-					fallback.
+					attendance records, settings, and SF2 workbook mappings. Backups are zip archives in your
+					Documents folder, so a copy is one copy-paste away.
 				{/if}
 			</p>
 		</div>
@@ -61,17 +54,9 @@
 		</button>
 	</div>
 
-	{#if backupState.backupStatus?.lastError || backupState.backupStatus?.lastSyncError || backupState.backupStatus?.lastGoogleDriveError}
+	{#if backupState.backupStatus?.lastError}
 		<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-			{#if backupState.backupStatus.lastError}
-				<div>{backupState.backupStatus.lastError}</div>
-			{/if}
-			{#if backupState.backupStatus.lastSyncError}
-				<div>{backupState.backupStatus.lastSyncError}</div>
-			{/if}
-			{#if backupState.backupStatus.lastGoogleDriveError}
-				<div>{backupState.backupStatus.lastGoogleDriveError}</div>
-			{/if}
+			<div>{backupState.backupStatus.lastError}</div>
 		</div>
 	{/if}
 
@@ -211,19 +196,6 @@
 						{backupState.restoreChoosing ? 'Checking...' : 'Restore Backup'}
 					</button>
 					<button
-						onclick={() => backupState.onChooseRestoreLegacyFile()}
-						disabled={backupState.restoreChoosing || backupState.restoreBusy}
-						title="Backups made before workbook backup existed are a single .db file, not a folder"
-						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						{#if backupState.restoreChoosing}
-							<Spinner />
-						{:else}
-							<RotateCcw class="size-4" aria-hidden="true" />
-						{/if}
-						Restore Older .db Backup
-					</button>
-					<button
 						onclick={() => backupState.onOpenBackupFolder()}
 						disabled={backupState.backupFolderOpening}
 						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
@@ -237,7 +209,7 @@
 					</button>
 				</div>
 
-				<div class="grid gap-3 sm:grid-cols-4">
+				<div class="grid gap-3 sm:grid-cols-2">
 					<div class="rounded-xl border border-border bg-surface p-4">
 						<div class="label-mono">Last Backup</div>
 						<div class="mt-2 text-sm font-semibold">
@@ -251,24 +223,6 @@
 								? `${backupState.backupStatus.backupCount} / ${backupState.backupStatus.retentionLimit}`
 								: 'Loading'}
 						</div>
-					</div>
-					<div class="rounded-xl border border-border bg-surface p-4">
-						<div class="label-mono">Sync Folder</div>
-						<div class="mt-2 text-sm font-semibold break-all">
-							{backupPathLabel(backupState.backupStatus?.syncFolderPath)}
-						</div>
-					</div>
-					<div class="rounded-xl border border-border bg-surface p-4">
-						<div class="label-mono">Google Drive</div>
-						<div class="mt-2 text-sm font-semibold break-all">
-							{backupState.googleDriveStatusLabel()}
-						</div>
-						{#if backupState.backupStatus?.lastGoogleDriveBackupAt}
-							<div class="mt-1 text-xs text-muted-foreground">
-								Last upload
-								{formatBackupTimestamp(backupState.backupStatus.lastGoogleDriveBackupAt)}
-							</div>
-						{/if}
 					</div>
 				</div>
 
@@ -344,73 +298,6 @@
 				</div>
 
 				<div class="flex flex-wrap gap-2 border-t border-border pt-5">
-					{#if backupState.backupStatus?.googleDriveConnected}
-						<button
-							onclick={() => backupState.onUploadLatestBackupToGoogleDrive()}
-							disabled={backupState.googleDriveBusy}
-							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							{#if backupState.googleDriveBusy}
-								<Spinner />
-							{:else}
-								<CloudUpload class="size-4" aria-hidden="true" />
-							{/if}
-							Upload Latest to Drive
-						</button>
-						<button
-							onclick={() => backupState.onDisconnectGoogleDriveBackup()}
-							disabled={backupState.googleDriveBusy}
-							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							{#if backupState.googleDriveBusy}
-								<Spinner />
-							{:else}
-								<LogOut class="size-4" aria-hidden="true" />
-							{/if}
-							Disconnect Google Drive
-						</button>
-					{:else}
-						<button
-							onclick={() => backupState.onConnectGoogleDriveBackup()}
-							disabled={backupState.googleDriveBusy ||
-								backupState.backupStatus?.googleDriveConfigured === false}
-							class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-							title={backupState.backupStatus?.googleDriveConfigured === false
-								? 'Set EES_AMS_GOOGLE_CLIENT_ID before building the app'
-								: 'Open browser sign-in for full Google Drive access'}
-						>
-							{#if backupState.googleDriveBusy}
-								<Spinner />
-							{:else}
-								<Cloud class="size-4" aria-hidden="true" />
-							{/if}
-							{backupState.googleDriveBusy ? 'Connecting...' : 'Connect Google Drive'}
-						</button>
-					{/if}
-					<button
-						onclick={() => backupState.onChooseBackupSyncFolder()}
-						disabled={backupState.syncFolderBusy}
-						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						{#if backupState.syncFolderBusy}
-							<Spinner />
-						{:else}
-							<FolderSync class="size-4" aria-hidden="true" />
-						{/if}
-						Choose Local Sync Folder
-					</button>
-					<button
-						onclick={() => backupState.onClearBackupSyncFolder()}
-						disabled={backupState.syncFolderBusy || !backupState.backupStatus?.syncFolderPath}
-						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						{#if backupState.syncFolderBusy}
-							<Spinner />
-						{:else}
-							<Trash2 class="size-4" aria-hidden="true" />
-						{/if}
-						Clear Sync Folder
-					</button>
 					<button
 						onclick={() => backupState.openExportDialog()}
 						class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"

@@ -1,4 +1,4 @@
-import type { Sf2WorkbookSettings, Sf2TemplateDraft } from '$lib/db-rust';
+import type { Sf2WorkbookSettings, Sf2TemplateDraft } from '$lib/api';
 import { normalizedSf2FirstSchoolDay } from '$lib/features/settings/sf2-workbook';
 
 // ── Workbook details draft state ───────────────────────────────────────────────

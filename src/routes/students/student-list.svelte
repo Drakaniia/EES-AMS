@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import Pagination from '$lib/components/ui/Pagination.svelte';
-	import type { Student } from '$lib/db-rust';
+	import type { Student } from '$lib/api';
 	import { genderLabel } from './student-state.svelte';
 
 	let {

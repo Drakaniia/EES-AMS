@@ -1,4 +1,4 @@
-import type { AuditEvent, BackupKind, BackupStatus } from '$lib/types';
+import type { AuditEvent, BackupKind } from '$lib/types';
 
 const AUDIT_METADATA_KEYS = [
 	'students',
@@ -60,18 +60,6 @@ export function formatBackupBytes(value: number) {
 	if (value < 1024) return `${value} B`;
 	if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
 	return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-export function backupPathLabel(path?: string) {
-	if (!path) return 'Not set';
-	const parts = path.split(/[\\/]/).filter(Boolean);
-	return parts.length > 2 ? `...${parts.slice(-2).join('\\')}` : path;
-}
-
-export function googleDriveStatusLabel(status?: BackupStatus | null) {
-	if (!status?.googleDriveConfigured) return 'OAuth not configured';
-	if (!status.googleDriveConnected) return 'Not connected';
-	return status.googleDriveFolderName ?? 'Connected';
 }
 
 export function backupKindLabel(kind: BackupKind) {

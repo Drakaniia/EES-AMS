@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Sf2ExportPreview, Sf2WorkbookSettings } from '$lib/db-rust';
+	import type { Sf2ExportPreview, Sf2WorkbookSettings } from '$lib/api';
 	import { headerReviewValue, headerReviewMonthValue } from './report-state.svelte';
 
 	let {

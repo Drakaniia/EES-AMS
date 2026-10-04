@@ -52,9 +52,7 @@ class SettingsStore {
 				q2Start: '',
 				q2End: '',
 				q3Start: '',
-				q3End: '',
-				brandingLogoPath: null,
-				brandingTitle: 'EES AMS'
+				q3End: ''
 			};
 		} finally {
 			this._loading = false;

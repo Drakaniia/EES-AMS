@@ -24,7 +24,7 @@
 		if (!page.preview?.template) return;
 		commandPaletteStore.register({
 			id: 'reports-switch-month',
-			label: 'Reports · Switch Month',
+			label: 'Reports � Switch Month',
 			keywords: 'change report month sf2 period',
 			hint: 'Reports',
 			group: 'Actions',
@@ -51,7 +51,7 @@
 	<!--
 		Error and empty states only. This used to also own a full-page loader, which
 		covered the whole route while a month or a class loaded and is why switching
-		either felt like the app had hung (spec §7.4, acceptance #10). The grid now
+		either felt like the app had hung (spec �7.4, acceptance #10). The grid now
 		skeletons itself and the sidebar stays interactive.
 	-->
 	<ReportLoadingStates
@@ -68,11 +68,29 @@
 		and then jumping. A switch between months, or between classes, takes the same
 		path - only the grid's cells are replaced.
 	-->
-	{#if !page.loadError}
+	<!--
+		The grid track only exists once there is something to put in it. `hasGrid` is
+		false while `loading` is false exactly when there is no workbook at all, which
+		is the empty state's business - rendering the skeleton there showed a second
+		"loading" panel under "No SF2 workbook is ready for review".
+	-->
+	{#if !page.loadError && (page.loading || page.hasGrid)}
+		<!-- The 360px sidebar track only exists when the sidebar is rendered. Full
+		     preview hides the sidebar, so keeping the track reserved left a dead
+		     380px column of whitespace down the right of the grid. -->
+		<!-- The track must be declared in BOTH states. With `grid-template-columns:
+		     none` the implicit track is `auto`, i.e. sized to the grid's max-content �
+		     which here is the whole 22-column table. Full preview sits behind three
+		     `overflow-hidden` ancestors, so that overflow was clipped and unreachable
+		     rather than scrolled: the toolbar's right-hand buttons and the sticky
+		     Learner column were both cut off the real screen. `minmax(0,1fr)` floors
+		     the track at the container width and lets the table scroll inside it. -->
 		<section
-			class="grid min-h-0 flex-1 gap-5 overflow-hidden px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px]"
+			class="grid min-h-0 min-w-0 flex-1 overflow-hidden {page.fullReviewOpen
+				? 'grid-cols-[minmax(0,1fr)]'
+				: 'gap-5 px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px]'}"
 		>
-			<div class="flex min-h-0 flex-col gap-5 pr-0 xl:pr-1">
+			<div class="flex min-h-0 min-w-0 flex-col gap-5 pr-0 xl:pr-1">
 				{#if page.loading || page.gridPending || !page.preview?.template}
 					<ReportGridSkeleton label="Loading the month" />
 				{:else if page.fullReviewOpen}
@@ -134,16 +152,13 @@
 					draftSchoolHeadName={page.draft.schoolHeadName}
 					exportDisabled={page.exportDisabled}
 					exporting={page.exporting}
-					syncingRoster={page.syncingRoster}
 					sf2OpenStatus={page.sf2Open.status}
 					workbookSettings={page.workbookSettings}
 					savingDetails={page.savingDetails}
 					activeClassId={page.activeClassId}
 					onOpenSf2={page.onOpenSf2}
-					onSyncRoster={page.onSyncRoster}
 					onClassSelect={page.onClassSelect}
 					onCreateMonth={() => page.onCreateMonth()}
-					onRefresh={page.refreshCurrentMonth}
 					onRequestExport={page.requestExport}
 					onEditDetails={() => (page.workbookDetailsOpen = true)}
 					onSwitchMonth={() => (page.monthPickerOpen = true)}
@@ -199,8 +214,6 @@
 	displayMessage={page.sf2Open.displayMessage}
 	progressPercent={page.sf2Open.progressPercent}
 	showWaitHint={page.sf2Open.showWaitHint}
-	isExcelError={page.sf2Open.isExcelError}
 	onRetry={page.retrySf2Open}
-	onKillAndRetry={page.killAndRetrySf2Open}
 	onClose={() => page.sf2Open.close()}
 />

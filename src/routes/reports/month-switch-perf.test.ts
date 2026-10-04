@@ -47,34 +47,40 @@ import type {
 } from '$lib/types';
 
 // ── Mocks, set up before the module under test is imported ──────────────────
+//
+// The month read is mocked at the module boundary rather than at the SQL
+// boundary. The old bridge put the seam one level down - it mocked Tauri's
+// `invoke` and still exercised `getSf2MonthPreview` - but that read is now a
+// sequence of `getDriver()` queries with no single call to intercept, and what
+// this file measures is the frontend's own projection work anyway (see the
+// timing section). The structural assertions in section 1 read the source, so
+// they still hold the line on what a switch is allowed to do.
 
-const invokeCalls: { command: string; args?: unknown }[] = [];
-const invokeMock = vi.fn(async (command: string, args?: unknown) => {
-	invokeCalls.push({ command, args });
+const readCalls: [string, ...unknown[]][] = [];
+const readMock = vi.fn(async (reportMonth: string, ...rest: unknown[]) => {
+	readCalls.push([reportMonth, ...rest]);
 	return monthPreview(40);
 });
 
 const listenCalls: string[] = [];
-const listenMock = vi.fn(async (event: string, _handler?: unknown) => {
-	listenCalls.push(event);
-	return () => {};
-});
-
-vi.mock('@tauri-apps/api/core', () => ({
-	invoke: (command: string, args?: unknown) => invokeMock(command, args)
-}));
 
 vi.mock('@tauri-apps/api/event', () => ({
-	listen: (event: string, handler: unknown) => listenMock(event, handler)
+	listen: (event: string, _handler: unknown) => {
+		listenCalls.push(event);
+		return Promise.resolve(() => {});
+	}
 }));
 
-import { getSf2MonthPreview } from '$lib/db-rust/sf2-months';
+import { getSf2MonthPreview } from '$lib/api/sf2-months';
+
+vi.mock('$lib/api/sf2-months', () => ({
+	getSf2MonthPreview: (...args: [string, ...unknown[]]) => readMock(...args)
+}));
 
 beforeEach(() => {
-	invokeCalls.length = 0;
+	readCalls.length = 0;
 	listenCalls.length = 0;
-	invokeMock.mockClear();
-	listenMock.mockClear();
+	readMock.mockClear();
 });
 
 // ── Source of the switch path ───────────────────────────────────────────────
@@ -87,8 +93,8 @@ const read = (...parts: string[]) => readFileSync(join(...parts), 'utf8');
 const SWITCH_PATH_SOURCES: Record<string, string> = {
 	'report-page-state.svelte.ts': read(REPORTS_DIR, 'report-page-state.svelte.ts'),
 	'report-sf2-open.svelte.ts': read(REPORTS_DIR, 'report-sf2-open.svelte.ts'),
-	'sf2-months.ts': read(SRC_DIR, 'lib', 'db-rust', 'sf2-months.ts'),
-	'sf2.ts': read(SRC_DIR, 'lib', 'db-rust', 'sf2.ts')
+	'sf2-months.ts': read(SRC_DIR, 'lib', 'api', 'sf2-months.ts'),
+	'sf2.ts': read(SRC_DIR, 'lib', 'api', 'sf2.ts')
 };
 
 /**
@@ -251,10 +257,10 @@ describe('the month switch path', () => {
 		).toEqual([]);
 	});
 
-	it('reads exactly one command, and it is the read-only one', async () => {
+	it('reads exactly one month, and it is the read-only one', async () => {
 		await getSf2MonthPreview('OCTOBER', 'class-1', '2026-2027');
 
-		expect(invokeCalls.map((call) => call.command)).toEqual(['get_sf2_month_preview']);
+		expect(readCalls).toEqual([['OCTOBER', 'class-1', '2026-2027']]);
 		expect(listenCalls).toEqual([]);
 		// The mock is a fixed September fixture, so the assertion is that the read
 		// returned a whole, coherent month - not that it echoed the month asked
@@ -265,14 +271,10 @@ describe('the month switch path', () => {
 		expect(preview.students.length).toBe(40);
 	});
 
-	it('passes the cache key inputs through to the command', async () => {
+	it('passes the cache key inputs through to the read', async () => {
 		await getSf2MonthPreview('AUGUST', 'class-2', '2026-2027');
 
-		expect(invokeMock).toHaveBeenCalledWith('get_sf2_month_preview', {
-			classId: 'class-2',
-			schoolYear: '2026-2027',
-			reportMonth: 'AUGUST'
-		});
+		expect(readMock).toHaveBeenCalledWith('AUGUST', 'class-2', '2026-2027');
 	});
 });
 
@@ -286,7 +288,7 @@ describe('sf2-progress during a switch', () => {
 		}
 
 		expect(listenCalls, 'a switch must not open an sf2-progress listener').toEqual([]);
-		expect(invokeCalls.filter((call) => call.command !== 'get_sf2_month_preview')).toEqual([]);
+		expect(readCalls.length).toBe(20);
 	});
 });
 

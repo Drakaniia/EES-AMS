@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Student, StudentGender } from '$lib/db-rust';
+	import type { Student, StudentGender } from '$lib/api';
 	import { genderOptions, entryModeTabs, type EntryMode } from './student-state.svelte';
 
 	let {

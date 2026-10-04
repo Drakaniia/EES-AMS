@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Dialog from '$lib/components/ui/Dialog.svelte';
-	import type { Student, AttendanceType } from '$lib/db-rust';
+	import type { Student, AttendanceType } from '$lib/api';
 
 	let {
 		open = $bindable(false),

@@ -1,20 +1,13 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
-	import { convertFileSrc } from '@tauri-apps/api/core';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { updateStore } from '$lib/stores/update.svelte';
-	import defaultLogo from '$lib/assets/logo-seal.png';
+	import logoSeal from '$lib/assets/logo-seal.png';
 	import { FileSpreadsheet, ScanLine, Search, Settings } from 'lucide-svelte';
 	import { commandPaletteStore } from '$lib/stores/command-palette.svelte';
 
-	const activeLogo = $derived.by(() => {
-		const path = settingsStore.settings?.brandingLogoPath;
-		if (path) return convertFileSrc(path);
-		return defaultLogo;
-	});
-
-	const brandingTitle = $derived(settingsStore.settings?.brandingTitle || 'EES AMS');
+	const APP_TITLE = 'EES AMS';
 
 	const attendanceNavLabel = $derived(
 		settingsStore.settings?.attendanceMode === 'card_reader' ? 'Live Session' : 'Attendance'
@@ -35,11 +28,11 @@
 	<a
 		href={`${base}/reports`}
 		class="title-logo"
-		title={brandingTitle}
+		title={APP_TITLE}
 		aria-label="Navigate to Reports"
 		data-tauri-drag-region
 	>
-		<img src={activeLogo} alt={brandingTitle} class="title-logo-img" />
+		<img src={logoSeal} alt={APP_TITLE} class="title-logo-img" />
 	</a>
 
 	<!-- Nav tabs -->
