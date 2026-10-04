@@ -6,6 +6,13 @@
  * protocol in `protocol.ts`. It is a dedicated Worker so a large report or an
  * attendance import never blocks the UI thread, and so the OPFS sync access
  * handle — which only a dedicated worker may hold — stays owned by one context.
+ *
+ * The database runs on sqlite-wasm's `opfs-sahpool` VFS. The older `opfs` VFS is
+ * deliberately disabled (see `configureSqliteBootstrap`): it installs through a
+ * second, classic "async proxy" Worker with a hard 4-second timeout and swallows
+ * its own failure, which is how the app used to end up with an undefined
+ * `oo1.OpfsDb` and a misleading diagnosis. `opfs-sahpool` holds its sync access
+ * handles directly in this worker instead, so there is nothing to time out.
  */
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import { DB_FILENAME, type WorkerRequest, type WorkerResponse } from './protocol';
@@ -45,16 +52,29 @@ type WasmDb = {
 	close(): void;
 	readonly pointer: number;
 };
+type OpfsSahPoolOptions = {
+	name?: string;
+	directory?: string;
+	initialCapacity?: number;
+	clearOnInit?: boolean;
+	/** Lets a later call re-run the install after an earlier one failed. */
+	forceReinitIfPreviouslyFailed?: boolean;
+};
+/**
+ * The slice of the `opfs-sahpool` pool utility this worker uses.
+ *
+ * `OpfsSAHPoolDb` is the database constructor bound to this pool's VFS;
+ * `importDb` overwrites a pooled file in place with a `.sqlite` image (the
+ * restore path); `getFileNames` reports what the pool already holds.
+ */
+type OpfsSahPoolUtil = {
+	OpfsSAHPoolDb: new (filename: string) => WasmDb;
+	importDb(name: string, bytes: Uint8Array): number;
+	getFileNames(): string[];
+};
 type WasmNamespace = {
 	oo1: {
 		DB: new (filename: string, mode?: string) => WasmDb;
-		/**
-		 * The `opfs` VFS's database class. `importDb` is its static file-image
-		 * writer — the supported way to replace the file this VFS reads.
-		 */
-		OpfsDb: (new (filename: string) => WasmDb) & {
-			importDb?(filename: string, bytes: Uint8Array): Promise<number>;
-		};
 	};
 	capi: {
 		/** `sqlite3_serialize(db, zSchema, pN, mFlags)` — the database as a file image. */
@@ -78,22 +98,102 @@ type WasmNamespace = {
 		peek(addr: number, representation?: string): number | bigint;
 		heap8u(): Uint8Array;
 	};
+	/** Installs the `opfs-sahpool` VFS. Absent only on builds that disabled it. */
+	installOpfsSAHPoolVfs?: (options?: OpfsSahPoolOptions) => Promise<OpfsSahPoolUtil>;
 };
+
+/** The `opfs-sahpool` VFS this worker installs, and where its pooled files live. */
+const SAHPOOL_VFS_NAME = 'ees-ams-sahpool';
+const SAHPOOL_DIRECTORY = '.ees-ams-sahpool';
+/**
+ * The pool's client-facing name for the database, **with** the leading slash.
+ *
+ * The pool's `xOpen` resolves every filename with
+ * `new URL(name, 'file://localhost/').pathname`, so a bare `ees-ams.sqlite3`
+ * becomes `/ees-ams.sqlite3`. `importDb()` does *not* normalize its name, so
+ * an import registered as `ees-ams.sqlite3` is a different file from the one
+ * the app opens — the name used below has to be the normalized form.
+ */
+const POOL_DB_PATH = `/${DB_FILENAME}`;
+/** The root file the retired `opfs` VFS wrote, migrated into the pool on first open. */
+const LEGACY_DB_FILENAME = 'ees-ams.sqlite3';
 
 let db: WasmDb | null = null;
 let namespace: WasmNamespace | null = null;
+/** The installed pool, needed to write a restored image back (see `importDatabase`). */
+let pool: OpfsSahPoolUtil | null = null;
 /**
- * Which file the live connection reads: the OPFS file, or a throwaway
+ * Which file the live connection reads: the OPFS pool, or a throwaway
  * in-memory database entered explicitly from the unavailable-DB screen.
  * `import`/`export` branch on it, so a restore into temporary mode lands in
- * memory and never touches the OPFS file.
+ * memory and never touches the OPFS pool.
  */
 let mode: 'opfs-sah' | 'memory' | null = null;
+
+/**
+ * Turn off sqlite-wasm's `opfs` VFS before the module bootstraps.
+ *
+ * That VFS installs through a second "async proxy" Worker with a hard 4-second
+ * timeout and reports failure only as a swallowed `config.warn`, leaving
+ * `oo1.OpfsDb` undefined with no reason attached. This app uses `opfs-sahpool`
+ * instead (see `open()`), so the proxy worker should never be spawned at all.
+ *
+ * Must run before `sqlite3InitModule()`: the bootstrap reads
+ * `globalThis.sqlite3ApiConfig` once, and `opfs-sahpool` is unaffected by the
+ * flag.
+ */
+function configureSqliteBootstrap(): void {
+	const g = globalThis as unknown as {
+		sqlite3ApiConfig?: { disable?: { vfs?: Record<string, boolean> } };
+	};
+	const config = g.sqlite3ApiConfig ?? {};
+	g.sqlite3ApiConfig = {
+		...config,
+		disable: { ...config.disable, vfs: { ...config.disable?.vfs, opfs: true } }
+	};
+}
 
 /** The live `navigator.storage`, passed as the receiver — never detached (see `probeOpfsStorage`). */
 function liveStorage(): ProbeStorage | undefined {
 	const nav = (globalThis as unknown as { navigator?: { storage?: ProbeStorage } }).navigator;
 	return nav?.storage;
+}
+
+/**
+ * Bring a database written by the retired `opfs` VFS into the `opfs-sahpool`
+ * pool.
+ *
+ * The two VFSes keep their bytes in different places under the OPFS root, so
+ * the first launch after the switch would otherwise start empty. The legacy
+ * file is the raw SQLite image (the `opfs` VFS adds no header) and is left on
+ * disk afterwards as a safety copy.
+ */
+async function migrateLegacyDatabase(sahp: OpfsSahPoolUtil): Promise<void> {
+	if (sahp.getFileNames().includes(POOL_DB_PATH)) return;
+	const nav = (
+		globalThis as unknown as {
+			navigator?: {
+				storage?: {
+					getDirectory?: () => Promise<{
+						getFileHandle(
+							name: string
+						): Promise<{ getFile(): Promise<{ arrayBuffer(): Promise<ArrayBuffer> }> }>;
+					}>;
+				};
+			};
+		}
+	).navigator;
+	try {
+		const root = await nav?.storage?.getDirectory?.();
+		if (!root) return;
+		const handle = await root.getFileHandle(LEGACY_DB_FILENAME);
+		const bytes = new Uint8Array(await (await handle.getFile()).arrayBuffer());
+		if (!looksLikeSqlite(bytes)) return;
+		sahp.importDb(POOL_DB_PATH, bytes);
+	} catch {
+		// `NotFoundError` is the normal first-install case (there is no legacy
+		// file); any other read failure must not block the fresh database.
+	}
 }
 
 async function open(): Promise<string> {
@@ -103,46 +203,55 @@ async function open(): Promise<string> {
 	// The namespace is initialised once per worker: a re-import reopens the
 	// database below, and re-running the module bootstrap would only re-run its
 	// initializers to warn that they already ran.
+	configureSqliteBootstrap();
 	const sqlite3 = namespace ?? ((await sqlite3InitModule()) as unknown as WasmNamespace);
 	namespace = sqlite3;
 
 	try {
 		// Sync access handles: the fast path, and the reason this is a Worker.
-		// `OpfsDb` is installed by the module's `opfs` VFS initializer, which
-		// reports failure as a warn and leaves this undefined — so the message
-		// below names the real cause instead of a bare "not a constructor".
-		// NOTE: SharedArrayBuffer being present proves COOP/COEP headers are
-		// fine — when it is missing here the cause is almost always an
-		// outdated Edge WebView2 Runtime on that PC (no
-		// FileSystemSyncAccessHandle in workers), not the app's headers.
-		// Mirror sqlite-wasm's own vfsInstallationFeatureCheck so the teacher
-		// gets the actionable reason instead of a header red herring.
-		if (!sqlite3.oo1.OpfsDb) {
+		// `opfs-sahpool` holds them directly in this context, unlike the `opfs`
+		// VFS it replaced, so a failure here is either a missing WebView2 API or
+		// genuinely blocked storage — never a proxy worker timing out.
+		if (!sqlite3.installOpfsSAHPoolVfs) {
 			const env = readOpfsEnv();
 			const { cause, note } = classifyMissingOpfs(env);
 			throw appError('Database', await diagnoseOpfsFailure(note, cause, env, liveStorage()));
 		}
 		try {
-			db = new sqlite3.oo1.OpfsDb(DB_FILENAME);
+			pool = await sqlite3.installOpfsSAHPoolVfs({
+				name: SAHPOOL_VFS_NAME,
+				directory: SAHPOOL_DIRECTORY,
+				initialCapacity: 6,
+				forceReinitIfPreviouslyFailed: true
+			});
 		} catch (error) {
+			// Unlike the `opfs` VFS, this install does not swallow its reason —
+			// keep it so Details says *why* the engine failed to start.
 			const env = readOpfsEnv();
 			throw appError(
 				'Database',
 				await diagnoseOpfsFailure(
-					`could not open OPFS database (${asAppError(error).detail})`,
+					`could not start the on-device storage engine (${asAppError(error).detail})`,
 					'storage-blocked',
 					env,
 					liveStorage()
 				)
 			);
 		}
+		await migrateLegacyDatabase(pool);
+		db = new pool.OpfsSAHPoolDb(POOL_DB_PATH);
 		mode = 'opfs-sah';
 		return mode;
 	} catch (error) {
+		// An `AppError` already carries the `[cause=…]` detail; only an
+		// unexpected throw needs wrapping.
 		if (typeof error === 'object' && error !== null && 'kind' in error && 'detail' in error) {
 			throw error;
 		}
-		throw appError('Database', `could not open OPFS database (${asAppError(error).detail})`);
+		throw appError(
+			'Database',
+			`could not open the on-device database (${asAppError(error).detail})`
+		);
 	}
 }
 
@@ -151,11 +260,12 @@ async function open(): Promise<string> {
  *
  * Same WASM module, same `SqlDriver` surface, no OPFS handle — so attendance
  * and SF2 preview keep working while nothing persists past the worker's life.
- * The OPFS file is closed first (it stays on disk, untouched) because sync
- * access handles are exclusive.
+ * The OPFS pool is left installed but unused, so a later `open()` reconnects to
+ * the real database.
  */
 async function openTemporary(): Promise<string> {
 	if (db && mode === 'memory') return mode;
+	configureSqliteBootstrap();
 	const sqlite3 = namespace ?? ((await sqlite3InitModule()) as unknown as WasmNamespace);
 	namespace = sqlite3;
 	db?.close();
@@ -254,13 +364,13 @@ function exportDatabase(): Uint8Array {
 }
 
 /**
- * Replace the database file with `bytes`, then reopen it.
+ * Replace the pooled database file with `bytes`, then reopen it.
  *
  * `sqlite3_deserialize()` is deliberately *not* used, though it would be the
  * one-call option: it swaps the connection onto the in-memory buffer, so every
  * write after a restore would live in RAM and vanish with this worker. Writing
- * the image through `OpfsDb.importDb()` — the documented pairing for the `opfs`
- * VFS this worker runs on — and reopening makes the archive's bytes the file
+ * the image through the pool's `importDb()` — the documented restore path for
+ * the `opfs-sahpool` VFS — and reopening makes the archive's bytes the file
  * itself, which is what "restore" has to mean.
  *
  * A failed write reopens the old file first: a restore that cannot land leaves
@@ -274,15 +384,15 @@ async function importDatabase(bytes: Uint8Array | undefined): Promise<null> {
 		await importIntoMemory(bytes);
 		return null;
 	}
-	const importer = namespace?.oo1.OpfsDb?.importDb;
-	if (!importer) throw appError('Internal', 'OPFS database import is unavailable');
+	if (!pool) throw appError('Internal', 'OPFS database import is unavailable');
 
-	// OPFS sync access handles are exclusive: the file must be closed before it
-	// can be rewritten, and reopened once it has been.
+	// OPFS sync access handles are exclusive, and the pool writes over the
+	// pooled file in place: the connection must be closed first, and reopened
+	// once the bytes have landed.
 	db?.close();
 	db = null;
 	try {
-		await importer(DB_FILENAME, bytes);
+		pool.importDb(POOL_DB_PATH, bytes);
 	} catch (thrown) {
 		await open();
 		throw appError(
@@ -298,10 +408,11 @@ async function importDatabase(bytes: Uint8Array | undefined): Promise<null> {
  * Load a file image into the temporary in-memory database (a restore while in
  * temporary mode).
  *
- * OPFS's `importDb` cannot help here — there is no file to write — so the
- * image goes through `sqlite3_deserialize` into a fresh `:memory:` connection.
- * `SQLITE_DESERIALIZE_FREEONCLOSE` hands the buffer to SQLite, which frees it
- * when the connection closes; nothing here frees it afterwards.
+ * The pool's `importDb` cannot help here — there is no pooled file to write in
+ * memory mode — so the image goes through `sqlite3_deserialize` into a fresh
+ * `:memory:` connection. `SQLITE_DESERIALIZE_FREEONCLOSE` hands the buffer to
+ * SQLite, which frees it when the connection closes; nothing here frees it
+ * afterwards.
  */
 async function importIntoMemory(bytes: Uint8Array): Promise<void> {
 	const sqlite3 = namespace;
