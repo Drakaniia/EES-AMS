@@ -11,3 +11,4 @@
 *.sqlite binary
 *.xls binary
 *.xlsx binary
+graphify-out/graph.json merge=graphify
