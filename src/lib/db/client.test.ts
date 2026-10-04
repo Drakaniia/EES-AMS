@@ -58,6 +58,33 @@ async function within<T>(ms: number, run: () => Promise<T>): Promise<T> {
 	}
 }
 
+/** A Worker whose first `open` fails, so Retry is exercised for real. */
+class FailOnceOpenWorker extends FakeWorker {
+	static openCalls = 0;
+
+	override postMessage(data: Posted): void {
+		if (data.op === 'open') {
+			FailOnceOpenWorker.openCalls += 1;
+			if (FailOnceOpenWorker.openCalls === 1) {
+				const id = data.id;
+				queueMicrotask(() => {
+					this.onmessage?.({
+						data: {
+							id,
+							ok: false,
+							error: { kind: 'Database', detail: 'could not open OPFS database (test)' }
+						}
+					} as MessageEvent);
+				});
+				return;
+			}
+		}
+		super.postMessage(data);
+	}
+
+	override terminate(): void {}
+}
+
 afterEach(() => {
 	vi.unstubAllGlobals();
 	if (realWorker !== undefined) globalThis.Worker = realWorker;
@@ -113,6 +140,22 @@ describe('the gate on the worker driver', () => {
 			const sql = FakeWorker.posted.map((m) => m.sql);
 			expect(sql).toContain('ROLLBACK');
 			expect(sql).not.toContain('COMMIT');
+		} finally {
+			await driver.close().catch(() => {});
+		}
+	});
+
+	it('re-opens after a failed open instead of replaying the cached failure', async () => {
+		FailOnceOpenWorker.openCalls = 0;
+		FakeWorker.posted = [];
+		vi.stubGlobal('Worker', FailOnceOpenWorker);
+		const driver = new WorkerSqlDriver();
+		try {
+			await within(2000, async () => {
+				await expect(driver.open()).rejects.toMatchObject({ kind: 'Database' });
+				await driver.open();
+			});
+			expect(FailOnceOpenWorker.openCalls).toBe(2);
 		} finally {
 			await driver.close().catch(() => {});
 		}

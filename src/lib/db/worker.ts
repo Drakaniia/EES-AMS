@@ -106,6 +106,76 @@ function describeMissingOpfs(): string {
 	return 'the opfs VFS is unavailable (OPFS storage is blocked on this PC); check disk space and site-storage permissions, then reopen the app';
 }
 
+type SyncAccessHandleLike = {
+	write(buffer: Uint8Array, options?: { at?: number }): number;
+	truncate(size: number): void;
+	close(): void;
+};
+type ProbeFileHandle = {
+	createSyncAccessHandle(): Promise<SyncAccessHandleLike>;
+};
+type ProbeRoot = {
+	getFileHandle(name: string, options?: { create?: boolean }): Promise<ProbeFileHandle>;
+	removeEntry(name: string): Promise<void>;
+};
+
+/**
+ * Facts about this runtime, appended to every OPFS failure so the message
+ * names the actual environment instead of guessing it. `protocol` tells dev
+ * (`http:` + Vite) apart from release (`https:` + Tauri asset protocol).
+ */
+function envFacts(): string {
+	const g = globalThis as Record<string, unknown>;
+	const loc = g['location'] as { protocol?: unknown } | undefined;
+	return [
+		`protocol=${typeof loc?.protocol === 'string' ? loc.protocol : 'unknown'}`,
+		`isolated=${typeof crossOriginIsolated !== 'undefined' ? String(crossOriginIsolated) : 'unknown'}`,
+		`sab=${typeof SharedArrayBuffer !== 'undefined' ? 'yes' : 'no'}`
+	].join(' ');
+}
+
+/**
+ * Live OPFS probe, run only on the failure path.
+ *
+ * The sqlite-wasm VFS install failure is swallowed to a `warn` by the module
+ * bootstrap, so a missing `OpfsDb` alone cannot say whether storage is
+ * blocked or the proxy worker simply failed to start. Writing a probe file
+ * through a sync access handle answers exactly that: if the probe passes,
+ * storage is fine and the failure is the VFS install (proxy/headers), not
+ * the PC.
+ */
+async function probeOpfsStorage(): Promise<string | null> {
+	try {
+		const nav = (globalThis as unknown as { navigator?: { storage?: { getDirectory?: unknown } } })
+			.navigator;
+		const getDirectory = nav?.storage?.getDirectory;
+		if (typeof getDirectory !== 'function') return 'navigator.storage.getDirectory is missing';
+		const root = (await (getDirectory as () => Promise<ProbeRoot>)()) as ProbeRoot;
+		const file = await root.getFileHandle('.ees-ams-opfs-probe', { create: true });
+		const access = await file.createSyncAccessHandle();
+		try {
+			access.write(new Uint8Array([1, 2, 3, 4]), { at: 0 });
+			access.truncate(4);
+		} finally {
+			access.close();
+		}
+		await root.removeEntry('.ees-ams-opfs-probe');
+		return null;
+	} catch (error) {
+		return error instanceof Error ? error.message : String(error);
+	}
+}
+
+/** The static reason plus the live probe, so the message is evidence, not a guess. */
+async function diagnoseOpfsFailure(note: string): Promise<string> {
+	const probe = await probeOpfsStorage();
+	const storage =
+		probe === null
+			? 'OPFS storage probe passed, so the failure is the SQLite proxy worker/headers rather than blocked storage'
+			: `OPFS storage probe failed: ${probe}`;
+	return `${note} [${envFacts()}; ${storage}]`;
+}
+
 async function open(): Promise<string> {
 	if (db) return DB_FILENAME;
 	// The shipped types take no options; the WASM build's own `print` is muted by
@@ -128,11 +198,21 @@ async function open(): Promise<string> {
 		// Mirror sqlite-wasm's own vfsInstallationFeatureCheck so the teacher
 		// gets the actionable reason instead of a header red herring.
 		if (!sqlite3.oo1.OpfsDb) {
-			throw appError('Database', describeMissingOpfs());
+			throw appError('Database', await diagnoseOpfsFailure(describeMissingOpfs()));
 		}
-		db = new sqlite3.oo1.OpfsDb(DB_FILENAME);
+		try {
+			db = new sqlite3.oo1.OpfsDb(DB_FILENAME);
+		} catch (error) {
+			throw appError(
+				'Database',
+				await diagnoseOpfsFailure(`could not open OPFS database (${asAppError(error).detail})`)
+			);
+		}
 		return 'opfs-sah';
 	} catch (error) {
+		if (typeof error === 'object' && error !== null && 'kind' in error && 'detail' in error) {
+			throw error;
+		}
 		throw appError('Database', `could not open OPFS database (${asAppError(error).detail})`);
 	}
 }

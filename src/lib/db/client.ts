@@ -45,7 +45,16 @@ export class WorkerSqlDriver implements SqlDriver {
 
 	/** Raw open without migrations. Migration itself runs on top of this. */
 	private ensureConnected(): Promise<string> {
-		this.opening ??= this.send('open') as Promise<string>;
+		this.opening ??= (this.send('open') as Promise<string>).then(
+			(mode) => mode,
+			(error: unknown) => {
+				// A failed open must not poison the driver: Retry reuses this
+				// singleton, so drop the cached rejection and let the next call
+				// actually open again instead of replaying this failure forever.
+				this.opening = null;
+				throw error;
+			}
+		);
 		return this.opening;
 	}
 
@@ -56,19 +65,26 @@ export class WorkerSqlDriver implements SqlDriver {
 	 */
 	private ensureMigrated(): Promise<void> {
 		this.migrated ??= (async () => {
-			await this.ensureConnected();
-			const raw: SqlDriver = {
-				query: <T>(sql: string, params: SqlParam[] = []) => this.rawQuery<T>(sql, params),
-				queryOne: async <T>(sql: string, params: SqlParam[] = []) =>
-					(await this.rawQuery<T>(sql, params))[0],
-				execute: (sql: string, params: SqlParam[] = []) => this.rawExecute(sql, params),
-				script: (sql: string) => this.rawScript(sql),
-				transaction: <T>(fn: () => Promise<T>) => this.rawTransaction(fn),
-				exportFile: () => this.rawExport(),
-				importFile: (bytes: Uint8Array) => this.rawImport(bytes),
-				close: () => this.close()
-			};
-			await migrate(raw);
+			try {
+				await this.ensureConnected();
+				const raw: SqlDriver = {
+					query: <T>(sql: string, params: SqlParam[] = []) => this.rawQuery<T>(sql, params),
+					queryOne: async <T>(sql: string, params: SqlParam[] = []) =>
+						(await this.rawQuery<T>(sql, params))[0],
+					execute: (sql: string, params: SqlParam[] = []) => this.rawExecute(sql, params),
+					script: (sql: string) => this.rawScript(sql),
+					transaction: <T>(fn: () => Promise<T>) => this.rawTransaction(fn),
+					exportFile: () => this.rawExport(),
+					importFile: (bytes: Uint8Array) => this.rawImport(bytes),
+					close: () => this.close()
+				};
+				await migrate(raw);
+			} catch (error: unknown) {
+				// Same poison rule as ensureConnected: a failed migration must
+				// be re-runnable, otherwise every later query dead-ends here.
+				this.migrated = null;
+				throw error;
+			}
 		})();
 		return this.migrated;
 	}

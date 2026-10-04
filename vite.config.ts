@@ -32,6 +32,13 @@ function crossOriginIsolation(): Plugin {
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), crossOriginIsolation()],
+	optimizeDeps: {
+		// Required by @sqlite.org/sqlite-wasm: pre-bundling the module breaks
+		// its worker-relative asset lookup (sqlite3.wasm, opfs proxy), which
+		// leaves `oo1.OpfsDb` undefined in dev while release works (or worse,
+		// the reverse). Keep dev and release resolving the same files.
+		exclude: ['@sqlite.org/sqlite-wasm']
+	},
 	server: {
 		host: '127.0.0.1',
 		port: 1420,
