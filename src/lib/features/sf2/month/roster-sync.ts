@@ -227,9 +227,13 @@ function placeStudents(
 		male: countBlock(students, 'male'),
 		female: countBlock(students, 'female')
 	};
+	// Bodies minus chairs: every claimed learner already sits in a slot, so the
+	// claimed count cancels out and only the block headcount matters. Counting
+	// `wanted - free` instead grows by the already-seated learners a second
+	// time, splicing a block apart on every sync once a class is mapped.
 	const missing = {
-		male: Math.max(0, wanted.male - (slots.male.length - claimed.male.size)),
-		female: Math.max(0, wanted.female - (slots.female.length - claimed.female.size))
+		male: Math.max(0, wanted.male - slots.male.length),
+		female: Math.max(0, wanted.female - slots.female.length)
 	};
 
 	let grown = rows;
