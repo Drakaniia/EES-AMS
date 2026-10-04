@@ -81,8 +81,18 @@ export async function openWorkbook(path: string): Promise<Workbook> {
  *
  * The bytes go to a sibling temp file and are renamed over the target, so a
  * failure part-way through leaves the previous good workbook intact.
+ *
+ * ExcelJS invents `fitToWidth`/`fitToHeight` (both `1`) when it parses a sheet
+ * whose `<pageSetup>` has neither, and writes them straight back - so every
+ * save would shrink the form onto one page even though the template never
+ * asked for fit-to-page and nothing in the app sets it. They are cleared here,
+ * at the one choke point every workbook save goes through.
  */
 export async function saveWorkbookAtomic(workbook: Workbook, path: string): Promise<void> {
+	for (const sheet of workbook.worksheets) {
+		sheet.pageSetup.fitToWidth = undefined;
+		sheet.pageSetup.fitToHeight = undefined;
+	}
 	const buffer = await workbook.xlsx.writeBuffer();
 	await getFileSystem().writeFileAtomic(path, new Uint8Array(buffer));
 }
