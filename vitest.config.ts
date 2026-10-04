@@ -19,6 +19,7 @@ export default defineConfig({
 		testTimeout: 60000
 	},
 	resolve: {
-		conditions: ['browser', 'development']
+		conditions: ['browser', 'development'],
+		external: ['node:sqlite']
 	}
 });
