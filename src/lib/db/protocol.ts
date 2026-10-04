@@ -5,7 +5,7 @@ import type { SqlParam } from './driver';
 
 export type WorkerRequest = {
 	id: number;
-	op: 'open' | 'query' | 'execute' | 'script' | 'export' | 'import' | 'close';
+	op: 'open' | 'open-temporary' | 'query' | 'execute' | 'script' | 'export' | 'import' | 'close';
 	sql?: string;
 	params?: SqlParam[];
 	/** `import` only: the bytes of a `.sqlite` file image to replace the live database with. */

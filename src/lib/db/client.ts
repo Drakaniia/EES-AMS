@@ -43,6 +43,35 @@ export class WorkerSqlDriver implements SqlDriver {
 		return mode;
 	}
 
+	/**
+	 * Opens a throwaway in-memory database and runs migrations over it.
+	 *
+	 * Entered only from the unavailable-DB screen: same `SqlDriver` surface,
+	 * nothing persists. A later `open()` recovery closes it — export first if
+	 * it holds anything worth keeping (the status store asks).
+	 */
+	async openTemporary(): Promise<string> {
+		const mode = await (this.send('open-temporary') as Promise<string>);
+		this.opening = Promise.resolve(mode);
+		this.migrated = null;
+		await this.ensureMigrated();
+		return mode;
+	}
+
+	/**
+	 * Forget the current connection and open OPFS fresh.
+	 *
+	 * Recovery from temporary mode: the memory database is closed (export it
+	 * first when it holds anything — the caller asks), then `open()` runs the
+	 * real OPFS open plus migrations instead of reusing the cached connection.
+	 */
+	async recover(): Promise<string> {
+		await this.send('close').catch(() => {});
+		this.opening = null;
+		this.migrated = null;
+		return this.open();
+	}
+
 	/** Raw open without migrations. Migration itself runs on top of this. */
 	private ensureConnected(): Promise<string> {
 		this.opening ??= (this.send('open') as Promise<string>).then(

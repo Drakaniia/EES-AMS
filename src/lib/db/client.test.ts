@@ -33,6 +33,7 @@ class FakeWorker {
 
 /** Enough SQL to look migrated, so these tests measure the gate and nothing else. */
 function answerFor(op: string, sql: string | undefined): unknown {
+	if (op === 'open-temporary') return 'memory';
 	if (op === 'query') return sql?.includes('user_version') ? [{ user_version: 25 }] : [];
 	if (op === 'execute') return 0;
 	return null;
@@ -156,6 +157,36 @@ describe('the gate on the worker driver', () => {
 				await driver.open();
 			});
 			expect(FailOnceOpenWorker.openCalls).toBe(2);
+		} finally {
+			await driver.close().catch(() => {});
+		}
+	});
+
+	it('opens a temporary database without touching OPFS', async () => {
+		withFakeWorker();
+		const driver = new WorkerSqlDriver();
+		try {
+			const mode = await within(2000, () => driver.openTemporary());
+			expect(mode).toBe('memory');
+			await within(2000, () => driver.query('SELECT 1'));
+			const ops = FakeWorker.posted.map((m) => m.op);
+			expect(ops).toContain('open-temporary');
+			expect(ops).not.toContain('open');
+		} finally {
+			await driver.close().catch(() => {});
+		}
+	});
+
+	it('recovers back to OPFS after temporary mode', async () => {
+		withFakeWorker();
+		const driver = new WorkerSqlDriver();
+		try {
+			await within(2000, () => driver.openTemporary());
+			FakeWorker.posted = [];
+			await within(2000, () => driver.recover());
+			const ops = FakeWorker.posted.map((m) => m.op);
+			expect(ops).toContain('close');
+			expect(ops).toContain('open');
 		} finally {
 			await driver.close().catch(() => {});
 		}

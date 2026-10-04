@@ -25,5 +25,6 @@ export function useDriver(driver: SqlDriver | null): void {
 export { WorkerSqlDriver } from './client';
 export * from './driver';
 export * from './error';
+export * from './opfs-diagnosis';
 export type { WorkerRequest, WorkerResponse } from './protocol';
 export { DB_FILENAME } from './protocol';

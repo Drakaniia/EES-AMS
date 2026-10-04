@@ -2,6 +2,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useFileSystem } from '$lib/platform/fs';
 import { TauriFileSystem } from '$lib/platform/tauri-fs';
 import { registerSf2Preview } from '$lib/features/sf2/preview';
+import { databaseStatus } from '$lib/stores/database-status.svelte';
 import { onAppQuit, scheduleBackups, stopScheduledBackups } from '$lib/features/backup';
 
 /**
@@ -36,6 +37,7 @@ export async function bootstrapApp(): Promise<void> {
 	useFileSystem(new TauriFileSystem());
 	registerSf2Preview();
 	scheduleBackups();
+	databaseStatus.startAutoRetry();
 	await bindQuitBackup();
 }
 
@@ -46,7 +48,9 @@ async function bindQuitBackup(): Promise<void> {
 		await appWindow.onCloseRequested(async (event) => {
 			event.preventDefault();
 			try {
-				await onAppQuit();
+				// No quit snapshot of throwaway state: it would pose as a real
+				// backup in retention. Manual exports stay available in-session.
+				if (databaseStatus.state !== 'temporary') await onAppQuit();
 			} catch (error) {
 				// A backup that cannot be written must not strand the teacher in a
 				// window they cannot close. The failure is already recorded in the

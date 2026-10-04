@@ -11,6 +11,12 @@ import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import { DB_FILENAME, type WorkerRequest, type WorkerResponse } from './protocol';
 import { appError, asAppError, type AppError } from './error';
 import { looksLikeSqlite, type SqlParam } from './driver';
+import {
+	classifyMissingOpfs,
+	diagnoseOpfsFailure,
+	readOpfsEnv,
+	type ProbeStorage
+} from './opfs-diagnosis';
 
 /**
  * The slice of the sqlite-wasm API this worker uses. Declaring it here keeps
@@ -53,6 +59,15 @@ type WasmNamespace = {
 	capi: {
 		/** `sqlite3_serialize(db, zSchema, pN, mFlags)` — the database as a file image. */
 		sqlite3_serialize?: (db: number, schema: string, pN: number, mFlags: 0) => number;
+		/** `sqlite3_deserialize` — load a file image into a connection (memory-mode restores). */
+		sqlite3_deserialize?: (
+			db: number,
+			schema: string,
+			data: number,
+			dbSize: number,
+			bufferSize: number,
+			flags: number
+		) => number;
 		/** Frees memory SQLite allocated, including a `sqlite3_serialize()` result. */
 		sqlite3_free?: (ptr: number) => void;
 	};
@@ -67,117 +82,22 @@ type WasmNamespace = {
 
 let db: WasmDb | null = null;
 let namespace: WasmNamespace | null = null;
-
 /**
- * Why the `opfs` VFS refused to install, in teacher-actionable terms.
- *
- * Mirrors sqlite-wasm's `vfsInstallationFeatureCheck` (SAB+Atomics, worker
- * context, FileSystem sync-access APIs), whose own failure is swallowed to a
- * `warn` by the module bootstrap — leaving `oo1.OpfsDb` undefined with no
- * reason attached. SAB present + OpfsDb missing means headers are fine and
- * the PC's WebView2 is too old for OPFS sync access handles.
+ * Which file the live connection reads: the OPFS file, or a throwaway
+ * in-memory database entered explicitly from the unavailable-DB screen.
+ * `import`/`export` branch on it, so a restore into temporary mode lands in
+ * memory and never touches the OPFS file.
  */
-function describeMissingOpfs(): string {
-	const g = globalThis as Record<string, unknown>;
-	const sabMissing =
-		typeof SharedArrayBuffer === 'undefined' || typeof (g['Atomics'] as object) === 'undefined';
-	if (sabMissing) {
-		return 'the opfs VFS is unavailable (SharedArrayBuffer is missing); the app must be served with COOP/COEP headers';
-	}
-	const fh = g['FileSystemHandle'];
-	const dir = g['FileSystemDirectoryHandle'];
-	const fileHandle = g['FileSystemFileHandle'] as
-		| { prototype?: { createSyncAccessHandle?: unknown } }
-		| undefined;
-	const hasSyncHandle = typeof fileHandle?.prototype?.createSyncAccessHandle !== 'undefined';
-	const nav = g['navigator'] as { storage?: { getDirectory?: unknown } } | undefined;
-	const hasGetDirectory = typeof nav?.storage?.getDirectory !== 'undefined';
-	if (
-		typeof fh === 'undefined' ||
-		typeof dir === 'undefined' ||
-		!hasSyncHandle ||
-		!hasGetDirectory
-	) {
-		return 'the opfs VFS is unavailable (this PC’s WebView2 runtime lacks OPFS sync-access handles); update “Microsoft Edge WebView2 Runtime” to the latest version, then reopen the app';
-	}
-	if (typeof crossOriginIsolated !== 'undefined' && !crossOriginIsolated) {
-		return 'the opfs VFS is unavailable (the window is not cross-origin isolated); the app must be served with COOP/COEP headers';
-	}
-	return 'the opfs VFS is unavailable (OPFS storage is blocked on this PC); check disk space and site-storage permissions, then reopen the app';
-}
+let mode: 'opfs-sah' | 'memory' | null = null;
 
-type SyncAccessHandleLike = {
-	write(buffer: Uint8Array, options?: { at?: number }): number;
-	truncate(size: number): void;
-	close(): void;
-};
-type ProbeFileHandle = {
-	createSyncAccessHandle(): Promise<SyncAccessHandleLike>;
-};
-type ProbeRoot = {
-	getFileHandle(name: string, options?: { create?: boolean }): Promise<ProbeFileHandle>;
-	removeEntry(name: string): Promise<void>;
-};
-
-/**
- * Facts about this runtime, appended to every OPFS failure so the message
- * names the actual environment instead of guessing it. `protocol` tells dev
- * (`http:` + Vite) apart from release (`https:` + Tauri asset protocol).
- */
-function envFacts(): string {
-	const g = globalThis as Record<string, unknown>;
-	const loc = g['location'] as { protocol?: unknown } | undefined;
-	return [
-		`protocol=${typeof loc?.protocol === 'string' ? loc.protocol : 'unknown'}`,
-		`isolated=${typeof crossOriginIsolated !== 'undefined' ? String(crossOriginIsolated) : 'unknown'}`,
-		`sab=${typeof SharedArrayBuffer !== 'undefined' ? 'yes' : 'no'}`
-	].join(' ');
-}
-
-/**
- * Live OPFS probe, run only on the failure path.
- *
- * The sqlite-wasm VFS install failure is swallowed to a `warn` by the module
- * bootstrap, so a missing `OpfsDb` alone cannot say whether storage is
- * blocked or the proxy worker simply failed to start. Writing a probe file
- * through a sync access handle answers exactly that: if the probe passes,
- * storage is fine and the failure is the VFS install (proxy/headers), not
- * the PC.
- */
-async function probeOpfsStorage(): Promise<string | null> {
-	try {
-		const nav = (globalThis as unknown as { navigator?: { storage?: { getDirectory?: unknown } } })
-			.navigator;
-		const getDirectory = nav?.storage?.getDirectory;
-		if (typeof getDirectory !== 'function') return 'navigator.storage.getDirectory is missing';
-		const root = (await (getDirectory as () => Promise<ProbeRoot>)()) as ProbeRoot;
-		const file = await root.getFileHandle('.ees-ams-opfs-probe', { create: true });
-		const access = await file.createSyncAccessHandle();
-		try {
-			access.write(new Uint8Array([1, 2, 3, 4]), { at: 0 });
-			access.truncate(4);
-		} finally {
-			access.close();
-		}
-		await root.removeEntry('.ees-ams-opfs-probe');
-		return null;
-	} catch (error) {
-		return error instanceof Error ? error.message : String(error);
-	}
-}
-
-/** The static reason plus the live probe, so the message is evidence, not a guess. */
-async function diagnoseOpfsFailure(note: string): Promise<string> {
-	const probe = await probeOpfsStorage();
-	const storage =
-		probe === null
-			? 'OPFS storage probe passed, so the failure is the SQLite proxy worker/headers rather than blocked storage'
-			: `OPFS storage probe failed: ${probe}`;
-	return `${note} [${envFacts()}; ${storage}]`;
+/** The live `navigator.storage`, passed as the receiver — never detached (see `probeOpfsStorage`). */
+function liveStorage(): ProbeStorage | undefined {
+	const nav = (globalThis as unknown as { navigator?: { storage?: ProbeStorage } }).navigator;
+	return nav?.storage;
 }
 
 async function open(): Promise<string> {
-	if (db) return DB_FILENAME;
+	if (db && mode) return mode;
 	// The shipped types take no options; the WASM build's own `print` is muted by
 	// the postMessage error path, which is where diagnostics actually belong.
 	// The namespace is initialised once per worker: a re-import reopens the
@@ -198,23 +118,50 @@ async function open(): Promise<string> {
 		// Mirror sqlite-wasm's own vfsInstallationFeatureCheck so the teacher
 		// gets the actionable reason instead of a header red herring.
 		if (!sqlite3.oo1.OpfsDb) {
-			throw appError('Database', await diagnoseOpfsFailure(describeMissingOpfs()));
+			const env = readOpfsEnv();
+			const { cause, note } = classifyMissingOpfs(env);
+			throw appError('Database', await diagnoseOpfsFailure(note, cause, env, liveStorage()));
 		}
 		try {
 			db = new sqlite3.oo1.OpfsDb(DB_FILENAME);
 		} catch (error) {
+			const env = readOpfsEnv();
 			throw appError(
 				'Database',
-				await diagnoseOpfsFailure(`could not open OPFS database (${asAppError(error).detail})`)
+				await diagnoseOpfsFailure(
+					`could not open OPFS database (${asAppError(error).detail})`,
+					'storage-blocked',
+					env,
+					liveStorage()
+				)
 			);
 		}
-		return 'opfs-sah';
+		mode = 'opfs-sah';
+		return mode;
 	} catch (error) {
 		if (typeof error === 'object' && error !== null && 'kind' in error && 'detail' in error) {
 			throw error;
 		}
 		throw appError('Database', `could not open OPFS database (${asAppError(error).detail})`);
 	}
+}
+
+/**
+ * Temporary in-memory database, entered only from the unavailable-DB screen.
+ *
+ * Same WASM module, same `SqlDriver` surface, no OPFS handle — so attendance
+ * and SF2 preview keep working while nothing persists past the worker's life.
+ * The OPFS file is closed first (it stays on disk, untouched) because sync
+ * access handles are exclusive.
+ */
+async function openTemporary(): Promise<string> {
+	if (db && mode === 'memory') return mode;
+	const sqlite3 = namespace ?? ((await sqlite3InitModule()) as unknown as WasmNamespace);
+	namespace = sqlite3;
+	db?.close();
+	db = new sqlite3.oo1.DB(':memory:');
+	mode = 'memory';
+	return mode;
 }
 
 function requireDb(): WasmDb {
@@ -268,6 +215,7 @@ function run(request: WorkerRequest): unknown {
 		case 'close': {
 			db?.close();
 			db = null;
+			mode = null;
 			return null;
 		}
 		default:
@@ -322,6 +270,10 @@ async function importDatabase(bytes: Uint8Array | undefined): Promise<null> {
 	if (!bytes || !looksLikeSqlite(bytes)) {
 		throw appError('InvalidInput', 'import requires the bytes of a SQLite database file');
 	}
+	if (mode === 'memory') {
+		await importIntoMemory(bytes);
+		return null;
+	}
 	const importer = namespace?.oo1.OpfsDb?.importDb;
 	if (!importer) throw appError('Internal', 'OPFS database import is unavailable');
 
@@ -342,13 +294,55 @@ async function importDatabase(bytes: Uint8Array | undefined): Promise<null> {
 	return null;
 }
 
+/**
+ * Load a file image into the temporary in-memory database (a restore while in
+ * temporary mode).
+ *
+ * OPFS's `importDb` cannot help here — there is no file to write — so the
+ * image goes through `sqlite3_deserialize` into a fresh `:memory:` connection.
+ * `SQLITE_DESERIALIZE_FREEONCLOSE` hands the buffer to SQLite, which frees it
+ * when the connection closes; nothing here frees it afterwards.
+ */
+async function importIntoMemory(bytes: Uint8Array): Promise<void> {
+	const sqlite3 = namespace;
+	const capi = sqlite3?.capi;
+	const wasm = sqlite3?.wasm;
+	if (!sqlite3 || !capi?.sqlite3_deserialize || !wasm) {
+		throw appError('Internal', 'in-memory database restore is unavailable');
+	}
+	db?.close();
+	db = null;
+	const fresh = new sqlite3.oo1.DB(':memory:');
+	const pData = wasm.alloc(bytes.length);
+	wasm.heap8u().set(bytes, pData);
+	let code: number;
+	try {
+		code = capi.sqlite3_deserialize(fresh.pointer, 'main', pData, bytes.length, bytes.length, 1);
+	} catch (thrown) {
+		fresh.close();
+		throw appError(
+			'Database',
+			`could not load the restored database (${thrown instanceof Error ? thrown.message : String(thrown)})`
+		);
+	}
+	if (code !== 0) {
+		fresh.close();
+		throw appError('Database', `could not load the restored database (error code ${code})`);
+	}
+	db = fresh;
+	mode = 'memory';
+}
+
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 	const request = event.data;
 	let response: WorkerResponse;
 	try {
 		if (request.op === 'open') {
-			const mode = await open();
-			response = { id: request.id, ok: true, value: mode };
+			const value = await open();
+			response = { id: request.id, ok: true, value };
+		} else if (request.op === 'open-temporary') {
+			const value = await openTemporary();
+			response = { id: request.id, ok: true, value };
 		} else {
 			// `await`: `import` closes and reopens the database around an async
 			// OPFS write, while every other op answers synchronously.
