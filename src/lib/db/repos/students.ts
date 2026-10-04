@@ -14,31 +14,27 @@ import { recordAuditEvent } from './audit';
  * Student repository — the port of
  * `src-tauri/src/infrastructure/database/students.rs`.
  *
- * The card serial is the only unique, user-supplied identifier on this table,
- * so every write path checks it against the table — and against the rest of its
- * own batch — before it inserts. That check is what makes `card already
- * registered` a specific message the Students page can show, instead of a UNIQUE
- * constraint blowing up halfway through a transaction.
+ * The `card_serial` column still exists in the schema but is dormant: nothing
+ * reads or writes it anymore, and it is deliberately left out of every
+ * statement below rather than migrated away.
  */
 
 interface StudentRow {
 	id: string;
 	name: string;
 	gender: string | null;
-	card_serial: string | null;
 	class_id: string | null;
 	sf2_learner_id: string | null;
 	created_at: number;
 }
 
-const STUDENT_COLUMNS = 'id, name, gender, card_serial, class_id, created_at, sf2_learner_id';
+const STUDENT_COLUMNS = 'id, name, gender, class_id, created_at, sf2_learner_id';
 
 function toStudent(row: StudentRow): StudentRecord {
 	return {
 		id: row.id,
 		name: row.name,
 		gender: studentGenderFromDb(row.gender),
-		cardSerial: row.card_serial ?? undefined,
 		classId: row.class_id ?? undefined,
 		sf2LearnerId: row.sf2_learner_id ?? undefined,
 		createdAt: epochSecondsToIso(row.created_at)
@@ -54,7 +50,6 @@ function toStudent(row: StudentRow): StudentRecord {
 function newStudent(
 	name: string,
 	gender: CreateStudentRequest['gender'],
-	cardSerial: string | undefined,
 	classId: string | undefined,
 	createdAt: number
 ): StudentRecord {
@@ -62,7 +57,6 @@ function newStudent(
 		id: crypto.randomUUID(),
 		name,
 		gender,
-		cardSerial,
 		classId,
 		sf2LearnerId: undefined,
 		createdAt: epochSecondsToIso(createdAt)
@@ -71,13 +65,12 @@ function newStudent(
 
 async function insertStudent(student: StudentRecord): Promise<void> {
 	await getDriver().execute(
-		`INSERT INTO students (id, name, gender, card_serial, class_id, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO students (id, name, gender, class_id, created_at)
+		 VALUES (?, ?, ?, ?, ?)`,
 		[
 			student.id,
 			student.name,
 			student.gender ?? null,
-			student.cardSerial ?? null,
 			student.classId ?? null,
 			// The record holds whole seconds, so this round-trip is exact.
 			isoToEpochSeconds(student.createdAt)
@@ -90,23 +83,6 @@ async function insertStudent(student: StudentRecord): Promise<void> {
 		summary: `Created student ${student.name}`,
 		afterJson: JSON.stringify(student)
 	});
-}
-
-export async function findStudentByCard(serial: string): Promise<StudentRecord | undefined> {
-	const row = await getDriver().queryOne<StudentRow>(
-		`SELECT ${STUDENT_COLUMNS} FROM students WHERE card_serial = ?`,
-		[serial]
-	);
-	return row === undefined ? undefined : toStudent(row);
-}
-
-/** Throws `CardAlreadyRegistered` when the serial is on file for someone else. */
-async function assertCardFree(serial: string | undefined, exceptStudentId?: string): Promise<void> {
-	if (serial === undefined) return;
-	const existing = await findStudentByCard(serial);
-	if (existing !== undefined && existing.id !== exceptStudentId) {
-		throw appError('CardAlreadyRegistered', serial);
-	}
 }
 
 export async function listStudents(classId?: string): Promise<StudentRecord[]> {
@@ -128,13 +104,9 @@ export async function getStudent(id: string): Promise<StudentRecord> {
 }
 
 export async function createStudent(req: CreateStudentRequest): Promise<StudentRecord> {
-	const cardSerial = normalizeOptionalText(req.cardSerial);
-	await assertCardFree(cardSerial);
-
 	const student = newStudent(
 		req.name,
 		req.gender,
-		cardSerial,
 		normalizeOptionalText(req.classId),
 		nowEpochSeconds()
 	);
@@ -144,28 +116,19 @@ export async function createStudent(req: CreateStudentRequest): Promise<StudentR
 	return student;
 }
 
-/** All or nothing: one duplicate card anywhere in the batch aborts the batch. */
+/** All or nothing: the batch commits as one transaction. */
 export async function createStudents(reqs: CreateStudentRequest[]): Promise<StudentRecord[]> {
 	const normalized = reqs.map((req) => ({
 		name: req.name,
 		gender: req.gender,
-		cardSerial: normalizeOptionalText(req.cardSerial),
 		classId: normalizeOptionalText(req.classId)
 	}));
-
-	const seen = new Set<string>();
-	for (const { cardSerial } of normalized) {
-		if (cardSerial === undefined) continue;
-		if (seen.has(cardSerial)) throw appError('CardAlreadyRegistered', cardSerial);
-		seen.add(cardSerial);
-		await assertCardFree(cardSerial);
-	}
 
 	// One clock read for the batch: a bulk import should read as created at one
 	// moment, not a second apart per row.
 	const createdAt = nowEpochSeconds();
 	const students = normalized.map((entry) =>
-		newStudent(entry.name, entry.gender, entry.cardSerial, entry.classId, createdAt)
+		newStudent(entry.name, entry.gender, entry.classId, createdAt)
 	);
 
 	return await getDriver().transaction(async () => {
@@ -177,13 +140,9 @@ export async function createStudents(reqs: CreateStudentRequest[]): Promise<Stud
 export async function updateStudent(id: string, req: UpdateStudentRequest): Promise<StudentRecord> {
 	// Rust's `Option<Option<String>>`: an absent key leaves the column alone, a
 	// present-but-blank key CLEARS it. Collapsing both to `undefined` would turn
-	// "clear the card" into "change nothing", so presence is tracked separately.
-	const hasCardSerial = req.cardSerial !== undefined;
+	// "clear the value" into "change nothing", so presence is tracked separately.
 	const hasClassId = req.classId !== undefined;
-	const cardSerial = normalizeOptionalText(req.cardSerial);
 	const classId = normalizeOptionalText(req.classId);
-
-	if (cardSerial !== undefined) await assertCardFree(cardSerial, id);
 
 	const before = await getStudent(id);
 	const student: StudentRecord = { ...before };
@@ -191,7 +150,6 @@ export async function updateStudent(id: string, req: UpdateStudentRequest): Prom
 	// Gender can only be set, never cleared — the Rust `if let Some(gender)`
 	// had no clear path either.
 	if (req.gender !== undefined) student.gender = req.gender;
-	if (hasCardSerial) student.cardSerial = cardSerial;
 	if (hasClassId) student.classId = classId;
 
 	await getDriver().transaction(async () => {
@@ -201,15 +159,9 @@ export async function updateStudent(id: string, req: UpdateStudentRequest): Prom
 		// the Students page has no field for. The SF2 roster owns that column.
 		await getDriver().execute(
 			`UPDATE students
-			 SET name = ?, gender = ?, card_serial = ?, class_id = ?
+			 SET name = ?, gender = ?, class_id = ?
 			 WHERE id = ?`,
-			[
-				student.name,
-				student.gender ?? null,
-				student.cardSerial ?? null,
-				student.classId ?? null,
-				id
-			]
+			[student.name, student.gender ?? null, student.classId ?? null, id]
 		);
 		await recordAuditEvent({
 			entityType: 'student',
@@ -229,7 +181,6 @@ export async function saveStudent(student: Student): Promise<StudentRecord> {
 	const req: CreateStudentRequest = {
 		name: student.name,
 		gender: student.gender,
-		cardSerial: student.cardSerial,
 		classId: student.classId
 	};
 	return student.id ? await updateStudent(student.id, req) : await createStudent(req);

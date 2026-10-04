@@ -27,7 +27,6 @@ type StudentRow = {
 	id: string;
 	name: string;
 	gender: string | null;
-	card_serial: string | null;
 	class_id: string | null;
 	sf2_learner_id: string | null;
 	created_at: number;
@@ -104,7 +103,7 @@ function parseDays(json: string | null): number[] {
 export async function exportAll(): Promise<ExportDataRecord> {
 	const driver = getDriver();
 	const students = await driver.query<StudentRow>(
-		'SELECT id, name, gender, card_serial, class_id, sf2_learner_id, created_at FROM students ORDER BY name ASC'
+		'SELECT id, name, gender, class_id, sf2_learner_id, created_at FROM students ORDER BY name ASC'
 	);
 	const classes = await driver.query<ClassRow>(
 		'SELECT id, name, room, day_start, day_end, late_after, created_at, sessions, days FROM classes ORDER BY name ASC'
@@ -118,7 +117,6 @@ export async function exportAll(): Promise<ExportDataRecord> {
 			id: row.id,
 			name: row.name,
 			gender: normalizeGender(row.gender),
-			cardSerial: optional(row.card_serial),
 			classId: optional(row.class_id),
 			sf2LearnerId: optional(row.sf2_learner_id),
 			createdAt: epochSecondsToIso(row.created_at)
@@ -201,20 +199,18 @@ export async function importAll(payload: ExportDataRecord): Promise<void> {
 
 		for (const row of payload.students) {
 			await driver.execute(
-				`INSERT INTO students (id, name, gender, card_serial, class_id, sf2_learner_id, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?)
-				 ON CONFLICT(id) DO UPDATE SET
-					name = excluded.name,
-					gender = excluded.gender,
-					card_serial = excluded.card_serial,
-					class_id = excluded.class_id,
-					sf2_learner_id = excluded.sf2_learner_id,
-					created_at = excluded.created_at`,
+				`INSERT INTO students (id, name, gender, class_id, sf2_learner_id, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(id) DO UPDATE SET
+				name = excluded.name,
+				gender = excluded.gender,
+				class_id = excluded.class_id,
+				sf2_learner_id = excluded.sf2_learner_id,
+				created_at = excluded.created_at`,
 				[
 					row.id,
 					row.name,
 					row.gender ?? null,
-					row.cardSerial ?? null,
 					row.classId ?? null,
 					row.sf2LearnerId ?? null,
 					requireUnixSeconds(row.createdAt, 'student')

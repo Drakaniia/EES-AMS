@@ -8,7 +8,6 @@
 		entryMode,
 		formName,
 		formGender,
-		formCardSerial,
 		bulkMaleStudentNames,
 		bulkFemaleStudentNames,
 		assignedClassLabel,
@@ -22,7 +21,6 @@
 		onSetEntryMode,
 		onFormNameChange,
 		onFormGenderChange,
-		onFormCardSerialChange,
 		onBulkMaleChange,
 		onBulkFemaleChange
 	}: {
@@ -31,7 +29,6 @@
 		entryMode: EntryMode;
 		formName: string;
 		formGender: StudentGender;
-		formCardSerial: string;
 		bulkMaleStudentNames: string;
 		bulkFemaleStudentNames: string;
 		assignedClassLabel: string;
@@ -45,7 +42,6 @@
 		onSetEntryMode: (mode: EntryMode) => void;
 		onFormNameChange: (value: string) => void;
 		onFormGenderChange: (value: StudentGender) => void;
-		onFormCardSerialChange: (value: string) => void;
 		onBulkMaleChange: (value: string) => void;
 		onBulkFemaleChange: (value: string) => void;
 	} = $props();
@@ -189,29 +185,16 @@
 									{/each}
 								</div>
 							</div>
-							<div class="grid gap-4 sm:grid-cols-2">
-								<div class="space-y-1.5">
-									<label for="field-name" class="label-mono">Full name</label>
-									<input
-										id="field-name"
-										value={formName}
-										oninput={(e) => onFormNameChange((e.currentTarget as HTMLInputElement).value)}
-										required
-										placeholder="LASTNAME, FIRSTNAME M."
-										class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-									/>
-								</div>
-								<div class="space-y-1.5">
-									<label for="field-card" class="label-mono">Card serial (optional)</label>
-									<input
-										id="field-card"
-										value={formCardSerial}
-										oninput={(e) =>
-											onFormCardSerialChange((e.currentTarget as HTMLInputElement).value)}
-										placeholder="Pair later"
-										class="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-									/>
-								</div>
+							<div class="space-y-1.5">
+								<label for="field-name" class="label-mono">Full name</label>
+								<input
+									id="field-name"
+									value={formName}
+									oninput={(e) => onFormNameChange((e.currentTarget as HTMLInputElement).value)}
+									required
+									placeholder="LASTNAME, FIRSTNAME M."
+									class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+								/>
 							</div>
 						{/if}
 					</div>

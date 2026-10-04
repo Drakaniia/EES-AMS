@@ -61,8 +61,7 @@ describe('importValidationFromAnalysis', () => {
 		await createStudent({
 			classId: cls.id,
 			name: 'Dela Cruz, Juan',
-			gender: 'male',
-			cardSerial: undefined
+			gender: 'male'
 		});
 
 		const report = await importValidationFromAnalysis(
@@ -95,8 +94,7 @@ describe('importValidationFromAnalysis', () => {
 		await createStudent({
 			classId: cls.id,
 			name: 'Dela Cruz, Juan',
-			gender: 'male',
-			cardSerial: undefined
+			gender: 'male'
 		});
 
 		const report = await importValidationFromAnalysis(

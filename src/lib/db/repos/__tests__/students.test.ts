@@ -3,7 +3,6 @@ import {
 	createStudent,
 	createStudents,
 	deleteStudent,
-	findStudentByCard,
 	getStudent,
 	listStudents,
 	saveStudent,
@@ -43,9 +42,8 @@ describe('listStudents', () => {
 
 describe('createStudent', () => {
 	it('trims text and treats blank as absent', async () => {
-		const student = await createStudent({ name: 'Ana', cardSerial: '  ', classId: '  c1  ' });
+		const student = await createStudent({ name: 'Ana', classId: '  c1  ' });
 
-		expect(student.cardSerial).toBeUndefined();
 		expect(student.classId).toBe('c1');
 		expect(student.gender).toBeUndefined();
 		expect(student.sf2LearnerId).toBeUndefined();
@@ -55,7 +53,6 @@ describe('createStudent', () => {
 		const created = await createStudent({
 			name: 'Ana',
 			gender: 'female',
-			cardSerial: 'CARD-1',
 			classId: 'c1'
 		});
 
@@ -63,16 +60,6 @@ describe('createStudent', () => {
 		expect(read).toEqual(created);
 		expect(read.gender).toBe('female');
 		expect(new Date(read.createdAt).toISOString()).toBe(read.createdAt);
-	});
-
-	it('rejects a card serial that is already on file', async () => {
-		await createStudent({ name: 'Ana', cardSerial: 'CARD-1' });
-
-		await expect(createStudent({ name: 'Zara', cardSerial: 'CARD-1' })).rejects.toMatchObject({
-			kind: 'CardAlreadyRegistered',
-			detail: 'CARD-1'
-		});
-		expect(await listStudents()).toHaveLength(1);
 	});
 });
 
@@ -82,15 +69,6 @@ describe('getStudent', () => {
 			kind: 'StudentNotFound',
 			detail: 'missing'
 		});
-	});
-});
-
-describe('findStudentByCard', () => {
-	it('finds by serial and misses without throwing', async () => {
-		await createStudent({ name: 'Ana', cardSerial: 'CARD-1' });
-
-		expect((await findStudentByCard('CARD-1'))?.name).toBe('Ana');
-		expect(await findStudentByCard('CARD-2')).toBeUndefined();
 	});
 });
 
@@ -107,31 +85,6 @@ describe('updateStudent', () => {
 		expect(updated.name).toBe('Ana Maria');
 		expect(updated.sf2LearnerId).toBe('LRN-1');
 		expect(updated.createdAt).toBe(created.createdAt);
-	});
-
-	it('clears the card serial when the field is sent blank, but ignores an absent field', async () => {
-		const created = await createStudent({ name: 'Ana', cardSerial: 'CARD-1' });
-
-		expect((await updateStudent(created.id, { name: 'Ana B' })).cardSerial).toBe('CARD-1');
-		expect((await updateStudent(created.id, { cardSerial: '' })).cardSerial).toBeUndefined();
-	});
-
-	it('rejects a card serial held by another student', async () => {
-		await createStudent({ name: 'Ana', cardSerial: 'CARD-1' });
-		const zara = await createStudent({ name: 'Zara' });
-
-		await expect(updateStudent(zara.id, { cardSerial: 'CARD-1' })).rejects.toMatchObject({
-			kind: 'CardAlreadyRegistered',
-			detail: 'CARD-1'
-		});
-	});
-
-	it('allows a student to keep their own card serial', async () => {
-		const ana = await createStudent({ name: 'Ana', cardSerial: 'CARD-1' });
-
-		expect((await updateStudent(ana.id, { cardSerial: 'CARD-1', name: 'Ana B' })).name).toBe(
-			'Ana B'
-		);
 	});
 
 	it('throws StudentNotFound for an unknown id', async () => {
@@ -158,40 +111,13 @@ describe('saveStudent', () => {
 
 describe('createStudents', () => {
 	it('creates the whole batch and audits each row', async () => {
-		const students = await createStudents([
-			{ name: 'Ana', cardSerial: 'CARD-1' },
-			{ name: 'Zara', classId: 'c1' }
-		]);
+		const students = await createStudents([{ name: 'Ana' }, { name: 'Zara', classId: 'c1' }]);
 
 		expect(students).toHaveLength(2);
 		const audit = await db().query<{ entity_id: string; action: string }>(
 			"SELECT entity_id, action FROM audit_events WHERE entity_type = 'student' ORDER BY entity_id"
 		);
 		expect(audit.map((row) => row.action)).toEqual(['create', 'create']);
-	});
-
-	it('aborts the whole batch on a duplicate inside the batch', async () => {
-		await expect(
-			createStudents([
-				{ name: 'Ana', cardSerial: 'CARD-1' },
-				{ name: 'Zara', cardSerial: 'CARD-1' }
-			])
-		).rejects.toMatchObject({ kind: 'CardAlreadyRegistered', detail: 'CARD-1' });
-
-		expect(await listStudents()).toHaveLength(0);
-	});
-
-	it('aborts the whole batch on a card already in the table', async () => {
-		await createStudent({ name: 'Ana', cardSerial: 'CARD-1' });
-
-		await expect(
-			createStudents([
-				{ name: 'Bea', cardSerial: 'CARD-2' },
-				{ name: 'Zara', cardSerial: 'CARD-1' }
-			])
-		).rejects.toMatchObject({ kind: 'CardAlreadyRegistered', detail: 'CARD-1' });
-
-		expect(await listStudents()).toHaveLength(1);
 	});
 });
 

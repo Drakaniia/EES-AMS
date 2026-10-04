@@ -33,19 +33,15 @@ class StudentPageState {
 	attendanceModalOpen = $state(false);
 	viewingStudent = $state<Student | null>(null);
 	editing = $state<Student | null>(null);
-	scanFor = $state<Student | null>(null);
 
 	entryMode = $state<EntryMode>('single');
 	formName = $state('');
 	formGender = $state<StudentGender>('male');
-	formCardSerial = $state('');
 	formClassId = $state('');
 	bulkMaleStudentNames = $state('');
 	bulkFemaleStudentNames = $state('');
 
 	deleteTarget = $state<Student | null>(null);
-
-	cardSerial = $state('');
 
 	toastMessage = $state<string | null>(null);
 	toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -248,7 +244,6 @@ class StudentPageState {
 		this.entryMode = 'single';
 		this.formName = '';
 		this.formGender = 'male';
-		this.formCardSerial = '';
 		this.formClassId = this.assignedClass?.id ?? '';
 		this.bulkMaleStudentNames = '';
 		this.bulkFemaleStudentNames = '';
@@ -260,7 +255,6 @@ class StudentPageState {
 		this.entryMode = 'single';
 		this.formName = s.name;
 		this.formGender = s.gender ?? 'male';
-		this.formCardSerial = s.cardSerial ?? '';
 		this.formClassId = this.assignedClass?.id ?? s.classId ?? '';
 		this.bulkMaleStudentNames = '';
 		this.bulkFemaleStudentNames = '';
@@ -277,17 +271,11 @@ class StudentPageState {
 		this.editing = null;
 	};
 
-	openScan = (s: Student) => {
-		this.scanFor = s;
-		this.cardSerial = s.cardSerial ?? '';
-	};
-
 	// ── CRUD operations ──────────────────────────────────────────────────────
 	onSubmit = async (e: SubmitEvent) => {
 		e.preventDefault();
 		if (this.savingStudent) return;
 		const name = this.formName.trim().toUpperCase();
-		const serial = this.formCardSerial.trim().toLowerCase();
 		const classId = this.formClassId || this.assignedClass?.id || '';
 
 		if (!this.editing && !this.canCreateStudents) {
@@ -342,7 +330,6 @@ class StudentPageState {
 						...this.editing,
 						name,
 						gender: this.formGender,
-						cardSerial: serial,
 						classId
 					}
 				: {
@@ -350,7 +337,6 @@ class StudentPageState {
 						createdAt: new Date().toISOString(),
 						name,
 						gender: this.formGender,
-						cardSerial: serial || undefined,
 						classId: classId || undefined
 					};
 
@@ -364,12 +350,7 @@ class StudentPageState {
 		} catch (error) {
 			console.error('Error saving student:', error);
 			const msg = describeError(error, 'Failed to save student');
-
-			if (msg.includes('UNIQUE constraint failed') && msg.includes('card_serial')) {
-				this.toast('Card serial already registered to another student.');
-			} else {
-				this.toast(`Error: ${msg}`);
-			}
+			this.toast(`Error: ${msg}`);
 		} finally {
 			this.savingStudent = false;
 		}
@@ -391,23 +372,6 @@ class StudentPageState {
 			return;
 		}
 		this.deleteTarget = student;
-	};
-
-	onSaveCard = async () => {
-		const serial = this.cardSerial.trim().toLowerCase();
-		if (!this.scanFor || !serial) return;
-		try {
-			const savedStudent = await saveStudent({ ...this.scanFor, cardSerial: serial });
-			this.students = this.students.map((student) =>
-				student.id === savedStudent.id ? savedStudent : student
-			);
-			this.toast(`Card paired to ${this.scanFor.name}`);
-			this.scanFor = null;
-			this.cardSerial = '';
-		} catch (error) {
-			const msg = describeError(error, 'Failed to pair card');
-			this.toast(`Card pairing failed: ${msg}`);
-		}
 	};
 }
 

@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	deleteStudent,
-	findStudentByCard,
-	getStudent,
-	listStudents,
-	saveStudent,
-	uid
-} from '$lib/api/students';
+import { deleteStudent, getStudent, listStudents, saveStudent, uid } from '$lib/api/students';
 import { addEvent } from '$lib/api/events';
 import { db, useApiFixture, seedRoster } from './fixture';
 
@@ -43,7 +36,6 @@ describe('saveStudent', () => {
 			id: '',
 			name: 'Roxas, Liza',
 			gender: 'female',
-			cardSerial: 'CARD-9',
 			classId: 'class-1',
 			createdAt: ''
 		});
@@ -53,7 +45,6 @@ describe('saveStudent', () => {
 		expect(stored).toMatchObject({
 			name: 'Roxas, Liza',
 			gender: 'female',
-			cardSerial: 'CARD-9',
 			classId: 'class-1'
 		});
 		expect(new Date(stored.createdAt).toISOString()).toBe(stored.createdAt);
@@ -73,31 +64,6 @@ describe('saveStudent', () => {
 		expect(saved.name).toBe('Reyes, Maria Jr.');
 		expect((await getStudent('s2')).name).toBe('Reyes, Maria Jr.');
 		expect(await listStudents()).toHaveLength(3);
-	});
-
-	it('refuses a card serial that is already on file', async () => {
-		await seedRoster();
-		await db().execute('UPDATE students SET card_serial = ? WHERE id = ?', ['CARD-1', 's1']);
-
-		await expect(
-			saveStudent({
-				id: '',
-				name: 'Other',
-				cardSerial: 'CARD-1',
-				classId: 'class-1',
-				createdAt: ''
-			})
-		).rejects.toMatchObject({ kind: 'CardAlreadyRegistered', detail: 'CARD-1' });
-	});
-});
-
-describe('findStudentByCard', () => {
-	it('finds the holder of a serial and reports undefined for an unknown one', async () => {
-		await seedRoster();
-		await db().execute('UPDATE students SET card_serial = ? WHERE id = ?', ['CARD-7', 's1']);
-
-		expect((await findStudentByCard('CARD-7'))?.id).toBe('s1');
-		expect(await findStudentByCard('CARD-NONE')).toBeUndefined();
 	});
 });
 

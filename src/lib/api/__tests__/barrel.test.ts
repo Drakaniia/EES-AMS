@@ -16,7 +16,6 @@ const SURVIVED = [
 	// students
 	'listStudents',
 	'getStudent',
-	'findStudentByCard',
 	'saveStudent',
 	'createStudents',
 	'deleteStudent',
@@ -82,6 +81,8 @@ const SURVIVED = [
 
 /** Deliberately not ported. Each one is a call site to delete, not a gap to fill. */
 const RETIRED = [
+	// Card reader removal: serial lookup is gone with the feature.
+	'findStudentByCard',
 	// D15: the startup self-heal
 	'healCurrentMonthWorkbook',
 	'onSf2HealOutcome',

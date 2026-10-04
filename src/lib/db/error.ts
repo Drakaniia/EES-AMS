@@ -14,7 +14,6 @@ export type AppErrorKind =
 	| 'StudentNotFound'
 	| 'EventNotFound'
 	| 'ClassNotFound'
-	| 'CardAlreadyRegistered'
 	| 'DuplicateAttendance'
 	| 'InvalidInput'
 	| 'Internal';
@@ -32,7 +31,6 @@ const MESSAGE_TEMPLATES: Record<AppErrorKind, string> = {
 	StudentNotFound: 'student not found: {detail}',
 	EventNotFound: 'event not found: {detail}',
 	ClassNotFound: 'class not found: {detail}',
-	CardAlreadyRegistered: 'card already registered: {detail}',
 	DuplicateAttendance: 'duplicate attendance: {detail}',
 	InvalidInput: 'invalid input: {detail}',
 	Internal: 'internal server error: {detail}'

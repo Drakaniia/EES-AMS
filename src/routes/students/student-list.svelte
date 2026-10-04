@@ -25,7 +25,6 @@
 		onPageChange,
 		onOpenAttendance,
 		onOpenEdit,
-		onOpenScan,
 		onDelete,
 		availableHeight = $bindable(0)
 	}: {
@@ -49,7 +48,6 @@
 		onPageChange: (page: number) => void;
 		onOpenAttendance: (student: Student) => void;
 		onOpenEdit: (student: Student) => void;
-		onOpenScan: (student: Student) => void;
 		onDelete: (event: MouseEvent, student: Student) => void;
 		availableHeight?: number;
 	} = $props();
@@ -194,7 +192,6 @@
 						</th>
 						<th class="label-mono px-4 py-3">Gender</th>
 						<th class="label-mono px-4 py-3">Class</th>
-						<th class="label-mono px-4 py-3">Card</th>
 						<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
 					</tr>
 				</thead>
@@ -233,15 +230,6 @@
 									{s.classId || '—'}
 								</span>
 							</td>
-							<td class="px-4 py-3 font-mono text-xs">
-								{#if s.cardSerial}
-									<span class="rounded-pill border border-border bg-surface px-2 py-1"
-										>{s.cardSerial}</span
-									>
-								{:else}
-									<span class="text-muted-foreground">—</span>
-								{/if}
-							</td>
 							<td class="px-4 py-3 text-right">
 								<div class="inline-flex gap-1">
 									<a
@@ -266,25 +254,6 @@
 											<polyline points="10 9 9 9 8 9" />
 										</svg>
 									</a>
-									<button
-										onclick={() => onOpenScan(s)}
-										class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"
-										title="Pair card"
-									>
-										<svg
-											class="size-3.5"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											aria-hidden="true"
-										>
-											<rect x="2" y="5" width="20" height="14" rx="2" />
-											<path d="M2 10h20" />
-										</svg>
-									</button>
 									<button
 										onclick={() => onOpenEdit(s)}
 										class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-surface"

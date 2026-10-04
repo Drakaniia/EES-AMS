@@ -6,7 +6,6 @@
 	import FeedbackToast from '$lib/components/ui/FeedbackToast.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 	import StudentAttendanceModal from '$lib/components/students/StudentAttendanceModal.svelte';
-	import StudentCardPairDialog from '$lib/components/students/StudentCardPairDialog.svelte';
 	import StudentList from './student-list.svelte';
 	import StudentForm from './student-form.svelte';
 	import StudentDeleteDialog from './student-delete-dialog.svelte';
@@ -123,7 +122,6 @@
 			onPageChange={(page) => studentPage.handlePageChange(page)}
 			onOpenAttendance={(s) => studentPage.openAttendance(s)}
 			onOpenEdit={(s) => studentPage.openEdit(s)}
-			onOpenScan={(s) => studentPage.openScan(s)}
 			onDelete={(e, s) => studentPage.onDelete(e, s)}
 			bind:availableHeight={studentPage.availableHeight}
 		/>
@@ -142,7 +140,6 @@
 	entryMode={studentPage.entryMode}
 	formName={studentPage.formName}
 	formGender={studentPage.formGender}
-	formCardSerial={studentPage.formCardSerial}
 	bulkMaleStudentNames={studentPage.bulkMaleStudentNames}
 	bulkFemaleStudentNames={studentPage.bulkFemaleStudentNames}
 	assignedClassLabel={studentPage.assignedClassLabel}
@@ -156,17 +153,8 @@
 	onSetEntryMode={(m) => studentPage.setEntryMode(m)}
 	onFormNameChange={(value) => (studentPage.formName = value)}
 	onFormGenderChange={(value) => (studentPage.formGender = value)}
-	onFormCardSerialChange={(value) => (studentPage.formCardSerial = value)}
 	onBulkMaleChange={(value) => (studentPage.bulkMaleStudentNames = value)}
 	onBulkFemaleChange={(value) => (studentPage.bulkFemaleStudentNames = value)}
-/>
-
-<StudentCardPairDialog
-	open={studentPage.scanFor !== null}
-	student={studentPage.scanFor}
-	bind:cardSerial={studentPage.cardSerial}
-	onSave={() => studentPage.onSaveCard()}
-	onClose={() => (studentPage.scanFor = null)}
 />
 
 <StudentDeleteDialog

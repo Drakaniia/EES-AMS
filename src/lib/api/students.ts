@@ -10,7 +10,6 @@
 export {
 	createStudents,
 	deleteStudent,
-	findStudentByCard,
 	getStudent,
 	listStudents,
 	saveStudent
