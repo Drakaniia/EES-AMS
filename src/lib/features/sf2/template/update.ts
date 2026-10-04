@@ -24,6 +24,7 @@ import { configureSf2Calendar, validateConfiguredCalendar } from '../calendar';
 import type { Sf2TemplateMetadata } from '../calendar';
 import { dateMappingsFromAnalysis, metadataFromDraft } from '../metadata';
 import { layoutFingerprint } from '../workbook-files';
+import { refreshMonthIdentityFields } from '../month/templates';
 import {
 	latestTemplateForClass,
 	studentMappingsForTemplate,
@@ -123,6 +124,17 @@ export async function updateWorkbookSettings(draft: Sf2TemplateDraft): Promise<S
 		lastSyncedAt: undefined
 	};
 	await updateTemplateWithMappings(template, outcome.studentMappings, dateMappings);
+	// The month rows carry their own copies of the class-level header, and opening
+	// a month stamps the sheet from the month row — so without this the next open
+	// stamps the edited names straight back to the stale ones.
+	await refreshMonthIdentityFields(classId, metadata.schoolYear, {
+		schoolId: metadata.schoolId,
+		schoolName: metadata.schoolName,
+		gradeLevel: metadata.gradeLevel,
+		section: metadata.section,
+		adviserName: metadata.adviserName,
+		schoolHeadName: metadata.schoolHeadName
+	});
 
 	return {
 		templateId: template.id,

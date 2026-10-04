@@ -90,6 +90,29 @@ CREATE TABLE sf2_date_mappings (
 	column_index INTEGER NOT NULL,
 	PRIMARY KEY (template_id, date)
 );
+
+CREATE TABLE sf2_month_templates (
+	id TEXT PRIMARY KEY NOT NULL,
+	active_class_id TEXT NOT NULL,
+	school_year TEXT NOT NULL,
+	report_month TEXT NOT NULL,
+	report_year INTEGER NOT NULL,
+	source_path TEXT NOT NULL,
+	source_hash TEXT NOT NULL,
+	school_id TEXT,
+	school_name TEXT,
+	grade_level TEXT,
+	section TEXT,
+	adviser_name TEXT,
+	school_head_name TEXT,
+	first_school_day INTEGER NOT NULL,
+	first_school_day_override INTEGER,
+	imported_at INTEGER NOT NULL,
+	last_synced_at INTEGER,
+	workbook_x_count INTEGER NOT NULL DEFAULT 0,
+	workbook_scanned_at INTEGER,
+	UNIQUE(active_class_id, school_year, report_month)
+);
 `;
 
 useTestDb();
@@ -358,6 +381,58 @@ describe('updateWorkbookSettings', () => {
 		const firstDay = firstMappedDay(sheet);
 		expect(getCellTextAt(sheet, `${firstDay}29`)).toBe('1');
 		expect(getCellTextAt(sheet, 'AR53')).toBe('1');
+	});
+
+	test('carries edited details onto the class month rows', async () => {
+		// Opening a month stamps the sheet from its *month* row, so an edit that
+		// stops at the legacy row is stamped straight back to the stale names on
+		// the next open (blank fields even clear the signature cells).
+		await createOne();
+		const seedMonth = (id: string, classId: string, schoolYear: string, month: string) =>
+			db().execute(
+				`INSERT INTO sf2_month_templates (
+					id, active_class_id, school_year, report_month, report_year,
+					source_path, source_hash, school_id, school_name, grade_level,
+					section, adviser_name, school_head_name, first_school_day, imported_at)
+				 VALUES (?, ?, ?, ?, 2026, '/workbooks/f.xlsx', 'h', 'old-id', 'Old School',
+				         '3', 'MATAPAT', 'OLD ADVISER', 'OLD HEAD', 1, 1)`,
+				[id, classId, schoolYear, month]
+			);
+		await seedMonth('m-sept', CLASS_ID, '2026-2027', 'SEPTEMBER');
+		await seedMonth('m-oct', CLASS_ID, '2026-2027', 'OCTOBER');
+		await seedMonth('m-other-class', 'class-9', '2026-2027', 'SEPTEMBER');
+		await seedMonth('m-other-year', CLASS_ID, '2025-2026', 'SEPTEMBER');
+
+		await updateWorkbookSettings(
+			draft({
+				adviserName: 'NEW ADVISER',
+				schoolHeadName: 'NEW HEAD',
+				learnerNames: ['ALVARADO, ZYRON JAY  E.']
+			})
+		);
+
+		const names = await db().query<{ id: string; adviser_name: string | null }>(
+			'SELECT id, adviser_name FROM sf2_month_templates ORDER BY id'
+		);
+		const byId = new Map(names.map((row) => [row.id, row.adviser_name]));
+		expect(byId.get('m-sept')).toBe('NEW ADVISER');
+		expect(byId.get('m-oct')).toBe('NEW ADVISER');
+		expect(byId.get('m-other-class')).toBe('OLD ADVISER');
+		expect(byId.get('m-other-year')).toBe('OLD ADVISER');
+
+		const heads = await db().query<{ id: string; school_head_name: string | null }>(
+			'SELECT id, school_head_name FROM sf2_month_templates ORDER BY id'
+		);
+		expect(new Map(heads.map((row) => [row.id, row.school_head_name])).get('m-sept')).toBe(
+			'NEW HEAD'
+		);
+		// Month dating is not metadata: the refresh must not touch it.
+		const dating = await db().queryOne<{ report_month: string; first_school_day: number }>(
+			'SELECT report_month, first_school_day FROM sf2_month_templates WHERE id = ?',
+			['m-sept']
+		);
+		expect(dating?.report_month).toBe('SEPTEMBER');
+		expect(Number(dating?.first_school_day)).toBe(1);
 	});
 
 	test('refuses when the class has no workbook', async () => {

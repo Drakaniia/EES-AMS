@@ -318,6 +318,54 @@ export async function upsertMonthTemplate(template: Sf2MonthTemplate): Promise<v
 	);
 }
 
+/** The class-level identity fields every month row of a school year shares. */
+export interface Sf2MonthIdentityFields {
+	schoolId: string;
+	schoolName: string;
+	gradeLevel: string;
+	section: string;
+	adviserName: string;
+	schoolHeadName: string;
+}
+
+/**
+ * Carry edited workbook details onto every month row of the class's school year.
+ *
+ * The settings save writes the header into the legacy row and the workbook file,
+ * but opening a month stamps the sheet from its *month* row — so an edit that
+ * stops at the legacy row is stamped over with stale names on the next open
+ * (blank month fields even clear the sheet's signature cells). Month dating —
+ * report month/year, first school day, sync stamps, X counts — is untouched.
+ *
+ * Returns how many month rows were refreshed.
+ */
+export async function refreshMonthIdentityFields(
+	classId: string,
+	schoolYear: string,
+	fields: Sf2MonthIdentityFields
+): Promise<number> {
+	const clean = (value: string): string | null => {
+		const trimmed = value.trim();
+		return trimmed === '' ? null : trimmed;
+	};
+	return getDriver().execute(
+		`UPDATE sf2_month_templates
+		 SET school_id = ?, school_name = ?, grade_level = ?,
+		     section = ?, adviser_name = ?, school_head_name = ?
+		 WHERE active_class_id = ? AND school_year = ?`,
+		[
+			clean(fields.schoolId),
+			clean(fields.schoolName),
+			clean(fields.gradeLevel),
+			clean(fields.section),
+			clean(fields.adviserName),
+			clean(fields.schoolHeadName),
+			classId,
+			normalizeSchoolYear(schoolYear)
+		]
+	);
+}
+
 /** Refresh a month file's metadata after it was re-opened. */
 export async function updateMonthTemplate(template: Sf2MonthTemplate): Promise<void> {
 	const updated = await getDriver().execute(
