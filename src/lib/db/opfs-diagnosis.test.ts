@@ -77,38 +77,39 @@ describe('opfs probe binding', () => {
 });
 
 describe('missing-OPFS taxonomy', () => {
-	it('blames headers when SharedArrayBuffer is missing', () => {
-		const { cause } = classifyMissingOpfs({ ...healthyEnv, hasSharedArrayBuffer: false });
-		expect(cause).toBe('headers');
-	});
-
 	it('blames an old WebView2 when sync-access handles are missing', () => {
 		const { cause, note } = classifyMissingOpfs({ ...healthyEnv, hasSyncAccessHandle: false });
 		expect(cause).toBe('webview-old');
 		expect(note).toContain('WebView2');
 	});
 
-	it('blames isolation when the window is not isolated', () => {
-		const { cause } = classifyMissingOpfs({ ...healthyEnv, crossOriginIsolated: false });
-		expect(cause).toBe('not-isolated');
+	it('does not blame SharedArrayBuffer: the sahpool VFS does not need it', () => {
+		const { cause } = classifyMissingOpfs({
+			...healthyEnv,
+			hasSharedArrayBuffer: false,
+			hasAtomics: false,
+			crossOriginIsolated: false
+		});
+		expect(cause).toBe('storage-blocked');
 	});
 
-	it('blames blocked storage only when everything else is present', () => {
+	it('blames blocked storage only when every OPFS API is present', () => {
 		const { cause } = classifyMissingOpfs(healthyEnv);
 		expect(cause).toBe('storage-blocked');
 	});
 });
 
 describe('failure diagnosis', () => {
-	it('never claims blocked storage when the probe passed', async () => {
+	it('keeps the startup reason and never claims blocked storage when the probe passed', async () => {
 		const detail = await diagnoseOpfsFailure(
-			'note',
+			'could not start the on-device storage engine (boom)',
 			'storage-blocked',
 			healthyEnv,
 			strictStorage()
 		);
 		expect(detail).toContain('cause=storage-proxy');
-		expect(detail).not.toContain('blocked on this PC');
+		expect(detail).toContain('boom');
+		expect(detail).not.toContain('cause=storage-blocked');
 	});
 
 	it('keeps the blocked-storage cause when the probe really failed', async () => {
@@ -125,13 +126,7 @@ describe('failure diagnosis', () => {
 
 describe('teacher-facing summary', () => {
 	it('maps every cause to steps and keeps the technical string', () => {
-		for (const cause of [
-			'webview-old',
-			'storage-proxy',
-			'storage-blocked',
-			'headers',
-			'not-isolated'
-		]) {
+		for (const cause of ['webview-old', 'storage-proxy', 'storage-blocked']) {
 			const summary = summarizeUnavailableError(
 				`detail [cause=${cause}; protocol=https: isolated=true sab=yes]`
 			);

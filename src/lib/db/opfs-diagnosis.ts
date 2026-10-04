@@ -8,15 +8,16 @@
  */
 
 /** The buckets a failed open is sorted into. Never claim `storage-blocked` when the probe passed. */
-export type OpfsCause =
-	| 'headers'
-	| 'webview-old'
-	| 'not-isolated'
-	| 'storage-proxy'
-	| 'storage-blocked'
-	| 'unknown';
+export type OpfsCause = 'webview-old' | 'storage-proxy' | 'storage-blocked' | 'unknown';
 
-/** The feature flags `describeMissingOpfs` used to read off `globalThis` inline. */
+/**
+ * The runtime facts read off `globalThis`, reported in every failure detail.
+ *
+ * The `opfs-sahpool` VFS the worker installs needs only the OPFS sync-access
+ * APIs and `navigator.storage.getDirectory`. `hasSharedArrayBuffer`,
+ * `hasAtomics` and `crossOriginIsolated` therefore no longer decide anything —
+ * they stay in the detail as evidence for a bug report, not as causes.
+ */
 export type OpfsEnv = {
 	hasSharedArrayBuffer: boolean;
 	hasAtomics: boolean;
@@ -51,21 +52,15 @@ export function readOpfsEnv(
 }
 
 /**
- * The static reason for a missing `OpfsDb`, in teacher-actionable terms.
+ * The static reason a fresh `opfs-sahpool` install would refuse, in
+ * teacher-actionable terms.
  *
- * Mirrors sqlite-wasm's `vfsInstallationFeatureCheck` (SAB+Atomics, worker
- * context, FileSystem sync-access APIs), whose own failure is swallowed to a
- * `warn` by the module bootstrap — leaving `oo1.OpfsDb` undefined with no
- * reason attached. SAB present + OpfsDb missing means headers are fine and
- * the PC's WebView2 is too old for OPFS sync access handles.
+ * Mirrors the feature check `installOpfsSAHPoolVfs()` runs before it installs:
+ * the OPFS sync-access APIs plus `navigator.storage.getDirectory`. It does not
+ * need SharedArrayBuffer, Atomics or cross-origin isolation, so those are not
+ * causes here — a PC missing only them can still open the database.
  */
 export function classifyMissingOpfs(env: OpfsEnv): { cause: OpfsCause; note: string } {
-	if (!env.hasSharedArrayBuffer || !env.hasAtomics) {
-		return {
-			cause: 'headers',
-			note: 'the database could not be opened (SharedArrayBuffer is missing); the app must be served with COOP/COEP headers'
-		};
-	}
 	if (
 		!env.hasFileSystemHandle ||
 		!env.hasDirectoryHandle ||
@@ -75,12 +70,6 @@ export function classifyMissingOpfs(env: OpfsEnv): { cause: OpfsCause; note: str
 		return {
 			cause: 'webview-old',
 			note: 'the database could not be opened (this PC’s WebView2 runtime lacks OPFS sync-access handles); update “Microsoft Edge WebView2 Runtime” to the latest version, then reopen the app'
-		};
-	}
-	if (env.crossOriginIsolated === false) {
-		return {
-			cause: 'not-isolated',
-			note: 'the database could not be opened (the window is not cross-origin isolated); the app must be served with COOP/COEP headers'
 		};
 	}
 	return {
@@ -149,7 +138,9 @@ export async function probeOpfsStorage(storage: ProbeStorage | undefined): Promi
  * The static reason plus the live probe, so the message is evidence, not a guess.
  *
  * A passed probe overrides a `storage-blocked` classification: storage works,
- * so the failure is the SQLite proxy worker/headers — never the PC.
+ * so the failure is the SQLite storage engine failing to start — never the PC.
+ * The caller's `note` (which carries the real startup error) is kept at the
+ * front so the Details block shows *why*, not just that it happened.
  */
 export async function diagnoseOpfsFailure(
 	note: string,
@@ -159,12 +150,10 @@ export async function diagnoseOpfsFailure(
 ): Promise<string> {
 	const probe = await probeOpfsStorage(storage);
 	if (probe === null && cause === 'storage-blocked') {
-		return `the database could not be opened even though on-device storage works (probe passed); the app’s storage setup failed to start — reopen the app, and report the details below if it persists [cause=storage-proxy; ${envFacts(env)}; OPFS storage probe passed]`;
+		return `${note}; on-device storage works (probe passed), so the failure is the app’s storage engine startup [cause=storage-proxy; ${envFacts(env)}; OPFS storage probe passed]`;
 	}
 	const storageNote =
-		probe === null
-			? 'OPFS storage probe passed, so the failure is the SQLite proxy worker/headers rather than blocked storage'
-			: `OPFS storage probe failed: ${probe}`;
+		probe === null ? 'OPFS storage probe passed' : `OPFS storage probe failed: ${probe}`;
 	return `${note} [cause=${cause}; ${envFacts(env)}; ${storageNote}]`;
 }
 
@@ -183,8 +172,6 @@ export function parseOpfsCause(detail: string): OpfsCause {
 	if (match?.[1] === 'webview-old') return 'webview-old';
 	if (match?.[1] === 'storage-proxy') return 'storage-proxy';
 	if (match?.[1] === 'storage-blocked') return 'storage-blocked';
-	if (match?.[1] === 'headers') return 'headers';
-	if (match?.[1] === 'not-isolated') return 'not-isolated';
 	return 'unknown';
 }
 
@@ -213,10 +200,10 @@ export function summarizeUnavailableError(detail: string): UnavailableSummary {
 		case 'storage-proxy':
 			return {
 				cause,
-				plain: `${SHARED_PLAIN} On-device storage itself works — the app’s storage setup failed to start.`,
+				plain: `${SHARED_PLAIN} On-device storage itself works — the app’s storage engine failed to start.`,
 				steps: [
-					'Reopen the app and use Retry below.',
-					'If it persists, copy the Details below into a bug report — this looks like an app setup issue, not your PC.'
+					'Use Retry below — it restarts the storage engine and can succeed on a second attempt.',
+					'If it persists, reopen the app and copy the Details below into a bug report — this looks like an app setup issue, not your PC.'
 				],
 				technical: detail
 			};
@@ -228,17 +215,6 @@ export function summarizeUnavailableError(detail: string): UnavailableSummary {
 					'Free disk space and make sure the drive isn’t full.',
 					'Allow site data / storage for the app (private or data-cleared modes block it), then reopen the app.',
 					'Use Retry below once space or permissions are fixed.'
-				],
-				technical: detail
-			};
-		case 'headers':
-		case 'not-isolated':
-			return {
-				cause,
-				plain: `${SHARED_PLAIN} The app wasn’t served with the storage headers it needs.`,
-				steps: [
-					'Reopen the app and use Retry below.',
-					'If it persists, copy the Details below into a bug report.'
 				],
 				technical: detail
 			};
