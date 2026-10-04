@@ -347,8 +347,9 @@ describe('open writes marks, roster, header and formulas', () => {
 		);
 		await recordAbsent(firstId, classId, '2025-06-02');
 
-		const path = await syncAndOpenSf2Workbook({ classId, reportMonth: JUNE });
-		expect(path).toBe(fixture.path);
+		const opened = await syncAndOpenSf2Workbook({ classId, reportMonth: JUNE });
+		expect(opened.path).toBe(fixture.path);
+		expect(opened.reportMonth).toBe(JUNE);
 
 		const workbook = await openWorkbook(fixture.path);
 		const sheet = workbook.getWorksheet(JUNE_SHEET)!;
@@ -468,13 +469,14 @@ describe('open guard behavior', () => {
 		await fixture.fileSystem.writeFileAtomic(fixture.path, new Uint8Array([1, 2, 3]));
 
 		const messages: string[] = [];
-		const path = await syncAndOpenSf2Workbook({
+		const opened = await syncAndOpenSf2Workbook({
 			classId,
 			reportMonth: JUNE,
 			progress: (update: Sf2ProgressUpdate) => messages.push(update.message)
 		});
 
-		expect(path).toBe(fixture.path);
+		expect(opened.path).toBe(fixture.path);
+		expect(opened.reportMonth).toBe(JUNE);
 		expect(messages.some((message) => message.startsWith('Opening read-only:'))).toBe(true);
 		// Zero writes: the bytes are untouched and no sync was stamped.
 		expect(await fixture.fileSystem.readFile(fixture.path)).toEqual(new Uint8Array([1, 2, 3]));

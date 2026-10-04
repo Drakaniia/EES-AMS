@@ -30,6 +30,7 @@ import {
 	setPreviewAttendanceLightweight,
 	syncAndOpenSf2Workbook as writeAndOpenWorkbook
 } from '$lib/features/sf2/attendance/attendance-service';
+import type { Sf2OpenResult } from '$lib/features/sf2/attendance/attendance-service';
 import {
 	monthAbsences,
 	resolveMonthWriteContext
@@ -285,6 +286,9 @@ export async function presentAllSf2PreviewAttendance(classId: string): Promise<n
 /**
  * Sync attendance into the month's worksheet, then hand the file to the OS.
  *
+ * Returns the file with the month it holds, so the UI names what was actually
+ * opened rather than echoing a path.
+ *
  * `progress` is the new seam: the Rust command emitted ten `sf2-progress` Tauri
  * events and the frontend listened. It is now a callback, so
  * `report-sf2-open.svelte.ts` can drop its `listen()` and pass one. Left optional
@@ -294,10 +298,10 @@ export async function syncAndOpenSf2Workbook(
 	classId: string,
 	reportMonth: string,
 	progress?: Sf2ProgressReporter
-): Promise<string> {
-	const path = await writeAndOpenWorkbook({ classId, reportMonth, progress });
-	await openWithOs(path);
-	return path;
+): Promise<Sf2OpenResult> {
+	const opened = await writeAndOpenWorkbook({ classId, reportMonth, progress });
+	await openWithOs(opened.path);
+	return opened;
 }
 
 // â”€â”€ Export and open â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

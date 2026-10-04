@@ -168,6 +168,30 @@ export function singleWorkbookPath(workbookDir: string, identity: WorkbookIdenti
 }
 
 /**
+ * Every workbook file on disk that names one class: the working copy plus any
+ * orphan a re-import, a retried split, or a manual copy left behind.
+ *
+ * Two files under one class stem is how "Open SF2" opens the wrong document:
+ * the month rows name one path while a stale copy sits beside it. The open
+ * path refuses to guess between them. Directories (`_legacy/`,
+ * `import-staging/`) and atomic-write temp files (`*.tmp`) are never
+ * workbooks.
+ */
+export async function classWorkbookFiles(
+	workbookDir: string,
+	gradeLevel: string,
+	section: string
+): Promise<string[]> {
+	const stem = `SF2-${sanitizedOr(gradeLevel, 'GRADE')}-${sanitizedOr(section, 'SECTION')}-`;
+	const names = await getFileSystem().readDir(workbookDir);
+	return names
+		.filter((name) => !name.endsWith('/'))
+		.filter((name) => name.startsWith(stem) && name.toLowerCase().endsWith('.xlsx'))
+		.map((name) => joinPath(workbookDir, name))
+		.sort();
+}
+
+/**
  * The export file name: `SF2-GRADE-3-MATAPAT-JUNE-generated.xlsx`.
  *
  * Falls back to the current calendar month when the template's own report month is

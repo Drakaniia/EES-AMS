@@ -232,11 +232,12 @@ export function createSf2OpenState() {
 		startMessageCycle();
 
 		try {
-			const path = await syncAndOpenSf2Workbook(activeClassId, reportMonth);
-			resultPath = path;
+			const opened = await syncAndOpenSf2Workbook(activeClassId, reportMonth);
+			resultPath = opened.path;
 			status = 'success';
 			stopMessageCycle();
-			showToast(`Opened SF2 working copy: ${path}`);
+			const fileName = opened.path.split(/[\\/]/).pop() ?? opened.path;
+			showToast(`Opened ${fileName} — ${opened.reportMonth} ${opened.reportYear} synced just now`);
 
 			// Auto-close after 1.5 seconds
 			successTimer = setTimeout(() => {

@@ -45,6 +45,7 @@ import type { Sf2ProgressReporter } from '$lib/features/sf2/progress';
 import { nowEpochSeconds } from '$lib/domain/models';
 import type { Student } from '$lib/domain/models';
 import type { Sf2AttendanceImportOutcome } from '$lib/types';
+import { classWorkbookFiles } from '$lib/features/sf2/workbook-files';
 import { clearLastSyncedAtForClass, setMonthLastSyncedAt } from '$lib/features/sf2/month/templates';
 import { setLastSyncedAt as setLegacyLastSyncedAt } from '$lib/features/sf2/repository';
 import { recordAuditEvent } from '$lib/db/repos/audit';
@@ -78,6 +79,51 @@ export const NO_MONTH_SELECTED_MESSAGE =
 export const WORKBOOK_MISSING_MESSAGE =
 	'The app SF2 working workbook no longer exists. Import the SF2 workbook again';
 
+/**
+ * What opening an SF2 workbook resolved to: the file, and the month it holds.
+ *
+ * The month is the resolved one — what the fallback derived when the asked
+ * month had no row — because that is the sheet the write activated. Reporting
+ * the asked month would claim a sheet the file may not even hold.
+ */
+export type Sf2OpenResult = {
+	/** The working-copy path the caller should open. */
+	path: string;
+	reportMonth: string;
+	reportYear: number;
+};
+
+function openedResult(context: Sf2MonthWriteContext): Sf2OpenResult {
+	return {
+		path: context.sourcePath,
+		reportMonth: context.reportMonth,
+		reportYear: context.reportYear
+	};
+}
+
+/**
+ * Refuse to open when the class has more than one workbook file on disk.
+ *
+ * A re-import or a retried split can orphan the previous working copy beside
+ * the current one (same `SF2-GRADE-SECTION-` stem, different id suffix), and
+ * the month rows name only one of them. Opening either silently is how the
+ * teacher ends up editing the stale copy, so this names every candidate and
+ * stops: keep the file the database names, remove the rest, open again.
+ */
+async function requireSingleClassWorkbook(context: Sf2MonthWriteContext): Promise<void> {
+	const { gradeLevel, section } = context.layout.metadata;
+	const directory = context.sourcePath.split(/[\\/]/).slice(0, -1).join('/');
+	const files = await classWorkbookFiles(directory, gradeLevel, section);
+	if (files.length <= 1) return;
+	const names = files.map((file) => file.split(/[\\/]/).pop() ?? file);
+	const kept = context.sourcePath.split(/[\\/]/).pop() ?? context.sourcePath;
+	throw appError(
+		'InvalidInput',
+		`Two SF2 workbooks exist for ${gradeLevel} ${section} (${names.join(', ')}). ` +
+			`The app opens ${kept}. Remove the other file(s) from the workbooks folder and open again.`
+	);
+}
+
 /** The class's roster and its `day_start`, or an error naming what is missing. */
 async function classRoster(classId: string): Promise<{ students: Student[]; dayStart: string }> {
 	const cls = await getClass(classId);
@@ -89,15 +135,13 @@ async function classRoster(classId: string): Promise<{ students: Student[]; dayS
 
 /**
  * Push the latest attendance events into the workbook for the month on screen, and
- * hand back the path the caller should open.
+ * hand back the file to open with the month it holds.
  *
  * Ten progress steps, the same numbers and messages the Rust emitted — including
- * the guard's `Checking the workbook against the app…` — so
- * `report-sf2-open.svelte.ts` needs no change beyond being handed a callback
- * instead of an event.
+ * the guard's `Checking the workbook against the app…`.
  *
  * The guard runs before anything is written. `ReadOnly` skips all writes and the
- * sync stamp and returns the path for a normal open; `Aborted` refuses without
+ * sync stamp and returns the file for a normal open; `Aborted` refuses without
  * touching the file or the stamp. There is deliberately no "has anything changed
  * since the last sync" shortcut on top of the guard: `Proven` already proves the
  * database holds every mark the workbook shows, so writing is always safe from
@@ -107,7 +151,7 @@ export async function syncAndOpenSf2Workbook(params: {
 	classId: string;
 	reportMonth: string;
 	progress?: Sf2ProgressReporter;
-}): Promise<string> {
+}): Promise<Sf2OpenResult> {
 	const { classId, reportMonth, progress = NO_PROGRESS } = params;
 	emitSf2Progress(progress, 1);
 
@@ -125,6 +169,10 @@ export async function syncAndOpenSf2Workbook(params: {
 		throw appError('InvalidInput', WORKBOOK_MISSING_MESSAGE);
 	}
 
+	// One class, one file: a stale orphan beside the working copy is a refusal,
+	// never a guess.
+	await requireSingleClassWorkbook(context);
+
 	const { students, dayStart } = await classRoster(classId);
 
 	// The destructive-sync guard. Nothing below this line may clear the grid
@@ -139,7 +187,7 @@ export async function syncAndOpenSf2Workbook(params: {
 		// writes. The user still sees their marks, through a normal open.
 		emitSf2Progress(progress, 4, `Opening read-only: ${action.reason}`);
 		emitSf2Progress(progress, 10);
-		return context.sourcePath;
+		return openedResult(context);
 	}
 	if (action.kind === 'Aborted') {
 		emitSf2Progress(progress, 4, 'Workbook not in sync…');
@@ -180,7 +228,7 @@ export async function syncAndOpenSf2Workbook(params: {
 	}
 	emitSf2Progress(progress, 9, 'Opening in Microsoft Excel…');
 	emitSf2Progress(progress, 10);
-	return context.sourcePath;
+	return openedResult(context);
 }
 
 /**

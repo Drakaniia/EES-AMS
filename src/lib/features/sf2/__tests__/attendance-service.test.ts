@@ -229,13 +229,15 @@ describe('syncAndOpenSf2Workbook', () => {
 		});
 
 		const steps: number[] = [];
-		const path = await syncAndOpenSf2Workbook({
+		const opened = await syncAndOpenSf2Workbook({
 			classId,
 			reportMonth: MONTH,
 			progress: (update) => steps.push(update.current)
 		});
 
-		expect(path).toBe(fixture.path);
+		expect(opened.path).toBe(fixture.path);
+		expect(opened.reportMonth).toBe(MONTH);
+		expect(opened.reportYear).toBe(2025);
 		// The outer steps are 1..10; the write phase reports on the 100-point scale in
 		// between, which is why the bar crawls rather than pausing at 60%.
 		expect(steps).toContain(1);
@@ -253,9 +255,36 @@ describe('syncAndOpenSf2Workbook', () => {
 		const { classId } = await seedClass();
 		const fixture = await loadTemplate();
 		await seedMonth({ classId, path: fixture.path });
-		await expect(syncAndOpenSf2Workbook({ classId, reportMonth: MONTH })).resolves.toBe(
-			fixture.path
+		await expect(syncAndOpenSf2Workbook({ classId, reportMonth: MONTH })).resolves.toMatchObject({
+			path: fixture.path,
+			reportMonth: MONTH,
+			reportYear: 2025
+		});
+	});
+
+	it('refuses to guess when two workbook files name the same class', async () => {
+		// A re-import or a retried split orphans the previous working copy beside
+		// the current one; opening either silently is how the teacher edits stale.
+		const { classId } = await seedClass();
+		const fixture = await loadTemplate();
+		const dir = '/Documents/EES-AMS/workbooks';
+		const current = `${dir}/SF2-GRADE-3-MATAPAT-8e10ae1e.xlsx`;
+		const orphan = `${dir}/SF2-GRADE-3-MATAPAT-a253179c.xlsx`;
+		await fixture.fileSystem.writeFileAtomic(current, new Uint8Array([1]));
+		await fixture.fileSystem.writeFileAtomic(orphan, new Uint8Array([2]));
+		await seedMonth({ classId, path: current });
+		await db().execute(
+			'UPDATE sf2_month_templates SET grade_level = ?, section = ? WHERE active_class_id = ?',
+			['Grade 3', 'Matapat', classId]
 		);
+
+		const error = await syncAndOpenSf2Workbook({ classId, reportMonth: MONTH }).then(
+			() => ({ detail: 'opened without refusing' }),
+			(thrown: unknown) => thrown as { detail: string }
+		);
+		expect(error.detail).toContain('Two SF2 workbooks exist');
+		expect(error.detail).toContain('SF2-GRADE-3-MATAPAT-8e10ae1e.xlsx');
+		expect(error.detail).toContain('SF2-GRADE-3-MATAPAT-a253179c.xlsx');
 	});
 
 	it('names the missing file, not the unmapped month, when a month has no days', async () => {
@@ -282,7 +311,9 @@ describe('syncAndOpenSf2Workbook', () => {
 				reportMonth: MONTH,
 				progress: (update) => messages.push(update.message)
 			})
-		).resolves.toBe(fixture.path);
+		).resolves.toMatchObject({ path: fixture.path, reportMonth: 'SEPTEMBER' });
+		// Asked JUNE, opened SEPTEMBER: no June row exists, so the latest-template
+		// fallback resolves September — and the result names it.
 
 		expect(messages).toContain(`Opening read-only: ${NO_MAPPED_DATES}`);
 		expect(await fixture.fileSystem.readFile(fixture.path)).toEqual(before);
