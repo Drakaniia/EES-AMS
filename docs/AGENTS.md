@@ -11,11 +11,10 @@ This is the single authoritative AGENTS.md for the EES-AMS project. It consolida
 
 ## 1. PROJECT OVERVIEW
 
-EES-AMS: cross-platform Tauri v2 desktop app for elementary school attendance management with ID card reader support. SvelteKit 5 + TypeScript + TailwindCSS 4 frontend. The whole backend — SQLite, Excel workbooks, backups, SF2 business logic — is TypeScript running in the webview. Windows-primary.
+EES-AMS: cross-platform Tauri v2 desktop app for elementary school attendance management with manual name-based attendance. SvelteKit 5 + TypeScript + TailwindCSS 4 frontend. The whole backend — SQLite, Excel workbooks, backups, SF2 business logic — is TypeScript running in the webview. Windows-primary.
 
 ### Key Facts
 
-- Card reader = USB HID keyboard wedge mode (emulated keystrokes)
 - No auth — single-teacher desktop use case
 - Windows NSIS installer via Tauri bundler
 - Tauri updater plugin for in-app update notifications

@@ -4,13 +4,12 @@ This project is the **Espiritu Elementary School Attendance Management System (E
 
 ## 🚀 Project Overview
 
-- **Core Purpose**: Manage student attendance using ID card readers in a local school environment.
-- **Target Platform**: Desktop (Windows, macOS, Linux) with card reader support.
+- **Core Purpose**: Manage student attendance through manual name-based recording in a local school environment.
+- **Target Platform**: Desktop (Windows, macOS, Linux).
 - **Key Technologies**:
   - **Frontend**: SvelteKit 5 (Runes), TypeScript, Tailwind CSS 4, Vite 8.
   - **Backend**: Rust (Tauri v2), SQLite (rusqlite + r2d2).
-  - **Hardware**: USB card readers (keyboard wedge/HID mode).
-- **Architecture**: Local-first desktop application. Card readers act as keyboard input devices, auto-typing card serials into focused text fields.
+- **Architecture**: Local-first desktop application.
 
 ## 🛠 Building and Running
 
