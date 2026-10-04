@@ -14,7 +14,11 @@ import { getSettings } from '$lib/db/repos/settings';
 import type { AttendanceEvent, Student } from '$lib/domain/models';
 import type { Sf2MonthTemplate } from '$lib/types';
 import { sf2MonthName, sf2MonthNumber, sf2ReportYear } from '$lib/features/sf2/calendar';
-import { currentYear, lastDayOfMonth } from '$lib/features/sf2/first-school-day';
+import {
+	currentYear,
+	knownFirstSchoolDay,
+	lastDayOfMonth
+} from '$lib/features/sf2/first-school-day';
 import { monthWorkbookSheetName } from '$lib/features/sf2/workbook-files';
 import {
 	findMonthTemplate,
@@ -148,6 +152,12 @@ async function contextFromMonthRow(
 	}
 
 	const sheetName = monthWorkbookSheetName(template.reportMonth, template.reportYear);
+	// `0` is FIRST_SCHOOL_DAY_UNDETERMINED ("not derived yet"), not a day — `??`
+	// alone lets it through and `setSf2MonthDates` refuses it at open time.
+	const effectiveFirstSchoolDay =
+		knownFirstSchoolDay(template.firstSchoolDayOverride) ??
+		knownFirstSchoolDay(template.firstSchoolDay) ??
+		1;
 	return {
 		classId,
 		reportMonth: template.reportMonth,
@@ -171,9 +181,9 @@ async function contextFromMonthRow(
 				section: template.section ?? '',
 				adviserName: template.adviserName ?? '',
 				schoolHeadName: template.schoolHeadName ?? '',
-				firstSchoolDay: template.firstSchoolDayOverride ?? template.firstSchoolDay ?? 1
+				firstSchoolDay: effectiveFirstSchoolDay
 			},
-			firstSchoolDay: template.firstSchoolDayOverride ?? template.firstSchoolDay ?? 1
+			firstSchoolDay: effectiveFirstSchoolDay
 		}
 	};
 }
