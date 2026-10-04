@@ -1,17 +1,12 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
-	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { updateStore } from '$lib/stores/update.svelte';
 	import logoSeal from '$lib/assets/logo-seal.png';
 	import { FileSpreadsheet, ScanLine, Search, Settings } from 'lucide-svelte';
 	import { commandPaletteStore } from '$lib/stores/command-palette.svelte';
 
 	const APP_TITLE = 'EES AMS';
-
-	const attendanceNavLabel = $derived(
-		settingsStore.settings?.attendanceMode === 'card_reader' ? 'Live Session' : 'Attendance'
-	);
 
 	const navItems = [
 		{ href: '/reports', label: 'SF2 Reports', icon: FileSpreadsheet },
@@ -40,7 +35,6 @@
 		{#each navItems as item (item.href)}
 			{@const active = isActive(item.href, page.url.pathname)}
 			{@const Icon = item.icon}
-			{@const label = item.href === '/attendance' ? attendanceNavLabel : item.label}
 			<a
 				href={`${base}${item.href}`}
 				aria-current={active ? 'page' : undefined}
@@ -48,7 +42,7 @@
 				class:active
 			>
 				<Icon class="size-[15px] shrink-0" aria-hidden="true" />
-				<span class="title-nav-label">{label}</span>
+				<span class="title-nav-label">{item.label}</span>
 				{#if active}
 					<span class="title-nav-indicator" aria-hidden="true"></span>
 				{/if}

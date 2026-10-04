@@ -28,7 +28,6 @@ import {
 	type LogOptions,
 	type LastResult
 } from './attendance-state.svelte';
-import { handleCardSubmit as submitCard } from './attendance-card-reader';
 import {
 	markStudent as opMarkStudent,
 	markAbsent as opMarkAbsent,
@@ -60,18 +59,14 @@ class AttendancePageState {
 	manualViewMode = $state<ManualViewMode>('boxes');
 	loading = $state(true);
 	loadError = $state<string | null>(null);
-	datePickerOpen = $state(false);
 	dateLoading = $state(false);
 
 	pickerOpen = $state(false);
 	pickerQuery = $state('');
 	rosterQuery = $state('');
 
-	cardInput = $state('');
-	cardInputElement: HTMLInputElement | null = $state(null);
 	isProcessing = $state(false);
 	isPresentingAll = $state(false);
-	lastScan = $state<{ serial: string; timestamp: number } | null>(null);
 	selectedDate = $state(fmtDate(Date.now()));
 	midnightTimer: ReturnType<typeof setTimeout> | null = null;
 	attendanceLog: AttendanceLogHandle | undefined = $state();
@@ -83,8 +78,6 @@ class AttendancePageState {
 
 	// ── Derived ────────────────────────────────────────────────────────────────
 	settingsPending = $derived(settingsStore.loading && !settingsStore.settings);
-	attendanceMode = $derived(settingsStore.settings?.attendanceMode ?? 'manual');
-	isCardReaderMode = $derived(this.attendanceMode === 'card_reader');
 	currentClass = $derived(this.classes.find((c) => c.id === this.selectedClassId));
 	isScheduledDayValue = $derived(isScheduledDay(this.selectedDate, this.currentClass));
 	selectedDateEvents = $derived(
@@ -184,40 +177,7 @@ class AttendancePageState {
 	);
 	pendingCount = $derived(this.manualStudents.length - this.presentCount - this.absentCount);
 
-	activeClass = $derived(getActiveClass(this.classes));
-	sessionClass = $derived.by(() => {
-		if (this.currentClass) return this.currentClass;
-		if (this.isCardReaderMode) return this.activeClass ?? undefined;
-		return undefined;
-	});
-
 	// ── Lifecycle ──────────────────────────────────────────────────────────────
-	constructor() {
-		$effect.root(() => {
-			$effect(() => {
-				if (
-					this.isCardReaderMode &&
-					!this.pickerOpen &&
-					!this.datePickerOpen &&
-					this.cardInputElement &&
-					!this.loading &&
-					!this.loadError
-				) {
-					this.cardInputElement.focus();
-				}
-			});
-
-			// Card-reader wedge safety: while the card input is armed on this page,
-			// the command palette must refuse to open so raw scans never leak into
-			// its query box.
-			$effect(() => {
-				commandPaletteStore.setCardReaderArmed(
-					this.isCardReaderMode && !!this.cardInputElement && !this.loading
-				);
-			});
-		});
-	}
-
 	async init() {
 		this.registerPaletteActions();
 		await this.loadInitial();
@@ -226,7 +186,6 @@ class AttendancePageState {
 
 	destroy() {
 		if (this.midnightTimer) clearTimeout(this.midnightTimer);
-		commandPaletteStore.setCardReaderArmed(false);
 		this.unregisterPaletteActions();
 	}
 
@@ -330,13 +289,7 @@ class AttendancePageState {
 	}
 
 	getAttendanceDraft(student: Student, timestamp?: number) {
-		const classObj = getAttendanceClass(
-			student,
-			this.currentClass,
-			this.isCardReaderMode,
-			this.activeClass,
-			this.classById
-		);
+		const classObj = getAttendanceClass(student, this.currentClass, this.classById);
 		const resolvedTimestamp =
 			timestamp ??
 			attendanceTimestampForSelectedDate(this.selectedDate, this.selectedDateIsToday, classObj);
@@ -358,13 +311,7 @@ class AttendancePageState {
 			attendanceTimestampForSelectedDate(
 				this.selectedDate,
 				this.selectedDateIsToday,
-				getAttendanceClass(
-					student,
-					this.currentClass,
-					this.isCardReaderMode,
-					this.activeClass,
-					this.classById
-				)
+				getAttendanceClass(student, this.currentClass, this.classById)
 			);
 		const draft = this.getAttendanceDraft(student, resolvedTimestamp);
 		if (event.sessionKey) return event.sessionKey === draft.sessionKey;
@@ -400,7 +347,6 @@ class AttendancePageState {
 
 	async selectAttendanceDate(date: string) {
 		const nextDate = date || fmtDate(Date.now());
-		this.datePickerOpen = false;
 		if (nextDate === this.selectedDate) return;
 
 		const previousDate = this.selectedDate;
@@ -426,15 +372,6 @@ class AttendancePageState {
 		void this.selectAttendanceDate(nextDate);
 	}
 
-	// ── Card reader operations ─────────────────────────────────────────────────
-	async handleCardSubmit(serial: string) {
-		await submitCard(this, serial);
-	}
-
-	handleCardInputChange(value: string) {
-		this.cardInput = value;
-	}
-
 	// ── Log operations ─────────────────────────────────────────────────────────
 	async logForStudent(
 		student: Student,
@@ -445,7 +382,7 @@ class AttendancePageState {
 		const lastAbsent = this.lastAbsentEventByStudentForSession.get(student.id);
 
 		// Decide the target state: an explicit action wins; otherwise toggle
-		// (card-reader double tap: present → absent → present).
+		// (present → absent → present).
 		let target: AttendanceType;
 		if (forcedType === 'in' || forcedType === 'absent') {
 			target = forcedType;
@@ -478,13 +415,7 @@ class AttendancePageState {
 			attendanceTimestampForSelectedDate(
 				this.selectedDate,
 				this.selectedDateIsToday,
-				getAttendanceClass(
-					student,
-					this.currentClass,
-					this.isCardReaderMode,
-					this.activeClass,
-					this.classById
-				)
+				getAttendanceClass(student, this.currentClass, this.classById)
 			);
 		const draft = this.getAttendanceDraft(student, ts);
 		const isLate = target === 'in' && draft.isLate && !options.suppressLate;

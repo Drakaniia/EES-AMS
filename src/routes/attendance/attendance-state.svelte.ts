@@ -129,15 +129,9 @@ export function getStudentClass(student: Student, classById: Map<string, Class>)
 export function getAttendanceClass(
 	student: Student,
 	currentClass: Class | undefined,
-	isCardReaderMode: boolean,
-	activeClass: Class | null,
 	classById: Map<string, Class>
 ) {
-	return (
-		currentClass ??
-		(isCardReaderMode ? activeClass : undefined) ??
-		getStudentClass(student, classById)
-	);
+	return currentClass ?? getStudentClass(student, classById);
 }
 
 export function getSessionSegment(classObj: Class | undefined, timestamp: number) {

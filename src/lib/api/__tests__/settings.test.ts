@@ -40,12 +40,12 @@ describe('saveSettings', () => {
 			dayEnd: '15:30',
 			lateAfter: '08:45',
 			quarter: 'Fourth Quarter',
-			attendanceMode: 'card_reader'
+			attendanceMode: 'manual'
 		});
 
 		expect(saved.quarter).toBe('3rd Quarter');
 		expect((await getSettings()).dayStart).toBe('08:30');
-		expect((await getSettings()).attendanceMode).toBe('card_reader');
+		expect((await getSettings()).attendanceMode).toBe('manual');
 	});
 
 	it('writes an audit entry for the save', async () => {

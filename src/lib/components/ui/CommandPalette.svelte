@@ -41,7 +41,7 @@
 	});
 
 	// Focus management: the input takes focus on open, and focus returns to
-	// whatever the user was using before (e.g. the card reader input).
+	// whatever the user was using before.
 	$effect(() => {
 		if (store.open) {
 			previouslyFocused = document.activeElement as HTMLElement | null;
@@ -84,10 +84,9 @@
 				return;
 			}
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-				// Never steal keys from an open modal dialog, and never open while
-				// the card-reader wedge is armed (raw scans would hit the query box).
+				// Never steal keys from an open modal dialog.
 				const modalOpen = document.querySelector('[role="dialog"][aria-modal="true"]');
-				if (store.open || (!modalOpen && !store.cardReaderArmed)) {
+				if (store.open || !modalOpen) {
 					event.preventDefault();
 					if (store.open) {
 						store.closePalette();

@@ -57,19 +57,6 @@ describe('command palette store', () => {
 		expect(mocks.listStudents).toHaveBeenCalledTimes(1);
 	});
 
-	it('does not open while the card-reader input is armed', async () => {
-		const store = await freshStore();
-		store.setCardReaderArmed(true);
-		store.openPalette();
-
-		expect(store.open).toBe(false);
-		expect(mocks.listStudents).not.toHaveBeenCalled();
-
-		store.setCardReaderArmed(false);
-		store.openPalette();
-		expect(store.open).toBe(true);
-	});
-
 	it('registers and unregisters contextual actions', async () => {
 		const store = await freshStore();
 		const item: PaletteItem = {

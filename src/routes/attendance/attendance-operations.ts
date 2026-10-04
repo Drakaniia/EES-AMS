@@ -26,8 +26,6 @@ export type PageState = {
 	selectedDate: string;
 	selectedDateIsToday: boolean;
 	currentClass: Class | undefined;
-	isCardReaderMode: boolean;
-	activeClass: Class | null;
 	classById: Map<string, Class>;
 	students: Student[];
 	events: AttendanceEvent[];
@@ -163,13 +161,7 @@ export function buildInEventRequests(state: PageState, students: Student[]): Cre
 		const timestamp = attendanceTimestampForSelectedDate(
 			state.selectedDate,
 			state.selectedDateIsToday,
-			getAttendanceClass(
-				student,
-				state.currentClass,
-				state.isCardReaderMode,
-				state.activeClass,
-				state.classById
-			)
+			getAttendanceClass(student, state.currentClass, state.classById)
 		);
 		const draft = state.getAttendanceDraft(student, timestamp);
 		return {

@@ -93,10 +93,6 @@
 	const studentMap = $derived(new SvelteMap(students.map((student) => [student.id, student])));
 	const activeClass = $derived(getActiveClass(classes));
 	const assignedClass = $derived(classes[0] ?? null);
-	const isCardReaderMode = $derived(settingsStore.settings?.attendanceMode === 'card_reader');
-	const attendanceActionLabel = $derived(
-		isCardReaderMode ? 'Start Live Session' : 'Take Attendance'
-	);
 
 	const classStudents = $derived.by(() => {
 		if (!assignedClass) return students;
@@ -196,10 +192,7 @@
 			<UsersRound class="size-4" aria-hidden="true" />
 			Manage students
 		</a>
-		<a
-			href={resolve(attendanceHref(isCardReaderMode, assignedClass?.id))}
-			class="btn btn-primary control-ring"
-		>
+		<a href={resolve(attendanceHref(assignedClass?.id))} class="btn btn-primary control-ring">
 			{#if activeClass}
 				<span class="relative flex h-2 w-2" aria-hidden="true">
 					<span
@@ -209,7 +202,7 @@
 				</span>
 			{/if}
 			<ScanLine class="size-4" aria-hidden="true" />
-			{attendanceActionLabel}
+			Take Attendance
 		</a>
 	{/snippet}
 </PageHeader>
@@ -353,7 +346,7 @@
 							class="rounded-xl border border-dashed border-border bg-surface/45 px-4 py-8 text-center text-sm text-muted-foreground"
 							role="status"
 						>
-							Attendance events will appear here as soon as a card tap or manual log is saved.
+							Attendance events will appear here as soon as attendance is recorded.
 						</div>
 					{:else}
 						<ul class="space-y-2">

@@ -15,7 +15,7 @@ function item(overrides: Partial<PaletteItem>): PaletteItem {
 
 const items: PaletteItem[] = [
 	item({ id: 'a1', label: 'SF2 Reports', group: 'Pages', keywords: 'sf2 excel' }),
-	item({ id: 'a2', label: 'Take Attendance', group: 'Pages', keywords: 'card reader' }),
+	item({ id: 'a2', label: 'Take Attendance', group: 'Pages', keywords: 'check in mark' }),
 	item({ id: 'a3', label: 'Juan Dela Cruz', group: 'Students' }),
 	item({ id: 'a4', label: 'Maria Santos', group: 'Students' }),
 	item({ id: 'a5', label: 'Switch Month', group: 'Actions' })

@@ -48,9 +48,10 @@ describe('getSettings', () => {
 	});
 
 	it('replaces an unrecognised quarter with 3rd Quarter and normalises the mode', async () => {
+		// 'card_reader' is the legacy mode stored by older installs; it reads as manual now.
 		await db().execute(
 			`INSERT INTO settings (id, day_start, day_end, late_after, quarter, attendance_mode)
-			 VALUES ('app', '08:00', '15:00', '08:45', 'Midterm', 'kiosk')`
+			 VALUES ('app', '08:00', '15:00', '08:45', 'Midterm', 'card_reader')`
 		);
 		const settings = await getSettings();
 		expect(settings.quarter).toBe('3rd Quarter');
@@ -77,7 +78,6 @@ describe('saveSettings', () => {
 		await saveSettings({
 			...base,
 			quarter: '2nd Quarter',
-			attendanceMode: 'card_reader',
 			q1Start: '2025-07-01',
 			schoolName: 'Espiritu Elementary',
 			adviserName: 'Dela Cruz'
@@ -85,7 +85,7 @@ describe('saveSettings', () => {
 
 		const settings = await getSettings();
 		expect(settings.quarter).toBe('2nd Quarter');
-		expect(settings.attendanceMode).toBe('card_reader');
+		expect(settings.attendanceMode).toBe('manual');
 		expect(settings.q1Start).toBe('2025-07-01');
 		expect(settings.schoolName).toBe('Espiritu Elementary');
 		expect(settings.adviserName).toBe('Dela Cruz');

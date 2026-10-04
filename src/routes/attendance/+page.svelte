@@ -3,7 +3,6 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import LoadingBlock from '$lib/components/ui/LoadingBlock.svelte';
 	import AttendanceGrid from './attendance-grid.svelte';
-	import AttendanceControls from './attendance-controls.svelte';
 	import AttendanceLog from './attendance-log.svelte';
 	import AttendanceManualLogDialog from './attendance-manual-log-dialog.svelte';
 	import AttendanceDateNav from './attendance-date-nav.svelte';
@@ -19,9 +18,7 @@
 </script>
 
 <svelte:head>
-	<title
-		>{attendanceState.isCardReaderMode ? 'Live Session' : 'Attendance'} - Attendance System</title
-	>
+	<title>Attendance - Attendance System</title>
 	<meta name="description" content="Record student attendance." />
 </svelte:head>
 
@@ -47,47 +44,6 @@
 			{/snippet}
 		</EmptyState>
 	</div>
-{:else if attendanceState.isCardReaderMode}
-	<section
-		class="flex min-h-0 flex-1 flex-col gap-5 px-4 py-5 md:px-8 lg:px-10 xl:grid xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]"
-	>
-		<div class="flex flex-wrap items-center justify-between gap-3 xl:col-span-2">
-			<div>
-				<p class="text-sm text-muted-foreground">Tap a card to record attendance</p>
-			</div>
-			<div class="flex flex-wrap items-center gap-3">
-				<AttendanceDateNav
-					selectedDate={attendanceState.selectedDate}
-					dateLoading={attendanceState.dateLoading}
-					isProcessing={attendanceState.isProcessing}
-					displayDateLabel={attendanceState.displayDateLabel}
-					onDateOffset={(offset) => attendanceState.handleDateOffset(offset)}
-					onDateSelect={(date) => void attendanceState.selectAttendanceDate(date)}
-				/>
-				<button
-					disabled={attendanceState.classes.length === 0}
-					onclick={() => {
-						attendanceState.pickerQuery = '';
-						attendanceState.pickerOpen = true;
-					}}
-					class="inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					Manual log
-				</button>
-			</div>
-		</div>
-		<AttendanceControls
-			classes={attendanceState.classes}
-			sessionClass={attendanceState.sessionClass}
-			isProcessing={attendanceState.isProcessing}
-			dateLoading={attendanceState.dateLoading}
-			cardInput={attendanceState.cardInput}
-			bind:cardInputElement={attendanceState.cardInputElement}
-			log={attendanceState.log}
-			onCardInputChange={(value) => attendanceState.handleCardInputChange(value)}
-			onCardSubmit={(serial) => void attendanceState.handleCardSubmit(serial)}
-		/>
-	</section>
 {:else}
 	<div class="flex min-h-0 flex-1 flex-col px-4 py-5 md:px-8 lg:px-10">
 		<AttendanceGrid

@@ -26,12 +26,10 @@ describe('CommandPalette', () => {
 		vi.clearAllMocks();
 		mocks.listStudents.mockResolvedValue(students);
 		commandPaletteStore.closePalette();
-		commandPaletteStore.setCardReaderArmed(false);
 	});
 
 	afterEach(() => {
 		commandPaletteStore.closePalette();
-		commandPaletteStore.setCardReaderArmed(false);
 	});
 
 	it('is hidden by default', () => {
@@ -101,15 +99,6 @@ describe('CommandPalette', () => {
 		fireEvent.input(input, { target: { value: 'zzz-no-such-thing' } });
 
 		expect(await screen.findByText(/No results for/)).toBeInTheDocument();
-	});
-
-	it('does not open with Ctrl+K while the card reader is armed', async () => {
-		commandPaletteStore.setCardReaderArmed(true);
-		render(CommandPalette);
-		pressCtrlK();
-
-		expect(screen.queryByLabelText('Search commands')).not.toBeInTheDocument();
-		expect(commandPaletteStore.open).toBe(false);
 	});
 
 	it('closes when the backdrop is clicked', async () => {

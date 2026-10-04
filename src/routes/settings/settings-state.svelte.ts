@@ -1,6 +1,6 @@
 import { describeError } from '$lib/db';
 import { settingsStore } from '$lib/stores/settings.svelte';
-import { listClasses, type Settings, type AttendanceMode } from '$lib/features/settings/native';
+import { listClasses, type Settings } from '$lib/features/settings/native';
 import {
 	buildGlobalSettingsPayload,
 	globalSettingsEqual,
@@ -40,7 +40,6 @@ class SettingsPageState implements Ctx {
 	defaultDayStart = $state('08:00');
 	defaultDayEnd = $state('15:00');
 	defaultLateAfter = $state('08:45');
-	attendanceMode = $state<AttendanceMode>('manual');
 
 	savedGlobalSettingsSnapshot = $state<Settings | null>(null);
 	pendingGlobalSettingsReload = $state<Settings | null>(null);
@@ -59,7 +58,7 @@ class SettingsPageState implements Ctx {
 			dayEnd: this.defaultDayEnd,
 			lateAfter: this.defaultLateAfter,
 			quarter: this.quarterState.defaultQuarter,
-			attendanceMode: this.attendanceMode,
+			attendanceMode: 'manual',
 			q1Start: this.quarterState.q1Start,
 			q1End: this.quarterState.q1End,
 			q2Start: this.quarterState.q2Start,
@@ -75,7 +74,6 @@ class SettingsPageState implements Ctx {
 		this.defaultDayEnd = normalized.dayEnd;
 		this.defaultLateAfter = normalized.lateAfter;
 		this.quarterState.defaultQuarter = normalized.quarter;
-		this.attendanceMode = normalized.attendanceMode;
 		this.quarterState.q1Start = normalized.q1Start ?? '';
 		this.quarterState.q1End = normalized.q1End ?? '';
 		this.quarterState.q2Start = normalized.q2Start ?? '';

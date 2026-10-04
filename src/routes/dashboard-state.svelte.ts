@@ -62,13 +62,9 @@ export function getRelevantTodayEvents(
 	});
 }
 
-export function attendanceHref(
-	isCardReaderMode: boolean,
-	classId?: string
-): '/attendance' | `/attendance?${string}` {
+export function attendanceHref(classId?: string): '/attendance' | `/attendance?${string}` {
 	const params: string[] = [];
 	if (classId) params.push(`classId=${encodeURIComponent(classId)}`);
-	if (classId && isCardReaderMode) params.push('manual=true');
 	const query = params.join('&');
 	return query ? (`/attendance?${query}` as `/attendance?${string}`) : '/attendance';
 }

@@ -7,9 +7,9 @@ import { buildAttendanceCsv, escapeCsvField } from '../csv';
  *
  * Two things make or break this file. Quoting: a name like `Dela Cruz, Jr.` is
  * ordinary text, and an unquoted comma silently shifts every later column. And
- * lateness: the row reports the *earliest* check-in of the day, because a card
- * reader fires more than once and the later scans are not when the child
- * arrived.
+ * lateness: the row reports the *earliest* check-in of the day, because a
+ * student can be recorded more than once and the later records are not when
+ * the child arrived.
  */
 
 const classOne: Class = {

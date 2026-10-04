@@ -12,10 +12,6 @@ export type { PaletteGroup, PaletteItem, PaletteGroupResult };
  * - Routes register contextual **Actions** with `register()` while mounted and
  *   remove them with `unregister()` on teardown.
  * - **Students** are fuzzy-matched by name and jump to their attendance log.
- *
- * Card-reader safety: while the attendance page has its card wedge input
- * armed (`setCardReaderArmed(true)`), the palette refuses to open so raw
- * card scans never leak into the query box.
  */
 
 const PAGE_ITEMS: PaletteItem[] = [
@@ -30,7 +26,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 	{
 		id: 'page-attendance',
 		label: 'Take Attendance',
-		keywords: 'live session card reader check in scan tap',
+		keywords: 'take attendance check in mark present',
 		hint: '/attendance',
 		group: 'Pages',
 		run: () => void goto('/attendance')
@@ -113,8 +109,6 @@ class CommandPaletteStore {
 	open = $state(false);
 	query = $state('');
 	selectedIndex = $state(0);
-	/** True while the attendance card-reader input is armed (wedge safety). */
-	cardReaderArmed = $state(false);
 
 	/** Contextual actions contributed by currently-mounted routes. */
 	registered = $state<Record<string, PaletteItem>>({});
@@ -125,7 +119,7 @@ class CommandPaletteStore {
 	private studentsLoaded = false;
 
 	openPalette() {
-		if (this.open || this.cardReaderArmed) return;
+		if (this.open) return;
 		this.query = '';
 		this.selectedIndex = 0;
 		this.open = true;
@@ -144,10 +138,6 @@ class CommandPaletteStore {
 
 	unregister(id: string) {
 		delete this.registered[id];
-	}
-
-	setCardReaderArmed(armed: boolean) {
-		this.cardReaderArmed = armed;
 	}
 
 	run(item: PaletteItem) {

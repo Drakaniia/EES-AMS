@@ -22,8 +22,8 @@ import type {
 
 export type { AuditEvent, AttendanceEvent, Class, ExportData, Settings, Student, WipeOutcome };
 
-/** Rust `AttendanceMode`. `#[serde(other)] Unknown` never survives: see `normalizeAttendanceMode`. */
-export type AttendanceMode = 'manual' | 'card_reader';
+/** Rust `AttendanceMode`. The card reader is gone: every stored value reads as manual. */
+export type AttendanceMode = 'manual';
 
 /** The single settings row. `settings.rs` selects `WHERE id = 'app'` everywhere. */
 export const SETTINGS_ROW_ID = 'app';
@@ -57,9 +57,9 @@ export interface ExportDataRecord {
 /** The only quarter labels the app accepts; anything else becomes `3rd Quarter`. */
 const QUARTERS = ['1st Quarter', '2nd Quarter', '3rd Quarter'] as const;
 
-/** `AttendanceMode::normalize` — everything that is not card reader is manual. */
-export function normalizeAttendanceMode(value: unknown): AttendanceMode {
-	return value === 'card_reader' ? 'card_reader' : 'manual';
+/** `AttendanceMode::normalize` — the card-reader value no longer exists, so everything is manual. */
+export function normalizeAttendanceMode(_value: unknown): AttendanceMode {
+	return 'manual';
 }
 
 /** The `quarter` guard shared by `SettingsRepository::get`, `update` and `import_all`. */

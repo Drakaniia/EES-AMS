@@ -12,7 +12,7 @@ vi.mock('$lib/stores/settings.svelte', () => ({
 	settingsStore: {
 		settings: {
 			quarter: '1st Quarter',
-			attendanceMode: 'card_reader',
+			attendanceMode: 'manual',
 			brandingLogoPath: null,
 			brandingTitle: 'EES AMS'
 		},

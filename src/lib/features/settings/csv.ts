@@ -4,8 +4,8 @@ import type { AttendanceEvent, Class, Student } from '$lib/types';
  * The attendance CSV — a port of `commands/csv_export.rs`.
  *
  * One row per student per local day, built from the *earliest* check-in of that
- * day, because the school's question is "when did this child arrive" and a card
- * reader fires more than once.
+ * day, because the school's question is "when did this child arrive" and a
+ * student can be recorded more than once.
  */
 
 export const CSV_HEADER = 'Date,Class,Room,Name,IN,Late';
