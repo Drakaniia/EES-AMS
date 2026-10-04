@@ -135,7 +135,7 @@ async function tableExists(driver: SqlDriver, table: string): Promise<boolean> {
 }
 
 /** Every user table, in name order, so a dump is byte-stable for the same data. */
-export async function tableNames(driver: SqlDriver): Promise<string[]> {
+async function tableNames(driver: SqlDriver): Promise<string[]> {
 	const rows = await driver.query<{ name: string }>(
 		"SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
 	);

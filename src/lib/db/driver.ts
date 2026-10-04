@@ -1,5 +1,3 @@
-import type { AppError } from './error';
-
 /**
  * SqlDriver — the whole of the data-access surface.
  *
@@ -56,13 +54,3 @@ export function looksLikeSqlite(bytes: Uint8Array): boolean {
 }
 
 export type SqlValue = string | number | bigint | Uint8Array | null;
-
-/** Raised by drivers; carries an `AppError` so repos can map SQL failures. */
-export class SqlError extends Error {
-	readonly appError: AppError;
-	constructor(appError: AppError) {
-		super(appError.detail);
-		this.name = 'SqlError';
-		this.appError = appError;
-	}
-}

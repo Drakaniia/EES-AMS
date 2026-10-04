@@ -41,7 +41,7 @@ export type BackupState = {
 	lastError?: string;
 };
 
-export async function statePath(): Promise<string> {
+async function statePath(): Promise<string> {
 	return `${await getEesAmsRootDir()}/${STATE_FILE_NAME}`;
 }
 
@@ -91,7 +91,7 @@ export async function setRetentionLimit(limit: number): Promise<void> {
 	await saveState({ ...state, retentionLimit: limit });
 }
 
-export function defaultState(): BackupState {
+function defaultState(): BackupState {
 	return { retentionLimit: DEFAULT_RETENTION_LIMIT };
 }
 

@@ -22,13 +22,7 @@ import { CURRENT_SCHEMA_VERSION } from '$lib/db/migrations';
 import { getFileSystem } from '$lib/platform/fs';
 import type { BackupPreview, BackupStatus, BackupSummary, BackupWorkbookPreview } from '$lib/types';
 import { archiveText, readArchiveFile, type BackupArchive } from './archive';
-import {
-	DATABASE_FILE_NAME,
-	MANIFEST_FILE_NAME,
-	WORKBOOK_PREFIX,
-	parseManifest,
-	type BackupManifest
-} from './manifest';
+import { MANIFEST_FILE_NAME, parseManifest, type BackupManifest } from './manifest';
 import { baseName, getBackupDir } from './paths';
 import { loadState } from './state';
 
@@ -164,7 +158,7 @@ export function workbookAbsenceWarning(
 }
 
 /** Everything the user should be told about an archive's workbooks, before a restore runs. */
-export function workbookAbsenceNotes(manifest: BackupManifest | undefined): string[] {
+function workbookAbsenceNotes(manifest: BackupManifest | undefined): string[] {
 	if (!manifest) return [];
 	if (manifest.workbooks.length === 0) {
 		return [
@@ -174,9 +168,7 @@ export function workbookAbsenceNotes(manifest: BackupManifest | undefined): stri
 	return [];
 }
 
-export function manifestWorkbookPreviews(
-	manifest: BackupManifest | undefined
-): BackupWorkbookPreview[] {
+function manifestWorkbookPreviews(manifest: BackupManifest | undefined): BackupWorkbookPreview[] {
 	return (manifest?.workbooks ?? []).map((entry) => ({
 		fileName: baseName(entry.path),
 		relativePath: entry.path,
@@ -186,7 +178,7 @@ export function manifestWorkbookPreviews(
 }
 
 /** Read an archive's manifest, or `undefined` when it has none or cannot be read. */
-export function readManifest(archive: BackupArchive): BackupManifest | undefined {
+function readManifest(archive: BackupArchive): BackupManifest | undefined {
 	const text = archiveText(archive, MANIFEST_FILE_NAME);
 	if (text === undefined) return undefined;
 	try {
@@ -199,20 +191,12 @@ export function readManifest(archive: BackupArchive): BackupManifest | undefined
 	}
 }
 
-export function workbookFilesOf(archive: BackupArchive) {
-	return archive.files.filter((file) => file.path.startsWith(WORKBOOK_PREFIX));
-}
-
-export function hasDatabaseImage(archive: BackupArchive): boolean {
-	return archive.files.some((file) => file.path === DATABASE_FILE_NAME);
-}
-
-export function isBackupArchiveName(name: string): boolean {
+function isBackupArchiveName(name: string): boolean {
 	return name.startsWith(FILE_PREFIX) && name.endsWith(FILE_SUFFIX) && !name.endsWith('.tmp');
 }
 
 /** Unix seconds from `20260928-142530`, or `undefined` for a name that has none. */
-export function timestampFromFileName(fileName: string): number | undefined {
+function timestampFromFileName(fileName: string): number | undefined {
 	const stem = fileName.slice(FILE_PREFIX.length, fileName.length - FILE_SUFFIX.length);
 	// A uniquified name is `EES-AMS-<timestamp>-2.zip`; the suffix is not part of
 	// the timestamp but the archive is still the second it claims to be.

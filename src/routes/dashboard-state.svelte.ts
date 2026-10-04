@@ -1,5 +1,5 @@
-import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity';
-import type { AttendanceEvent, Student, Class } from '$lib/api';
+import { SvelteDate } from 'svelte/reactivity';
+import type { AttendanceEvent, Class } from '$lib/api';
 
 export function getActiveClass(classes: Class[]): Class | null {
 	const now = new SvelteDate();
@@ -34,32 +34,6 @@ export function initials(name: string) {
 			.map((part) => part[0]?.toUpperCase())
 			.join('') || 'ST'
 	);
-}
-
-export function getCheckedInEvents(relevantTodayEvents: AttendanceEvent[]): AttendanceEvent[] {
-	const lastByStudent = new SvelteMap<string, AttendanceEvent>();
-	for (const event of [...relevantTodayEvents].sort((a, b) => eventTime(a) - eventTime(b))) {
-		lastByStudent.set(event.studentId, event);
-	}
-	return [...lastByStudent.values()].filter((event) => event.type === 'in');
-}
-
-export function getRelevantTodayEvents(
-	todayEvents: AttendanceEvent[],
-	assignedClass: Class | null,
-	studentMap: Map<string, Student>,
-	classStudents: Student[]
-): AttendanceEvent[] {
-	if (!assignedClass) return todayEvents;
-	const classStudentIds = new SvelteSet(classStudents.map((student) => student.id));
-	return todayEvents.filter((event) => {
-		const student = studentMap.get(event.studentId);
-		return (
-			event.classId === assignedClass.id ||
-			student?.classId === assignedClass.id ||
-			classStudentIds.has(event.studentId)
-		);
-	});
 }
 
 export function attendanceHref(classId?: string): '/attendance' | `/attendance?${string}` {

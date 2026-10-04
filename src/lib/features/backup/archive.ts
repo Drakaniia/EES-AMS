@@ -44,10 +44,6 @@ export function readArchive(bytes: Uint8Array): BackupArchive {
 	return { files: Object.entries(unzipped).map(([path, data]) => ({ path, bytes: data })) };
 }
 
-export async function writeArchive(archive: Uint8Array, path: string): Promise<void> {
-	await getFileSystem().writeFileAtomic(path, archive);
-}
-
 export async function readArchiveFile(path: string): Promise<BackupArchive> {
 	try {
 		return readArchive(await getFileSystem().readFile(path));

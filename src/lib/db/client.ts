@@ -1,5 +1,4 @@
 import type { AppError } from './error';
-import { appError } from './error';
 import type { SqlDriver, SqlParam } from './driver';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 import { migrate } from './migrations';
@@ -231,9 +230,4 @@ export class WorkerSqlDriver implements SqlDriver {
 		this.migrated = null;
 		this.worker.terminate();
 	}
-}
-
-/** Convenience for one-off reads that only need the value or a friendly error. */
-export function throwAppError(error: AppError): never {
-	throw appError(error.kind, error.detail);
 }

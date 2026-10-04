@@ -1,13 +1,4 @@
-import type { AuditEvent, BackupKind } from '$lib/types';
-
-const AUDIT_METADATA_KEYS = [
-	'students',
-	'classes',
-	'events',
-	'presentCount',
-	'absentCount',
-	'format'
-];
+import type { BackupKind } from '$lib/types';
 
 export function formatBackupTimestamp(value?: number) {
 	if (!value) return 'Never';
@@ -18,42 +9,6 @@ export function formatBackupTimestamp(value?: number) {
 		hour: 'numeric',
 		minute: '2-digit'
 	});
-}
-
-export function formatAuditTimestamp(value: string) {
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return 'Unknown time';
-	return date.toLocaleString(undefined, {
-		year: 'numeric',
-		month: 'short',
-		day: 'numeric',
-		hour: 'numeric',
-		minute: '2-digit'
-	});
-}
-
-export function auditEntityLabel(event: AuditEvent) {
-	const entityType = event.entityType.replaceAll('_', ' ');
-	if (!event.entityId) return entityType;
-	const id =
-		event.entityId.length > 12
-			? `${event.entityId.slice(0, 8)}...${event.entityId.slice(-4)}`
-			: event.entityId;
-	return `${entityType} ${id}`;
-}
-
-export function auditMetadataPreview(event: AuditEvent) {
-	if (!event.metadataJson) return '';
-	try {
-		const metadata = JSON.parse(event.metadataJson) as Record<string, unknown>;
-		return AUDIT_METADATA_KEYS.filter(
-			(key) => metadata[key] !== undefined && metadata[key] !== null
-		)
-			.map((key) => `${key}: ${metadata[key]}`)
-			.join(' | ');
-	} catch {
-		return '';
-	}
 }
 
 export function formatBackupBytes(value: number) {

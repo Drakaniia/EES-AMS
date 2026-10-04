@@ -8,7 +8,7 @@
  * `#[error("...")]` strings byte-for-byte and must not be reworded.
  */
 
-export type AppErrorKind =
+type AppErrorKind =
 	| 'Database'
 	| 'Pool'
 	| 'StudentNotFound'
@@ -54,7 +54,7 @@ export function errorMessage(error: AppError): string {
 }
 
 /** True for the plain `{ kind, detail }` objects repos throw instead of `Error`s. */
-export function isAppError(thrown: unknown): thrown is AppError {
+function isAppError(thrown: unknown): thrown is AppError {
 	return typeof thrown === 'object' && thrown !== null && 'kind' in thrown && 'detail' in thrown;
 }
 

@@ -10,7 +10,7 @@ export type Sf2OpenStatus = 'idle' | 'syncing' | 'success' | 'error';
 
 // ── Friendly loading messages that cycle during SF2 open ───────────────────────
 
-export const SF2_OPEN_MESSAGES = [
+const SF2_OPEN_MESSAGES = [
 	'Warming up the workbook…',
 	'Reading attendance records…',
 	'Writing marks to the workbook…',
@@ -23,7 +23,7 @@ export const SF2_OPEN_MESSAGES = [
 // Reassurance messages cycled while a single progress step stalls (typically
 // the slow Excel COM write). Only these are shown so the text never describes
 // an earlier phase than the actual progress bar.
-export const SF2_STALL_MESSAGES = [
+const SF2_STALL_MESSAGES = [
 	'Still working on the workbook…',
 	'Excel is finishing up in the background…',
 	'Double-checking everything is in order…',
@@ -75,7 +75,7 @@ export function getMonthCache(): SvelteMap<string, Sf2MonthGridPreview> {
 // Encapsulates all state and lifecycle for the "Open SF2" process including
 // progress tracking, cycling friendly messages, and Tauri event listeners.
 
-export type ShowToastFn = (message: string, ok?: boolean) => void;
+type ShowToastFn = (message: string, ok?: boolean) => void;
 
 export function createSf2OpenState() {
 	let status = $state<Sf2OpenStatus>('idle');

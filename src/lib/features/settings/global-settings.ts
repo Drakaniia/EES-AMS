@@ -14,7 +14,7 @@ export type GlobalSettingsFields = {
 	q3End: string;
 };
 
-export const DEFAULT_GLOBAL_SETTINGS: Settings = {
+const DEFAULT_GLOBAL_SETTINGS: Settings = {
 	id: 'app',
 	dayStart: '08:00',
 	dayEnd: '15:00',

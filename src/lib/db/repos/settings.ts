@@ -81,18 +81,6 @@ export async function getSettings(): Promise<SettingsRecord> {
 }
 
 /**
- * Creates the settings row if a database has none yet, so the wipe-time default
- * insert has a row to write into.
- */
-export async function ensureSettingsRow(): Promise<void> {
-	await getDriver().execute(
-		`INSERT OR IGNORE INTO settings (id, day_start, day_end, late_after, quarter, attendance_mode)
-		 VALUES (?, '08:00', '15:00', '08:45', '1st Quarter', 'manual')`,
-		[SETTINGS_ROW_ID]
-	);
-}
-
-/**
  * `SettingsRepository::update` — a targeted upsert, and the reason is the class
  * of bug rather than the columns it bites today.
  *

@@ -19,7 +19,7 @@ import { readLearnerRows } from '$lib/features/excel/roster';
 import { openWorkbook, readDayGrid } from '$lib/features/excel/workbook';
 
 /** The mark the SF2 workbook uses for an absence (`sf2/logic.rs:9`). */
-export const ABSENT_MARK = 'X';
+const ABSENT_MARK = 'X';
 
 /**
  * The number of absences the workbook records.

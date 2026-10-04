@@ -50,7 +50,7 @@ const STAGING_FOLDER = 'restore-staging';
  * Pure, so cleanup needs no disk round-trip, and narrow enough that a real archive
  * in `backups\` — the only other place this app writes a `.zip` — is never a match.
  */
-export function isStagedRestore(path: string): boolean {
+function isStagedRestore(path: string): boolean {
 	const segments = path.replace(/\\/g, '/').split('/');
 	return segments[segments.length - 2] === STAGING_FOLDER;
 }

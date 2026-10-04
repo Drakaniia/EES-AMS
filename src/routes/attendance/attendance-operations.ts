@@ -156,7 +156,7 @@ export async function handleUndo(state: PageState, eventId: string): Promise<boo
  *
  * Extracted from `AttendancePageState.buildInEventRequests`.
  */
-export function buildInEventRequests(state: PageState, students: Student[]): CreateEventRequest[] {
+function buildInEventRequests(state: PageState, students: Student[]): CreateEventRequest[] {
 	return students.map((student) => {
 		const timestamp = attendanceTimestampForSelectedDate(
 			state.selectedDate,

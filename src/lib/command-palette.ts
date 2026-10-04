@@ -21,7 +21,7 @@ export interface PaletteGroupResult {
 	items: PaletteItem[];
 }
 
-export const GROUP_ORDER: PaletteGroup[] = ['Pages', 'Actions', 'Students'];
+const GROUP_ORDER: PaletteGroup[] = ['Pages', 'Actions', 'Students'];
 
 /**
  * Fuzzy-filter items and group them in fixed order. Students are capped to

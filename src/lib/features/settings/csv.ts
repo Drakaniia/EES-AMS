@@ -8,7 +8,7 @@ import type { AttendanceEvent, Class, Student } from '$lib/types';
  * student can be recorded more than once.
  */
 
-export const CSV_HEADER = 'Date,Class,Room,Name,IN,Late';
+const CSV_HEADER = 'Date,Class,Room,Name,IN,Late';
 
 const UNKNOWN_CLASS = 'Unknown';
 const NO_ROOM = 'N/A';

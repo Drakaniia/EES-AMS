@@ -22,7 +22,7 @@ export function primaryEvent(record: StudentAttendance) {
 	return [...record.events].sort((a, b) => eventTime(a) - eventTime(b))[0];
 }
 
-export function sessionSegment(classObj: Class | undefined, timestamp: Date) {
+function sessionSegment(classObj: Class | undefined, timestamp: Date) {
 	if (!classObj?.sessions || classObj.sessions.length <= 1) return 'day';
 
 	const timeStr = `${String(timestamp.getHours()).padStart(2, '0')}:${String(

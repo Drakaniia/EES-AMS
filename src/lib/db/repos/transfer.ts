@@ -7,7 +7,6 @@ import {
 } from '$lib/domain/settings';
 import { epochSecondsToIso, nowEpochSeconds } from '$lib/domain/models';
 import type { AttendanceEvent, Session, WipeOutcome } from '$lib/types';
-import type { SqlValue } from '../driver';
 import { invalidInput } from '../error';
 import { getDriver } from '../index';
 import { listAllAuditEvents, recordAuditEvent } from './audit';
@@ -444,40 +443,4 @@ async function countRows(table: string): Promise<number> {
 		`SELECT COUNT(*) AS total FROM ${tableRef(table)}`
 	);
 	return Number(row?.total ?? 0);
-}
-
-/**
- * The whole database as SQL text — the stand-in for `export_database`, which used
- * to copy the `.sqlite` file through a second r2d2 connection.
- *
- * This one is a dump by choice, not by constraint: the worker can now export the
- * real file image (that is what a backup archive carries), and a dump is the
- * readable counterpart — `INSERT` per row, diffable, opens in any SQLite client.
- */
-export async function exportDatabaseSql(): Promise<string> {
-	const driver = getDriver();
-	const tables = await driver.query<{ name: string }>(
-		"SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-	);
-	const statements: string[] = ['PRAGMA foreign_keys = OFF;', 'BEGIN TRANSACTION;'];
-	for (const table of tables) {
-		const name = tableRef(table.name);
-		const rows = await driver.query<Record<string, SqlValue>>(`SELECT * FROM ${name}`);
-		for (const row of rows) {
-			const values = Object.values(row).map(sqlLiteral).join(', ');
-			statements.push(`INSERT INTO ${name} VALUES (${values});`);
-		}
-	}
-	statements.push('COMMIT;');
-	return `${statements.join('\n')}\n`;
-}
-
-function sqlLiteral(value: SqlValue): string {
-	if (value === null) return 'NULL';
-	if (typeof value === 'bigint' || typeof value === 'number') return String(value);
-	if (ArrayBuffer.isView(value)) {
-		const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-		return `X'${[...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')}'`;
-	}
-	return `'${value.replace(/'/g, "''")}'`;
 }

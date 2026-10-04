@@ -10,7 +10,7 @@ interface QuarterDefinition {
 	fallbackEndMonth: number;
 }
 
-export interface QuarterDateRange {
+interface QuarterDateRange {
 	startDate: string;
 	endDate: string;
 	source: 'settings' | 'calendar';
@@ -50,7 +50,7 @@ function formatCalendarDate(year: number, month: number, day: number): string {
 	return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-export function getQuarterDateRange(
+function getQuarterDateRange(
 	settings: Pick<
 		Settings,
 		'quarter' | 'q1Start' | 'q1End' | 'q2Start' | 'q2End' | 'q3Start' | 'q3End'
@@ -80,11 +80,11 @@ export function getQuarterDateRange(
 	};
 }
 
-export function getAttendanceEventDate(event: Pick<AttendanceEvent, 'timestamp'>): string | null {
+function getAttendanceEventDate(event: Pick<AttendanceEvent, 'timestamp'>): string | null {
 	return normalizeIsoDate(event.timestamp);
 }
 
-export function isAttendanceEventInQuarter(
+function isAttendanceEventInQuarter(
 	event: Pick<AttendanceEvent, 'timestamp'>,
 	settings: Pick<
 		Settings,

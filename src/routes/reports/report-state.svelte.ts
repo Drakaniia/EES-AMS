@@ -8,7 +8,7 @@ import type { Sf2PreviewCell, Sf2PreviewStudentRow } from '$lib/api';
 
 export const MATRIX_WEEKDAYS = ['M', 'T', 'W', 'TH', 'F'] as const;
 
-export type MatrixWeekday = (typeof MATRIX_WEEKDAYS)[number];
+type MatrixWeekday = (typeof MATRIX_WEEKDAYS)[number];
 
 export type MatrixDateSlot = {
 	key: string;
@@ -34,13 +34,6 @@ export type MatrixCell = Sf2PreviewCell & {
 	key: string;
 	label: string;
 	cls: string;
-};
-
-export type MatrixWeekGroupHeader = {
-	key: string;
-	label: string;
-	slots: MatrixDateSlot[];
-	rangeLabel: string;
 };
 
 /**
@@ -75,12 +68,12 @@ export function formatDate(date: string) {
 	return value.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export function formatWeekday(date: string) {
+function formatWeekday(date: string) {
 	const value = new SvelteDate(`${date}T00:00:00`);
 	return value.toLocaleDateString(undefined, { weekday: 'short' });
 }
 
-export function formatDayNumber(date: string) {
+function formatDayNumber(date: string) {
 	const value = new SvelteDate(`${date}T00:00:00`);
 	return String(value.getDate());
 }
@@ -109,14 +102,14 @@ export function formatImportedAt(value?: number) {
  * that is a third state, not zero: an unmeasured workbook is one the app cannot
  * make any claim about, which is exactly what §9.1's `Unmeasured` default is for.
  */
-export type WorkbookStatusCounts = {
+type WorkbookStatusCounts = {
 	/** Unix seconds, or `null` when the file has never been counted. */
 	scannedAt: number | null;
 	workbookXCount: number | null;
 	appXCount: number;
 };
 
-export type WorkbookStatusLine = {
+type WorkbookStatusLine = {
 	/** The sentence, ready to render. */
 	text: string;
 	/**
@@ -180,11 +173,6 @@ export function formatCheckedAt(value: number | null): string {
 
 export function cellKey(studentId: string, date: string) {
 	return `${studentId}:${date}`;
-}
-
-export function cellLabel(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
-	const state = cell.status === 'absent' ? 'absent' : 'present';
-	return `${row.studentName}, ${matrixDateLabel(cell.date)}: ${state}`;
 }
 
 function cellLabelFor(studentName: string, date: string, status: Sf2PreviewCell['status']) {
@@ -251,13 +239,6 @@ export function buildMatrixRows(
 	return rows;
 }
 
-export function cellClass(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
-	if (!row.mapped) return 'border-border bg-surface text-muted-foreground';
-	if (cell.status === 'absent') return 'border-red-500/35 bg-red-50 text-red-700';
-	// Present/Open = visually empty (no green background, no checkmark)
-	return 'border-border bg-background text-muted-foreground';
-}
-
 export function reportMonthLabel(value: string) {
 	return sf2ReportMonthLabel(value) || 'Blank';
 }
@@ -296,7 +277,7 @@ export function monthGridToPreview(grid: Sf2MonthGridPreview): Sf2ExportPreview 
 	};
 }
 
-export function createMatrixWeekGroup(key: string): MatrixWeekGroup {
+function createMatrixWeekGroup(key: string): MatrixWeekGroup {
 	return {
 		key,
 		label: '',
@@ -347,7 +328,7 @@ function enrichSlot(
 	};
 }
 
-export function mondayDateKey(date: string) {
+function mondayDateKey(date: string) {
 	const [year, month, day] = date.split('-').map(Number);
 	const value = new SvelteDate(year, month - 1, day);
 	const weekday = value.getDay();
@@ -362,7 +343,7 @@ export function weekdayIndexForDate(date: string) {
 	return weekday - 1;
 }
 
-export function localDateKey(date: Date) {
+function localDateKey(date: Date) {
 	const year = date.getFullYear();
 	const month = String(date.getMonth() + 1).padStart(2, '0');
 	const day = String(date.getDate()).padStart(2, '0');

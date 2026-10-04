@@ -21,7 +21,7 @@ import { WORKBOOK_PREFIX } from './manifest';
 import { getWorkbooksDir } from './paths';
 import { countXmarks } from './x-count';
 
-export type WorkbookSnapshot = {
+type WorkbookSnapshot = {
 	/** The workbook bytes, ready to be put in the archive. */
 	files: ArchiveFile[];
 	/** One manifest entry per collected workbook, in sorted path order. */
@@ -74,7 +74,7 @@ export async function writeWorkbooks(files: readonly ArchiveFile[]): Promise<num
 }
 
 /** Every file below `dir`, as slash-separated paths relative to `dir`. */
-export async function listFilesRecursive(dir: string): Promise<string[]> {
+async function listFilesRecursive(dir: string): Promise<string[]> {
 	const fs = getFileSystem();
 	const found: string[] = [];
 	const pending = [''];

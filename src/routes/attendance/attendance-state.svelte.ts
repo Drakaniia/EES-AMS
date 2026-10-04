@@ -32,10 +32,6 @@ export type LastResult = {
 
 // ── Pure utility functions ──────────────────────────────────────────────────────
 
-export function getTimeOfDay(): 'Morning' | 'Afternoon' {
-	return new SvelteDate().getHours() < 12 ? 'Morning' : 'Afternoon';
-}
-
 export function getActiveClass(classes: Class[]): Class | null {
 	const now = new SvelteDate();
 	const currentTime = now.getHours() * 60 + now.getMinutes();
@@ -60,7 +56,7 @@ export function eventTime(event: AttendanceEvent) {
 		: event.timestamp;
 }
 
-export function parseDateKey(dateKey: string) {
+function parseDateKey(dateKey: string) {
 	const [year, month, day] = dateKey.split('-').map(Number);
 	if (
 		typeof year !== 'number' ||
@@ -97,7 +93,7 @@ export function formatAttendanceDate(dateKey: string) {
 	});
 }
 
-export function firstClassTime(classObj: Class | undefined) {
+function firstClassTime(classObj: Class | undefined) {
 	return classObj?.sessions?.[0]?.startTime ?? classObj?.dayStart ?? '08:00';
 }
 
@@ -122,7 +118,7 @@ export function studentName(studentId: string, studentById: Map<string, Student>
 	return studentById.get(studentId)?.name ?? 'Unknown student';
 }
 
-export function getStudentClass(student: Student, classById: Map<string, Class>) {
+function getStudentClass(student: Student, classById: Map<string, Class>) {
 	return student.classId ? classById.get(student.classId) : undefined;
 }
 
@@ -134,7 +130,7 @@ export function getAttendanceClass(
 	return currentClass ?? getStudentClass(student, classById);
 }
 
-export function getSessionSegment(classObj: Class | undefined, timestamp: number) {
+function getSessionSegment(classObj: Class | undefined, timestamp: number) {
 	if (!classObj?.sessions || classObj.sessions.length <= 1) return 'day';
 
 	const now = new SvelteDate(timestamp);
@@ -178,22 +174,6 @@ export function checkLate(classObj: Class | undefined, timestamp: number): boole
 	return now > lateTime;
 }
 
-export function isWithinClassHours(classObj: Class | undefined, timestamp: number): boolean {
-	if (!classObj) return false;
-
-	const now = new SvelteDate(timestamp);
-	const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-	if (classObj.sessions && classObj.sessions.length > 0) {
-		for (const session of classObj.sessions) {
-			if (timeStr >= session.startTime && timeStr <= session.endTime) return true;
-		}
-		return false;
-	}
-
-	return timeStr >= classObj.dayStart && timeStr <= classObj.dayEnd;
-}
-
 export function getStudentInitials(name: string) {
 	const initials = name
 		.split(/\s+/)
@@ -203,10 +183,6 @@ export function getStudentInitials(name: string) {
 		.join('');
 
 	return initials || 'ST';
-}
-
-export function getStudentClassName(student: Student, classById: Map<string, Class>) {
-	return getStudentClass(student, classById)?.name ?? 'No class';
 }
 
 export function isScheduledDay(selectedDate: string, classObj: Class | undefined): boolean {
