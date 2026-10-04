@@ -189,17 +189,30 @@ export function hideEmptyLearnerRows(
 ): number {
 	let touched = 0;
 	for (const sheet of sf2MonthlySheets(workbook)) {
-		for (const [first, last] of [
-			[SF2_FIRST_LEARNER_ROW, maleTotalRow - 1],
-			[maleTotalRow + 1, femaleTotalRow - 1]
-		]) {
-			for (let row = first; row <= last; row += 1) {
-				sheet.getRow(row).hidden = !occupiedRows.has(row);
-			}
-		}
+		hideEmptyLearnerRowsOnSheet(sheet, maleTotalRow, femaleTotalRow, occupiedRows);
 		touched += 1;
 	}
 	return touched;
+}
+
+/**
+ * Hide the learner slots of one sheet that hold no data, so only rows with
+ * real students print. The TOTAL rows themselves are never slots.
+ */
+export function hideEmptyLearnerRowsOnSheet(
+	sheet: Worksheet,
+	maleTotalRow: number,
+	femaleTotalRow: number,
+	occupiedRows: ReadonlySet<number>
+): void {
+	for (const [first, last] of [
+		[SF2_FIRST_LEARNER_ROW, maleTotalRow - 1],
+		[maleTotalRow + 1, femaleTotalRow - 1]
+	]) {
+		for (let row = first; row <= last; row += 1) {
+			sheet.getRow(row).hidden = !occupiedRows.has(row);
+		}
+	}
 }
 
 /** The learner slots of one sheet, as `{ row, gender }`. */

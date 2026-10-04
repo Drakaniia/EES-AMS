@@ -486,6 +486,23 @@ describe('building a month worksheet from the bundled template', () => {
 		expect(report.months[0].extraRosterRows).toBe(0);
 	});
 
+	it('hides the learner rows the roster does not claim, so only the class prints', async () => {
+		await buildSchoolYearWorkbook(fixture.path, [
+			{ request: requestFor(roster(2, 1), []), removeStaleSheets: true }
+		]);
+		const sheet = (await fixture.open()).getWorksheet('SEPTEMBER 2026') as Worksheet;
+
+		expect(sheet.getRow(8).hidden).toBe(false);
+		expect(sheet.getRow(9).hidden).toBe(false);
+		expect(sheet.getRow(30).hidden).toBe(false);
+		expect(sheet.getRow(10).hidden).toBe(true);
+		expect(sheet.getRow(28).hidden).toBe(true);
+		expect(sheet.getRow(31).hidden).toBe(true);
+		// The TOTAL rows are not slots and must never be hidden.
+		expect(sheet.getRow(29).hidden).toBe(false);
+		expect(sheet.getRow(49).hidden).toBe(false);
+	});
+
 	it('writes the header block, and shifts the signature rows when the roster grows', async () => {
 		// 24 boys and 22 girls whose female block starts at row 33, because the source
 		// roster had already been expanded: three extra rows each, so the adviser and

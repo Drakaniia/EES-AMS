@@ -80,7 +80,7 @@ import {
 	type Sf2DayColumn,
 	type Sf2TotalRows
 } from '$lib/features/excel/formula-marks';
-import { readLearnerRows } from '$lib/features/excel/roster';
+import { hideEmptyLearnerRowsOnSheet, readLearnerRows } from '$lib/features/excel/roster';
 import type { Sf2CellMark, Sf2LearnerRow } from '$lib/features/excel/types';
 import {
 	copyFormSheet,
@@ -813,6 +813,16 @@ function populateMonthSheet(
 		totalRows.maleTotalRow,
 		totalRows.femaleTotalRow,
 		totalRows.combinedTotalRow
+	);
+	// The sheet was copied from the donor form, so its hidden flags are the
+	// donor's - a roster that shrank since would leave empty rows showing and
+	// filled rows hidden. The build owns the roster it just wrote, so it hides
+	// what the roster does not claim.
+	hideEmptyLearnerRowsOnSheet(
+		sheet,
+		totalRows.maleTotalRow,
+		totalRows.femaleTotalRow,
+		new Set(request.learners.map((learner) => learner.rowIndex))
 	);
 
 	const slots = weekdaySlots(sheet);
