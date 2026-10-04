@@ -90,7 +90,7 @@ export const EMPTY_ROSTER_ANALYSIS_MESSAGE =
  * the start year, then JANUARY -> AUGUST of the next. Alphabetical month order
  * would be misleading.
  */
-export function schoolYearOrderKey(template: Sf2MonthTemplate): [number, number] {
+function schoolYearOrderKey(template: Sf2MonthTemplate): [number, number] {
 	return [template.reportYear, sf2MonthNumber(template.reportMonth) ?? 0];
 }
 
@@ -319,7 +319,7 @@ export async function upsertMonthTemplate(template: Sf2MonthTemplate): Promise<v
 }
 
 /** The class-level identity fields every month row of a school year shares. */
-export interface Sf2MonthIdentityFields {
+interface Sf2MonthIdentityFields {
 	schoolId: string;
 	schoolName: string;
 	gradeLevel: string;

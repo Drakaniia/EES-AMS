@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The worksheets of the single-file, twelve-sheet SF2 workbook, and the naming
  * rules that decide which of them is a month.
  *
@@ -56,26 +56,12 @@ import {
 	isSf2MonthlySheetName,
 	materialiseSharedFormulas,
 	monthNumber,
-	openWorkbook,
 	spliceRowsPreservingMerges,
 	writableDayColumns
 } from '$lib/features/excel/workbook';
-import { countAbsentMarks } from '$lib/features/excel/formulas';
-import { readLearnerRows } from '$lib/features/excel/roster';
-import type { Sf2LearnerRow } from '$lib/features/excel/types';
-
-/**
- * The prefix of the retired hide/rename cycle's worksheets.
- *
- * The old per-month-file design hid a tab and renamed it to `__SF2_HIDDEN_{n}`
- * while it rebuilt the month. Those leftovers are recognised here so they can be
- * *removed* - and, because they are not month names, so they can never be *read*
- * as one.
- */
-export const HIDDEN_SHEET_PREFIX = '__SF2_HIDDEN_';
 
 /** Excel refuses a worksheet name longer than this. */
-export const MONTH_SHEET_NAME_MAX = 31;
+const MONTH_SHEET_NAME_MAX = 31;
 
 /**
  * One day column of a month file, resolved against the sheet's own weekday
@@ -91,7 +77,7 @@ export type MonthDaySlot = {
 };
 
 /** One worksheet's name, position and visibility. */
-export type SheetEntry = {
+type SheetEntry = {
 	/** 1-based index of the worksheet in the workbook, matching Excel. */
 	index: number;
 	name: string;
@@ -167,15 +153,6 @@ function monthNumberToFullName(month: number): string {
  */
 export function isMonthSheetOf(sheetName: string, month: number): boolean {
 	return monthNumber(sheetName) === month;
-}
-
-/**
- * Whether a worksheet name is a leftover of the retired hide/rename cycle.
- *
- * The name came from a loop, not from a user, so case and padding are ignored.
- */
-export function isHiddenSheetName(sheetName: string): boolean {
-	return sheetName.trim().toUpperCase().startsWith(HIDDEN_SHEET_PREFIX);
 }
 
 /**
@@ -520,58 +497,6 @@ export function helperSheetNames(workbook: Workbook): string[] {
 	return sheetEntries(workbook)
 		.filter((entry) => !entry.isSf2Form)
 		.map((entry) => entry.name);
-}
-
-// ── Reading a worksheet back ─────────────────────────────────────────────────
-
-/** Every worksheet in the file at `path`, with whether it is visible. */
-export async function readSheetNames(path: string): Promise<{ name: string; visible: boolean }[]> {
-	return sheetEntries(await openWorkbook(path)).map((entry) => ({
-		name: entry.name,
-		visible: entry.visible
-	}));
-}
-
-/**
- * The roster on one worksheet, with each learner's own row and gender block.
- *
- * This is what a build needs - a learner is a *row*, and the twelve worksheets
- * only work because the same name is on the same row on all of them - so it is
- * the shape the merge job reads a class's roster in.
- */
-export async function learnersOnSheet(path: string, sheetName: string): Promise<Sf2LearnerRow[]> {
-	return readLearnerRows(getSheet(await openWorkbook(path), sheetName));
-}
-
-/**
- * The learner names on one worksheet, in row order.
- *
- * Used to prove that all twelve worksheets carry the **same** roster on the
- * **same** rows, which is what makes one `sf2_month_student_mappings` row set
- * valid for all twelve months.
- */
-export async function learnerNamesOnSheet(path: string, sheetName: string): Promise<string[]> {
-	return (await learnersOnSheet(path, sheetName)).map((learner) => learner.name.trim());
-}
-
-/**
- * How many `X` marks the named worksheet's learner rows hold.
- *
- * Counted cell by cell over the learner rows and the addressable day columns,
- * rather than by `COUNTIF` over the whole sheet, because what has to be proven is
- * that the marks are on *this* worksheet and in the *learner* rows: a count over
- * the whole sheet would be satisfied by a mark in a total row, and one over the
- * full grid would be satisfied by a mark left in a column the month does not use.
- */
-export async function countAbsentMarksOnSheet(path: string, sheetName: string): Promise<number> {
-	const sheet = getSheet(await openWorkbook(path), sheetName);
-	const columns = writableDayColumns(sheet).map(columnNumber);
-	let total = 0;
-	for (const learner of readLearnerRows(sheet)) {
-		const row = sheet.getRow(learner.row);
-		total += countAbsentMarks(columns.map((column) => cellText(row.getCell(column))));
-	}
-	return total;
 }
 
 /** Re-exported so a reader of the month modules has the one true predicate. */

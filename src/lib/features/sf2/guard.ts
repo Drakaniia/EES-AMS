@@ -165,11 +165,6 @@ export function staleAbortMessage(unmatchedXMarks: number): string {
 	);
 }
 
-/** The export path's refusal: the guard said no, so no output file was written. */
-export function exportRefusedMessage(staleAbort: string): string {
-	return `The export was not written. ${staleAbort}`;
-}
-
 /** Name every in-scope cell, so a `Stale` permit lists learners and days. */
 export function cellLabels(
 	roster: readonly Sf2MonthStudentMapping[],

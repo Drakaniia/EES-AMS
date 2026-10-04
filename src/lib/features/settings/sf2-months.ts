@@ -96,7 +96,7 @@ function formatUnixSeconds(value?: number | null): string | null {
 }
 
 /** Build one renderable row from a backend row. */
-export function sf2MonthWorkbookRow(row: Sf2MonthPreview): Sf2MonthWorkbookRow {
+function sf2MonthWorkbookRow(row: Sf2MonthPreview): Sf2MonthWorkbookRow {
 	const month = row.month.toUpperCase();
 	const measured = typeof row.workbookScannedAt === 'number' && row.workbookScannedAt > 0;
 
@@ -205,7 +205,7 @@ export function sf2SplitSummary(outcome: Sf2SplitOutcome): string {
 	return sf2SplitSummaryFromCounts(outcome.verifiedCount, outcome.needsAttentionCount);
 }
 
-export function sf2SplitSummaryFromCounts(verified: number, needsAttention: number): string {
+function sf2SplitSummaryFromCounts(verified: number, needsAttention: number): string {
 	// "The original workbook is kept" is the promise that makes the whole operation
 	// safe to run without reading the spec, so it is in both sentences rather than
 	// only the cheerful one.

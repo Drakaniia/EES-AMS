@@ -25,7 +25,7 @@ import type { Sf2SummaryCountsByColumn } from '$lib/features/excel/constants';
  * identical either way, so a recalculation in Excel replaces the cached value with
  * the real one the moment the teacher fills those rows in (migration spec D7).
  */
-export const NO_MOVEMENT: Sf2SummaryCountsByColumn = {
+const NO_MOVEMENT: Sf2SummaryCountsByColumn = {
 	AR: { lateEnrolment: 0, droppedOut: 0, transferredOut: 0, transferredIn: 0 },
 	AS: { lateEnrolment: 0, droppedOut: 0, transferredOut: 0, transferredIn: 0 },
 	AT: { lateEnrolment: 0, droppedOut: 0, transferredOut: 0, transferredIn: 0 }

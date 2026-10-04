@@ -67,12 +67,6 @@ export const SF2_ATTENDANCE_FIRST_COLUMN = 6;
 /** Last day column of the SF2 attendance block - column `AL`. */
 export const SF2_ATTENDANCE_LAST_COLUMN = 38;
 
-/** The `ABSENT` column, `AM`, immediately right of the day grid. */
-export const SF2_ABSENT_COLUMN = 39;
-
-/** The `PRESENT` column, `AO`. */
-export const SF2_PRESENT_COLUMN = 41;
-
 /**
  * `TOTAL NO. OF DAYS`, merged `AW5:AY6`.
  *
@@ -92,10 +86,10 @@ export const SF2_TOTAL_DAYS_REF = '$AW$5';
 export const SF2_SUMMARY_COLUMNS = ['AR', 'AS', 'AT'] as const;
 
 /** One of the three summary columns. */
-export type Sf2SummaryColumn = (typeof SF2_SUMMARY_COLUMNS)[number];
+type Sf2SummaryColumn = (typeof SF2_SUMMARY_COLUMNS)[number];
 
 /** Rows 55, 67, 69 and 71 of one summary column, as the form labels them. */
-export type Sf2SummaryCounts = {
+type Sf2SummaryCounts = {
 	/** Late enrolment. */
 	lateEnrolment: number;
 	/** Dropped out (NLS). */

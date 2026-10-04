@@ -43,7 +43,7 @@ export type Sf2TotalRows = {
 export type Sf2DayColumn = { sheetName: string; column: string };
 
 /** A learner row the roster mapped onto the workbook. */
-export type Sf2MappedRow = { row: number };
+type Sf2MappedRow = { row: number };
 
 /** The day grid of each sheet the marks will be written to. */
 export type Sf2GridSource = (sheetName: string) => Sf2DayGrid;
@@ -281,9 +281,4 @@ export function summaryFormulaMarks(
 		});
 	}
 	return { formulaMarks, staticMarks };
-}
-
-/** A mark that clears a cell, for the cells a sync is allowed to blank. */
-export function clearMark(sheetName: string, address: string): Sf2CellMark {
-	return { sheetName, address, value: '' };
 }

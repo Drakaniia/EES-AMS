@@ -106,7 +106,7 @@ import { writeSummaryBlock } from './summary-block';
 export type { MonthDaySlot };
 
 /** The header block, copied from the legacy workbook's own template row. */
-export type MonthHeader = {
+type MonthHeader = {
 	schoolId: string;
 	schoolName: string;
 	schoolYear: string;
@@ -130,7 +130,7 @@ export type MonthLearnerWrite = {
 };
 
 /** One cell to copy verbatim into a month sheet's attendance grid. */
-export type MonthMarkWrite = {
+type MonthMarkWrite = {
 	rowIndex: number;
 	/** 1-based Excel column. */
 	columnIndex: number;
@@ -160,7 +160,7 @@ export type MonthAbsence = {
  * `Sf2MonthDateMapping` with camelCase fields, so the two are assignable to one
  * another once `$lib/features/sf2/month/month` lands.
  */
-export type MonthDateMapping = {
+type MonthDateMapping = {
 	templateId: string;
 	/** `YYYY-MM-DD`. */
 	date: string;
@@ -190,7 +190,7 @@ export type MonthBuildRequest = {
 };
 
 /** The result of comparing a freshly built month against its source. */
-export type MonthVerification =
+type MonthVerification =
 	| { verified: true }
 	| {
 			verified: false;
@@ -606,7 +606,7 @@ export function combineVerifications(
 }
 
 /** The cells a month's absences land in, and the ones no cell was found for. */
-export type ResolvedMarks = {
+type ResolvedMarks = {
 	marks: MonthMarkWrite[];
 	/** Absences naming a learner the roster does not hold. */
 	unmappedStudents: number;
@@ -1026,7 +1026,7 @@ export function dateInColumn(
 }
 
 /** One month of a bulk read, successful or not. */
-export type LegacyMonthRead = {
+type LegacyMonthRead = {
 	reportMonth: string;
 	reportYear: number;
 	/** Absent when the legacy file has no readable sheet for this month. */
@@ -1034,17 +1034,6 @@ export type LegacyMonthRead = {
 	/** Why this month could not be read, when it could not. */
 	error?: string;
 };
-
-/**
- * Read one month file's day-column slots, without writing to it.
- *
- * The "create this month" path needs the same grid the build computes, and the grid is
- * a property of the sheet's own weekday header - not of the calendar, and not of a
- * constant this module could hardcode.
- */
-export async function readDaySlots(path: string): Promise<MonthDaySlot[]> {
-	return weekdaySlots(donorFormSheet(await openWorkbook(path)));
-}
 
 /**
  * Read every requested month of a legacy twelve-tab workbook.

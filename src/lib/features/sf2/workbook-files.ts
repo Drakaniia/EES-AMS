@@ -17,13 +17,10 @@ import { reportYearForSchoolMonth } from './first-school-day';
 import { sanitizeFilePart } from './naming';
 import type { Sf2WorkbookAnalysis } from './calendar';
 
-/** The bundled DepEd template, as a URL the app can fetch its bytes from. */
-export const BUNDLED_TEMPLATE_URL: string = bundledTemplateUrl;
-
 /** The folder under Documents that holds everything the app writes (spec D13). */
 export const SF2_ROOT_FOLDER = 'EES-AMS';
 
-export const SF2_WORKBOOKS_FOLDER = 'workbooks';
+const SF2_WORKBOOKS_FOLDER = 'workbooks';
 
 /**
  * Folder inside the workbooks directory that keeps the pre-split per-class workbook.
@@ -125,15 +122,6 @@ export function monthWorkbookSheetName(reportMonth: string, reportYear: number):
  */
 export function monthWorkbookFileName(reportMonth: string, reportYear: number): string {
 	return `SF2-${canonicalMonthName(reportMonth)}-${reportYear}.xlsx`;
-}
-
-/** Where a retired per-month workbook would be. May not exist; never created here. */
-export function monthWorkbookPath(
-	workbookDir: string,
-	reportMonth: string,
-	reportYear: number
-): string {
-	return joinPath(workbookDir, monthWorkbookFileName(reportMonth, reportYear));
 }
 
 /**

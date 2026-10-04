@@ -19,7 +19,6 @@ import {
 import {
 	getCellText,
 	materialiseSharedFormulas,
-	setCellText,
 	sf2MonthlySheets,
 	spliceRowsPreservingMerges
 } from './workbook';
@@ -225,15 +224,4 @@ export function learnerSlots(
 		slots.push({ row, gender: 'M' });
 	for (let row = maleTotalRow + 1; row < femaleTotalRow; row += 1) slots.push({ row, gender: 'F' });
 	return slots;
-}
-
-/** Write a learner's name into a slot, renumbering the item-number column. */
-export function writeLearnerRow(
-	sheet: Worksheet,
-	row: number,
-	name: string,
-	itemNumber: number
-): void {
-	setCellText(sheet, row, SF2_ITEM_NUMBER_COLUMN, String(itemNumber));
-	setCellText(sheet, row, SF2_NAME_COLUMN, name);
 }

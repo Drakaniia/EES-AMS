@@ -31,7 +31,7 @@ const SF2_PRESENT_MARK = '';
 export { isLearnerName };
 
 /** One learner row in a workbook, as the roster sync records it. */
-export type Sf2StudentMapping = {
+type Sf2StudentMapping = {
 	studentId: string;
 	sheetName: string;
 	rowIndex: number;
@@ -52,16 +52,6 @@ export type Sf2AttendanceEvent = {
  */
 export function normalizeLearnerName(name: string): string {
 	return name.trim().split(/\s+/).join(' ').replace(/, /g, ',').trim().toUpperCase();
-}
-
-/**
- * Check if a day has any attendance taken.
- *
- * A day has "attendance taken" when at least one event exists — either an "in"
- * (present) record or an explicit "absent" record.
- */
-export function dayHasAttendanceTaken(dayEvents: readonly Sf2AttendanceEvent[]): boolean {
-	return dayEvents.length > 0;
 }
 
 /**

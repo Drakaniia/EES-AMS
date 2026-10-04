@@ -16,7 +16,7 @@ import type { Sf2WorkbookAnalysis, Sf2WorkbookLearner } from './calendar';
 import type { Student } from '$lib/domain/models';
 
 /** A database student, as the validation report shows it. */
-export type Sf2ValidationStudent = {
+type Sf2ValidationStudent = {
 	studentId: string;
 	name: string;
 	normalizedName: string;
@@ -25,7 +25,7 @@ export type Sf2ValidationStudent = {
 };
 
 /** A workbook learner row, as the validation report shows it. */
-export type Sf2ValidationLearner = {
+type Sf2ValidationLearner = {
 	rowIndex: number;
 	name: string;
 	normalizedName: string;
@@ -33,14 +33,14 @@ export type Sf2ValidationLearner = {
 };
 
 /** One learner whose two names look like the same person typed two ways. */
-export type Sf2ValidationNameMismatch = {
+type Sf2ValidationNameMismatch = {
 	currentStudent: Sf2ValidationStudent;
 	sf2Learner: Sf2ValidationLearner;
 	reason: string;
 };
 
 /** Two rows on one side of the comparison carrying the same name. */
-export type Sf2ValidationDuplicate = {
+type Sf2ValidationDuplicate = {
 	normalizedName: string;
 	names: string[];
 	studentIds: string[];
@@ -168,7 +168,7 @@ export function ensureImportValidationAllows(
 }
 
 /** Every pair that could be the same learner typed two ways, in both directions. */
-export function findPossibleNameMismatches(
+function findPossibleNameMismatches(
 	current: readonly Sf2ValidationStudent[],
 	learners: readonly Sf2ValidationLearner[]
 ): Sf2ValidationNameMismatch[] {

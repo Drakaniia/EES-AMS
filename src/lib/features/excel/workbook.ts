@@ -58,7 +58,7 @@ export function cellAddress(row: number, column: number): string {
 }
 
 /** Parse an A1 address into its 1-based row and column. */
-export function parseAddress(address: string): { row: number; column: number } {
+function parseAddress(address: string): { row: number; column: number } {
 	const match = /^([A-Za-z]+)(\d+)$/.exec(address);
 	if (!match) throw new Error(`Not an A1 address: ${address}`);
 	return { column: columnNumber(match[1]), row: Number(match[2]) };
@@ -304,12 +304,6 @@ export function getCellTextAt(sheet: Worksheet, address: string): string {
 /** Write a value to one cell, addressed by row and column. */
 export function setCellText(sheet: Worksheet, row: number, column: number, value: string): void {
 	const cell = writableCell(sheet.getRow(row).getCell(column));
-	cell.value = value === '' ? null : value;
-}
-
-/** Write a value to one cell, addressed by A1. */
-export function setCellTextAt(sheet: Worksheet, address: string, value: string): void {
-	const cell = writableCell(sheet.getCell(address));
 	cell.value = value === '' ? null : value;
 }
 

@@ -41,8 +41,6 @@
  * because the Settings screen that calls them is outside this change's scope.
  */
 
-import ExcelJS from 'exceljs';
-import type { Worksheet } from 'exceljs';
 import { getDriver, internal, invalidInput } from '$lib/db';
 import getSchoolStartDateSql from '$lib/db/sql/month_get_school_start_date.sql?raw';
 import getSplitCompletedAtSql from '$lib/db/sql/month_get_split_completed_at.sql?raw';
@@ -57,30 +55,9 @@ import { getSettings } from '$lib/db/repos/settings';
 import { createStudent, listStudents } from '$lib/db/repos/students';
 import { nowEpochSeconds } from '$lib/domain/models';
 import type { Student } from '$lib/domain/models';
-import {
-	SF2_ATTENDANCE_FIRST_COLUMN,
-	SF2_ATTENDANCE_LAST_COLUMN,
-	SF2_FIRST_LEARNER_ROW,
-	bundledTemplateTotalRows,
-	type Sf2SummaryCountsByColumn
-} from '$lib/features/excel/constants';
-import {
-	learnerAbsentPresentFormulaMarks,
-	summaryFormulaMarks,
-	totalFormulaMarks,
-	type Sf2DayColumn
-} from '$lib/features/excel/formula-marks';
-import { writeFormulaMarks, writeMarksForce } from '$lib/features/excel/marks';
+import type { Sf2SummaryCountsByColumn } from '$lib/features/excel/constants';
 import { isLearnerName } from '$lib/features/excel/roster';
-import {
-	cellText,
-	columnLetter,
-	numericCellValue,
-	openWorkbook,
-	saveWorkbookAtomic,
-	type Sf2DayGrid
-} from '$lib/features/excel/workbook';
-import { dayNumbersForSlots, sf2MonthName } from '$lib/features/sf2/calendar';
+import { sf2MonthName } from '$lib/features/sf2/calendar';
 import {
 	currentYear,
 	defaultSchoolStartDate,
@@ -91,7 +68,7 @@ import {
 	schoolYearStartYear
 } from '$lib/features/sf2/first-school-day';
 import { SF2_ABSENT_MARK, normalizeLearnerName } from '$lib/features/sf2/logic';
-import { monthSheetName, weekdaySlots } from '$lib/features/sf2/month/workbook-sheets';
+import { monthSheetName } from '$lib/features/sf2/month/workbook-sheets';
 import {
 	matchRosterLearner,
 	monthRosterForTemplate,
@@ -131,7 +108,7 @@ import type { Sf2SplitMonthOutcome, Sf2SplitOutcome } from '$lib/types';
 export const SPLIT_MONTH_COUNT = 12;
 
 /** The one file all twelve months live in. */
-export type SplitWorkbook = {
+type SplitWorkbook = {
 	/** The class the workbook belongs to, and the school year it is dated in. */
 	gradeLevel: string;
 	section: string;
@@ -230,7 +207,7 @@ export function femaleBlockStart(maleCount: number): number {
 }
 
 /** The one roster, shared by all twelve worksheets. */
-export type ResolvedRoster = {
+type ResolvedRoster = {
 	/** The learner rows to write onto every sheet, in row order. */
 	writes: {
 		studentId: string;

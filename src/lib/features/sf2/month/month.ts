@@ -519,7 +519,7 @@ function requireGridBuilder(): MonthGridBuilder {
  * the month being read: twelve worksheets share one file, and a column letter is
  * not an address without a sheet.
  */
-export function expandToMonthWeekdays(
+function expandToMonthWeekdays(
 	reportYear: number,
 	monthNumber: number,
 	sheetName: string,
@@ -996,23 +996,6 @@ export async function runSf2WorkbookSplit(): Promise<Sf2SplitOutcome> {
 	return mergeWorkbooks();
 }
 
-/**
- * Rewrite the twelve worksheets after the class roster changed.
- *
- * The split is idempotent and deliberately refuses to rebuild a workbook that has been
- * written to since, which is right for a one-time split and wrong for a roster change:
- * the rows have moved, so the file has to be rewritten or a learner added on the
- * Students page is on no sheet at all and none of their X marks can be written.
- *
- * Marks come from the database, so a rebuild redraws them rather than losing them.
- * Anything typed into the workbook by hand outside the attendance grid does not survive
- * one - that is the trade a roster change makes, and it is why the caller reports a
- * failure instead of hiding it.
- */
-export async function runSf2RosterRefresh(): Promise<Sf2SplitOutcome> {
-	return mergeWorkbooks({ force: true });
-}
-
 // â”€â”€ Supporting detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
@@ -1061,7 +1044,7 @@ function monthIssues(
  * files of a class is the point: the sidebar's identity panel is fed from whichever
  * month is on screen.
  */
-export function templateSummaryFromMonth(template: Sf2MonthTemplate): Sf2TemplateSummary {
+function templateSummaryFromMonth(template: Sf2MonthTemplate): Sf2TemplateSummary {
 	return {
 		id: template.id,
 		sourcePath: template.sourcePath,
@@ -1086,7 +1069,7 @@ export function templateSummaryFromMonth(template: Sf2MonthTemplate): Sf2Templat
  * last written to it, and putting that name on a grid full of another month's days
  * is the same lie in a different field.
  */
-export function templateSummaryFromLegacy(
+function templateSummaryFromLegacy(
 	legacy: NonNullable<Awaited<ReturnType<typeof latestLegacyTemplate>>>,
 	month: string,
 	schoolYear: string
@@ -1112,7 +1095,7 @@ export function templateSummaryFromLegacy(
  * `merge::number_the_roster`, which `merge.ts` inlines into its own roster
  * resolution and does not export.
  */
-export function numberTheRoster(learners: MonthLearnerWrite[]): MonthLearnerWrite[] {
+function numberTheRoster(learners: MonthLearnerWrite[]): MonthLearnerWrite[] {
 	let male = 0;
 	let female = 0;
 	return learners.map((learner) => {

@@ -189,7 +189,7 @@ export async function writeAttendanceToWorkbook(params: {
 }
 
 /** The four mark lists of one month write, in the order they are reported. */
-export type Sf2MonthWriteParts = {
+type Sf2MonthWriteParts = {
 	clearMarks: Sf2CellMark[];
 	marks: Sf2CellMark[];
 	formulaMarks: Sf2CellMark[];
@@ -204,7 +204,7 @@ export type Sf2MonthWriteParts = {
  * `measuredX` is the guard's own measurement, reused so the write does not
  * re-read what the permit was just granted on.
  */
-export function collectMonthWriteParts(
+function collectMonthWriteParts(
 	workbook: Parameters<typeof getSheet>[0],
 	target: Sf2MonthWriteTarget,
 	absentIdsFor: (date: string) => ReadonlySet<string>,
@@ -239,7 +239,7 @@ export function collectMonthWriteParts(
 }
 
 /** Write computed parts into an opened workbook and report the phased progress. */
-export function applyMonthWriteParts(
+function applyMonthWriteParts(
 	workbook: Parameters<typeof getSheet>[0],
 	target: Sf2MonthWriteTarget,
 	parts: Sf2MonthWriteParts,
@@ -366,7 +366,7 @@ export type Sf2OpenLayout = {
  * Made visible and renamed (31-char cap, no uniquify counter: the caller only
  * renames because no sheet carries the name), then the landing tab.
  */
-export function resolveOpenSheet(
+function resolveOpenSheet(
 	workbook: Workbook,
 	targetName: string
 ): { sheet: Worksheet; sheetName: string } {
@@ -389,10 +389,7 @@ export function resolveOpenSheet(
  * month's metadata across all twelve sheets would stamp the wrong school year
  * on eleven of them.
  */
-export function metadataMarksForSheet(
-	sheetName: string,
-	metadata: Sf2WorkbookMetadata
-): Sf2CellMark[] {
+function metadataMarksForSheet(sheetName: string, metadata: Sf2WorkbookMetadata): Sf2CellMark[] {
 	const entries: [keyof typeof SF2_METADATA_CELLS, string][] = [
 		['schoolId', metadata.schoolId],
 		['schoolYear', metadata.schoolYear],
@@ -418,7 +415,7 @@ export function metadataMarksForSheet(
  * row is cleared here (that is the roster sync's job). Item numbers count from
  * 1 within each gender block, the way the form numbers them.
  */
-export function rosterMarksForSheet(
+function rosterMarksForSheet(
 	sheetName: string,
 	roster: readonly Sf2MonthStudentMapping[]
 ): Sf2CellMark[] {

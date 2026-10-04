@@ -76,7 +76,7 @@ export type Sf2WorkbookDate = {
 };
 
 /** One worksheet of the workbook. */
-export type Sf2WorkbookSheet = {
+type Sf2WorkbookSheet = {
 	name: string;
 	usedRange: string;
 };
@@ -434,14 +434,14 @@ export function daysWithoutASlot(
 // ── Writing the date header ──────────────────────────────────────────────────
 
 /** What {@link configureSf2Calendar} did, for the caller to report on. */
-export type Sf2CalendarResult = {
+type Sf2CalendarResult = {
 	sheetName: string;
 	/** School days the DepEd form has no column for. Empty for every real month. */
 	droppedSchoolDays: number[];
 };
 
 /** How well populated a monthly sheet is; compared field by field, highest wins. */
-export type Sf2SheetQuality = {
+type Sf2SheetQuality = {
 	totalDayCells: number;
 	learnerCount: number;
 	maleCount: number;
@@ -463,7 +463,7 @@ function compareQuality(left: Sf2SheetQuality, right: Sf2SheetQuality): number {
  * The TOTAL rows' day cells come first in the comparison: a sheet whose totals
  * were never written has no attendance grid at all, however many names it holds.
  */
-export function sf2SheetQuality(sheet: Worksheet): Sf2SheetQuality {
+function sf2SheetQuality(sheet: Worksheet): Sf2SheetQuality {
 	const learners = readLearnerRows(sheet);
 	let totalDayCells = 0;
 	for (const row of [SF2_FRESH_MALE_TOTAL_ROW, SF2_FRESH_FEMALE_TOTAL_ROW]) {

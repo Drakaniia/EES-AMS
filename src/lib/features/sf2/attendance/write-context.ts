@@ -311,7 +311,7 @@ export async function monthAbsences(
  * `X` over it is a stale mark the rewrite may clear rather than a mark the
  * import must resurrect.
  */
-export function presentIdsByDate(
+function presentIdsByDate(
 	dates: readonly Sf2MonthDateMappingRecord[],
 	events: readonly AttendanceEvent[],
 	students: readonly Student[],

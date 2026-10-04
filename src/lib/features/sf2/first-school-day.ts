@@ -34,7 +34,7 @@ import { normalizeSchoolStartDate } from '$lib/features/settings/sf2-months';
  * belong to the start year; the rest belong to the following calendar year. The
  * v22 backfill applies the same rule in SQL (`migrate_to_v22.sql`).
  */
-export const SCHOOL_YEAR_START_MONTH = 9;
+const SCHOOL_YEAR_START_MONTH = 9;
 
 /** Shown once, when the real start date has not been entered yet (spec E3). */
 
@@ -134,7 +134,7 @@ export function schoolYearStartYear(schoolYear: string): number | undefined {
  * The month classes start. Every month file is dated from June 1st of the
  * school year's start year, so no start-date setup is needed.
  */
-export const CLASS_START_MONTH = 6;
+const CLASS_START_MONTH = 6;
 
 /**
  * June 1st of the school year's start year — the default `school_start_date`
