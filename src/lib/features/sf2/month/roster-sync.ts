@@ -98,9 +98,15 @@ export async function syncMonthRosterForClass(classId: string): Promise<number> 
 	rejectDuplicateRosterNames(students);
 	// Deleting the last student clears every month roster instead of leaving the
 	// old rows behind: `replaceMonthRoster` rejects an empty roster, so an early
-	// return here is how a deleted learner stayed on the SF2 grid.
+	// return here is how a deleted learner stayed on the SF2 grid. The database
+	// rows go first: the workbook clear below can fail (most often because the
+	// file is open in Excel), and the retry is then a no-op on the mappings but
+	// still rewrites the workbook.
 	if (students.length === 0) {
 		for (const template of templates) await deleteMonthRoster(template.id);
+		for (const months of monthsPerWorkbook(templates)) {
+			await clearWorkbookRoster(months[0].sourcePath);
+		}
 		return 0;
 	}
 
@@ -187,6 +193,39 @@ function monthsPerWorkbook(templates: Sf2MonthTemplate[]): Sf2MonthTemplate[][] 
 		else group.push(template);
 	}
 	return [...groups.values()];
+}
+
+/**
+ * Blank every learner row of one workbook's month sheets and hide them, so a
+ * class with no students left prints no roster at all.
+ *
+ * Throws when the workbook is missing or cannot be saved, like the roster sync
+ * it stands in for on this path: the caller reports it instead of undoing the
+ * save, and the retry is a no-op on the already-cleared mappings.
+ */
+async function clearWorkbookRoster(sourcePath: string): Promise<void> {
+	if (!(await getFileSystem().exists(sourcePath))) {
+		throw invalidInput(`The SF2 workbook at ${sourcePath} is missing. Restore it from a backup.`);
+	}
+
+	const workbook = await openWorkbook(sourcePath);
+	const sheets = sf2MonthlySheets(workbook);
+	if (sheets.length === 0) return;
+
+	const rows = totalsOn(sheets[0]);
+	const slots = [...slotsOn(rows).male, ...slotsOn(rows).female];
+	const marks: Sf2CellMark[] = [];
+	for (const sheet of sheets) {
+		for (const row of slots) {
+			for (const column of LEARNER_COLUMNS) marks.push(cell(sheet, column, row, ''));
+		}
+	}
+	// Forced: a cleared row can be the master of a merged pair, and the
+	// item-number column is one of the pairs the form merges.
+	writeMarksForce(workbook, marks);
+	hideEmptyLearnerRows(workbook, rows.maleTotalRow, rows.femaleTotalRow, new Set());
+
+	await saveWorkbookAtomic(workbook, sourcePath);
 }
 
 /** The roster the split left behind, taken from the first month that has one. */

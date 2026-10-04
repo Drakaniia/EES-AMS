@@ -162,4 +162,23 @@ describe('syncMonthRosterForClass', () => {
 		expect(sheet.getRow(29).height).toBe(19.5);
 		expect(sheet.getCell('F29').border.left?.style).toBe('medium');
 	});
+
+	test('deleting the last student blanks the workbook rows and hides them', async () => {
+		await seedJuneMonth();
+		// No students and no mappings: every learner was deleted, and the
+		// template's own sample roster is still on the sheet.
+		expect(await syncMonthRosterForClass(CLASS_ID)).toBe(0);
+		expect(await mappings()).toEqual([]);
+
+		const sheet = await juneSheet();
+		expect(getCellTextAt(sheet, 'C8')).toBe('');
+		expect(getCellTextAt(sheet, 'C30')).toBe('');
+		expect(sheet.getRow(8).hidden).toBe(true);
+		expect(sheet.getRow(28).hidden).toBe(true);
+		expect(sheet.getRow(30).hidden).toBe(true);
+		expect(sheet.getRow(48).hidden).toBe(true);
+		// The TOTAL rows are not slots and must never be hidden.
+		expect(sheet.getRow(29).hidden).toBe(false);
+		expect(sheet.getRow(49).hidden).toBe(false);
+	});
 });
