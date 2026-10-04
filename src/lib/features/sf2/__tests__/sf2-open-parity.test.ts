@@ -165,6 +165,29 @@ describe('guard decide/action', () => {
 		});
 	});
 
+	it('proves a workbook X the database explicitly marks present instead of importing it', () => {
+		// The teacher corrected the mark to present in the app: the stale X is
+		// a clear, not a missing absence, so it must not appear in `missing`
+		// (which is what the import resurrects).
+		const forgiven = new Set(['JUNE 2025!F8']);
+		const proven = decide([], [cell('JUNE 2025', 'F', 8)], labels, 'reason', forgiven);
+		expect(proven).toMatchObject({ kind: 'Proven', dbCount: 0, workbookCount: 1 });
+		// A genuinely unknown X on the same sheet still blocks.
+		const partial = decide(
+			[],
+			[cell('JUNE 2025', 'F', 8), cell('JUNE 2025', 'H', 8)],
+			labels,
+			'reason',
+			forgiven
+		);
+		expect(partial.kind).toBe('Stale');
+		if (partial.kind === 'Stale') {
+			expect(partial.missing).toHaveLength(1);
+			expect(partial.dbCount).toBe(0);
+			expect(partial.workbookCount).toBe(2);
+		}
+	});
+
 	it('maps permits to actions, and only Rewrite permits a write', () => {
 		expect(actionFor({ kind: 'Proven', dbCount: 1, workbookCount: 1 }).kind).toBe('Rewrite');
 		expect(actionFor({ kind: 'Unmeasured', reason: NO_MAPPED_DATES }).kind).toBe('ReadOnly');
@@ -397,6 +420,42 @@ describe('open guard behavior', () => {
 		expect(events.some((row) => row.student_id === firstId)).toBe(true);
 		const workbook = await openWorkbook(fixture.path);
 		expect(getCellTextAt(workbook.getWorksheet(JUNE_SHEET)!, 'F8')).toBe('X');
+	});
+
+	it('clears a workbook X the teacher corrected to present instead of resurrecting it', async () => {
+		const { classId } = await seedClass();
+		const { firstId, secondId } = await seedTwoStudents(classId);
+		const fixture = await loadTemplate();
+		await seedJuneMonth(classId, fixture.path, [
+			{ id: firstId, block: 'MALE' },
+			{ id: secondId, block: 'FEMALE' }
+		]);
+		// The stale X from before the correction…
+		const planted = await fixture.open();
+		planted.getWorksheet(JUNE_SHEET)!.getCell('F8').value = 'X';
+		await fixture.save(planted);
+		// …and the teacher's explicit present-marking over it (what unmarking
+		// the grid cell records).
+		await setAttendanceEventForDay({
+			studentId: firstId,
+			classId,
+			date: '2025-06-02',
+			dayStart: '07:30',
+			eventType: 'in',
+			reason: 'parity-test'
+		});
+
+		await syncAndOpenSf2Workbook({ classId, reportMonth: JUNE });
+
+		// The rewrite clears the stale X…
+		const workbook = await openWorkbook(fixture.path);
+		expect(getCellTextAt(workbook.getWorksheet(JUNE_SHEET)!, 'F8')).toBe('');
+		// …and the guard never imports it back over the correction.
+		const events = await db().query<{ event_type: string }>(
+			'SELECT event_type FROM events WHERE student_id = ?',
+			[firstId]
+		);
+		expect(events.map((row) => row.event_type)).toEqual(['in']);
 	});
 
 	it('opens read-only with zero writes when the workbook cannot be read', async () => {
