@@ -15,8 +15,7 @@ import {
 import { recordAuditEvent } from './audit';
 
 /**
- * Event repository — the port of
- * `src-tauri/src/infrastructure/database/events/{mod,write}.rs`.
+ * Event repository.
  *
  * The `session_key` is what makes "already recorded today" decidable: one key
  * per student per class per local calendar day. It is supplied when the caller

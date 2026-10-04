@@ -1,9 +1,7 @@
 /**
  * Learner rows: reading the roster, growing the roster area, hiding empty slots.
  *
- * Replaces `excel_com/learners.rs` and the roster half of
- * `excel_com/workbook_ops.rs`. The row arithmetic is the whole risk of this file:
- * one row off and the TOTAL rows, the `COUNTIF` ranges and the teacher's printed
+ * The row arithmetic is the whole risk of this file: one row off and the TOTAL rows, the `COUNTIF` ranges and the teacher's printed
  * report all shift together, silently.
  */
 

@@ -14,10 +14,10 @@
  * merely empty - it was *asserting* that nobody was ever absent while the
  * database held absences, and refusing to let the teacher correct it.
  *
- * The fix has a half in the backend (the month read resolves mappings from the
- * per-month tables and falls back to the pre-split ones) and a half here (the
- * grid must draw what the read gives it, for whichever month is on screen). The
- * backend half is covered in `src-tauri/src/sf2/month_preview/__tests__/`. This
+ * The fix has a half in the month read (it resolves mappings from the per-month
+ * tables and falls back to the pre-split ones) and a half here (the grid must draw
+ * what the read gives it, for whichever month is on screen). The read half is covered
+ * in `src/lib/features/sf2/month/__tests__/`. This
  * file covers the half that is the grid's own, plus the one property that only
  * exists end to end: a cell is clickable exactly when the component's condition
  * says so.

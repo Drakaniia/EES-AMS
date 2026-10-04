@@ -7,7 +7,7 @@
 -- verified.
 --
 -- ── How this file is executed ───────────────────────────────────────────────
--- `migrations.rs` splits it into statements and runs them in two groups.
+-- `migrations.ts` splits it into statements and runs them in two groups.
 --
 -- 1. Unmarked statements are DDL and run once, in order. An
 --    `ALTER TABLE ... ADD COLUMN` is applied only when the column is missing,
@@ -16,7 +16,7 @@
 --
 -- 2. Statements under a `-- name: <label>` marker are the backfill. They run
 --    once per calendar month with these placeholders substituted from
---    hard-coded month constants in `migrations.rs` — never from a workbook,
+--    hard-coded month constants in `migrations.ts` — never from a workbook,
 --    a settings row, or any other user input:
 --
 --      {month_name}    canonical uppercase month name, e.g. SEPTEMBER
@@ -74,8 +74,8 @@ SELECT
     '{month_name}',
     -- The school year wraps: September..December is the start year, the rest
     -- of the months is the following calendar year. The 9 is September - see
-    -- `sf2::month::first_school_day::SCHOOL_YEAR_START_MONTH`, which is the
-    -- same rule in Rust (`report_year_for_school_month`).
+    -- `first-school-day.ts`'s `SCHOOL_YEAR_START_MONTH`, which is the same rule
+    -- in TypeScript (`reportYearForSchoolMonth`).
     CAST(SUBSTR(t.school_year, 1, 4) AS INTEGER)
         + CASE WHEN {month_number} >= 9 THEN 0 ELSE 1 END,
     t.source_path,

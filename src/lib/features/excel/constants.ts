@@ -1,10 +1,9 @@
 /**
  * Fixed layout of the DepEd School Form 2 (SF2) workbook.
  *
- * Ported from `src-tauri/src/sf2/month/workbook_sheets.rs` and
- * `src-tauri/src/sf2/attendance/attendance_marks.rs`. These are the numbers the
- * official form is built from; nothing in the workbook is discoverable at
- * runtime, so they live here rather than being re-derived per call site.
+ * These are the numbers the official form is built from; nothing in the workbook is
+ * discoverable at runtime, so they live here rather than being re-derived per call
+ * site.
  */
 
 /**

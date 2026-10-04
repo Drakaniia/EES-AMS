@@ -7,8 +7,8 @@
  * spec D7). Every function here returns that pair: the formula text to write
  * and the number it evaluates to.
  *
- * The formula strings are ports of
- * `src-tauri/src/sf2/attendance/attendance_marks.rs`. A new formula shape in
+ * The formula strings are the ones the official template ships, so they are a
+ * compatibility contract with a teacher's existing workbooks. A new formula shape in
  * the template means a new function here and a test.
  */
 

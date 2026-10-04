@@ -8,8 +8,7 @@ import { rejectDuplicateRosterNames, templateOwnsRoster } from './parser';
 import type { Sf2TemplateRecord } from '../repository';
 
 /**
- * Re-point a class's workbook at the class's current roster — the port of
- * `src-tauri/src/sf2/roster/roster_sync.rs`.
+ * Re-point a class's workbook at the class's current roster.
  *
  * This is what every add / update / delete-student command runs afterwards, so it is
  * on the hot path of the Students page rather than a rare operation.

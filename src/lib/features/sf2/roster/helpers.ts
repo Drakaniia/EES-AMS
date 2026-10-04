@@ -15,8 +15,7 @@ import type { Settings } from '$lib/types';
 import type { Sf2CellMark } from '$lib/features/excel/types';
 
 /**
- * The two helpers the roster path shares — the port of
- * `src-tauri/src/sf2/roster/roster_helpers.rs`.
+ * The two helpers the roster path shares.
  */
 
 /** The standard columns of the SF2 learner info block: item number, LRN, name. */

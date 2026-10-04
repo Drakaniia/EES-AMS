@@ -1,18 +1,13 @@
 /**
  * Where the backup module remembers what it did last time.
  *
- * A port of `file_ops.rs`'s `BackupState` and `db-fingerprint.rs`'s sidecar: a
- * small JSON file beside the backups, written through the temp-file + rename
+ * A small JSON file beside the backups, written through the temp-file + rename
  * helper so a crash mid-write cannot leave the app with no record of its last
  * backup.
  *
  * It is a file and not a `settings` column because `settings` is a single
  * fixed-column row keyed by `id = 'app'`, and putting a key/value there needs a
- * schema change. The fingerprint module made the same argument for the same
- * reason.
- *
- * Google Drive and the sync folder are gone (spec D10), so `sync_folder_path`
- * and `last_sync_error` are gone with them.
+ * schema change.
  */
 
 import { asAppError, internal } from '$lib/db';

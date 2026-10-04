@@ -1,9 +1,9 @@
 /**
  * The SF2 workbooks inside a backup, and putting them back.
  *
- * A port of `workbooks.rs`, with the recursive copy turned into an in-memory
- * file list: the archive is a zip, so a "copy" is a read now and a write during
- * restore. What is kept is the part that was load-bearing — recurse rather than
+ * The recursive copy is an in-memory file list: the archive is a zip, so a "copy"
+ * is a read now and a write during restore. What is kept is the part that is
+ * load-bearing — recurse rather than
  * enumerate, so the `_legacy/` subfolder and any later layout change need no
  * special case, and fail the whole snapshot if any single file cannot be read, so
  * an archive never claims to hold a workbook it does not.

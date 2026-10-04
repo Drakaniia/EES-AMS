@@ -1,11 +1,8 @@
 /**
  * The zip archive — an in-memory set of named files.
  *
- * A port of `zip_writer.rs`, with one deliberate difference: that file was a
- * hand-rolled store-only ZIP writer whose only reason to exist was the single
- * object Google Drive's upload endpoint wanted, and `fflate` is now the whole
- * point of the phase. The entries are sorted so the same inputs always produce
- * the same bytes, which is what makes two archives comparable in a diff.
+ * `fflate` does the zip itself. The entries are sorted so the same inputs always
+ * produce the same bytes, which is what makes two archives comparable in a diff.
  */
 
 import { unzipSync, zipSync } from 'fflate';

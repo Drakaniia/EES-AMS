@@ -1,5 +1,5 @@
 /**
- * The roster validation report — the port of `src-tauri/src/sf2/validation.rs`.
+ * The roster validation report.
  *
  * This is the screen that stands between a teacher's workbook and the database:
  * before anything is imported, it says exactly which learners the workbook and the

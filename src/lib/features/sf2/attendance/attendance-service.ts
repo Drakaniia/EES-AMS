@@ -1,15 +1,13 @@
 /**
- * The SF2 attendance service — the port of
- * `src-tauri/src/sf2/attendance/attendance_service.rs`.
+ * The SF2 attendance service.
  *
  * ## The guard
  *
- * `run_write_guard` / `SyncPermit` / `SyncAction` live in `../guard.ts`, adapted
- * from COM to ExcelJS: measuring is a cell-text read off the opened workbook,
- * and the read-only branch skips all writes and hands the path to the OS opener
- * normally (there is no COM `ReadOnly:=True`; the guarantee is "the app never
- * writes"). The differential clear in `attendance-marks.ts` remains the second,
- * structural layer, as in Rust.
+ * `run_write_guard` / `SyncPermit` / `SyncAction` live in `../guard.ts`: measuring
+ * is a cell-text read off the opened workbook, and the read-only branch skips all
+ * writes and hands the path to the OS opener normally (the guarantee is "the app
+ * never writes"). The differential clear in `attendance-marks.ts` remains the
+ * second, structural layer.
  *
  * ## No Excel process
  *

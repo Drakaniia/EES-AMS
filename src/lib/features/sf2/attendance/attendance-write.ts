@@ -1,13 +1,12 @@
 /**
- * Writing a month's attendance into the workbook — the port of the write half of
- * `src-tauri/src/sf2/progress.rs`.
+ * Writing a month's attendance into the workbook.
  *
  * ## One open, one save
  *
- * Rust drove Excel through a COM session; here a workbook is an in-memory value
- * and the save is a temp-file rename. That means the whole write is one pass over
- * one object, which is what lets the formula marks be computed from the day grid
- * *after* the `X` marks are in it rather than from a guess at what they will be.
+ * A workbook is an in-memory value and the save is a temp-file rename, so the whole
+ * write is one pass over one object. That is what lets the formula marks be computed
+ * from the day grid *after* the `X` marks are in it rather than from a guess at what
+ * they will be.
  *
  * ## The order is load-bearing
  *

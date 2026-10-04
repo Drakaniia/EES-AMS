@@ -1,6 +1,5 @@
 /**
- * The destructive-sync guard — the port of `src-tauri/src/sf2/guard/mod.rs` and
- * `src-tauri/src/sf2/guard/evaluate.rs`.
+ * The destructive-sync guard.
  *
  * One property, held by two independent layers on purpose:
  *

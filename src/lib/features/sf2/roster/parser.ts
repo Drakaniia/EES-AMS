@@ -17,7 +17,7 @@ import type { Sf2StudentMappingRecord } from '../repository';
 
 /**
  * Roster slot arithmetic: which workbook row each student sits on, and the marks
- * that put them there — the port of `src-tauri/src/sf2/roster/roster_parser.rs`.
+ * that put them there.
  *
  * The row arithmetic is the whole risk of this file. One row off and the TOTAL rows,
  * the `COUNTIF` ranges and the teacher's printed report all shift together, silently,

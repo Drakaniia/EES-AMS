@@ -2,10 +2,8 @@
  * The SF2 calendar: month arithmetic, the first-attendance-day rules, and the
  * date-header writer.
  *
- * Ports `src-tauri/src/sf2/calendar/mod.rs` and the date half of
- * `excel_com/calendar.rs`. The pure rules live here; the writer takes an
- * `ExcelJS.Workbook` instead of a COM worksheet, because there is no Excel process
- * to drive (migration spec D2).
+ * The pure rules live here; the writer takes an `ExcelJS.Workbook`, because there
+ * is no Excel process to drive (migration spec D2).
  *
  * ## Two different year rules, on purpose
  *

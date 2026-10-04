@@ -1,10 +1,9 @@
 /**
  * Automatic backups.
  *
- * A port of `scheduling.rs`, reshaped by spec D11: an interval timer that runs
- * while the app is open, plus one backup as the app quits. The Rust version used
- * a detached OS thread with an hourly sleep; a `setInterval` in the page is the
- * same thing without a thread, and it stops for free when the window closes.
+ * An interval timer that runs while the app is open, plus one backup as the app
+ * quits. A `setInterval` in the page is the whole mechanism, and it stops for free
+ * when the window closes (spec D11).
  *
  * The daily guard is kept, and it is what makes an hourly timer safe. Without it
  * an app left open over lunch writes twenty archives a day and retention quietly

@@ -5,7 +5,7 @@ import type { Sf2TemplateSummary } from '$lib/types';
 
 /**
  * The pre-split SF2 tables — `sf2_templates`, `sf2_student_mappings`,
- * `sf2_date_mappings` — the port of `src-tauri/src/sf2/repository.rs`.
+ * `sf2_date_mappings`.
  *
  * These tables are what an install has *before* the per-month split runs, and the
  * split does not delete them: on an install that has not been split they are still

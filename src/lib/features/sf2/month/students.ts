@@ -4,8 +4,7 @@ import { EMPTY_ROSTER_ANALYSIS_MESSAGE } from './templates';
 import { appError } from '$lib/db';
 
 /**
- * `sf2_month_student_mappings` — the port of
- * `src-tauri/src/sf2/month/student_repo.rs`.
+ * `sf2_month_student_mappings`.
  *
  * Identity, in the order the spec sets out:
  *

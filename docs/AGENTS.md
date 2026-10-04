@@ -37,8 +37,9 @@ ees_ams/
 │       ├── platform/     # FileSystem interface + Tauri implementation
 │       ├── components/   # Shared UI (ui/, layout/, students/)
 │       └── stores/       # Global reactive singletons
-├── src-tauri/            # Plugin registration only (~23 lines of Rust)
+├── src-tauri/            # Plugin registration only (~25 lines of Rust)
 │   ├── src/lib.rs        # The whole Rust surface
+│   ├── src/main.rs       # The binary's entry point
 │   └── resources/sf2/    # Bundled DepEd workbook template
 ├── docs/                 # This file, DESIGN.md, ts-migration-spec.md
 ├── static/               # Self-hosted fonts + robots.txt
@@ -64,7 +65,6 @@ ees_ams/
 | SF2 business logic       | `src/lib/features/sf2/`            | Naming, logic, validation, calendar, roster, template, …    |
 | SF2 month workbooks      | `src/lib/features/sf2/month/`      | 12-month split, workbook build/merge, student mapping       |
 | SF2 attendance           | `src/lib/features/sf2/attendance/` | Read/write/import marks and events                          |
-| SF2 diagnostics          | `src/lib/features/sf2/diagnose/`   | Why a workbook and the DB disagree; repair report           |
 | Backup + restore         | `src/lib/features/backup/`         | Zip snapshots, retention, scheduling, restore preview       |
 | Settings workflows       | `src/lib/features/settings/`       | Global settings, CSV, SF2 month settings                    |
 | File system port         | `src/lib/platform/fs.ts`           | `FileSystem` interface, `MemoryFileSystem`, `useFileSystem` |
@@ -250,7 +250,6 @@ Workbooks are written with **ExcelJS** and then handed to `@tauri-apps/plugin-op
 - Pure logic in `features/sf2/*.ts`: `naming`, `logic`, `validation` + `validation-service`, `metadata`, `calendar`, `first-school-day`, `workbook-files`, `repository`
 - Attendance read/write/import in `features/sf2/attendance/`
 - The 12-month workbook split in `features/sf2/month/` (`workbook-builder`, `workbook-sheets`, `merge`, `templates`, `students`)
-- Why a workbook and the database disagree, and the repair report, in `features/sf2/diagnose/`
 - `preview.ts` and `progress.ts` feed the UI; `preview` is registered at startup (see below)
 
 ### 6.5 Files & Backup (`src/lib/features/backup/`, `src/lib/platform/`)
@@ -338,7 +337,7 @@ The app writes **`.xlsx`**. The pre-split per-class workbook is kept untouched a
 
 - The old workbooks do not become `.xlsx` by being renamed. Open the original once in Excel, Save As `.xlsx`, and import from that. The bundled template is already Excel's own `.xls`→`.xlsx` conversion, so the layout matches
 - The old app data directory's `.sqlite` file is **not** read. The database now lives in OPFS as `ees-ams.sqlite3`, and the migration chain expects it to have been created by a previous version of _this_ app. Treat the first launch of the new build as a fresh start, and keep the old backups as your archive of record
-- Attendance history lives in two places after the upgrade: the database (new) and the workbooks (old). Workbooks remain readable, and `features/sf2/diagnose/` exists to explain and repair the gap between them
+- Attendance history lives in two places after the upgrade: the database (new) and the workbooks (old). Workbooks remain readable in Excel, and marks entered from this build on are read from the database
 - Nothing in the app launches Excel. Workbooks open in whatever the OS associates with `.xlsx` when you ask for it
 
 ---

@@ -1,8 +1,8 @@
 /**
  * SF2 metadata: the eight header fields, and the date mappings that go with them.
  *
- * Port of `src-tauri/src/sf2/sf2_metadata.rs`. The rule this file exists to hold
- * together is that a metadata block and the date grid it describes are one thing:
+ * The rule this file exists to hold together is that a metadata block and the date
+ * grid it describes are one thing:
  * `metadataFromImportAnalysis` derives the first attendance day *from* the dates
  * the workbook recorded, so the header block cannot claim a first day the grid
  * does not have.

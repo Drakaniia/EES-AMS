@@ -48,12 +48,9 @@ import type { Class } from '$lib/domain/models';
 import type { Sf2TemplateRecord } from '../repository';
 
 /**
- * Create a class's SF2 workbook from the bundled DepEd template — the port of
- * `src-tauri/src/sf2/template/template_create.rs`.
+ * Create a class's SF2 workbook from the bundled DepEd template.
  *
- * Everything the Rust did across seven Excel startups now happens on one in-memory
- * workbook that is written once, which is the whole of what `batch_operations` was
- * already emulating.
+ * The whole build happens on one in-memory workbook that is written once.
  */
 
 /**

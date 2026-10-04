@@ -9,8 +9,8 @@
  *
  * The root is derived from `getSf2WorkbookDir()` rather than from
  * `documentDir()` + `SF2_ROOT_FOLDER` a second time. Two independent
- * derivations of one directory is the Rust bug this file exists to prevent —
- * `workbooks.rs` had to carry a comment explaining why its constant was equal
+ * derivations of one directory is the bug this file exists to prevent: the
+ * workbook folder had to carry a comment explaining why its constant was equal
  * to a literal in another module, and it drifted.
  */
 

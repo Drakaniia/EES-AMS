@@ -1,5 +1,5 @@
 -- Column-existence probe for the idempotent `ALTER TABLE ... ADD COLUMN` guard
--- in `execute_migration_ddl` (`src-tauri/src/infrastructure/database/migrations.rs`).
+-- in `execute_migration_ddl` (`migrations.ts`).
 --
 -- `{table}` and `{column}` are both substituted by the caller from hard-coded
 -- literals - either from that module or from an `ADD COLUMN` statement in a

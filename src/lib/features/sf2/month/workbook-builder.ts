@@ -2,9 +2,8 @@
  * Build the month worksheets of one SF2 workbook, and read the marks out of a
  * legacy workbook without ever touching it.
  *
- * Ported from `src-tauri/src/sf2/month/workbook_builder.rs`. Two things live
- * here, and they are deliberately in one file because they are the two halves of
- * the same conversation with the file:
+ * Two things live here, and they are deliberately in one file because they are the
+ * two halves of the same conversation with the file:
  *
  * - {@link buildSchoolYearWorkbook} - writes the month worksheets of the one file
  *   the class has, dates each one, writes the header, copies the roster, and
@@ -155,10 +154,8 @@ export type MonthAbsence = {
 /**
  * One day column of one month, as stored in `sf2_month_date_mappings`.
  *
- * Declared here rather than imported so this module stands alone while the rest
- * of `sf2/month` is still being ported; the shape is the Rust
- * `Sf2MonthDateMapping` with camelCase fields, so the two are assignable to one
- * another once `$lib/features/sf2/month/month` lands.
+ * Declared here rather than imported so this module stands alone; it is the same
+ * row `month/month.ts` reads, so the two are assignable to one another.
  */
 type MonthDateMapping = {
 	templateId: string;

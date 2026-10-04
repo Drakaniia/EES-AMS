@@ -13,13 +13,11 @@ import { listAllAuditEvents, recordAuditEvent } from './audit';
 import { getSettings } from './settings';
 
 /**
- * JSON export, JSON import, and "wipe all" — a port of
- * `commands/data_transfer.rs` and the `collect_export_data` half of
- * `commands/common.rs`.
+ * JSON export, JSON import, and "wipe all".
  *
- * Ordering is the Rust repos' ordering, not a new one: students and classes by
- * name, events newest first, the audit trail oldest first. A snapshot that
- * re-sorts itself between two exports diffs as noise in the teacher's restore.
+ * The ordering is fixed: students and classes by name, events newest first, the
+ * audit trail oldest first. A snapshot that re-sorts itself between two exports
+ * diffs as noise in the teacher's restore.
  */
 
 type StudentRow = {

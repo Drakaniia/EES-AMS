@@ -1,6 +1,5 @@
 /**
- * Which cells of an SF2 attendance grid a sync is allowed to write — the port of
- * `src-tauri/src/sf2/attendance/attendance_marks.rs`.
+ * Which cells of an SF2 attendance grid a sync is allowed to write.
  *
  * ## The rule this file exists to hold
  *

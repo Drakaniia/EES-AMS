@@ -1,5 +1,5 @@
 /**
- * Workbook and class naming rules — the port of `src-tauri/src/sf2/naming.rs`.
+ * Workbook and class naming rules.
  *
  * These two functions decide what a class is called in the database and what the
  * workbook on disk is called, so they are the one place a spelling change has to

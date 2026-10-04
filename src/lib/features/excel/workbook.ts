@@ -1,10 +1,9 @@
 /**
  * Opening, saving and addressing an SF2 workbook.
  *
- * Replaces `excel_com/workbook.rs`, `excel_com/worksheet.rs` and
- * `excel_com/workbook_io.rs`'s session plumbing. There is no Excel process and no
- * COM object graph any more: a workbook is a plain `ExcelJS.Workbook` value and a
- * save is a temp-file write plus a rename (migration spec D15).
+ * There is no Excel process and no COM object graph: a workbook is a plain
+ * `ExcelJS.Workbook` value and a save is a temp-file write plus a rename
+ * (migration spec D15).
  */
 
 import ExcelJS from 'exceljs';

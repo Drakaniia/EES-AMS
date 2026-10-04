@@ -1,9 +1,8 @@
 /**
  * Putting a backup back.
  *
- * A port of `restore_service.rs`, and the one place in this app that overwrites a
- * teacher's live database and workbooks. The ordering is the Rust ordering and
- * it is not arbitrary:
+ * The one place in this app that overwrites a teacher's live database and
+ * workbooks. The ordering is not arbitrary:
  *
  *  1. Read and validate the archive, before anything is touched. An archive this
  *     app cannot read is refused up front rather than half-applied.

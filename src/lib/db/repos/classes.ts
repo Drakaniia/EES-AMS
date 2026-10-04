@@ -4,14 +4,13 @@ import { epochSecondsToIso, normalizeOptionalText, nowEpochSeconds } from '$lib/
 import { recordAuditEvent } from './audit';
 
 /**
- * Class repository — the port of
- * `src-tauri/src/infrastructure/database/classes.rs`.
+ * Class repository.
  *
  * `sessions` and `days` are stored as JSON text. A class written before those
  * columns existed has no text in them, and a school day list is never empty in
  * practice, so an unreadable `days` falls back to Monday..Friday and an
- * unreadable `sessions` falls back to none — the same defaults the Rust row
- * reader used, so an old row reads back identically after the port.
+ * unreadable `sessions` falls back to none — the defaults an old row has always
+ * read back with, so a pre-migration row still reads identically.
  */
 
 interface ClassRow {

@@ -1,6 +1,5 @@
 /**
- * Progress reporting for the long SF2 operations — the port of the vocabulary in
- * `src-tauri/src/sf2/progress.rs`.
+ * Progress reporting for the long SF2 operations.
  *
  * ## Why a callback and not an event
  *

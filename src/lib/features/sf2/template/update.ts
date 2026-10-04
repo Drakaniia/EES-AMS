@@ -45,8 +45,7 @@ import type { Sf2ImportSummary, Sf2TemplateDraft } from '$lib/types';
 import type { Sf2StudentMappingRecord, Sf2TemplateRecord } from '../repository';
 
 /**
- * Rewrite a class's existing workbook from a fresh draft — the port of
- * `src-tauri/src/sf2/template/template_update.rs`.
+ * Rewrite a class's existing workbook from a fresh draft.
  *
  * Two shapes, decided by {@link templateOwnsRoster} rather than by the caller:
  * a bundled working copy is re-laid-out from scratch, while a workbook the school
@@ -96,7 +95,7 @@ export async function updateWorkbookSettings(draft: Sf2TemplateDraft): Promise<S
 
 	const workbook = await openWorkbook(existing.sourcePath);
 	writeMetadata(workbook, headerBlock(metadata));
-	// Rust wrote the header and the calendar in one call; they are one thing, because
+	// The header and the calendar are written together; they are one thing, because
 	// a header naming a report month whose day row still holds another month's dates
 	// is a workbook that will not validate.
 	configureSf2Calendar(workbook, metadata);

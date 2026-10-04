@@ -1,7 +1,5 @@
 /**
- * The attendance event writes behind every SF2 grid correction — the port of
- * `src-tauri/src/sf2/attendance/attendance_events.rs` and the day-level selectors
- * of `src-tauri/src/sf2/attendance/mod.rs`.
+ * The attendance event writes behind every SF2 grid correction.
  *
  * Two rules in here are the load-bearing ones, and both are the reason this file
  * exists rather than being three calls into `$lib/db/repos/events`:

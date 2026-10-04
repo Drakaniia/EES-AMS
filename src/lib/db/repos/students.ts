@@ -11,8 +11,7 @@ import type { Student } from '$lib/types';
 import { recordAuditEvent } from './audit';
 
 /**
- * Student repository — the port of
- * `src-tauri/src/infrastructure/database/students.rs`.
+ * Student repository.
  *
  * The `card_serial` column still exists in the schema but is dormant: nothing
  * reads or writes it anymore, and it is deliberately left out of every

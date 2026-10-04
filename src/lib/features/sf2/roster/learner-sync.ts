@@ -8,8 +8,7 @@ import type { Sf2StudentMappingRecord } from '../repository';
 import type { StudentGender, StudentRecord } from '$lib/domain/models';
 
 /**
- * Turning the learner names a teacher typed, or a workbook holds, into students —
- * the port of `src-tauri/src/sf2/roster/roster_sync_learner.rs`.
+ * Turning the learner names a teacher typed, or a workbook holds, into students.
  *
  * The rule this file exists to hold is the order a learner is identified in:
  * `sf2_learner_id` → `normalized_name` → `row_index`, which is exactly what

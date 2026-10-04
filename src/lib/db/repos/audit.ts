@@ -3,13 +3,12 @@ import type { AuditEvent } from '$lib/domain/models';
 import { epochSecondsToIso, nowEpochSeconds, type AuditEventInput } from '$lib/domain/models';
 
 /**
- * The general audit trail — the port of
- * `src-tauri/src/infrastructure/database/audit.rs`.
+ * The general audit trail.
  *
  * Every repo in this directory writes through `recordAuditEvent()` inside its
  * own transaction, so a rolled-back write leaves no orphan audit row. The app
- * has no auth, so every row is written as `admin`; that is what the Rust
- * `AuditEventDraft::new` hard-coded and it is what the Records page shows.
+ * has no auth, so every row is written as `admin`; that is what the Records
+ * page shows.
  */
 
 interface AuditRow {

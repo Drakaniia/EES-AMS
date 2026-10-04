@@ -22,15 +22,14 @@ import type { Sf2WorkbookAnalysis, Sf2WorkbookDate, Sf2WorkbookLearner } from '.
  * Reading a workbook as the SF2 business view: the eight header fields, every
  * learner row, every day column, and the sheet inventory.
  *
- * This is the `analyze_workbook` half of `excel_com/workbook_analysis.rs`, which had
- * no pure TypeScript counterpart to land in `$lib/features/excel` - it produces the
- * `Sf2WorkbookAnalysis` shape `$lib/features/sf2/calendar` declares, which is the
- * business view rather than the workbook inventory, so it belongs with the roster
- * rules that consume it.
+ * This is the whole-file read that produces the `Sf2WorkbookAnalysis` shape
+ * `$lib/features/sf2/calendar` declares. That shape is the business view rather than
+ * the workbook inventory, so it belongs with the roster rules that consume it rather
+ * than in `$lib/features/excel`.
  *
  * The day grid is read from the **writable** day columns only. The form merges
- * consecutive day columns into pairs and Excel answered for the right half of a pair
- * with its master's text, so the Rust read produced every day twice. A mapping is an
+ * consecutive day columns into pairs, and a read of the right half of a pair returns
+ * its master's text, so reading every column produces every day twice. A mapping is an
  * address a write lands on, so a duplicated one is not a duplicate row - it is two
  * writes fighting over one cell.
  */

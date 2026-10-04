@@ -25,7 +25,7 @@ export type { AuditEvent, AttendanceEvent, Class, ExportData, Settings, Student,
 /** Rust `AttendanceMode`. The card reader is gone: every stored value reads as manual. */
 export type AttendanceMode = 'manual';
 
-/** The single settings row. `settings.rs` selects `WHERE id = 'app'` everywhere. */
+/** The single settings row. Every read selects `WHERE id = 'app'`. */
 export const SETTINGS_ROW_ID = 'app';
 
 export interface SettingsRecord extends Settings {

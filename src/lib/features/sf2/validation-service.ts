@@ -1,12 +1,11 @@
 /**
- * Import validation and the roster geometry an import writes with — the port of
- * `src-tauri/src/sf2/validation_service.rs`.
+ * Import validation and the roster geometry an import writes with.
  *
- * The Rust file was the whole import: pick a file, read it, validate, then run ten
- * Excel operations in one COM session. The Excel half of that belongs to
- * `$lib/features/excel` and the roster sync to the roster module, so what is left
- * here is the two pieces that are neither — the database read that makes the
- * validation report possible, and the row arithmetic every writer needs.
+ * An import is a pipeline: pick a file, read it, validate, then write. The Excel
+ * half of that belongs to `$lib/features/excel` and the roster sync to the roster
+ * module, so what is left here is the two pieces that are neither — the database
+ * read that makes the validation report possible, and the row arithmetic every
+ * writer needs.
  */
 
 import { listClasses } from '$lib/db/repos/classes';

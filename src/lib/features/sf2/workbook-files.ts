@@ -1,11 +1,10 @@
 /**
- * Where SF2 workbooks live and what they are called — the port of
- * `src-tauri/src/sf2/workbook_files.rs`.
+ * Where SF2 workbooks live and what they are called.
  *
- * Two things changed with the port and both are deliberate. The files moved out of
- * the app data directory into `Documents\EES-AMS\workbooks\` so a teacher can find
- * them (migration spec D13), and the extension is `.xlsx` because ExcelJS writes
- * `.xlsx` and the school accepts it (D3).
+ * Two things changed when this was written and both are deliberate. The files moved
+ * out of the app data directory into `Documents\EES-AMS\workbooks\` so a teacher can
+ * find them (migration spec D13), and the extension is `.xlsx` because ExcelJS
+ * writes `.xlsx` and the school accepts it (D3).
  */
 
 import { documentDir } from '@tauri-apps/api/path';

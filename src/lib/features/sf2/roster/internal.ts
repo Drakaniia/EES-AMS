@@ -32,8 +32,7 @@ import type { Student } from '$lib/domain/models';
 import type { Sf2CellMark } from '$lib/features/excel/types';
 
 /**
- * The two roster-sync branches — the port of
- * `src-tauri/src/sf2/roster/roster_sync/internal.rs`.
+ * The two roster-sync branches.
  *
  * Which branch runs is decided by whether the template owns the roster, and it is the
  * single most important decision on this path:

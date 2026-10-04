@@ -30,9 +30,7 @@ import columnExistsSql from './sql/column_exists.sql?raw';
 import tableColumnsSql from './sql/table_columns.sql?raw';
 
 /**
- * The SQLite migration chain, ported from
- * `src-tauri/src/infrastructure/database/migrations.rs` (with the v24 body from
- * `src-tauri/src/sf2/month/schema_v24.rs`).
+ * The SQLite migration chain.
  *
  * ## The chain is load-bearing
  *
@@ -46,17 +44,15 @@ import tableColumnsSql from './sql/table_columns.sql?raw';
  *
  * ## `CURRENT_SCHEMA_VERSION`
  *
- * Rust owns this number in `schema_v24::SCHEMA_VERSION` so the number and the
- * migration body cannot drift apart. Here both live in this file, so the number
- * is written exactly once and the chain below is what has to keep it honest:
- * `migrate()` refuses to leave a database above `CURRENT_SCHEMA_VERSION`, and
- * the chain has no version 23 file because v23 is code (see `migrateToV23`).
+ * The number and the migration body must not drift apart, so both live in this
+ * file and the number is written exactly once: `migrate()` refuses to leave a
+ * database above `CURRENT_SCHEMA_VERSION`, and the chain has no version 23 file
+ * because v23 is code (see `migrateToV23`).
  */
 
-/** `schema_v24::SCHEMA_VERSION`. */
 export const CURRENT_SCHEMA_VERSION = 25;
 
-/** Canonical uppercase month names, as `sf2::calendar::sf2_month_name` returns. */
+/** Canonical uppercase month names, as `sf2MonthName` returns them. */
 const SF2_MONTH_NAMES = [
 	'JANUARY',
 	'FEBRUARY',

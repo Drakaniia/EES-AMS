@@ -5,7 +5,7 @@
  * Ground truth is the old output's layout, which the bundled
  * `TEMPLATE_AUTOMATED_SF2.xlsx` preserves (Excel's own `.xls`→`.xlsx`
  * conversion): 25 labelled day cells across F–AL, merged weekday pairs, the
- * eight header fields, and the formula text of `attendance_marks.rs`.
+ * eight header fields, and the formula text the marks writer emits.
  *
  * Real template bytes plus a real (in-memory) database throughout: no fixture
  * invents sheet names, merges or cell addresses.

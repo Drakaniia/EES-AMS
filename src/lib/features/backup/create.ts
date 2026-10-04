@@ -1,16 +1,13 @@
 /**
  * Writing a backup, and pruning the old ones.
  *
- * A port of `backup_ops.rs`'s `create_backup_at`, `create_workbooks_backup` and
- * `enforce_retention`. Two decisions are worth stating because they are the ones
- * the Rust version got wrong for its own shape:
+ * Two decisions are worth stating:
  *
  *  - The archive is written **once, directly, through the atomic write helper**,
  *    not assembled in a `.tmp` sibling and renamed. `writeFileAtomic` already
  *    writes a sibling temp file and renames over the target, and it is the same
- *    guarantee D15 settled on for workbooks. The Rust `.tmp` sibling, its stale-
- *    temp sweep and its 60-minute `STALE_TEMP_AGE` window all existed to do what
- *    one helper does.
+ *    guarantee D15 settled on for workbooks. Nothing else needs a stale-temp
+ *    sweep to go with it.
  *  - The summary is taken **before** pruning. A caller that asked for a backup
  *    must never be handed a path that retention has just deleted.
  */

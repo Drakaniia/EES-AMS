@@ -1,7 +1,5 @@
 /**
- * Deriving a month's first attendance day (spec D16, §11.1) — the port of
- * `src-tauri/src/sf2/month/first_school_day.rs` and the resolution half of
- * `month/merge.rs`.
+ * Deriving a month's first attendance day (spec D16, §11.1).
  *
  * ```text
  * first_school_day(MONTH, YEAR) =

@@ -1,6 +1,5 @@
 /**
- * Reading a month's `X` marks back out of the workbook — the port of
- * `src-tauri/src/sf2/attendance/attendance_import.rs`.
+ * Reading a month's `X` marks back out of the workbook.
  *
  * ## Why this exists
  *

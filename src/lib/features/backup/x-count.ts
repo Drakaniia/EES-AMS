@@ -1,24 +1,23 @@
 /**
  * Counting the `"X"` marks a workbook holds, without modifying it.
  *
- * A port of `x_count.rs`. Its one job is to be the evidence in the restore
- * preview: a backup whose workbooks hold more X marks than its database holds
- * absences is pairing a database with its own future, and the app will re-import
- * the difference the next time SF2 is opened. The teacher has to be told that
- * before they click restore, not after.
+ * Its one job is to be the evidence in the restore preview: a backup whose
+ * workbooks hold more X marks than its database holds absences is pairing a
+ * database with its own future, and the app will re-import the difference the
+ * next time SF2 is opened. The teacher has to be told that before they click
+ * restore, not after.
  *
- * The Rust version let Excel do the counting with one `COUNTIF` per sheet over
- * the learner block. There is no Excel to ask any more (spec D2), so this reads
- * the day grid through `$lib/features/excel` — the same `readDayGrid` the marks
- * writer derives its totals from, over the same learner rows, so the count
- * covers exactly the cells the app treats as attendance marks.
+ * The count reads the day grid through `$lib/features/excel` — the same
+ * `readDayGrid` the marks writer derives its totals from, over the same learner
+ * rows, so the count covers exactly the cells the app treats as attendance marks
+ * (spec D2).
  */
 
 import type { Worksheet } from 'exceljs';
 import { readLearnerRows } from '$lib/features/excel/roster';
 import { openWorkbook, readDayGrid } from '$lib/features/excel/workbook';
 
-/** The mark the SF2 workbook uses for an absence (`sf2/logic.rs:9`). */
+/** The mark the SF2 workbook uses for an absence (`SF2_ABSENT_MARK`). */
 const ABSENT_MARK = 'X';
 
 /**

@@ -9,11 +9,11 @@ import { getDriver } from '../index';
 import { recordAuditEvent } from './audit';
 
 /**
- * The settings row — a port of `infrastructure/database/settings.rs`.
+ * The settings row.
  *
- * The audit half of `infrastructure/database/audit.rs` is `repos/audit.ts`; a
- * save writes its trail through `recordAuditEvent()` inside the same
- * transaction, so a rolled-back save leaves no orphan row saying it happened.
+ * The audit trail is `repos/audit.ts`; a save writes its trail through
+ * `recordAuditEvent()` inside the same transaction, so a rolled-back save leaves
+ * no orphan row saying it happened.
  */
 
 const SETTINGS_COLUMNS =

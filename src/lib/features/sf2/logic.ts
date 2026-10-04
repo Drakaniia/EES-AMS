@@ -1,6 +1,5 @@
 /**
- * The small SF2 rules that the writer and the reader must agree on — the port of
- * `src-tauri/src/sf2/logic.rs`.
+ * The small SF2 rules that the writer and the reader must agree on.
  *
  * Everything here is pure. The one thing worth reading twice is
  * {@link normalizeLearnerName}: it is what makes a learner row in a workbook and a

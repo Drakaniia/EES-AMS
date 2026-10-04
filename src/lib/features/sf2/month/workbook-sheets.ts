@@ -2,8 +2,8 @@
  * The worksheets of the single-file, twelve-sheet SF2 workbook, and the naming
  * rules that decide which of them is a month.
  *
- * Ported from `src-tauri/src/sf2/month/workbook_sheets.rs`. The DepEd School
- * Form 2 is one worksheet per month on one file, and this module owns the two
+ * The DepEd School Form 2 is one worksheet per month on one file, and this module
+ * owns the two
  * things that must never disagree about that file: the form's own geometry -
  * which row a learner is on, where the weekday header sits, where a MALE TOTAL
  * row lands - because the code that *empties* a worksheet and the code that

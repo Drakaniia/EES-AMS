@@ -5,8 +5,7 @@ import { monthWorkbookSheetName } from '$lib/features/sf2/workbook-files';
 import type { Sf2MonthTemplate } from '$lib/types';
 
 /**
- * `sf2_month_templates` and `sf2_month_date_mappings` — the port of
- * `src-tauri/src/sf2/month/{mod,template_repo,date_repo}.rs`.
+ * `sf2_month_templates` and `sf2_month_date_mappings`.
  *
  * Every lookup here is keyed on `(class, school year, month)` or on the row id,
  * never on "the class's current month". That is the whole point of the table: a
@@ -509,8 +508,8 @@ export async function deleteMonthTemplate(templateId: string): Promise<boolean> 
 }
 
 // ── The day-number grid ─────────────────────────────────────────────────────
-// Port of `sf2/month/date_repo.rs`. `sf2/date-repo.ts` is a separate deliverable
-// in the migration; move these three functions there when it lands.
+// The day-number grid. These three functions are grouped by the table they write;
+// move them to a `sf2/date-repo.ts` module when they grow.
 
 /**
  * Replace one month file's grid with `dates`, in one transaction.

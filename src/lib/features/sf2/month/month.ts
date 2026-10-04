@@ -59,8 +59,7 @@ import type {
 } from '$lib/types';
 
 /**
- * The month service — the port of `src-tauri/src/sf2/month_preview/mod.rs` and
- * the command handlers in `src-tauri/src/commands/sf2.rs`.
+ * The month service.
  *
  * The seven exported functions are the API `$lib/api/sf2-months.ts` already
  * calls, so the UI can be repointed here without a component changing.
@@ -77,8 +76,8 @@ import type {
  *
  * ## The June / September year wrap
  *
- * Two year-assignment rules exist in the Rust codebase and they disagree:
- * `sf2_report_year` wraps at **June** and belongs to the retired one-workbook
+ * Two year-assignment rules exist in this codebase and they disagree:
+ * `sf2ReportYear` wraps at **June** and belongs to the retired one-workbook
  * model; {@link reportYearForSchoolMonth} wraps at **September** and belongs to
  * this one, because a Philippine school year is SEPTEMBER → AUGUST. They differ
  * only for AUGUST.

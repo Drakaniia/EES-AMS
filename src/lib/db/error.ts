@@ -1,11 +1,8 @@
 /**
- * AppError — a direct port of `src-tauri/src/domain/error.rs`.
+ * AppError.
  *
- * The Rust side used `thiserror`, and `impl From<AppError> for InvokeError`
- * flattened every error to its `Display` string before it crossed the IPC
- * boundary. The frontend catches those strings and shows them to the teacher,
- * so the wording is part of the UI contract: `errorMessage()` reproduces the
- * `#[error("...")]` strings byte-for-byte and must not be reworded.
+ * The wording is part of the UI contract: `errorMessage()` reproduces the message
+ * strings byte-for-byte and must not be reworded.
  */
 
 type AppErrorKind =

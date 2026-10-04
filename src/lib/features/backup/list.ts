@@ -1,9 +1,7 @@
 /**
  * What is in the backup folder, and what one archive holds.
  *
- * A port of `file_ops.rs`'s listing half and `backup_ops.rs`'s status and
- * preview. Three things survived the port, and all three are about not lying to
- * the teacher:
+ * Three things here are about not lying to the teacher:
  *
  *  - an archive whose manifest cannot be parsed is still listed, because it is
  *    still a snapshot they may need; it just reports what the file name and the
@@ -12,9 +10,8 @@
  *    only thing the daily-backup check looks at, so a workbooks backup never
  *    counts as "today is already backed up".
  *  - the preview refuses an archive from a newer schema *before* anything is
- *    replaced. The Rust version allowed a newer database when snapshotting the
- *    live one — an archive this app just wrote cannot be newer than this app —
- *    and refused it on restore, where the check belongs.
+ *    replaced. An archive this app just wrote cannot be newer than this app, so
+ *    the check belongs on restore, where it is.
  */
 
 import { asAppError, invalidInput } from '$lib/db';

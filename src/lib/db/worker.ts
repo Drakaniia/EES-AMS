@@ -68,6 +68,44 @@ type WasmNamespace = {
 let db: WasmDb | null = null;
 let namespace: WasmNamespace | null = null;
 
+/**
+ * Why the `opfs` VFS refused to install, in teacher-actionable terms.
+ *
+ * Mirrors sqlite-wasm's `vfsInstallationFeatureCheck` (SAB+Atomics, worker
+ * context, FileSystem sync-access APIs), whose own failure is swallowed to a
+ * `warn` by the module bootstrap — leaving `oo1.OpfsDb` undefined with no
+ * reason attached. SAB present + OpfsDb missing means headers are fine and
+ * the PC's WebView2 is too old for OPFS sync access handles.
+ */
+function describeMissingOpfs(): string {
+	const g = globalThis as Record<string, unknown>;
+	const sabMissing =
+		typeof SharedArrayBuffer === 'undefined' || typeof (g['Atomics'] as object) === 'undefined';
+	if (sabMissing) {
+		return 'the opfs VFS is unavailable (SharedArrayBuffer is missing); the app must be served with COOP/COEP headers';
+	}
+	const fh = g['FileSystemHandle'];
+	const dir = g['FileSystemDirectoryHandle'];
+	const fileHandle = g['FileSystemFileHandle'] as
+		| { prototype?: { createSyncAccessHandle?: unknown } }
+		| undefined;
+	const hasSyncHandle = typeof fileHandle?.prototype?.createSyncAccessHandle !== 'undefined';
+	const nav = g['navigator'] as { storage?: { getDirectory?: unknown } } | undefined;
+	const hasGetDirectory = typeof nav?.storage?.getDirectory !== 'undefined';
+	if (
+		typeof fh === 'undefined' ||
+		typeof dir === 'undefined' ||
+		!hasSyncHandle ||
+		!hasGetDirectory
+	) {
+		return 'the opfs VFS is unavailable (this PC’s WebView2 runtime lacks OPFS sync-access handles); update “Microsoft Edge WebView2 Runtime” to the latest version, then reopen the app';
+	}
+	if (typeof crossOriginIsolated !== 'undefined' && !crossOriginIsolated) {
+		return 'the opfs VFS is unavailable (the window is not cross-origin isolated); the app must be served with COOP/COEP headers';
+	}
+	return 'the opfs VFS is unavailable (OPFS storage is blocked on this PC); check disk space and site-storage permissions, then reopen the app';
+}
+
 async function open(): Promise<string> {
 	if (db) return DB_FILENAME;
 	// The shipped types take no options; the WASM build's own `print` is muted by
@@ -83,13 +121,14 @@ async function open(): Promise<string> {
 		// `OpfsDb` is installed by the module's `opfs` VFS initializer, which
 		// reports failure as a warn and leaves this undefined — so the message
 		// below names the real cause instead of a bare "not a constructor".
+		// NOTE: SharedArrayBuffer being present proves COOP/COEP headers are
+		// fine — when it is missing here the cause is almost always an
+		// outdated Edge WebView2 Runtime on that PC (no
+		// FileSystemSyncAccessHandle in workers), not the app's headers.
+		// Mirror sqlite-wasm's own vfsInstallationFeatureCheck so the teacher
+		// gets the actionable reason instead of a header red herring.
 		if (!sqlite3.oo1.OpfsDb) {
-			throw appError(
-				'Database',
-				`the opfs VFS is unavailable (SharedArrayBuffer is ${
-					typeof SharedArrayBuffer === 'undefined' ? 'missing' : 'present'
-				}); the app must be served with COOP/COEP headers`
-			);
+			throw appError('Database', describeMissingOpfs());
 		}
 		db = new sqlite3.oo1.OpfsDb(DB_FILENAME);
 		return 'opfs-sah';

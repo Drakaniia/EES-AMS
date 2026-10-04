@@ -1,9 +1,10 @@
 /**
  * The SF2 roster: reading a workbook's learners, giving each student a row, and
- * re-pointing a workbook at a class's current roster.
- *
- * The port of `src-tauri/src/sf2/roster/{roster_parser,roster_helpers,roster_sync,
- * roster_sync_learner,roster_sync/internal}.rs`, split by the job each file does.
+ * re-pointing a workbook at a class's current roster. The module is split by the job
+ * each file does — `parser` (slot arithmetic), `helpers` (shared lookups),
+ * `learner-sync` (names to students), `sync` (class to workbook), `internal` (the two
+ * workbook-mutating branches), `analysis` (workbook to business view),
+ * `formula-marks` (the marks a roster change writes).
  */
 
 export { readWorkbookAnalysis } from './analysis';

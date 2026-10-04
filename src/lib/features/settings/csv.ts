@@ -1,7 +1,7 @@
 import type { AttendanceEvent, Class, Student } from '$lib/types';
 
 /**
- * The attendance CSV — a port of `commands/csv_export.rs`.
+ * The attendance CSV.
  *
  * One row per student per local day, built from the *earliest* check-in of that
  * day, because the school's question is "when did this child arrive" and a

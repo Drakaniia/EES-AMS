@@ -1,11 +1,11 @@
 /**
- * Domain models — the TypeScript port of `src-tauri/src/domain/models.rs`.
+ * Domain models.
  *
  * The record types are NOT redeclared here. `$lib/types` already declares them
- * with exactly the shape `#[serde(rename_all = "camelCase")]` produced on the
- * Rust side, and the UI already depends on those, so they are re-exported as-is.
- * What is added here is the two things Rust had and `$lib/types` did not: the
- * row-level coercions (SQLite holds INTEGER epoch seconds; the UI sees ISO
+ * with exactly the camelCase shape the UI has always seen, and the UI already
+ * depends on those, so they are re-exported as-is.
+ * What is added here is the two things the UI has no type for: the row-level
+ * coercions (SQLite holds INTEGER epoch seconds; the UI sees ISO
  * strings) and the audit-trail request input.
  */
 

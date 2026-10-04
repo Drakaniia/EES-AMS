@@ -1,5 +1,5 @@
 /**
- * Shared Excel types — ports of the structs in `src-tauri/src/sf2/models.rs`.
+ * Shared Excel types.
  *
  * Owned here so the excel modules (`workbook`, `marks`, `roster`, `formulas`)
  * all agree on shapes without importing each other.
