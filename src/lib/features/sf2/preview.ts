@@ -109,20 +109,18 @@ export function buildExportPreview(input: MonthGridInput): Sf2ExportPreview {
 	let absenceCount = 0;
 
 	for (const mapping of roster) {
-		mappedStudentIds.add(mapping.studentId);
 		const student = studentsById.get(mapping.studentId);
-		// A mapped row whose student has left the class keeps the workbook's name: it is
-		// the only thing that still identifies the row on the form.
-		const stored = student?.name.trim();
-		const studentName = stored === undefined || stored === '' ? mapping.workbookName : stored;
+		// A mapping whose student was deleted leaves no row behind: the delete
+		// already removed its events and mappings, and any stale mapping that
+		// survived (empty-class sync, legacy fallback) must not resurface here.
+		if (student === undefined) continue;
+		mappedStudentIds.add(mapping.studentId);
+		// The workbook name is kept as a fallback only for a blank student name;
+		// a deleted student never reaches this point (skipped above).
+		const stored = student.name.trim();
+		const studentName = stored === '' ? mapping.workbookName : stored;
 
 		const rowWarnings: string[] = [];
-		if (student === undefined) {
-			rowWarnings.push('This SF2 row points to a student record that is no longer in the class.');
-			warnings.push(
-				`${mapping.workbookName} is mapped in the SF2 workbook but is not in the selected class.`
-			);
-		}
 
 		let rowPresent = 0;
 		let rowAbsent = 0;
@@ -144,14 +142,14 @@ export function buildExportPreview(input: MonthGridInput): Sf2ExportPreview {
 					rowIndex: mapping.rowIndex
 				});
 			}
-			return { date: date.date, status, editable: student !== undefined };
+			return { date: date.date, status, editable: true };
 		});
 
 		students.push({
 			studentId: mapping.studentId,
 			studentName,
 			workbookName: mapping.workbookName,
-			gender: previewGender(student?.gender, mapping.genderBlock),
+			gender: previewGender(student.gender, mapping.genderBlock),
 			rowIndex: mapping.rowIndex,
 			mapped: true,
 			presentCount: rowPresent,

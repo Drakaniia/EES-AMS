@@ -343,6 +343,9 @@ describe('getSf2MonthPreview', () => {
 	});
 
 	test('hands the grid builder the month roster and the day grid', async () => {
+		await db().execute(
+			`INSERT INTO students (id, name, class_id, created_at) VALUES ('stu-1', 'JUAN', 'class-1', 1)`
+		);
 		await insertMonthTemplate({ id: 'm-sep', reportMonth: 'SEPTEMBER', reportYear: 2026 });
 		await replaceMonthRoster('m-sep', [
 			{

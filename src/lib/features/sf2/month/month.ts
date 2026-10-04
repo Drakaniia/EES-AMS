@@ -591,6 +591,11 @@ export async function getSf2MonthPreview(
 	const dates = expandToMonthWeekdays(reportYear, monthNumber, sheetName, legacy.dates);
 	const classStudents = await listStudents(resolvedClassId);
 	const className = (await getClass(resolvedClassId))?.name ?? '';
+	// A deleted student leaves no grid row behind. The delete already removes its
+	// mappings, but a stale mapping that survived (empty-class sync, legacy
+	// fallback) must not resurface as an orphan row or inflate the counts.
+	const liveIds = new Set(classStudents.map((student) => student.id));
+	const roster = legacy.roster.filter((mapping) => liveIds.has(mapping.studentId));
 
 	const first = dates[0];
 	const last = dates[dates.length - 1];
@@ -604,12 +609,12 @@ export async function getSf2MonthPreview(
 		template !== undefined,
 		workbook.exists,
 		legacy.dates,
-		legacy.roster,
+		roster,
 		classStudents
 	);
 	const readiness: Sf2ExportReadiness = {
 		template: undefined,
-		mappedStudents: legacy.roster.length,
+		mappedStudents: roster.length,
 		mappedDates: legacy.dates.length,
 		canExport: issues.length === 0,
 		issues,
@@ -638,7 +643,7 @@ export async function getSf2MonthPreview(
 			classId: resolvedClassId,
 			importedAt: template?.importedAt ?? 0
 		},
-		roster: legacy.roster,
+		roster,
 		dates,
 		className,
 		classStudents,

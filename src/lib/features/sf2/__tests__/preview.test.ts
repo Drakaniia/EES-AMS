@@ -249,20 +249,16 @@ describe('buildExportPreview', () => {
 		expect(preview.absenceCount).toBe(0);
 	});
 
-	it('shows a mapped row whose student has left as uneditable, and says so', () => {
+	it('drops a mapped row whose student was deleted instead of showing it', () => {
 		const preview = buildExportPreview(
 			input({
 				classStudents: [{ id: 's2', name: 'Reyes, Maria', gender: 'female', createdAt: '' }]
 			})
 		);
 
-		const row = preview.students.find((entry) => entry.studentId === 's1');
-		expect(row?.studentName).toBe('Dela Cruz, Juan');
-		expect(row?.cells.every((cell) => cell.editable === false)).toBe(true);
-		expect(row?.warnings).toEqual([
-			'This SF2 row points to a student record that is no longer in the class.'
-		]);
-		expect(preview.warnings).toContain(
+		expect(preview.students.find((entry) => entry.studentId === 's1')).toBeUndefined();
+		expect(preview.students.map((entry) => entry.studentId)).toEqual(['s2']);
+		expect(preview.warnings).not.toContain(
 			'Dela Cruz, Juan is mapped in the SF2 workbook but is not in the selected class.'
 		);
 	});
