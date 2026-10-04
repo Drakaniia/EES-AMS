@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
 	db,
 	DAY_ONE,
+	DAY_TWO,
 	insertMonthTemplate,
 	MONTH,
 	SCHOOL_YEAR,
@@ -21,6 +22,7 @@ import {
 import { MemoryFileSystem, useFileSystem } from '$lib/platform/fs';
 import { listEventsForClassAndDateRange } from '$lib/db/repos/events';
 import { loadTemplate } from '$lib/features/excel/__tests__/template-fixture';
+import { getCellTextAt, openWorkbook } from '$lib/features/excel/workbook';
 import {
 	importAbsentMarksFromWorkbook,
 	NO_MONTH_SELECTED_MESSAGE,
@@ -344,6 +346,41 @@ describe('presentAllPreviewAttendance', () => {
 
 		expect(await presentAllPreviewAttendance({ classId, reportMonth: MONTH })).toBe(0);
 		expect(await hasPresentEventForDay(firstId, classId, DAY_ONE)).toBe(true);
+	});
+
+	it('records explicit present marks for the cleared days, so the next open clears the workbook', async () => {
+		const { classId } = await seedClass();
+		const fixture = await loadTemplate();
+		await seedMonth({ classId, path: fixture.path });
+		for (const day of [DAY_ONE, DAY_TWO]) {
+			await setAttendanceEventForDay({
+				studentId: 's1',
+				classId,
+				date: day,
+				dayStart: '07:30',
+				eventType: 'absent',
+				reason: 'test'
+			});
+		}
+		const planted = await fixture.open();
+		planted.getWorksheet(SHEET)!.getCell('H8').value = 'X';
+		planted.getWorksheet(SHEET)!.getCell('I8').value = 'X';
+		await fixture.save(planted);
+
+		expect(await presentAllPreviewAttendance({ classId, reportMonth: MONTH })).toBe(2);
+		expect(await hasAbsentEventForDay('s1', classId, DAY_ONE)).toBe(false);
+		expect(await hasPresentEventForDay('s1', classId, DAY_ONE)).toBe(true);
+		expect(await hasPresentEventForDay('s1', classId, DAY_TWO)).toBe(true);
+
+		await syncAndOpenSf2Workbook({ classId, reportMonth: MONTH });
+
+		const workbook = await openWorkbook(fixture.path);
+		expect(getCellTextAt(workbook.getWorksheet(SHEET)!, 'H8')).toBe('');
+		expect(getCellTextAt(workbook.getWorksheet(SHEET)!, 'I8')).toBe('');
+		const resurrected = await db().query<{ student_id: string }>(
+			"SELECT student_id FROM events WHERE event_type = 'absent'"
+		);
+		expect(resurrected).toEqual([]);
 	});
 });
 

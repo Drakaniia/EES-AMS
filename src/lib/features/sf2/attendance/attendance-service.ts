@@ -47,8 +47,11 @@ import type { Student } from '$lib/domain/models';
 import type { Sf2AttendanceImportOutcome } from '$lib/types';
 import { clearLastSyncedAtForClass, setMonthLastSyncedAt } from '$lib/features/sf2/month/templates';
 import { setLastSyncedAt as setLegacyLastSyncedAt } from '$lib/features/sf2/repository';
+import { recordAuditEvent } from '$lib/db/repos/audit';
 import {
+	SF2_PRESENT_ALL_CORRECTION,
 	SF2_PREVIEW_CORRECTION,
+	attendanceTimestampForDate,
 	localDayBoundsTimestampsForDate,
 	setAttendanceEventForDay
 } from './attendance-events';
@@ -284,14 +287,17 @@ async function forgivenCells(
 ): Promise<Set<string>> {
 	const present = await monthPresences(context, students);
 	const studentByRow = new Map(
-		context.roster.filter((mapping) => mapping.rowIndex > 0).map((mapping) => [mapping.rowIndex, mapping.studentId])
+		context.roster
+			.filter((mapping) => mapping.rowIndex > 0)
+			.map((mapping) => [mapping.rowIndex, mapping.studentId])
 	);
 	const forgiven = new Set<string>();
 	for (const date of dates) {
 		const ids = present.get(date.date);
 		if (ids === undefined) continue;
 		for (const [rowIndex, studentId] of studentByRow) {
-			if (ids.has(studentId)) forgiven.add(`${date.sheetName ?? ''}!${date.columnLetter}${rowIndex}`);
+			if (ids.has(studentId))
+				forgiven.add(`${date.sheetName ?? ''}!${date.columnLetter}${rowIndex}`);
 		}
 	}
 	return forgiven;
@@ -378,10 +384,10 @@ export async function setPreviewAttendanceLightweight(params: {
  * Mark every learner present for the month on screen, and report how many
  * absences were cleared.
  *
- * With present-by-default that means **deleting** the explicit `absent` events for
- * the month's mapped days. It does not create an `in` per learner: that would
- * manufacture attendance records the app never took, and would make a later open
- * write them into the workbook as though they were real.
+ * Each cleared absence becomes an explicit `in` record — the same record
+ * unmarking one grid cell writes — because a deleted event leaves no trace and
+ * the open guard would resurrect the workbook's `X` over the silence. Days
+ * with no absence to clear get no record: present-by-default needs none.
  *
  * Open days are left alone, so a teacher's note in a column the app has no record
  * for survives.
@@ -392,10 +398,13 @@ export async function presentAllPreviewAttendance(params: {
 }): Promise<number> {
 	const { classId, reportMonth } = params;
 	const context = await resolveMonthWriteContext(classId, reportMonth);
-	const rosterIds = new Set((await listStudents(classId)).map((student) => student.id));
+	const { students, dayStart } = await classRoster(classId);
+	const rosterIds = new Set(students.map((student) => student.id));
 	const driver = getDriver();
 
 	let deleted = 0;
+	const cleared: { studentId: string; date: string }[] = [];
+	const seen = new Set<string>();
 	await driver.transaction(async () => {
 		for (const date of context.dates) {
 			const { start, end } = localDayBoundsTimestampsForDate(date.date);
@@ -410,7 +419,52 @@ export async function presentAllPreviewAttendance(params: {
 				if (row.class_id !== classId && !rosterIds.has(row.student_id)) continue;
 				await driver.execute('DELETE FROM events WHERE id = ?', [row.id]);
 				deleted += 1;
+				const key = `${row.student_id}|${date.date}`;
+				if (!seen.has(key)) {
+					seen.add(key);
+					cleared.push({ studentId: row.student_id, date: date.date });
+				}
 			}
+		}
+		if (cleared.length > 0) {
+			for (const { studentId, date } of cleared) {
+				const { start, end } = localDayBoundsTimestampsForDate(date);
+				await driver.execute(
+					`DELETE FROM events
+					 WHERE student_id = ?
+					   AND timestamp >= ?
+					   AND timestamp < ?
+					   AND (class_id IS NULL OR class_id = ?)`,
+					[studentId, start, end, classId]
+				);
+				await driver.execute(
+					`INSERT INTO events
+					   (id, student_id, class_id, event_type, timestamp, note, session_key, override_reason, updated_at)
+					 VALUES (?, ?, ?, 'in', ?, ?, ?, ?, NULL)`,
+					[
+						crypto.randomUUID(),
+						studentId,
+						classId,
+						attendanceTimestampForDate(date, dayStart),
+						SF2_PRESENT_ALL_CORRECTION,
+						`${date}|${classId}|day`,
+						SF2_PRESENT_ALL_CORRECTION
+					]
+				);
+			}
+			await recordAuditEvent({
+				entityType: 'attendance_event',
+				action: 'create',
+				summary: `Marked ${cleared.length} learner-day(s) present for ${context.reportMonth} (${SF2_PRESENT_ALL_CORRECTION})`,
+				metadataJson: JSON.stringify({
+					classId,
+					reportMonth: context.reportMonth,
+					eventType: 'in',
+					clearedAbsences: deleted,
+					presentRecords: cleared.length,
+					reason: SF2_PRESENT_ALL_CORRECTION
+				})
+			});
 		}
 	});
 

@@ -28,6 +28,13 @@ import type { Sf2AttendanceEvent } from '$lib/features/sf2/logic';
 export const SF2_PREVIEW_CORRECTION = 'SF2 preview correction';
 
 /**
+ * The note and audit reason on every event the SF2 "present all" button writes,
+ * so the trail says the marks were cleared in bulk in the app rather than
+ * imported from the workbook.
+ */
+export const SF2_PRESENT_ALL_CORRECTION = 'SF2 present-all correction';
+
+/**
  * `HH:MM` to `{ hour, minute }`, or `undefined` for anything else.
  *
  * Out-of-range values are refused rather than clamped: a class whose `day_start`
