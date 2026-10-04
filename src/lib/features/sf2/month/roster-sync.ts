@@ -51,7 +51,7 @@ import { genderCounts } from '../roster/helpers';
 import { rejectDuplicateRosterNames } from '../roster/parser';
 import { normalizeLearnerName } from '../logic';
 import { listAllMonthTemplates, listMonthDateMappings, setMonthLastSyncedAt } from './templates';
-import { monthRosterForTemplate, replaceMonthRoster } from './students';
+import { deleteMonthRoster, monthRosterForTemplate, replaceMonthRoster } from './students';
 import type { Sf2MonthStudentMapping } from './students';
 import type { Sf2MonthTemplate } from '$lib/types';
 
@@ -96,7 +96,13 @@ export async function syncMonthRosterForClass(classId: string): Promise<number> 
 
 	const students = await listStudents(classId);
 	rejectDuplicateRosterNames(students);
-	if (students.length === 0) return 0;
+	// Deleting the last student clears every month roster instead of leaving the
+	// old rows behind: `replaceMonthRoster` rejects an empty roster, so an early
+	// return here is how a deleted learner stayed on the SF2 grid.
+	if (students.length === 0) {
+		for (const template of templates) await deleteMonthRoster(template.id);
+		return 0;
+	}
 
 	let placed = 0;
 	for (const months of monthsPerWorkbook(templates)) {
