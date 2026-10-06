@@ -11,7 +11,7 @@ import {
 	SF2_NAME_COLUMN
 } from '$lib/features/excel/constants';
 import { columnLetter } from '$lib/features/excel/workbook';
-import { normalizeLearnerName } from '../logic';
+import { compareLearnerNames, normalizeLearnerName } from '../logic';
 import type { Sf2CellMark } from '$lib/features/excel/types';
 import type { Sf2StudentMappingRecord } from '../repository';
 
@@ -99,7 +99,7 @@ export function templateOwnsRoster(template: { sourceHash: string }): boolean {
 }
 
 /**
- * Give every student a row, in male-then-female order.
+ * Give every student a row, alphabetically within each gender block.
  *
  * A student with no gender cannot be placed - the form has one block per gender and
  * no third block - so the whole operation is refused rather than dropping them.
@@ -122,6 +122,9 @@ export function templateRosterAssignments(
 			`Set Male/Female for these students before creating or updating the SF2 workbook: ${missingGender.join(', ')}`
 		);
 	}
+
+	male.sort((a, b) => compareLearnerNames(a.name, b.name));
+	female.sort((a, b) => compareLearnerNames(a.name, b.name));
 
 	const { extraMale, extraFemale } = rosterExpansionNeeded(male.length, female.length);
 	const slots =

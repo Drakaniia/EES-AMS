@@ -67,7 +67,7 @@ import {
 	resolveFirstSchoolDay,
 	schoolYearStartYear
 } from '$lib/features/sf2/first-school-day';
-import { SF2_ABSENT_MARK, normalizeLearnerName } from '$lib/features/sf2/logic';
+import { SF2_ABSENT_MARK, compareLearnerNames, normalizeLearnerName } from '$lib/features/sf2/logic';
 import { monthSheetName } from '$lib/features/sf2/month/workbook-sheets';
 import {
 	matchRosterLearner,
@@ -229,8 +229,8 @@ type ResolvedRoster = {
  * Turn the class's roster into the rows every one of the twelve worksheets is
  * written with.
  *
- * The order is the pre-split mapping's own row order, grouped by gender block, so
- * the roster the user already sees keeps its shape; row indices are then
+ * The order is alphabetical within each gender block, so an unsorted pre-split
+ * workbook converges to A-Z on the next sync; row indices are then
  * re-derived from the block sizes.
  *
  * A learner the workbook only knows is created; a learner the app already has is
@@ -259,7 +259,7 @@ export async function resolveRoster(
 	const ordered = [...named].sort(
 		(left, right) =>
 			(left.genderBlock === FEMALE ? 1 : 0) - (right.genderBlock === FEMALE ? 1 : 0) ||
-			left.rowIndex - right.rowIndex
+			compareLearnerNames(left.workbookName, right.workbookName)
 	);
 
 	const writes: ResolvedRoster['writes'] = [];
@@ -322,8 +322,9 @@ export async function resolveRoster(
 }
 
 /**
- * Sorts after every real workbook row, so an added student lands at the end of their
- * gender block and no existing learner changes row when one is added.
+ * A placeholder row only: the roster is sorted A-Z within each gender block, so
+ * this value never decides placement — the name does. An added student can land
+ * mid-block and shift existing learners down a row.
  */
 const LAST_ROW = Number.MAX_SAFE_INTEGER;
 

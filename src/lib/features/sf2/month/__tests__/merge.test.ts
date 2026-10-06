@@ -276,13 +276,13 @@ describe('resolving the roster', () => {
 		expect(roster.writes).toEqual([
 			{ studentId: 's2', rowIndex: 8, name: 'DELA CRUZ, JUAN', itemNumber: 1, genderBlock: 'MALE' },
 			{
-				studentId: 's1',
+				studentId: 's3',
 				rowIndex: 30,
-				name: 'SANTOS, MARIA',
+				name: 'REYES, ANA',
 				itemNumber: 1,
 				genderBlock: 'FEMALE'
 			},
-			{ studentId: 's3', rowIndex: 31, name: 'REYES, ANA', itemNumber: 2, genderBlock: 'FEMALE' }
+			{ studentId: 's1', rowIndex: 31, name: 'SANTOS, MARIA', itemNumber: 2, genderBlock: 'FEMALE' }
 		]);
 	});
 
@@ -678,14 +678,19 @@ describe('a merge of a real bundled template', () => {
 
 		const workbook = await fixture.open();
 		for (const month of ['SEPTEMBER 2026', 'JUNE 2027']) {
-			expect(getCellText(workbook.getWorksheet(month) as Worksheet, 9, 3)).toBe('CRUZ, PEDRO');
+			// A-Z within the male block: CRUZ sorts before DELA CRUZ, so the
+			// added learner takes row 8 and the existing learner moves to 9.
+			expect(getCellText(workbook.getWorksheet(month) as Worksheet, 8, 3)).toBe('CRUZ, PEDRO');
+			expect(getCellText(workbook.getWorksheet(month) as Worksheet, 9, 3)).toBe(
+				'DELA CRUZ, JUAN'
+			);
 		}
 		const roster = await db().query<{ student_id: string; row_index: number }>(
 			'SELECT student_id, row_index FROM sf2_month_student_mappings WHERE student_id = ?',
 			['s4']
 		);
 		// One mapping per month, all on the row the name was written to.
-		expect(new Set(roster.map((row) => row.row_index))).toEqual(new Set([9]));
+		expect(new Set(roster.map((row) => row.row_index))).toEqual(new Set([8]));
 		expect(roster).toHaveLength(12);
 	});
 

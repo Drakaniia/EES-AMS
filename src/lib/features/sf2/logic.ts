@@ -54,6 +54,19 @@ export function normalizeLearnerName(name: string): string {
 }
 
 /**
+ * A-Z within one gender block, on the same normalization identity uses.
+ *
+ * `sensitivity: 'base'` folds case and diacritics so `dela Cruz` and
+ * `DELA CRUZ` sort together; the DepEd `Last, First` spelling already
+ * sorts by surname with no extra parsing.
+ */
+export function compareLearnerNames(a: string, b: string): number {
+	return normalizeLearnerName(a).localeCompare(normalizeLearnerName(b), undefined, {
+		sensitivity: 'base'
+	});
+}
+
+/**
  * Generate Excel marks for a day's attendance.
  *
  * With explicit absent records, the X mark is written ONLY for students who have
