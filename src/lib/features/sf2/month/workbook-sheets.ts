@@ -333,6 +333,17 @@ export function weekdaySlots(sheet: Worksheet): MonthDaySlot[] {
 export function copyFormSheet(donor: Worksheet, sheet: Worksheet): void {
 	materialiseSharedFormulas(donor);
 
+	// The merges come off *first*, before one style is copied. ExcelJS's `unmerge()`
+	// resets every slave cell's style to its row and column defaults, so taking the
+	// merges off after the copy would wipe exactly the interior lines the copy just
+	// brought over - and a month rebuilt on top of a previous build would lose them
+	// twice. A sheet that is its own donor is left alone: unmerging it would empty
+	// the very list being copied.
+	const donorIsSheet = donor === sheet;
+	if (!donorIsSheet) {
+		for (const range of sheet.model.merges) sheet.unMergeCells(range);
+	}
+
 	for (let column = 1; column <= donor.columnCount; column += 1) {
 		sheet.getColumn(column).width = donor.getColumn(column).width;
 	}
@@ -356,14 +367,17 @@ export function copyFormSheet(donor: Worksheet, sheet: Worksheet): void {
 	});
 
 	// Merges last: the values above went onto the top-left cells, which is the only
-	// cell of each merged region that can hold one. Every merge is unmerged first, one
-	// by one - `unMergeCells()` with no argument only clears the ones covering `A1`
-	// (ExcelJS reads the empty range as `A1:A1`), so a month rebuilt onto its own
-	// last build kept all 681 and the re-merge threw. A sheet that is its own donor is
-	// left alone: unmerging it would empty the very list being copied.
-	if (donor === sheet) return;
-	for (const range of sheet.model.merges) sheet.unMergeCells(range);
-	for (const range of donor.model.merges) sheet.mergeCells(range);
+	// cell of each merged region that can hold one. A sheet that is its own donor is
+	// left alone: it already carries its merges and the copy above was a no-op.
+	if (donorIsSheet) return;
+	// `mergeCellsWithoutStyle`, never `mergeCells`. `mergeCells` hands every slave
+	// cell the master's style - `Cell.merge` does `this.style = master.style` - which
+	// discards the lines the donor draws on the cells *inside* each merge. Those are
+	// the vertical rules down the day grid, and the donor has a border on every one
+	// of them, so the form has to keep them. ExcelJS makes the same distinction when
+	// it loads a file: `_parseMergeCells` is the one caller that passes
+	// `ignoreStyle`, "since each cell may have different styles intentionally".
+	for (const range of donor.model.merges) sheet.mergeCellsWithoutStyle(range);
 }
 
 /**

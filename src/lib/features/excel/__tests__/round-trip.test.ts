@@ -31,6 +31,7 @@ import {
 	getCellText,
 	hasFormula,
 	readDayGrid,
+	spliceRowsPreservingMerges,
 	writableDayColumns
 } from '../workbook';
 import type { Sf2CellMark, Sf2WorkbookMetadata } from '../types';
@@ -301,6 +302,37 @@ describe('formula marks carry their cached value', () => {
 		expect(storedValue(sheet.getCell('AR53'))).toBe(TEMPLATE_ROSTER.maleCount);
 		expect(storedValue(sheet.getCell('AS53'))).toBe(TEMPLATE_ROSTER.femaleCount);
 		expect(storedValue(sheet.getCell('AT53'))).toBe(26);
+	});
+});
+
+/** Every cell's style across a row band, as text, so two snapshots can be compared. */
+function styleGrid(sheet: Worksheet, lastRow: number): Map<string, string> {
+	const grid = new Map<string, string>();
+	for (let row = 1; row <= lastRow; row += 1) {
+		for (let column = 1; column <= sheet.columnCount; column += 1) {
+			grid.set(`${row}:${column}`, JSON.stringify(sheet.getRow(row).getCell(column).style));
+		}
+	}
+	return grid;
+}
+
+describe('splicing roster rows into a form sheet', () => {
+	it('leaves every cell above the insertion drawn exactly as it was', async () => {
+		const workbook = await fixture.open();
+		const sheet = workbook.getWorksheet(SHEET) as Worksheet;
+		const mergesBefore = sheet.model.merges.length;
+		// Row 74 is a boundary no merged region of the form straddles, so everything
+		// above it has to survive the round trip untouched.
+		const before = styleGrid(sheet, 73);
+
+		spliceRowsPreservingMerges(sheet, 74, 1);
+
+		expect(sheet.model.merges).toHaveLength(mergesBefore);
+		// The traps are `unmerge()`, which drops a slave's style back to its row and
+		// column defaults, and `mergeCells`, which would then hand that slave its
+		// master's style - between them the day grid's inner vertical rules came out as
+		// the master's border, or as nothing at all.
+		expect(styleGrid(sheet, 73)).toEqual(before);
 	});
 });
 

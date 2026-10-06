@@ -355,6 +355,13 @@ export function materialiseSharedFormulas(sheet: Worksheet): void {
  * the style and height of `templateRow` (default: the row above the
  * insertion), because an unformatted learner row is a row the form stops
  * drawing.
+ *
+ * The merges go back on with `mergeCellsWithoutStyle` and each cell's own style
+ * is put back by hand. ExcelJS's `mergeCells` would give every slave cell the
+ * master's style (`Cell.merge` does `this.style = master.style`), so inserting
+ * one row at the bottom of the form would restyle every merge above it - the day
+ * grid's inner vertical rules would all become the master's border. See
+ * {@link copyFormSheet} for the same trap on the copy path.
  */
 export function spliceRowsPreservingMerges(
 	sheet: Worksheet,
@@ -364,6 +371,22 @@ export function spliceRowsPreservingMerges(
 ): void {
 	if (count <= 0) return;
 	const merges = [...sheet.model.merges];
+
+	// Read every merged cell's style before the merges come off: `unmerge()` resets
+	// a slave's style to its row and column defaults, so the styles above have to be
+	// remembered across the round trip rather than re-derived from the master.
+	const mergedStyles = new Map<string, Cell['style']>();
+	for (const range of merges) {
+		const [from, to] = range.split(':');
+		const start = parseAddress(from);
+		const end = parseAddress(to ?? from);
+		for (let row = start.row; row <= end.row; row += 1) {
+			for (let column = start.column; column <= end.column; column += 1) {
+				mergedStyles.set(`${row}:${column}`, sheet.getRow(row).getCell(column).style);
+			}
+		}
+	}
+
 	for (const range of merges) sheet.unMergeCells(range);
 	sheet.spliceRows(at, 0, ...Array.from({ length: count }, () => []));
 	for (const range of merges) {
@@ -372,9 +395,18 @@ export function spliceRowsPreservingMerges(
 		const end = parseAddress(to ?? from);
 		const moved = (row: number): number => (row >= at ? row + count : row);
 		const newEnd = start.row < at && end.row >= at ? end.row + count : moved(end.row);
-		sheet.mergeCells(
+		sheet.mergeCellsWithoutStyle(
 			`${cellAddress(moved(start.row), start.column)}:${cellAddress(newEnd, end.column)}`
 		);
+		// The rows at and below the insertion moved down by `count`, so each cell's
+		// remembered style goes back on at its new address. The rows that were just
+		// inserted are not in this map and are styled from `templateRow` below.
+		for (let row = start.row; row <= end.row; row += 1) {
+			for (let column = start.column; column <= end.column; column += 1) {
+				const style = mergedStyles.get(`${row}:${column}`);
+				if (style !== undefined) sheet.getRow(moved(row)).getCell(column).style = style;
+			}
+		}
 	}
 	const template = sheet.getRow(templateRow ?? at - 1);
 	for (let row = at; row < at + count; row += 1) {

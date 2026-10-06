@@ -390,6 +390,26 @@ function roster(maleCount: number, femaleCount: number, femaleStartRow = 30): Mo
 	return learners;
 }
 
+/**
+ * Every cell's border across the whole form, as text, so two snapshots can be
+ * compared.
+ *
+ * An empty border object and no border at all both draw nothing, and the file
+ * carries one where the other is absent, so the two are normalised together - what
+ * is being compared is lines.
+ */
+function borderGrid(sheet: Worksheet, rows: number, columns: number): Map<string, string> {
+	const grid = new Map<string, string>();
+	for (let row = 1; row <= rows; row += 1) {
+		for (let column = 1; column <= columns; column += 1) {
+			const border = sheet.getRow(row).getCell(column).style.border;
+			const ruled = border !== undefined && Object.keys(border).length > 0;
+			grid.set(`${row}:${column}`, JSON.stringify(ruled ? border : null));
+		}
+	}
+	return grid;
+}
+
 const HEADER: MonthBuildRequest['header'] = {
 	schoolId: '132839',
 	schoolName: 'ESPIRITU ELEMENTARY SCHOOL',
@@ -538,6 +558,23 @@ describe('building a month worksheet from the bundled template', () => {
 		const guidelines = (sheet.getCell('A64') as { master?: { address: string } }).master;
 		expect(guidelines?.address).toBe('A64');
 		expect(getCellText(sheet, 65, 1)).toBe(getCellText(sheet, 64, 1));
+	});
+
+	it('draws the day grid the way the form does, vertical rules and all', async () => {
+		// The form is a ruled grid, and most of its rules are on cells that hold no
+		// value: the donor borders ~1300 empty cells, and the cells *inside* every merge
+		// carry a rule of their own. ExcelJS's `mergeCells` would hand each of those
+		// slaves its master's style instead, which left the month sheets with a gap
+		// wherever the day grid should have drawn a line.
+		const donor = (await fixture.open()).getWorksheet(TEMPLATE_SHEETS[0]) as Worksheet;
+		const before = borderGrid(donor, donor.rowCount, donor.columnCount);
+
+		await buildSchoolYearWorkbook(fixture.path, [
+			{ request: requestFor(roster(13, 7), []), removeStaleSheets: true }
+		]);
+		const sheet = (await fixture.open()).getWorksheet('SEPTEMBER 2026') as Worksheet;
+
+		expect(borderGrid(sheet, donor.rowCount, donor.columnCount)).toEqual(before);
 	});
 
 	it('writes each absence once, in the cell its date and learner resolve to', async () => {
