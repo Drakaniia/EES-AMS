@@ -2,34 +2,27 @@
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
 	import { updateStore } from '$lib/stores/update.svelte';
-	import logoSeal from '$lib/assets/logo-seal.png';
-	import { FileSpreadsheet, ScanLine, Search, Settings } from 'lucide-svelte';
+	import { FileSpreadsheet, ScanLine, LayoutDashboard, FileText, UsersRound, Search, Settings } from 'lucide-svelte';
 	import { commandPaletteStore } from '$lib/stores/command-palette.svelte';
-
-	const APP_TITLE = 'EES AMS';
 
 	const navItems = [
 		{ href: '/reports', label: 'SF2 Reports', icon: FileSpreadsheet },
-		{ href: '/attendance', label: 'Attendance', icon: ScanLine }
+		{ href: '/attendance', label: 'Attendance', icon: ScanLine },
+		{ href: '/attendance/overview', label: 'Daily Overview', icon: LayoutDashboard },
+		{ href: '/attendance/logs', label: 'Attendance Logs', icon: FileText },
+		{ href: '/students', label: 'Class List', icon: UsersRound },
+		{ href: '/settings', label: 'Settings', icon: Settings }
 	] as const;
 
 	function isActive(href: string, pathname: string) {
-		return href === '/' ? pathname === '/' : pathname.startsWith(href);
+		// '/attendance' is exact — its sub-routes have their own tabs.
+		if (href === '/attendance') return pathname === href || pathname === '/attendance/';
+		return pathname === href || pathname.startsWith(`${href}/`);
 	}
+
 </script>
 
 <div class="title-bar" data-tauri-drag-region>
-	<!-- Logo -->
-	<a
-		href={`${base}/reports`}
-		class="title-logo"
-		title={APP_TITLE}
-		aria-label="Navigate to Reports"
-		data-tauri-drag-region
-	>
-		<img src={logoSeal} alt={APP_TITLE} class="title-logo-img" />
-	</a>
-
 	<!-- Nav tabs -->
 	<nav class="title-nav" aria-label="Primary navigation" data-tauri-drag-region>
 		{#each navItems as item (item.href)}
@@ -45,6 +38,9 @@
 				<span class="title-nav-label">{item.label}</span>
 				{#if active}
 					<span class="title-nav-indicator" aria-hidden="true"></span>
+				{/if}
+				{#if item.href === '/settings' && updateStore.badgeVisible}
+					<span class="title-badge" title="Update available" aria-hidden="true"></span>
 				{/if}
 			</a>
 		{/each}
@@ -65,19 +61,6 @@
 		<span class="title-search-label">Search</span>
 		<kbd class="title-search-kbd">Ctrl K</kbd>
 	</button>
-
-	<!-- Settings gear -->
-	<a
-		href={`${base}/settings`}
-		aria-current={page.url.pathname.startsWith('/settings') ? 'page' : undefined}
-		class="title-settings"
-		title="Settings"
-	>
-		<Settings class="size-4" aria-hidden="true" />
-		{#if updateStore.badgeVisible}
-			<span class="title-badge" title="Update available" aria-hidden="true"></span>
-		{/if}
-	</a>
 </div>
 
 <style>
@@ -109,34 +92,11 @@
 		}
 	}
 
-	/* ── Logo ─────────────────────────────────────── */
-	.title-logo {
-		display: flex;
-		align-items: center;
-		flex-shrink: 0;
-		-webkit-app-region: no-drag;
-		border-radius: 8px;
-		padding: 4px;
-		transition: background-color 150ms ease;
-	}
-	.title-logo:hover {
-		background: color-mix(in oklab, var(--color-surface) 70%, transparent);
-	}
-	.title-logo-img {
-		width: 24px;
-		height: 24px;
-		border-radius: 6px;
-		object-fit: contain;
-		outline: 1px solid var(--color-border);
-		outline-offset: 0px;
-	}
-
 	/* ── Nav ──────────────────────────────────────── */
 	.title-nav {
 		display: flex;
 		align-items: center;
 		gap: 2px;
-		margin-left: 16px;
 		-webkit-app-region: no-drag;
 	}
 	.title-nav-link {
@@ -223,26 +183,7 @@
 		color: var(--color-muted-foreground);
 	}
 
-	/* ── Settings ─────────────────────────────────── */
-	.title-settings {
-		position: relative;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 32px;
-		height: 32px;
-		border-radius: 8px;
-		color: var(--color-muted-foreground);
-		text-decoration: none;
-		-webkit-app-region: no-drag;
-		transition:
-			background-color 150ms ease,
-			color 150ms ease;
-	}
-	.title-settings:hover {
-		background: color-mix(in oklab, var(--color-surface) 70%, transparent);
-		color: var(--color-foreground);
-	}
+	/* ── Update badge on nav item ─────────────── */
 	.title-badge {
 		position: absolute;
 		top: 5px;
