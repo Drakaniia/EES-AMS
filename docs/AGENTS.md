@@ -111,9 +111,10 @@ bun run lint               # Prettier --check + ESLint
 bun run format             # Prettier write
 
 # Tests — Vitest only
-bun run test               # Vitest, single run (all tests)
+bun run test               # Vitest, fast loop: 52 files, heavy Excel ones skipped
+bun run test:heavy         # The full gate: all 68 files including the heavy ones
 bun run test:watch         # Vitest in watch mode
-bunx vitest run <path>     # One file, one run
+bunx vitest run <path>     # One file, one run (works even for a heavy file)
 bun run test:perf          # The month-switch wall-clock budget, alone (see below)
 
 # Tauri
@@ -125,6 +126,8 @@ bun run tauri <args...>    # Raw Tauri CLI, loaded with .env
 > **`bun test` is not the test runner here.** `bun test` invokes Bun's own runner, which cannot load `node:sqlite` — every database test needs it, so the whole DB suite dies with `error: No such built-in module: node:sqlite`. Use `bun run test` or `bunx vitest run`. `package.json`'s `test` script is `vitest run`.
 
 > **`month-switch-perf.test.ts` is excluded from `bun run test`.** It asserts wall-clock timings (p50/p95/p99), and a wall-clock budget measured while 66 other files compete for the CPU is meaningless — p50 tracks machine load roughly 1:1. Run it alone with `bun run test:perf`. Its scaling assertion (that month switching is linear, not quadratic) is the part that actually guards the code.
+
+> **`bun run test` also skips 16 heavy Excel/SF2 workbook files.** Each of them loads the real bundled template and drives ExcelJS through full build/merge cycles, so one file costs tens of seconds and the 16 together are ~95% of the suite's CPU. They are skipped only by default: `bun run test:heavy` runs all 68 files and is the real pre-PR gate. Naming a heavy file on the command line still runs it (`bunx vitest run <path>`), because the config drops the exclusion when a path filter is given. `HEAVY_TESTS` in `vitest.config.ts` is the list; nothing is deleted or asserted more weakly.
 
 CI: `.github/workflows/release.yml` has one job. It installs Bun, then the Rust toolchain — the toolchain is there only to compile the binary, not to lint or test it. There is no Rust lint or test job, and `cargo` is not something you need to reach for.
 
@@ -205,7 +208,7 @@ CI: `.github/workflows/release.yml` has one job. It installs Bun, then the Rust 
 
 1. `bun run check` — type checks (0 errors). Note this runs svelte-check, not `tsc`
 2. `bun run lint` — lint clean
-3. `bun run test` — suite green
+3. `bun run test:heavy` — all 68 files green (`bun run test` is the fast inner loop and skips the heavy workbook files)
 4. Confirm no `as any` or `@ts-ignore` in diff
 5. Check route files stay under 400 lines or delegate to `*-state.svelte.ts`
 

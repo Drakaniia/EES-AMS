@@ -17,6 +17,7 @@
 		"tauri:dev": "tauri dev",
 		"tauri:build": "bun --env-file=.env run tauri build",
 		"test": "vitest run",
+		"test:heavy": "VITEST_HEAVY=1 vitest run",
 		"test:perf": "VITEST_PERF=1 vitest run --no-file-parallelism src/routes/reports/month-switch-perf.test.ts",
 		"test:watch": "vitest",
 		"tools:xls": "bun tools/xls-inspect.ts"
