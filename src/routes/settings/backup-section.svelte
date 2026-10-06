@@ -336,6 +336,7 @@
 
 <WipeDialog
 	bind:open={backupState.wipeTarget}
+	busy={backupState.wipeBusy}
 	onconfirm={async () => {
 		await backupState.onWipeConfirm();
 	}}

@@ -1,9 +1,13 @@
 <script lang="ts">
+	import Spinner from '$lib/components/ui/Spinner.svelte';
+
 	let {
 		open = $bindable(false),
+		busy = false,
 		onconfirm
 	}: {
 		open?: boolean;
+		busy?: boolean;
 		onconfirm?: () => Promise<void>;
 	} = $props();
 </script>
@@ -12,8 +16,8 @@
 	<div
 		class="fixed inset-x-0 top-8 bottom-0 z-40 bg-black/50"
 		role="presentation"
-		onclick={() => (open = false)}
-		onkeydown={(e) => e.key === 'Escape' && (open = false)}
+		onclick={() => !busy && (open = false)}
+		onkeydown={(e) => e.key === 'Escape' && !busy && (open = false)}
 	></div>
 
 	<div
@@ -52,7 +56,8 @@
 			<div class="flex gap-2">
 				<button
 					onclick={() => (open = false)}
-					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
+					disabled={busy}
+					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
 				>
 					Cancel
 				</button>
@@ -61,9 +66,15 @@
 						await onconfirm?.();
 						open = false;
 					}}
-					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+					disabled={busy}
+					class="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
 				>
-					Wipe All
+					{#if busy}
+						<Spinner />
+						Wiping…
+					{:else}
+						Wipe All
+					{/if}
 				</button>
 			</div>
 		</div>

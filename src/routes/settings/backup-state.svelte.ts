@@ -88,6 +88,7 @@ import { errorMessage as appErrorMessage, type AppError } from '$lib/db';
 
 	// ── Wipe ───────────────────────────────────────────────────────────────────
 	wipeTarget = $state(false);
+	wipeBusy = $state(false);
 
 	// ── Helpers ─────────────────────────────────────────────────────────────────
 	private errorMessage(error: unknown, fallback: string): string {
@@ -261,14 +262,22 @@ import { errorMessage as appErrorMessage, type AppError } from '$lib/db';
 	}
 
 	async onWipeConfirm() {
-		const outcome = await wipeAll();
-		await this.ctx.reload();
-		this.ctx.toast(
-			outcome.preWipeBackupPath
-				? `All data wiped (${outcome.deletedEvents} attendance records). A safety backup was saved first.`
-				: `All data wiped (${outcome.deletedEvents} attendance records). The safety backup could not be written.`,
-			!!outcome.preWipeBackupPath
-		);
+		if (this.wipeBusy) return;
+		this.wipeBusy = true;
+		try {
+			const outcome = await wipeAll();
+			await this.ctx.reload();
+			this.ctx.toast(
+				outcome.preWipeBackupPath
+					? `All data wiped (${outcome.deletedEvents} attendance records). A safety backup was saved first.`
+					: `All data wiped (${outcome.deletedEvents} attendance records). The safety backup could not be written.`,
+				!!outcome.preWipeBackupPath
+			);
+		} catch (error) {
+			this.ctx.toast(`Wipe failed: ${this.errorMessage(error, 'Wipe failed')}`, false);
+		} finally {
+			this.wipeBusy = false;
+		}
 	}
 }
 
