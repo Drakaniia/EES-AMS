@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Calendar, ExternalLink, Pencil, Plus, Save, UserX } from 'lucide-svelte';
+	import { Calendar, ChevronDown, ExternalLink, Pencil, Plus, UserX } from 'lucide-svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import {
 		reportMonthLabel,
@@ -44,16 +44,15 @@
 		draftSection: string;
 		draftAdviserName: string;
 		draftSchoolHeadName: string;
-		exportDisabled: boolean;
-		exporting: boolean;
 		sf2OpenStatus: string;
 		workbookSettings: Sf2WorkbookSettings | null;
 		savingDetails: boolean;
 		activeClassId: string;
+		/** Calendar year the month belongs to, for the "October 2025" label. */
+		reportYear?: number;
 		onOpenSf2?: () => void;
 		onClassSelect?: (classId: string) => void;
 		onCreateMonth?: () => void;
-		onRequestExport?: () => void;
 		onEditDetails?: () => void;
 		onSwitchMonth?: () => void;
 	};
@@ -77,16 +76,14 @@
 		draftSection,
 		draftAdviserName,
 		draftSchoolHeadName,
-		exportDisabled,
-		exporting,
 		sf2OpenStatus,
 		workbookSettings,
 		savingDetails,
 		activeClassId,
+		reportYear,
 		onOpenSf2,
 		onClassSelect,
 		onCreateMonth,
-		onRequestExport,
 		onEditDetails,
 		onSwitchMonth
 	}: Props = $props();
@@ -122,8 +119,8 @@
 	);
 </script>
 
-<aside class="min-h-0 space-y-5 overflow-auto">
-	<div class="rounded-2xl border border-border bg-surface p-5">
+<aside class="min-h-0 overflow-y-auto border-t border-border bg-background xl:border-t-0 xl:border-l">
+	<section class="border-b border-border px-5 py-5">
 		<div class="label-mono mb-4 text-primary">Class &amp; month</div>
 		<label class="block text-xs text-muted-foreground" for="reports-class-select">Class</label>
 		<select
@@ -138,22 +135,26 @@
 			{/each}
 		</select>
 
-		<div class="mt-4 flex items-center justify-between gap-3">
-			<div>
-				<div class="text-xs text-muted-foreground">Report month</div>
-				<div class="text-sm font-medium">{reportMonthLabel(reportMonth)}</div>
-			</div>
-			<button
-				type="button"
-				onclick={onSwitchMonth}
-				disabled={!workbookSettings || !activeClassId}
-				class="control-ring inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-				title="Switch SF2 report month"
-			>
-				<Calendar class="size-3.5" aria-hidden="true" />
-				Switch month
-			</button>
-		</div>
+			<label class="mt-4 block text-xs text-muted-foreground" for="reports-month-switch">
+			Report month
+		</label>
+		<button
+			id="reports-month-switch"
+			type="button"
+			onclick={onSwitchMonth}
+			disabled={!workbookSettings || !activeClassId}
+			class="control-ring mt-1 flex h-12 w-full items-center gap-3 rounded-md border border-border bg-background px-3 text-left transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+			title="Switch SF2 report month"
+		>
+			<Calendar class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+			<span class="min-w-0 flex-1">
+				<span class="block truncate text-sm font-semibold">
+					{reportMonthLabel(reportMonth)}{#if reportYear} {reportYear}{/if}
+				</span>
+				<span class="block text-xs text-muted-foreground">Tap to switch month</span>
+			</span>
+			<ChevronDown class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+		</button>
 
 		<!--
 			Edge case E1: today's month has school days and no file, so the app
@@ -183,45 +184,26 @@
 				</button>
 			</div>
 		{/if}
-	</div>
+	</section>
 
-	<div class="rounded-2xl border border-border bg-surface p-5">
-		<div class="label-mono mb-4 text-primary">Actions</div>
-		<div class="flex flex-col gap-2">
-			<button
-				type="button"
-				onclick={onOpenSf2}
-				disabled={!preview?.template || sf2OpenStatus === 'syncing' || !activeClassId}
-				class="control-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-3.5 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-			>
-				<ExternalLink class="size-4" aria-hidden="true" />
-				{sf2OpenStatus === 'syncing' ? 'Opening...' : 'Open SF2'}
-			</button>
-			<!-- Export button: show skeleton pulsing when the grid is re-reading -->
-			{#if gridPending}
-				<button
-					type="button"
-					disabled
-					class="control-ring inline-flex h-10 w-full cursor-not-allowed items-center justify-center gap-2 rounded-pill bg-primary/60 px-4 text-sm font-semibold text-primary-foreground/70"
-				>
-					<Spinner />
-					Loading preview...
-				</button>
+	<section class="border-b border-border px-5 py-5">
+		<button
+			type="button"
+			onclick={onOpenSf2}
+			disabled={!preview?.template || sf2OpenStatus === 'syncing' || !activeClassId}
+			class="control-ring inline-flex h-11 w-full items-center justify-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+		>
+			{#if sf2OpenStatus === 'syncing'}
+				<Spinner />
+				Opening...
 			{:else}
-				<button
-					type="button"
-					onclick={onRequestExport}
-					disabled={exportDisabled}
-					class="control-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					<Save class="size-4" aria-hidden="true" />
-					{exporting ? 'Exporting...' : 'Review Export'}
-				</button>
+				<ExternalLink class="size-4" aria-hidden="true" />
+				Open SF2 in Excel
 			{/if}
-		</div>
-	</div>
+		</button>
+	</section>
 
-	<div class="rounded-2xl border border-border bg-surface p-5">
+	<section class="border-b border-border px-5 py-5">
 		<div class="flex items-start justify-between gap-3">
 			<div class="label-mono text-primary">Workbook identity</div>
 			<button
@@ -288,9 +270,9 @@
 					</span>{/if}
 			</p>
 		{/if}
-	</div>
+	</section>
 
-	<div class="rounded-2xl border border-border bg-card p-5">
+	<section class="px-5 py-5">
 		<div class="flex items-start justify-between gap-3">
 			<div>
 				<div class="label-mono text-primary">Absent list</div>
@@ -324,7 +306,7 @@
 				No absences are currently marked for this report month.
 			</p>
 		{/if}
-	</div>
+	</section>
 </aside>
 
 {#snippet metaRow(label: string, value: string)}

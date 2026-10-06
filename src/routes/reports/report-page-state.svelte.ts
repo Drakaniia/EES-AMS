@@ -2,7 +2,6 @@ import { onMount, onDestroy } from 'svelte';
 
 import {
 	createSf2MonthFile,
-	exportSf2Workbook,
 	getSf2LaunchMonth,
 	getSf2MonthPreview,
 	getSf2WorkbookSettings,
@@ -85,13 +84,10 @@ export function createReportPageState() {
 	let gridPending = $state(false);
 	let creatingMonth = $state(false);
 	let genderFilter = $state<'all' | 'male' | 'female'>('all');
-	let exporting = $state(false);
 	let presentingAll = $state(false);
 	let savingDetails = $state(false);
 	let correctingCellKey = $state<string | null>(null);
-	let exportDialogOpen = $state(false);
-	let exportLoadingOpen = $state(false);
-	let fullReviewOpen = $state(false);
+	let sidebarCollapsed = $state(false);
 	let workbookDetailsOpen = $state(false);
 	let monthPickerOpen = $state(false);
 	let modalSaving = $state(false);
@@ -101,9 +97,6 @@ export function createReportPageState() {
 		selectedClassId || monthGrid?.classId || preview?.classId || preview?.template?.classId || ''
 	);
 	const selectedClass = $derived(classes.find((item) => item.id === activeClassId));
-	const exportDisabled = $derived(
-		!preview?.canExport || exporting || savingDetails || !activeClassId
-	);
 	const activeReportMonth = $derived(
 		reportMonth || draft.reportMonth || preview?.template?.reportMonth || ''
 	);
@@ -404,42 +397,6 @@ export function createReportPageState() {
 	 * time this page is on screen there is nothing left for a button to do.
 	 */
 
-	async function requestExport() {
-		if (exportDisabled) return;
-		const missingFields = draft.blankFields();
-		if (missingFields.length > 0) {
-			reportDialogs?.showToast(
-				`Fill required SF2 header fields before exporting: ${missingFields.join(', ')}.`,
-				false
-			);
-			return;
-		}
-		if (hasModalDraftChanges) {
-			const saved = await saveWorkbookDetails(null);
-			if (!saved) return;
-		}
-		exportDialogOpen = true;
-	}
-
-	async function confirmExport() {
-		if (!activeClassId || !preview?.canExport || exporting) return;
-		exportDialogOpen = false;
-		exporting = true;
-		exportLoadingOpen = true;
-		try {
-			const result = await exportSf2Workbook(activeClassId);
-			invalidateMonthCache(activeClassId, schoolYear, activeReportMonth);
-			reportDialogs?.showToast(`SF2 exported and opened: ${result.outputPath}`);
-			await refreshCurrentMonth();
-		} catch (error) {
-			const msg = errorMessage(error, 'SF2 export failed');
-			reportDialogs?.showToast(`SF2 export failed: ${msg}`, false);
-		} finally {
-			exporting = false;
-			exportLoadingOpen = false;
-		}
-	}
-
 	async function saveWorkbookDetails(successMessage: string | null = 'SF2 workbook details saved') {
 		if (!activeClassId || savingDetails || modalSaving) return false;
 		const payload = draft.buildPayload(activeClassId, workbookSettings);
@@ -462,12 +419,12 @@ export function createReportPageState() {
 		}
 	}
 
-	function onToggleFullReview() {
-		fullReviewOpen = !fullReviewOpen;
+	function onToggleSidebar() {
+		sidebarCollapsed = !sidebarCollapsed;
 	}
 
 	function onWindowKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape' && fullReviewOpen) fullReviewOpen = false;
+		if (event.key === 'Escape' && sidebarCollapsed) sidebarCollapsed = false;
 	}
 
 	async function toggleAttendance(row: Sf2PreviewStudentRow, cell: Sf2PreviewCell) {
@@ -562,12 +519,6 @@ export function createReportPageState() {
 		set genderFilter(v) {
 			genderFilter = v;
 		},
-		get exporting() {
-			return exporting;
-		},
-		set exporting(v) {
-			exporting = v;
-		},
 		get presentingAll() {
 			return presentingAll;
 		},
@@ -586,23 +537,11 @@ export function createReportPageState() {
 		set correctingCellKey(v) {
 			correctingCellKey = v;
 		},
-		get exportDialogOpen() {
-			return exportDialogOpen;
+		get sidebarCollapsed() {
+			return sidebarCollapsed;
 		},
-		set exportDialogOpen(v) {
-			exportDialogOpen = v;
-		},
-		get exportLoadingOpen() {
-			return exportLoadingOpen;
-		},
-		set exportLoadingOpen(v) {
-			exportLoadingOpen = v;
-		},
-		get fullReviewOpen() {
-			return fullReviewOpen;
-		},
-		set fullReviewOpen(v) {
-			fullReviewOpen = v;
+		set sidebarCollapsed(v) {
+			sidebarCollapsed = v;
 		},
 		get workbookDetailsOpen() {
 			return workbookDetailsOpen;
@@ -633,9 +572,6 @@ export function createReportPageState() {
 		},
 		get selectedClass() {
 			return selectedClass;
-		},
-		get exportDisabled() {
-			return exportDisabled;
 		},
 		get activeReportMonth() {
 			return activeReportMonth;
@@ -674,10 +610,8 @@ export function createReportPageState() {
 		onMonthSelect,
 		onClassSelect,
 		refreshCurrentMonth,
-		requestExport,
-		confirmExport,
 		saveWorkbookDetails,
-		onToggleFullReview,
+		onToggleSidebar,
 		onWindowKeydown,
 		toggleAttendance
 	};

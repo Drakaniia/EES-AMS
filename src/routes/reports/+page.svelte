@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
-	import { fullPreviewStore } from '$lib/stores/full-preview.svelte';
 	import { commandPaletteStore } from '$lib/stores/command-palette.svelte';
 	import ReportTable from './report-table.svelte';
 	import ReportExportDialogs from './report-export-dialogs.svelte';
@@ -13,10 +11,6 @@
 	import { createReportPageState } from './report-page-state.svelte';
 
 	const page = createReportPageState();
-
-	$effect(() => {
-		fullPreviewStore.isActive = page.fullReviewOpen;
-	});
 
 	// Contextual palette action: switch the report month. Registered only while
 	// an SF2 workbook is actually loaded.
@@ -33,10 +27,6 @@
 			}
 		});
 		return () => commandPaletteStore.unregister('reports-switch-month');
-	});
-
-	onDestroy(() => {
-		fullPreviewStore.isActive = false;
 	});
 </script>
 
@@ -75,41 +65,25 @@
 		"loading" panel under "No SF2 workbook is ready for review".
 	-->
 	{#if !page.loadError && (page.loading || page.hasGrid)}
-		<!-- The 360px sidebar track only exists when the sidebar is rendered. Full
-		     preview hides the sidebar, so keeping the track reserved left a dead
-		     380px column of whitespace down the right of the grid. -->
+		<!-- The 320px sidebar track only exists when the sidebar is rendered.
+		     Collapsing hides the sidebar, so keeping the track reserved left a dead
+		     320px column of whitespace down the right of the grid. -->
 		<!-- The track must be declared in BOTH states. With `grid-template-columns:
 		     none` the implicit track is `auto`, i.e. sized to the grid's max-content �
-		     which here is the whole 22-column table. Full preview sits behind three
-		     `overflow-hidden` ancestors, so that overflow was clipped and unreachable
-		     rather than scrolled: the toolbar's right-hand buttons and the sticky
-		     Learner column were both cut off the real screen. `minmax(0,1fr)` floors
-		     the track at the container width and lets the table scroll inside it. -->
+		     which here is the whole 22-column table. The collapsed grid sits behind
+		     three `overflow-hidden` ancestors, so that overflow was clipped and
+		     unreachable rather than scrolled: the toolbar's right-hand buttons and
+		     the sticky Learner column were both cut off the real screen.
+		     `minmax(0,1fr)` floors the track at the container width and lets the
+		     table scroll inside it. -->
 		<section
-			class="grid min-h-0 min-w-0 flex-1 overflow-hidden {page.fullReviewOpen
+			class="grid min-h-0 min-w-0 flex-1 overflow-hidden {page.sidebarCollapsed
 				? 'grid-cols-[minmax(0,1fr)]'
-				: 'gap-5 px-4 py-5 md:px-8 lg:px-10 xl:grid-cols-[minmax(0,1fr)_360px]'}"
+				: 'gap-0 xl:grid-cols-[minmax(0,1fr)_320px]'}"
 		>
-			<div class="flex min-h-0 min-w-0 flex-col gap-5 pr-0 xl:pr-1">
+			<div class="flex min-h-0 min-w-0 flex-col overflow-hidden">
 				{#if page.loading || page.gridPending || !page.preview?.template}
 					<ReportGridSkeleton label="Loading the month" />
-				{:else if page.fullReviewOpen}
-					<ReportTable
-						previewTemplateGradeLevel={page.preview.template.gradeLevel}
-						previewTemplateSection={page.preview.template.section}
-						genderFilter={page.genderFilter}
-						matrixWeekGroups={page.matrixWeekGroups}
-						matrixDates={page.matrixDates}
-						matrixStudents={page.matrixStudents}
-						correctingCellKey={page.correctingCellKey}
-						fullReview={true}
-						presentingAll={page.presentingAll}
-						hasAbsentCells={page.hasAbsentCells}
-						onToggleAttendance={page.toggleAttendance}
-						onPresentAll={page.onPresentAll}
-						onFullReviewOpen={page.onToggleFullReview}
-						onGenderFilterChange={(value) => (page.genderFilter = value)}
-					/>
 				{:else}
 					<ReportTable
 						previewTemplateGradeLevel={page.preview.template.gradeLevel}
@@ -119,18 +93,18 @@
 						matrixDates={page.matrixDates}
 						matrixStudents={page.matrixStudents}
 						correctingCellKey={page.correctingCellKey}
-						fullReview={false}
+						sidebarCollapsed={page.sidebarCollapsed}
 						presentingAll={page.presentingAll}
 						hasAbsentCells={page.hasAbsentCells}
 						onToggleAttendance={page.toggleAttendance}
 						onPresentAll={page.onPresentAll}
-						onFullReviewOpen={page.onToggleFullReview}
+						onToggleSidebar={page.onToggleSidebar}
 						onGenderFilterChange={(value) => (page.genderFilter = value)}
 					/>
 				{/if}
 			</div>
 
-			{#if page.preview?.template && !page.loading && !page.fullReviewOpen}
+			{#if page.preview?.template && !page.loading && !page.sidebarCollapsed}
 				<ReportSidebar
 					preview={page.preview}
 					gridPending={page.gridPending}
@@ -149,18 +123,16 @@
 					draftGradeLevel={page.draft.gradeLevel}
 					draftSection={page.draft.section}
 					draftAdviserName={page.draft.adviserName}
-					draftSchoolHeadName={page.draft.schoolHeadName}
-					exportDisabled={page.exportDisabled}
-					exporting={page.exporting}
-					sf2OpenStatus={page.sf2Open.status}
+				draftSchoolHeadName={page.draft.schoolHeadName}
+				reportYear={page.activeReportYear}
+				sf2OpenStatus={page.sf2Open.status}
 					workbookSettings={page.workbookSettings}
 					savingDetails={page.savingDetails}
 					activeClassId={page.activeClassId}
 					onOpenSf2={page.onOpenSf2}
 					onClassSelect={page.onClassSelect}
-					onCreateMonth={() => page.onCreateMonth()}
-					onRequestExport={page.requestExport}
-					onEditDetails={() => (page.workbookDetailsOpen = true)}
+				onCreateMonth={() => page.onCreateMonth()}
+				onEditDetails={() => (page.workbookDetailsOpen = true)}
 					onSwitchMonth={() => (page.monthPickerOpen = true)}
 				/>
 			{/if}
@@ -168,14 +140,7 @@
 	{/if}
 </div>
 
-<ReportExportDialogs
-	bind:this={page.reportDialogs}
-	bind:exportDialogOpen={page.exportDialogOpen}
-	bind:exportLoadingOpen={page.exportLoadingOpen}
-	preview={page.preview}
-	exporting={page.exporting}
-	onConfirmExport={page.confirmExport}
-/>
+<ReportExportDialogs bind:this={page.reportDialogs} />
 
 <ReportWorkbookDetailsDialog
 	open={page.workbookDetailsOpen}

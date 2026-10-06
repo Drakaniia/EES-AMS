@@ -1,13 +1,5 @@
 <script lang="ts">
-	import {
-		AlertTriangle,
-		X,
-		CheckCheck,
-		Maximize2,
-		Minimize2,
-		ChevronLeft,
-		ChevronRight
-	} from 'lucide-svelte';
+	import { AlertTriangle, X, CheckCheck, PanelRightClose, PanelRightOpen } from 'lucide-svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import type { Sf2PreviewStudentRow, Sf2PreviewCell } from '$lib/api';
 	import type {
@@ -17,127 +9,18 @@
 		MatrixCell
 	} from './report-state.svelte';
 	import { weekRangeLabel } from './report-state.svelte';
+	import ReportScrollbars from './report-scrollbars.svelte';
 
 	let scrollEl: HTMLDivElement | undefined = $state(undefined);
 	let tableEl: HTMLTableElement | undefined = $state(undefined);
-	let topScrollEl: HTMLDivElement | undefined = $state(undefined);
-	let canScrollLeft = $state(false);
-	let canScrollRight = $state(false);
-	let showTopBar = $state(false);
-	let contentWidth = $state(0);
-
-	// Cached geometry for the affordances. The scroll listeners used to read
-	// scrollWidth/clientWidth and then write scrollLeft on the other scroller,
-	// which forced a synchronous reflow of the entire grid on every scroll event
-	// (vertical scrolling included) — the reason scrolling dropped frames. Reads
-	// now happen only from a ResizeObserver, and listeners work off that cache.
-	let viewportWidth = 0;
-	let lastScrollLeft = -1;
-	let measureFrame = 0;
-	let affordanceFrame = 0;
-	// Guard against feedback loops between the two horizontal scrollers.
-	let isSyncingScroll = false;
-
-	function updateAffordances(scrollLeft: number) {
-		const maxScroll = contentWidth - viewportWidth;
-		const left = scrollLeft > 2;
-		const right = maxScroll > 2 && scrollLeft < maxScroll - 2;
-		// Assign only on change: unrelated writes still re-render the fades.
-		if (left !== canScrollLeft) canScrollLeft = left;
-		if (right !== canScrollRight) canScrollRight = right;
-	}
-
-	function scheduleAffordance(scrollLeft: number) {
-		if (affordanceFrame) return;
-		affordanceFrame = requestAnimationFrame(() => {
-			affordanceFrame = 0;
-			updateAffordances(scrollLeft);
-		});
-	}
-
-	/** Layout reads live here — never call this from a scroll listener. */
-	function measure() {
-		measureFrame = 0;
-		if (!scrollEl) return;
-		viewportWidth = scrollEl.clientWidth;
-		contentWidth = scrollEl.scrollWidth;
-		const show = contentWidth > viewportWidth + 2;
-		if (show !== showTopBar) showTopBar = show;
-		updateAffordances(scrollEl.scrollLeft);
-	}
-
-	function scheduleMeasure() {
-		if (measureFrame) return;
-		measureFrame = requestAnimationFrame(measure);
-	}
-
-	/**
-	 * The top strip is a live horizontal scroller that mirrors the grid
-	 * two-way. Writes are guarded by `isSyncingScroll` to break the
-	 * feedback loop where each scroller's scroll event fires the other.
-	 */
-	function syncTopBar(scrollLeft: number) {
-		const target = topScrollEl;
-		if (!target || Math.abs(target.scrollLeft - scrollLeft) < 0.5) return;
-		isSyncingScroll = true;
-		target.scrollLeft = scrollLeft;
-		requestAnimationFrame(() => {
-			isSyncingScroll = false;
-		});
-	}
-
-	function onTopScroll() {
-		if (isSyncingScroll || !topScrollEl || !scrollEl) return;
-		const scrollLeft = topScrollEl.scrollLeft;
-		if (Math.abs(scrollEl.scrollLeft - scrollLeft) < 0.5) return;
-		isSyncingScroll = true;
-		scrollEl.scrollLeft = scrollLeft;
-		lastScrollLeft = scrollLeft;
-		scheduleAffordance(scrollLeft);
-		requestAnimationFrame(() => {
-			isSyncingScroll = false;
-		});
-	}
-
-	function onMainScroll() {
-		const el = scrollEl;
-		if (!el) return;
-		const scrollLeft = el.scrollLeft;
-		// Vertical scrolling fires 'scroll' too — bail before doing any work.
-		if (scrollLeft === lastScrollLeft) return;
-		lastScrollLeft = scrollLeft;
-		scheduleAffordance(scrollLeft);
-		syncTopBar(scrollLeft);
-	}
-
-	function nudge(dir: 1 | -1) {
-		scrollEl?.scrollBy({ left: dir * 280, behavior: 'auto' });
-	}
 
 	// NOTE: no custom wheel handler. A Svelte `onwheel` binding is
 	// non-passive by default, so the browser must run JS before it may
 	// start scrolling — every vertical wheel tick stalls on the main
 	// thread. Native Shift+wheel already pans horizontally, so
 	// intercepting it buys nothing and janks vertical scroll.
-
-	$effect(() => {
-		// Re-measure whenever the table shape (and therefore its width) changes.
-		void matrixDates.length;
-		void matrixStudents.length;
-		const ro = new ResizeObserver(scheduleMeasure);
-		if (scrollEl) ro.observe(scrollEl);
-		if (tableEl) ro.observe(tableEl);
-		window.addEventListener('resize', scheduleMeasure, { passive: true });
-		scheduleMeasure();
-		return () => {
-			ro.disconnect();
-			window.removeEventListener('resize', scheduleMeasure);
-			if (measureFrame) cancelAnimationFrame(measureFrame);
-			if (affordanceFrame) cancelAnimationFrame(affordanceFrame);
-			measureFrame = 0;
-			affordanceFrame = 0;
-		};
-	});
+	// Both scrollbars are overlay thumbs (report-scrollbars.svelte) driven
+	// by the scroller's own scroll events - no handlers live here.
 
 	let {
 		previewTemplateGradeLevel,
@@ -147,12 +30,12 @@
 		matrixDates,
 		matrixStudents,
 		correctingCellKey,
-		fullReview,
+		sidebarCollapsed,
 		presentingAll,
 		hasAbsentCells,
 		onToggleAttendance,
 		onPresentAll,
-		onFullReviewOpen,
+		onToggleSidebar,
 		onGenderFilterChange
 	}: {
 		previewTemplateGradeLevel: string;
@@ -163,21 +46,17 @@
 		matrixDates: MatrixDateSlot[];
 		matrixStudents: MatrixStudentRow[];
 		correctingCellKey: string | null;
-		fullReview: boolean;
+		sidebarCollapsed: boolean;
 		presentingAll: boolean;
 		hasAbsentCells: boolean;
 		onToggleAttendance: (row: Sf2PreviewStudentRow, cell: Sf2PreviewCell | MatrixCell) => void;
 		onPresentAll: () => void;
-		onFullReviewOpen: () => void;
+		onToggleSidebar: () => void;
 		onGenderFilterChange?: (value: 'all' | 'male' | 'female') => void;
 	} = $props();
 </script>
 
-<div
-	class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden {fullReview
-		? 'rounded-none border-0 bg-background shadow-none'
-		: 'rounded-2xl border border-border bg-card shadow-sm'}"
->
+<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
 	<div class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
 		<div>
 			<h2 class="text-xl font-semibold">
@@ -243,42 +122,23 @@
 
 			<button
 				type="button"
-				onclick={onFullReviewOpen}
+				onclick={onToggleSidebar}
 				class="control-ring inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-surface"
-				title={fullReview ? 'Exit full preview' : 'Open full preview'}
+				title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
 			>
-				{#if fullReview}
-					<Minimize2 class="size-3.5" aria-hidden="true" />
-					Exit Full Preview
+				{#if sidebarCollapsed}
+					<PanelRightOpen class="size-3.5" aria-hidden="true" />
+					Expand sidebar
 				{:else}
-					<Maximize2 class="size-3.5" aria-hidden="true" />
-					Full Preview
+					<PanelRightClose class="size-3.5" aria-hidden="true" />
+					Collapse sidebar
 				{/if}
 			</button>
 		</div>
 	</div>
 
-	{#if showTopBar}
-		<!-- Interactive horizontal scroller: drag the thumb (or Shift+wheel over
-		     the grid) to pan. Mirrored two-way with the grid via onTopScroll /
-		     syncTopBar. Opaque background: a translucent strip would force the
-		     compositor to blend it against the page on every scroll frame. -->
-		<div
-			bind:this={topScrollEl}
-			onscroll={onTopScroll}
-			class="report-top-scroll shrink-0 cursor-grab overflow-x-auto overflow-y-hidden border-b border-border bg-surface active:cursor-grabbing"
-			aria-label="Scroll attendance grid horizontally"
-		>
-			<div style:width="{contentWidth}px" class="h-3.5"></div>
-		</div>
-	{/if}
-
 	<div class="report-table-clip relative min-h-0 flex-1 overflow-hidden">
-		<div
-			bind:this={scrollEl}
-			onscroll={onMainScroll}
-			class="report-table-scroll absolute inset-0 [scrollbar-gutter:stable]"
-		>
+		<div bind:this={scrollEl} class="report-table-scroll absolute inset-0">
 			<table
 				bind:this={tableEl}
 				class="min-w-full table-fixed border-separate border-spacing-0 text-sm"
@@ -389,31 +249,8 @@
 		<!-- NOTE: no edge-fade gradient overlays. A full-height translucent
 		     gradient forces the compositor to re-blend the entire viewport
 		     edge on every scroll frame over a multi-thousand-node sticky
-		     table — the dominant horizontal-scroll cost. The chevron nudge
-		     buttons below are the scroll affordance. -->
-
-		{#if showTopBar}
-			<button
-				type="button"
-				onclick={() => nudge(-1)}
-				disabled={!canScrollLeft}
-				class="absolute top-3 left-2 z-[40] hidden h-7 w-7 place-items-center rounded-full border border-border bg-card shadow-lg disabled:opacity-30 md:grid"
-				aria-label="Scroll table left"
-				title="Scroll left (also Shift+wheel)"
-			>
-				<ChevronLeft class="size-3.5" />
-			</button>
-			<button
-				type="button"
-				onclick={() => nudge(1)}
-				disabled={!canScrollRight}
-				class="absolute top-3 right-2 z-[40] hidden h-7 w-7 place-items-center rounded-full border border-border bg-card shadow-lg disabled:opacity-30 md:grid"
-				aria-label="Scroll table right"
-				title="Scroll right (also Shift+wheel)"
-			>
-				<ChevronRight class="size-3.5" />
-			</button>
-		{/if}
+		     table — the dominant horizontal-scroll cost. -->
+		<ReportScrollbars target={scrollEl} />
 	</div>
 </div>
 
@@ -424,26 +261,24 @@
 	   not one offscreen row was ever skipped. Skipping rows for real needs JS windowing
 	   (or a non-table row element), not this. */
 
-	/* Clip the bottom 12px where the native horizontal scrollbar would sit.
-	   Push the native bar outside the parent's overflow-hidden so every
-	   browser hides the duplicate bottom bar; the top .report-top-scroll
-	   remains the single horizontal control. Vertical scrollbar stays visible. */
-	.report-table-clip {
-		scrollbar-gutter: stable;
-	}
 	.report-table-scroll {
-		scrollbar-width: auto;
-		scrollbar-color: color-mix(in oklab, var(--color-foreground) 38%, transparent) transparent;
-		/* The grid scrolls itself; the top strip only mirrors its offset one-way. The
-		   native horizontal bar is pushed 12px below the parent's overflow-hidden
-		   clip so it stays hidden. */
-		overflow-x: auto !important;
-		overflow-y: auto !important;
-		bottom: -12px !important;
-		padding-bottom: 12px;
+		overflow: auto !important;
+		/* Native bars are hidden on purpose: they belong to the OS, and under
+		   overlay-scrollbar settings (or the old -12px clip trick misfiring)
+		   the vertical bar can vanish with no recourse. The overlay thumbs in
+		   report-scrollbars.svelte own both axes from live metrics, so they
+		   render exactly when there is overflow - and take no layout space. */
+		scrollbar-width: none;
+		/* No rubber-banding past the grid edges in any direction. */
+		overscroll-behavior: none;
 		/* Hint the compositor the scroll offset animates every frame; paints
 		   then track the layer instead of re-rasterizing the whole table. */
 		will-change: scroll-position;
+	}
+	.report-table-scroll::-webkit-scrollbar {
+		display: none !important;
+		width: 0 !important;
+		height: 0 !important;
 	}
 	/* 1500+ cell buttons each carry `.control-ring`'s 150ms border/bg/color
 	   transition. During scroll that keeps the style engine diffing every
@@ -456,48 +291,5 @@
 	.report-table-scroll thead th,
 	.report-table-scroll tbody th {
 		backface-visibility: hidden;
-	}
-	.report-table-scroll::-webkit-scrollbar {
-		width: 12px;
-		height: 0;
-	}
-	.report-table-scroll::-webkit-scrollbar:horizontal {
-		height: 0 !important;
-		display: none !important;
-	}
-	.report-table-scroll::-webkit-scrollbar-track:horizontal,
-	.report-table-scroll::-webkit-scrollbar-thumb:horizontal,
-	.report-table-scroll::-webkit-scrollbar-corner {
-		display: none !important;
-		background: transparent !important;
-		height: 0 !important;
-	}
-	.report-table-scroll::-webkit-scrollbar-track:vertical {
-		background: transparent;
-	}
-	.report-table-scroll::-webkit-scrollbar-thumb:vertical {
-		border: 2px solid transparent;
-		border-radius: 999px;
-		background-clip: content-box;
-		background-color: color-mix(in oklab, var(--color-foreground) 34%, transparent);
-	}
-	.report-table-scroll::-webkit-scrollbar-thumb:vertical:hover {
-		background-color: color-mix(in oklab, var(--color-foreground) 48%, transparent);
-	}
-	.report-top-scroll {
-		scrollbar-width: thin;
-		scrollbar-color: color-mix(in oklab, var(--color-primary) 55%, transparent) transparent;
-	}
-	.report-top-scroll::-webkit-scrollbar {
-		height: 12px;
-	}
-	.report-top-scroll::-webkit-scrollbar-thumb {
-		border: 2px solid transparent;
-		border-radius: 999px;
-		background-clip: content-box;
-		background-color: color-mix(in oklab, var(--color-primary) 45%, transparent);
-	}
-	.report-top-scroll::-webkit-scrollbar-thumb:hover {
-		background-color: color-mix(in oklab, var(--color-primary) 65%, transparent);
 	}
 </style>

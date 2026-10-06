@@ -25,22 +25,6 @@ vi.mock('$lib/stores/update.svelte', () => ({
 	updateStore: { badgeVisible: false }
 }));
 
-vi.mock('$lib/stores/full-preview.svelte', () => {
-	let isActive = false;
-	return {
-		fullPreviewStore: {
-			get isActive() {
-				return isActive;
-			},
-			set isActive(v: boolean) {
-				isActive = v;
-			},
-			get isTitleBarHidden() {
-				return isActive;
-			}
-		}
-	};
-});
 vi.mock('@tauri-apps/api/core', () => ({
 	convertFileSrc: (path: string) => `asset://localhost/${path}`
 }));
@@ -80,17 +64,5 @@ describe('AppShell', () => {
 		renderAppShell();
 		const navLinks = document.querySelectorAll('.title-nav-link');
 		expect(navLinks.length).toBe(2);
-	});
-
-	it('hides TitleBar in full-preview mode', async () => {
-		const { fullPreviewStore } = await import('$lib/stores/full-preview.svelte');
-		fullPreviewStore.isActive = true;
-
-		renderAppShell();
-		const titleBar = document.querySelector('.title-bar');
-		expect(titleBar).not.toBeInTheDocument();
-
-		// Reset
-		fullPreviewStore.isActive = false;
 	});
 });

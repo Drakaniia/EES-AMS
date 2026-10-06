@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { fullPreviewStore } from '$lib/stores/full-preview.svelte';
 	import { databaseStatus } from '$lib/stores/database-status.svelte';
 	import TitleBar from '$lib/components/ui/TitleBar.svelte';
 	import CommandPalette from '$lib/components/ui/CommandPalette.svelte';
@@ -28,9 +27,7 @@
 		Skip to content
 	</a>
 
-	{#if !fullPreviewStore.isTitleBarHidden}
-		<TitleBar />
-	{/if}
+	<TitleBar />
 
 	{#if databaseStatus.state === 'temporary'}
 		<DatabaseRecovery compact />
@@ -42,13 +39,7 @@
 		</div>
 	{/if}
 
-	<main
-		id="main-content"
-		class="min-h-0 min-w-0 flex-1 focus:outline-none {fullPreviewStore.isTitleBarHidden
-			? 'overflow-hidden'
-			: 'overflow-auto'}"
-		tabindex="-1"
-	>
+	<main id="main-content" class="min-h-0 min-w-0 flex-1 overflow-auto focus:outline-none" tabindex="-1">
 		{@render children()}
 	</main>
 
