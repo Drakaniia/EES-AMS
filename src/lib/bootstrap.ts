@@ -30,6 +30,16 @@ import { onAppQuit, scheduleBackups, stopScheduledBackups } from '$lib/features/
 
 let started = false;
 
+/**
+ * How long the quit backup may take before the window closes without it.
+ *
+ * The backup is a nicety; being unable to close the app is not. Every step of it
+ * is a `postMessage` round trip to the database worker (`WorkerSqlDriver.send`
+ * has no timeout of its own), so a wedged worker would otherwise leave the
+ * window open forever with no way out but killing the process.
+ */
+const QUIT_BACKUP_TIMEOUT_MS = 3_000;
+
 export async function bootstrapApp(): Promise<void> {
 	if (started) return;
 	started = true;
@@ -46,11 +56,16 @@ async function bindQuitBackup(): Promise<void> {
 	try {
 		const appWindow = getCurrentWindow();
 		await appWindow.onCloseRequested(async (event) => {
+			// This handler is the only thing that can close the window, so
+			// `destroy()` below must be reached unconditionally: a rejection or a
+			// hang anywhere in the backup used to leave the app unquittable.
 			event.preventDefault();
 			try {
 				// No quit snapshot of throwaway state: it would pose as a real
 				// backup in retention. Manual exports stay available in-session.
-				if (databaseStatus.state !== 'temporary') await onAppQuit();
+				// Nor one from a database that failed to open — there is no image
+				// to take, and asking for it only stalls the close.
+				if (databaseStatus.state === 'ready') await quitBackup();
 			} catch (error) {
 				// A backup that cannot be written must not strand the teacher in a
 				// window they cannot close. The failure is already recorded in the
@@ -65,4 +80,12 @@ async function bindQuitBackup(): Promise<void> {
 		// preview). The interval timer still backs up while the app is open.
 		console.warn('could not bind the on-quit backup', error);
 	}
+}
+
+/** The quit backup, bounded so it can delay a close but never prevent one. */
+function quitBackup(): Promise<unknown> {
+	return Promise.race([
+		onAppQuit(),
+		new Promise((resolve) => setTimeout(resolve, QUIT_BACKUP_TIMEOUT_MS))
+	]);
 }
