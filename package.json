@@ -59,6 +59,7 @@
 		"@tauri-apps/plugin-updater": "^2.13.1",
 		"exceljs": "^4.4.0",
 		"fflate": "^0.8.3",
-		"lucide-svelte": "^1.0.1"
+		"lucide-svelte": "^1.0.1",
+		"motion": "^14.6.0"
 	}
 }

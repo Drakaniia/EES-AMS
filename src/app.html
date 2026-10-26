@@ -4,73 +4,100 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<script>
+			// Resolve the theme before the first paint. Waiting for the component
+			// tree means one frame of light-on-dark, which is exactly the flash the
+			// dark token block exists to avoid.
+			(() => {
+				try {
+					const stored = localStorage.getItem('ees-ams-theme') || 'system';
+					const dark =
+						stored === 'dark' ||
+						(stored === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+					const root = document.documentElement;
+					root.classList.toggle('dark', dark);
+					root.style.colorScheme = dark ? 'dark' : 'light';
+				} catch {
+					/* Storage can be unavailable; the light theme is the fallback. */
+				}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<!-- Loading screen overlay - shows immediately on app launch -->
-		<div
-			id="initial-loading"
-			style="
-				position: fixed;
-				inset: 0;
-				background-color: var(--color-background);
-				z-index: 9999;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-			"
-		>
-			<div style="display: flex; gap: 4px; align-items: center">
-				<div
-					style="
-						width: 4px;
-						height: 32px;
-						background-color: #fb923c;
-						border-radius: 2px;
-						animation: spin 1.2s ease-in-out infinite;
-					"
-				></div>
-				<div
-					style="
-						width: 4px;
-						height: 32px;
-						background-color: #fb923c;
-						border-radius: 2px;
-						animation: spin 1.2s ease-in-out infinite 0.1s;
-					"
-				></div>
-				<div
-					style="
-						width: 4px;
-						height: 32px;
-						background-color: #fb923c;
-						border-radius: 2px;
-						animation: spin 1.2s ease-in-out infinite 0.2s;
-					"
-				></div>
-				<div
-					style="
-						width: 4px;
-						height: 32px;
-						background-color: #fb923c;
-						border-radius: 2px;
-						animation: spin 1.2s ease-in-out infinite 0.3s;
-					"
-				></div>
+		<div id="initial-loading">
+			<div class="boot-mark">
+				<span class="boot-wordmark">EES</span>
+				<span class="boot-track"><span class="boot-fill"></span></span>
 			</div>
 		</div>
 
 		<style>
-			@keyframes spin {
-				0%,
-				40%,
-				100% {
-					transform: scaleY(0.4);
-					opacity: 0.5;
+			#initial-loading {
+				position: fixed;
+				inset: 0;
+				z-index: 9999;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				background-color: oklch(0.973 0.005 78);
+				color: oklch(0.235 0.006 60);
+			}
+
+			.dark #initial-loading {
+				background-color: oklch(0.175 0.004 60);
+				color: oklch(0.955 0.004 78);
+			}
+
+			.boot-mark {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 18px;
+			}
+
+			.boot-wordmark {
+				font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+				font-size: 22px;
+				font-weight: 650;
+				letter-spacing: -0.03em;
+			}
+
+			.boot-track {
+				position: relative;
+				display: block;
+				width: 84px;
+				height: 2px;
+				overflow: hidden;
+				border-radius: 2px;
+				background: currentColor;
+				opacity: 0.12;
+			}
+
+			.boot-fill {
+				position: absolute;
+				inset: 0;
+				width: 42%;
+				border-radius: inherit;
+				background: #d4571b;
+				animation: boot-slide 1.5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+			}
+
+			@keyframes boot-slide {
+				0% {
+					transform: translateX(-110%);
 				}
-				20% {
-					transform: scaleY(1);
-					opacity: 1;
+				100% {
+					transform: translateX(320%);
+				}
+			}
+
+			@media (prefers-reduced-motion: reduce) {
+				.boot-fill {
+					animation: none;
+					width: 100%;
+					opacity: 0.6;
 				}
 			}
 		</style>
