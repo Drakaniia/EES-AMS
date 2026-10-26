@@ -7,6 +7,7 @@
 		type Settings
 	} from '$lib/api';
 	import { filterAttendanceEventsForQuarter } from '$lib/student-analytics';
+	import { ChevronLeft, ChevronRight } from 'lucide-svelte';
 	import Dialog from '../ui/Dialog.svelte';
 
 	interface Props {
@@ -161,7 +162,7 @@
 	maxWidth="lg"
 	{onClose}
 >
-	<div class="space-y-6">
+	<div class="space-y-5">
 		{#if loading}
 			<div class="flex h-64 items-center justify-center">
 				<div
@@ -169,83 +170,45 @@
 					role="status"
 				>
 					<span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-					Loading attendance...
+					Loading attendance…
 				</div>
 			</div>
 		{:else}
 			<!-- Header Stats -->
-			<div class="grid grid-cols-4 gap-4">
-				<div class="rounded-xl border border-border bg-surface p-4">
-					<div class="label-mono text-xs">Total Presents</div>
-					<div class="mt-1 text-2xl font-bold text-primary">{stats.presents}</div>
-				</div>
-				<div class="rounded-xl border border-border bg-surface p-4">
-					<div class="label-mono text-xs">Absences</div>
-					<div class="mt-1 text-2xl font-bold text-destructive">{stats.absences}</div>
-				</div>
-				<div class="rounded-xl border border-border bg-surface p-4">
-					<div class="label-mono text-xs">Late Arrivals</div>
-					<div class="text-warning mt-1 text-2xl font-bold">{stats.tardies}</div>
-				</div>
-				<div class="rounded-xl border border-border bg-surface p-4">
-					<div class="label-mono text-xs">Current Quarter</div>
-					<div class="mt-1 text-2xl font-bold">{settings?.quarter || '—'}</div>
-				</div>
-			</div>
+			<dl class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+				{@render statCell('Present', String(stats.presents))}
+				{@render statCell('Absent', String(stats.absences), 'text-destructive')}
+				{@render statCell('Late', String(stats.tardies))}
+				{@render statCell('Quarter', settings?.quarter || '—')}
+			</dl>
 
 			<!-- Controls -->
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-2">
-					<button
-						onclick={prevMonth}
-						class="rounded-md border border-border p-1.5 transition-colors hover:bg-surface"
-						aria-label="Previous month"
-					>
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-						>
-							<path d="m15 18-6-6 6-6" />
-						</svg>
+					<button onclick={prevMonth} class="icon-btn" aria-label="Previous month">
+						<ChevronLeft class="size-4" aria-hidden="true" />
 					</button>
-					<span class="min-w-32 text-center font-medium">
+					<span class="min-w-32 text-center text-[12.5px] font-semibold">
 						{months[selectedMonth]}
 						{selectedYear}
 					</span>
-					<button
-						onclick={nextMonth}
-						class="rounded-md border border-border p-1.5 transition-colors hover:bg-surface"
-						aria-label="Next month"
-					>
-						<svg
-							class="size-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-						>
-							<path d="m9 18 6-6-6-6" />
-						</svg>
+					<button onclick={nextMonth} class="icon-btn" aria-label="Next month">
+						<ChevronRight class="size-4" aria-hidden="true" />
 					</button>
 				</div>
 
-				<div class="flex rounded-lg border border-border bg-surface p-1">
+				<div class="segmented" role="group" aria-label="Attendance period">
 					<button
 						onclick={() => (viewMode = 'month')}
-						class="rounded-md px-3 py-1 text-xs font-medium transition-all {viewMode === 'month'
-							? 'bg-background text-primary shadow-sm'
-							: 'text-muted-foreground'}"
+						aria-pressed={viewMode === 'month'}
+						class="segmented-item"
 					>
 						Monthly
 					</button>
 					<button
 						onclick={() => (viewMode = 'quarter')}
-						class="rounded-md px-3 py-1 text-xs font-medium transition-all {viewMode === 'quarter'
-							? 'bg-background text-primary shadow-sm'
-							: 'text-muted-foreground'}"
+						aria-pressed={viewMode === 'quarter'}
+						class="segmented-item"
 					>
 						Quarterly
 					</button>
@@ -256,9 +219,7 @@
 				<!-- Calendar Grid -->
 				<div class="grid grid-cols-7 gap-1">
 					{#each ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as day (day)}
-						<div
-							class="py-2 text-center text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
-						>
+						<div class="pb-1.5 text-center text-[10.5px] font-semibold text-muted-foreground">
 							{day}
 						</div>
 					{/each}
@@ -280,10 +241,10 @@
 										: 'bg-surface'}"
 							>
 								<span
-									class="font-mono text-xs {status === 'present'
-										? 'font-bold'
+									class="text-[11.5px] tabular-nums {status === 'present'
+										? 'font-semibold'
 										: status === 'absent'
-											? 'font-bold text-destructive'
+											? 'font-semibold text-destructive'
 											: 'text-muted-foreground'}"
 								>
 									{d.day}
@@ -343,7 +304,9 @@
 												minute: '2-digit'
 											})}
 											{#if isLate(e)}
-												<span class="text-warning ml-2 font-bold">LATE</span>
+												<span class="ml-1.5 font-semibold text-amber-600 dark:text-amber-400"
+													>Late</span
+												>
 											{/if}
 										</div>
 									</div>
@@ -360,18 +323,19 @@
 					{/if}
 				</div>
 			{/if}
-
-			<div class="flex justify-end pt-2">
-				<button
-					onclick={onClose}
-					class="rounded-pill bg-primary px-6 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
-				>
-					Done
-				</button>
+			<div class="flex justify-end border-t border-border pt-3">
+				<button onclick={onClose} class="btn btn-primary min-w-24">Done</button>
 			</div>
 		{/if}
 	</div>
 </Dialog>
+
+{#snippet statCell(label: string, value: string, tone = '')}
+	<div class="rounded-lg border border-border bg-card px-3 py-2">
+		<dt class="text-[11px] font-medium text-muted-foreground">{label}</dt>
+		<dd class="mt-0.5 text-[17px] font-semibold tabular-nums {tone}">{value}</dd>
+	</div>
+{/snippet}
 
 <style>
 	.custom-scrollbar::-webkit-scrollbar {

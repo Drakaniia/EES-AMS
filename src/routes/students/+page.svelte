@@ -10,6 +10,7 @@
 	import StudentForm from './student-form.svelte';
 	import StudentDeleteDialog from './student-delete-dialog.svelte';
 	import { resolve } from '$app/paths';
+	import { FileText, Plus } from 'lucide-svelte';
 	import { studentPage } from './student-page-state.svelte';
 
 	onMount(() => {
@@ -30,26 +31,9 @@
 	>
 		{#snippet actions()}
 			<div class="flex items-center gap-3">
-				<a
-					href={resolve('/attendance/logs')}
-					class="inline-flex h-10 items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
-				>
-					<svg
-						class="size-4"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-						<polyline points="14 2 14 8 20 8" />
-						<line x1="16" y1="13" x2="8" y2="13" />
-						<line x1="16" y1="17" x2="8" y2="17" />
-						<polyline points="10 9 9 9 8 9" />
-					</svg>
-					View Records
+				<a href={resolve('/attendance/logs')} class="btn btn-secondary">
+					<FileText class="size-4" aria-hidden="true" strokeWidth={1.9} />
+					View records
 				</a>
 
 				<button
@@ -59,19 +43,9 @@
 					title={studentPage.canCreateStudents
 						? 'Add student'
 						: studentPage.studentCreationBlockedMessage}
-					class="inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-6 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+					class="btn btn-primary"
 				>
-					<svg
-						class="size-4"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<path d="M12 5v14M5 12h14" />
-					</svg>
+					<Plus class="size-4" aria-hidden="true" strokeWidth={2.2} />
 					Add student
 				</button>
 			</div>
@@ -90,11 +64,7 @@
 				description={studentPage.loadError}
 			>
 				{#snippet actions()}
-					<button
-						type="button"
-						onclick={() => void studentPage.reload()}
-						class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
-					>
+					<button type="button" onclick={() => void studentPage.reload()} class="btn btn-secondary">
 						Retry
 					</button>
 				{/snippet}

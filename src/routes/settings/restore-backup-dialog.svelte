@@ -33,36 +33,16 @@
 				</div>
 			</div>
 
-			<div class="grid gap-3 sm:grid-cols-3">
-				<div class="rounded-xl border border-border p-4">
-					<div class="label-mono">Students</div>
-					<div class="mt-2 text-2xl font-semibold">{backupState.restorePreview.studentCount}</div>
-				</div>
-				<div class="rounded-xl border border-border p-4">
-					<div class="label-mono">Classes</div>
-					<div class="mt-2 text-2xl font-semibold">{backupState.restorePreview.classCount}</div>
-				</div>
-				<div class="rounded-xl border border-border p-4">
-					<div class="label-mono">Attendance</div>
-					<div class="mt-2 text-2xl font-semibold">{backupState.restorePreview.eventCount}</div>
-				</div>
-				<div class="rounded-xl border border-border p-4">
-					<div class="label-mono">Absences</div>
-					<div class="mt-2 text-2xl font-semibold">{backupState.restorePreview.absentCount}</div>
-				</div>
-				<div class="rounded-xl border border-border p-4">
-					<div class="label-mono">Settings</div>
-					<div class="mt-2 text-2xl font-semibold">
-						{backupState.restorePreview.settingsCount}
-					</div>
-				</div>
-				<div class="rounded-xl border border-border p-4">
-					<div class="label-mono">Size</div>
-					<div class="mt-2 text-2xl font-semibold">
-						{formatBackupBytes(backupState.restorePreview.sizeBytes)}
-					</div>
-				</div>
-			</div>
+			<dl
+				class="grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl border border-border bg-surface/60 p-4 sm:grid-cols-3"
+			>
+				{@render metric('Students', String(backupState.restorePreview.studentCount))}
+				{@render metric('Classes', String(backupState.restorePreview.classCount))}
+				{@render metric('Attendance', String(backupState.restorePreview.eventCount))}
+				{@render metric('Absences', String(backupState.restorePreview.absentCount))}
+				{@render metric('Settings', String(backupState.restorePreview.settingsCount))}
+				{@render metric('Size', formatBackupBytes(backupState.restorePreview.sizeBytes))}
+			</dl>
 
 			<div class="rounded-xl border border-border bg-background p-4">
 				<div class="label-mono">SF2 Workbooks in This Backup</div>
@@ -113,7 +93,9 @@
 				</div>
 			{/if}
 
-			<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+			<div
+				class="rounded-xl border border-amber-500/30 bg-amber-50/80 p-3.5 text-[12.5px] leading-5 text-amber-900 dark:border-amber-400/25 dark:bg-amber-950/25 dark:text-amber-200"
+			>
 				Restoring replaces the current database{backupState.restorePreview.workbooks.length > 0
 					? ' and overwrites the current SF2 workbooks'
 					: ''}. A pre-restore safety backup — including the workbooks — is created first, and
@@ -133,7 +115,7 @@
 					type="button"
 					onclick={() => (backupState.restorePreview = null)}
 					disabled={backupState.restoreBusy}
-					class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+					class="btn btn-secondary"
 				>
 					Cancel
 				</button>
@@ -141,14 +123,21 @@
 					type="button"
 					onclick={() => backupState.onConfirmRestoreBackup()}
 					disabled={backupState.restoreBusy}
-					class="inline-flex items-center justify-center gap-2 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+					class="btn btn-danger"
 				>
 					{#if backupState.restoreBusy}
 						<Spinner />
 					{/if}
-					{backupState.restoreBusy ? 'Restoring...' : 'Restore Backup'}
+					{backupState.restoreBusy ? 'Restoring…' : 'Restore backup'}
 				</button>
 			</div>
 		</div>
 	{/if}
 </Dialog>
+
+{#snippet metric(label: string, value: string)}
+	<div>
+		<dt class="text-[11px] text-muted-foreground">{label}</dt>
+		<dd class="mt-0.5 text-[14px] font-semibold tabular-nums">{value}</dd>
+	</div>
+{/snippet}

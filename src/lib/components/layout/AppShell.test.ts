@@ -63,6 +63,6 @@ describe('AppShell', () => {
 	it('renders navigation links in the TitleBar', () => {
 		renderAppShell();
 		const navLinks = document.querySelectorAll('.title-nav-link');
-		expect(navLinks.length).toBe(2);
+		expect(navLinks.length).toBe(6);
 	});
 });

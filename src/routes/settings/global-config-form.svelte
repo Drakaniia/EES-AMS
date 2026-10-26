@@ -3,83 +3,100 @@
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import QuarterDialog from './quarter-dialog.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
+	import SettingsSection from './settings-section.svelte';
+	import SettingsGroup from './settings-group.svelte';
+	import SettingRow from './setting-row.svelte';
+	import { ChevronDown } from 'lucide-svelte';
+	import { themeStore, type ThemeMode } from '$lib/stores/theme.svelte';
+
+	const themeOptions: { value: ThemeMode; label: string }[] = [
+		{ value: 'light', label: 'Light' },
+		{ value: 'dark', label: 'Dark' },
+		{ value: 'system', label: 'System' }
+	];
+
+	const fieldClass = 'field w-auto tabular-nums';
 </script>
 
-<form
-	onsubmit={(e) => settingsState.onSaveGlobal(e)}
-	onfocusout={(e) => settingsState.handleGlobalSettingsFocusOut(e)}
-	class="space-y-5 rounded-2xl border border-border bg-card p-6"
->
-	<div class="space-y-1">
-		<h3 class="text-lg font-medium">Global Settings</h3>
-		<p class="text-xs text-muted-foreground">Controls defaults for new classes.</p>
-	</div>
+<SettingsSection title="General" description="Appearance and the defaults for a normal school day.">
+	<SettingsGroup>
+		<div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+			<div class="min-w-0">
+				<p class="text-[13px] leading-5 font-medium">Appearance</p>
+				<p class="mt-0.5 text-xs leading-4 text-muted-foreground">
+					System follows your Windows theme.
+				</p>
+			</div>
+			<div class="segmented" role="group" aria-label="Appearance">
+				{#each themeOptions as option (option.value)}
+					<button
+						type="button"
+						aria-pressed={themeStore.mode === option.value}
+						onclick={() => themeStore.set(option.value)}
+						class="segmented-item"
+					>
+						{option.label}
+					</button>
+				{/each}
+			</div>
+		</div>
+	</SettingsGroup>
 
-	<div class="space-y-4">
-		<div class="space-y-2">
-			<label for="defDayStart" class="label-mono">Default Day Start</label>
-			<input
-				id="defDayStart"
-				type="time"
-				bind:value={settingsState.defaultDayStart}
-				class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-			/>
-		</div>
-		<div class="space-y-2">
-			<label for="defDayEnd" class="label-mono">Default Day End</label>
-			<input
-				id="defDayEnd"
-				type="time"
-				bind:value={settingsState.defaultDayEnd}
-				class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-			/>
-		</div>
-		<div class="space-y-2">
-			<label for="defLateAfter" class="label-mono">Default Late After</label>
-			<input
-				id="defLateAfter"
-				type="time"
-				bind:value={settingsState.defaultLateAfter}
-				class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-			/>
-		</div>
-		<div class="space-y-2">
-			<label for="defQuarter" class="label-mono">Current Quarter</label>
-			<button
-				type="button"
-				onclick={() => (quarterState.quarterDialogOpen = true)}
-				class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-sm transition-colors hover:bg-accent/50 focus:ring-2 focus:ring-primary focus:outline-none"
-			>
-				<span>{quarterState.defaultQuarter}</span>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="16"
-					height="16"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					class="opacity-50"
+	<form
+		onsubmit={(e) => settingsState.onSaveGlobal(e)}
+		onfocusout={(e) => settingsState.handleGlobalSettingsFocusOut(e)}
+		class="space-y-4"
+	>
+		<SettingsGroup>
+			<SettingRow label="Day starts" description="When attendance opens.">
+				<input
+					type="time"
+					aria-label="Default day start"
+					bind:value={settingsState.defaultDayStart}
+					class={fieldClass}
+				/>
+			</SettingRow>
+
+			<SettingRow label="Day ends" description="When the school day closes.">
+				<input
+					type="time"
+					aria-label="Default day end"
+					bind:value={settingsState.defaultDayEnd}
+					class={fieldClass}
+				/>
+			</SettingRow>
+
+			<SettingRow label="Late after" description="Arrivals past this time are late.">
+				<input
+					type="time"
+					aria-label="Default late after"
+					bind:value={settingsState.defaultLateAfter}
+					class={fieldClass}
+				/>
+			</SettingRow>
+
+			<SettingRow label="Quarter" description="The grading period reports are filed under.">
+				<button
+					type="button"
+					onclick={() => (quarterState.quarterDialogOpen = true)}
+					class="field flex w-auto min-w-32 items-center justify-between gap-2"
 				>
-					<path d="m6 9 6 6 6-6" />
-				</svg>
+					<span>{quarterState.defaultQuarter}</span>
+					<ChevronDown class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+				</button>
+			</SettingRow>
+		</SettingsGroup>
+
+		<div class="flex justify-end">
+			<button type="submit" disabled={settingsState.globalSettingsSaving} class="btn btn-primary">
+				{#if settingsState.globalSettingsSaving}
+					<Spinner />
+				{/if}
+				{settingsState.globalSettingsSaving ? 'Saving…' : 'Save'}
 			</button>
 		</div>
-	</div>
-
-	<button
-		type="submit"
-		disabled={settingsState.globalSettingsSaving}
-		class="inline-flex w-full items-center justify-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-	>
-		{#if settingsState.globalSettingsSaving}
-			<Spinner />
-		{/if}
-		{settingsState.globalSettingsSaving ? 'Saving...' : 'Save Settings'}
-	</button>
-</form>
+	</form>
+</SettingsSection>
 
 <QuarterDialog
 	bind:open={quarterState.quarterDialogOpen}
@@ -96,32 +113,27 @@
 <Dialog
 	open={settingsState.unsavedGlobalDialogOpen}
 	title="Unsaved Global Settings"
-	description="You have unsaved changes in Global Settings."
+	description="You have unsaved changes in General."
 	onClose={() => settingsState.keepEditingGlobalSettings()}
 >
 	<div class="space-y-5">
-		<div
-			class="rounded-xl border border-primary/25 bg-primary/10 p-4 text-sm leading-6 text-foreground"
-		>
-			<div class="label-mono text-primary">Review Changes</div>
-			<p class="mt-2 text-muted-foreground">
-				Save your global configuration before continuing, discard the edits to restore saved values,
-				or keep editing the current form.
-			</p>
-		</div>
+		<p class="text-sm leading-6 text-muted-foreground">
+			Save your changes before continuing, discard them to restore the saved values, or keep
+			editing.
+		</p>
 
 		<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
 			<button
 				type="button"
 				onclick={() => settingsState.keepEditingGlobalSettings()}
-				class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
+				class="btn btn-secondary"
 			>
 				Keep Editing
 			</button>
 			<button
 				type="button"
 				onclick={() => settingsState.discardGlobalSettingsChanges()}
-				class="rounded-md border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+				class="btn btn-danger"
 			>
 				Discard Changes
 			</button>
@@ -129,12 +141,12 @@
 				type="button"
 				onclick={() => settingsState.saveGlobalSettingsFromDialog()}
 				disabled={settingsState.globalSettingsSaving}
-				class="inline-flex items-center justify-center gap-2 rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+				class="btn btn-primary"
 			>
 				{#if settingsState.globalSettingsSaving}
 					<Spinner />
 				{/if}
-				{settingsState.globalSettingsSaving ? 'Saving...' : 'Save Changes'}
+				{settingsState.globalSettingsSaving ? 'Saving…' : 'Save Changes'}
 			</button>
 		</div>
 	</div>

@@ -34,13 +34,7 @@
 	<div class="px-4 py-5 md:px-8 lg:px-10">
 		<EmptyState tone="warning" title="SF2 reports are unavailable" description={loadError}>
 			{#snippet actions()}
-				<button
-					type="button"
-					onclick={onRetry}
-					class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
-				>
-					Retry
-				</button>
+				<button type="button" onclick={onRetry} class="btn btn-secondary"> Retry </button>
 			{/snippet}
 		</EmptyState>
 	</div>
@@ -53,12 +47,7 @@
 				'Import an SF2 workbook or create one from the bundled template first.'}
 		>
 			{#snippet actions()}
-				<a
-					href={resolve('/settings')}
-					class="control-ring inline-flex rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-accent"
-				>
-					Open SF2 Settings
-				</a>
+				<a href={resolve('/settings')} class="btn btn-primary"> Open SF2 Settings </a>
 			{/snippet}
 		</EmptyState>
 	</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Check, ChevronDown, Search } from 'lucide-svelte';
 	import Dialog from './Dialog.svelte';
 	import type { Student } from '$lib/api';
 
@@ -51,90 +52,63 @@
 		onclick={() => (open = true)}
 		aria-haspopup="dialog"
 		aria-expanded={open}
-		class="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-surface focus:ring-2 focus:ring-primary focus:outline-none"
+		class="field flex items-center justify-between gap-2 text-left"
 	>
-		<span class={selectedStudent ? 'font-medium text-foreground' : 'text-muted-foreground'}>
+		<span
+			class={selectedStudent
+				? 'truncate font-medium text-foreground'
+				: 'truncate text-muted-foreground'}
+		>
 			{selectedStudent ? selectedStudent.name : placeholder}
 		</span>
-		<svg
-			class="size-4 text-muted-foreground"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<path d="m6 9 6 6 6-6" />
-		</svg>
+		<ChevronDown class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
 	</button>
 </div>
 
 <Dialog
 	{open}
-	title="Select Student"
-	description="Search for a student to filter records."
+	title="Select student"
+	description="Search the roster to filter records."
 	onClose={() => (open = false)}
 >
-	<div class="space-y-4">
-		<div class="relative">
-			<svg
-				class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<circle cx="11" cy="11" r="8" />
-				<path d="m21 21-4.3-4.3" />
-			</svg>
+	<div class="space-y-3">
+		<div class="search-field">
+			<Search aria-hidden="true" />
 			<input
 				type="text"
 				bind:value={query}
-				placeholder="Search by name..."
-				class="h-10 w-full rounded-md border border-border bg-background pr-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				placeholder="Search by name"
+				class="field pl-[31px]"
 				autocomplete="off"
 			/>
 		</div>
 
-		<ul
-			class="max-h-[300px] divide-y divide-border overflow-y-auto rounded-xl border border-border bg-surface/30"
-		>
+		<ul class="max-h-[320px] overflow-y-auto rounded-lg border border-border bg-card p-1">
 			<li>
 				<button
 					onclick={handleClear}
-					class="flex w-full items-center px-4 py-3 text-left text-sm font-medium text-primary transition-colors hover:bg-surface"
+					class="flex w-full items-center rounded-md px-2.5 py-2 text-left text-[13px] font-medium text-primary transition-colors hover:bg-surface"
 				>
-					All Students (Clear selection)
+					All students
+					<span class="ml-1.5 text-muted-foreground">— clear selection</span>
 				</button>
 			</li>
 			{#if filteredStudents.length === 0}
-				<li class="py-10 text-center text-sm text-muted-foreground">No students found.</li>
+				<li class="px-3 py-8 text-center text-[13px] text-muted-foreground">No students found.</li>
 			{:else}
 				{#each filteredStudents as s (s.id)}
 					<li>
 						<button
 							onclick={() => handleSelect(s.id)}
-							class="group flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-surface"
+							class="group flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-surface"
 						>
-							<div class="min-w-0 flex-1">
-								<div class="truncate font-medium group-hover:text-primary">{s.name}</div>
-							</div>
+							<span class="min-w-0 flex-1 truncate text-[13px] font-medium">{s.name}</span>
 							{#if s.id === selectedId}
-								<svg
-									class="size-4 text-primary"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="3"
+								<Check
+									class="size-3.5 shrink-0 text-primary"
+									strokeWidth={2.4}
 									aria-hidden="true"
-								>
-									<polyline points="20 6 9 17 4 12" />
-								</svg>
+								/>
 							{/if}
 						</button>
 					</li>
@@ -143,12 +117,7 @@
 		</ul>
 	</div>
 
-	<div class="flex justify-end gap-2 border-t border-border pt-4">
-		<button
-			onclick={() => (open = false)}
-			class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
-		>
-			Cancel
-		</button>
+	<div class="flex justify-end border-t border-border pt-3">
+		<button onclick={() => (open = false)} class="btn btn-secondary">Cancel</button>
 	</div>
 </Dialog>

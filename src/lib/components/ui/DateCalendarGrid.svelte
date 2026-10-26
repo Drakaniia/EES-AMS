@@ -4,6 +4,8 @@
 	 * Renders the month navigation + day grid.
 	 * The parent handles view-specific header text and action buttons.
 	 */
+	import { ChevronLeft, ChevronRight } from 'lucide-svelte';
+
 	type Props = {
 		month: Date;
 		selectedDate: Date | null;
@@ -76,7 +78,9 @@
 		const daysInMonth = getDaysInMonth(month);
 		const firstDay = getFirstDayOfMonth(month);
 		const days: (Date | null)[] = [];
-		for (let i = 0; i < firstDay; i++) days.push(null);
+		// Start the week on Monday, the way a school week reads.
+		const leading = (firstDay + 6) % 7;
+		for (let i = 0; i < leading; i++) days.push(null);
 		for (let i = 1; i <= daysInMonth; i++) {
 			days.push(new Date(month.getFullYear(), month.getMonth(), i));
 		}
@@ -98,63 +102,35 @@
 		'December'
 	] as const;
 
-	const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const;
+	const weekDays = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
 </script>
 
-<div class="space-y-4">
-	<!-- Month navigation -->
+<div class="space-y-3">
 	<div class="flex items-center justify-between">
-		<button
-			onclick={() => onNavigate?.(-1)}
-			class="p-1 text-muted-foreground transition-colors hover:text-foreground"
-			aria-label="Previous month"
-		>
-			<svg
-				class="size-5"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<polyline points="15 18 9 12 15 6"></polyline>
-			</svg>
+		<button onclick={() => onNavigate?.(-1)} class="icon-btn" aria-label="Previous month">
+			<ChevronLeft class="size-4" aria-hidden="true" />
 		</button>
 
 		<div class="text-center">
-			<div class="font-medium">{monthNames[month.getMonth()]}</div>
-			<div class="text-sm text-muted-foreground">{month.getFullYear()}</div>
+			<div class="text-[14px] font-semibold tracking-[-0.01em]">
+				{monthNames[month.getMonth()]}
+			</div>
+			<div class="text-[11px] font-medium text-muted-foreground">{month.getFullYear()}</div>
 		</div>
 
-		<button
-			onclick={() => onNavigate?.(1)}
-			class="p-1 text-muted-foreground transition-colors hover:text-foreground"
-			aria-label="Next month"
-		>
-			<svg
-				class="size-5"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<polyline points="9 18 15 12 9 6"></polyline>
-			</svg>
+		<button onclick={() => onNavigate?.(1)} class="icon-btn" aria-label="Next month">
+			<ChevronRight class="size-4" aria-hidden="true" />
 		</button>
 	</div>
 
-	<!-- Calendar grid -->
-	<div class="grid grid-cols-7 gap-1">
+	<div class="grid grid-cols-7 gap-y-1">
 		{#each weekDays as day, i (`header-${i}`)}
-			<div class="py-2 text-center font-mono text-xs text-muted-foreground">{day}</div>
+			<div class="pb-1 text-center text-[10.5px] font-semibold text-muted-foreground">{day}</div>
 		{/each}
 
 		{#each calendarDays as day, i (`day-${i}`)}
 			{#if day === null}
-				<div class="p-2"></div>
+				<div></div>
 			{:else}
 				{@const dateDisabled = isDisabled(day)}
 				{@const dateSelected = isSelected(day)}
@@ -162,11 +138,12 @@
 				<button
 					onclick={() => handleDateSelect(day)}
 					disabled={dateDisabled}
-					class="relative rounded-md p-2 text-sm transition-colors
-						{dateDisabled ? 'cursor-not-allowed text-muted-foreground/30' : ''}
-						{!dateDisabled && !dateSelected ? 'cursor-pointer hover:bg-surface' : ''}
-						{dateSelected ? 'cursor-default bg-primary text-primary-foreground' : ''}
-						{dateToday && !dateSelected ? 'border border-border' : ''}"
+					class="calendar-day relative mx-auto grid size-8 place-items-center rounded-md text-[12.5px] font-medium transition-colors
+						{dateDisabled ? 'cursor-not-allowed text-muted-foreground/35' : ''}
+						{!dateDisabled && !dateSelected ? 'hover:bg-surface' : ''}
+						{dateSelected ? 'bg-primary font-semibold text-primary-foreground' : ''}
+						{dateToday && !dateSelected ? 'ring-1 ring-border' : ''}"
+					aria-pressed={dateSelected}
 				>
 					{day.getDate()}
 				</button>

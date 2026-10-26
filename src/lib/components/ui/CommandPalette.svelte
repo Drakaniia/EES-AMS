@@ -1,11 +1,51 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { CornerDownLeft, FileText, Search, UserRound, Zap } from 'lucide-svelte';
+	import {
+		BookOpen,
+		CornerDownLeft,
+		DatabaseBackup,
+		FileSpreadsheet,
+		FileText,
+		GraduationCap,
+		LayoutDashboard,
+		RefreshCw,
+		ScanLine,
+		Search,
+		Settings,
+		SlidersHorizontal,
+		UserRound,
+		UsersRound,
+		Zap
+	} from 'lucide-svelte';
 	import { commandPaletteStore as store } from '$lib/stores/command-palette.svelte';
-	import { filterPaletteItems, type PaletteItem } from '$lib/command-palette';
+	import { filterPaletteItems, type PaletteIcon, type PaletteItem } from '$lib/command-palette';
+	import { enterPanel } from '$lib/motion';
+
+	const ICONS: Record<PaletteIcon, typeof FileText> = {
+		reports: FileSpreadsheet,
+		attendance: ScanLine,
+		overview: LayoutDashboard,
+		logs: FileText,
+		students: UsersRound,
+		settings: Settings,
+		classes: GraduationCap,
+		workbook: BookOpen,
+		data: DatabaseBackup,
+		general: SlidersHorizontal,
+		update: RefreshCw
+	};
+
+	/** The item's own icon, else one that names its group. */
+	function iconFor(item: PaletteItem) {
+		if (item.icon) return ICONS[item.icon];
+		if (item.group === 'Students') return UserRound;
+		if (item.group === 'Actions') return Zap;
+		return FileText;
+	}
 
 	let inputEl = $state<HTMLInputElement | null>(null);
 	let resultsEl = $state<HTMLDivElement | null>(null);
+	let panelEl = $state<HTMLDivElement | null>(null);
 	let previouslyFocused: HTMLElement | null = null;
 
 	type Row =
@@ -45,7 +85,10 @@
 	$effect(() => {
 		if (store.open) {
 			previouslyFocused = document.activeElement as HTMLElement | null;
-			tick().then(() => inputEl?.focus());
+			tick().then(() => {
+				inputEl?.focus();
+				if (panelEl) enterPanel(panelEl, { from: { opacity: 0, scale: 0.985, y: -10 } });
+			});
 		} else {
 			if (previouslyFocused && previouslyFocused.isConnected) previouslyFocused.focus();
 			previouslyFocused = null;
@@ -111,13 +154,18 @@
 		></button>
 		<div class="palette-position">
 			<div
-				class="surface-panel palette-panel"
+				bind:this={panelEl}
+				class="palette-panel"
 				role="dialog"
 				aria-modal="true"
 				aria-label="Command palette"
 			>
 				<div class="palette-input-row">
-					<Search class="size-[18px] shrink-0 text-muted-foreground" aria-hidden="true" />
+					<Search
+						class="size-[17px] shrink-0 text-muted-foreground"
+						strokeWidth={2}
+						aria-hidden="true"
+					/>
 					<input
 						bind:this={inputEl}
 						bind:value={store.query}
@@ -139,6 +187,7 @@
 							{#if row.kind === 'group'}
 								<div class="palette-group-label">{row.label}</div>
 							{:else}
+								{@const Icon = iconFor(row.item)}
 								<button
 									type="button"
 									role="option"
@@ -150,13 +199,7 @@
 									onclick={() => store.run(row.item)}
 								>
 									<span class="palette-item-icon" aria-hidden="true">
-										{#if row.item.group === 'Students'}
-											<UserRound class="size-3.5" />
-										{:else if row.item.group === 'Actions'}
-											<Zap class="size-3.5" />
-										{:else}
-											<FileText class="size-3.5" />
-										{/if}
+										<Icon class="size-3.5" strokeWidth={1.9} />
 									</span>
 									<span class="palette-item-label">{row.item.label}</span>
 									<span class="palette-item-hint">{row.item.hint}</span>
@@ -186,6 +229,8 @@
 		z-index: 80;
 	}
 
+	/* Dim the page; no blur on the scrim. One translucent material (the title
+	   bar) is enough for the whole product. */
 	.palette-backdrop {
 		position: absolute;
 		inset: 0;
@@ -193,9 +238,7 @@
 		height: 100%;
 		border: none;
 		padding: 0;
-		background: color-mix(in oklab, var(--color-foreground) 38%, transparent);
-		backdrop-filter: blur(2px);
-		-webkit-backdrop-filter: blur(2px);
+		background: var(--scrim);
 	}
 
 	.palette-position {
@@ -204,25 +247,30 @@
 		display: flex;
 		align-items: flex-start;
 		justify-content: center;
-		padding: clamp(3.5rem, 12vh, 7rem) 1rem 1rem;
+		padding: clamp(3rem, 11vh, 6.5rem) 1rem 1rem;
 		pointer-events: none;
 	}
 
 	.palette-panel {
 		display: flex;
-		width: min(640px, 100%);
+		width: min(620px, 100%);
 		flex-direction: column;
 		overflow: hidden;
 		pointer-events: auto;
-		box-shadow: var(--shadow-soft);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-2xl);
+		background: var(--color-card);
+		box-shadow: var(--shadow-lifted);
+		transform-origin: top center;
 	}
 
 	/* ── Input ─────────────────────────────────────── */
 	.palette-input-row {
 		display: flex;
 		align-items: center;
-		gap: 0.625rem;
-		padding: 0.875rem 1rem;
+		gap: 10px;
+		height: 52px;
+		padding: 0 14px;
 		border-bottom: 1px solid var(--color-border);
 	}
 
@@ -233,6 +281,7 @@
 		outline: none;
 		background: transparent;
 		font-size: 15px;
+		letter-spacing: -0.01em;
 		color: var(--color-foreground);
 	}
 
@@ -243,64 +292,68 @@
 	.palette-kbd {
 		flex-shrink: 0;
 		border: 1px solid var(--color-border);
-		border-radius: 6px;
-		background: var(--surface-soft);
-		padding: 2px 7px;
-		font-family: var(--font-mono);
+		border-radius: 4px;
+		background: var(--color-surface);
+		padding: 1px 6px;
+		font-family: var(--font-sans);
 		font-size: 10px;
 		font-weight: 600;
 		color: var(--color-muted-foreground);
-		text-transform: uppercase;
 	}
 
 	/* ── Results ───────────────────────────────────── */
 	.palette-results {
-		max-height: min(52vh, 420px);
+		max-height: min(50vh, 400px);
 		overflow-y: auto;
-		padding: 0.5rem;
+		padding: 6px;
 	}
 
 	.palette-group-label {
-		padding: 0.5rem 0.625rem 0.3rem;
-		font-family: var(--font-mono);
+		padding: 9px 8px 4px;
 		font-size: 11px;
-		font-weight: 700;
-		letter-spacing: 0.06em;
+		font-weight: 600;
+		letter-spacing: 0.005em;
 		color: var(--color-muted-foreground);
-		text-transform: uppercase;
 	}
 
 	.palette-item {
 		display: flex;
 		width: 100%;
 		align-items: center;
-		gap: 0.625rem;
+		gap: 9px;
+		height: 36px;
 		border: none;
-		border-radius: var(--radius-lg);
+		border-radius: var(--radius-sm);
 		background: transparent;
-		padding: 0.5rem 0.625rem;
-		font-size: 14px;
+		padding: 0 8px;
+		font-size: 13.5px;
 		text-align: left;
 		color: var(--color-foreground);
+		transition: background-color 110ms ease;
 	}
 
 	.palette-item:hover:not(.selected) {
-		background: var(--surface-soft);
+		background: var(--color-surface);
 	}
 
 	.palette-item.selected {
-		background: color-mix(in oklab, var(--color-primary) 13%, transparent);
+		background: var(--color-fill);
 	}
 
 	.palette-item-icon {
 		display: grid;
-		width: 26px;
-		height: 26px;
+		width: 24px;
+		height: 24px;
 		flex-shrink: 0;
 		place-items: center;
-		border-radius: 8px;
-		background: var(--surface-soft);
+		border-radius: 6px;
+		background: var(--color-surface);
 		color: var(--color-muted-foreground);
+	}
+
+	.palette-item.selected .palette-item-icon {
+		background: var(--color-card);
+		color: var(--color-primary);
 	}
 
 	.palette-item-label {
@@ -313,14 +366,13 @@
 
 	.palette-item-hint {
 		flex-shrink: 0;
-		font-family: var(--font-mono);
 		font-size: 11px;
 		color: var(--color-muted-foreground);
 	}
 
 	.palette-empty {
-		padding: 1.5rem 0.75rem;
-		font-size: 14px;
+		padding: 28px 12px;
+		font-size: 13px;
 		text-align: center;
 		color: var(--color-muted-foreground);
 	}
@@ -328,16 +380,16 @@
 	/* ── Footer ────────────────────────────────────── */
 	.palette-footer {
 		display: flex;
-		gap: 1.1rem;
+		gap: 16px;
 		border-top: 1px solid var(--color-border);
-		padding: 0.625rem 1rem;
+		background: color-mix(in oklab, var(--color-surface) 55%, var(--color-card));
+		padding: 8px 14px;
 	}
 
 	.palette-footer-hint {
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		font-family: var(--font-mono);
 		font-size: 11px;
 		color: var(--color-muted-foreground);
 	}

@@ -2,7 +2,15 @@
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
 	import { updateStore } from '$lib/stores/update.svelte';
-	import { FileSpreadsheet, ScanLine, LayoutDashboard, FileText, UsersRound, Search, Settings } from 'lucide-svelte';
+	import {
+		FileSpreadsheet,
+		ScanLine,
+		LayoutDashboard,
+		FileText,
+		UsersRound,
+		Search,
+		Settings
+	} from 'lucide-svelte';
 	import { commandPaletteStore } from '$lib/stores/command-palette.svelte';
 
 	const navItems = [
@@ -19,11 +27,9 @@
 		if (href === '/attendance') return pathname === href || pathname === '/attendance/';
 		return pathname === href || pathname.startsWith(`${href}/`);
 	}
-
 </script>
 
 <div class="title-bar" data-tauri-drag-region>
-	<!-- Nav tabs -->
 	<nav class="title-nav" aria-label="Primary navigation" data-tauri-drag-region>
 		{#each navItems as item (item.href)}
 			{@const active = isActive(item.href, page.url.pathname)}
@@ -34,11 +40,8 @@
 				class="title-nav-link"
 				class:active
 			>
-				<Icon class="size-[15px] shrink-0" aria-hidden="true" />
+				<Icon class="size-[15px] shrink-0" strokeWidth={1.9} aria-hidden="true" />
 				<span class="title-nav-label">{item.label}</span>
-				{#if active}
-					<span class="title-nav-indicator" aria-hidden="true"></span>
-				{/if}
 				{#if item.href === '/settings' && updateStore.badgeVisible}
 					<span class="title-badge" title="Update available" aria-hidden="true"></span>
 				{/if}
@@ -46,10 +49,8 @@
 		{/each}
 	</nav>
 
-	<!-- Spacer -->
 	<div class="title-spacer" data-tauri-drag-region></div>
 
-	<!-- Command palette trigger -->
 	<button
 		type="button"
 		class="title-search"
@@ -57,31 +58,29 @@
 		aria-label="Search commands (Ctrl+K)"
 		onclick={() => commandPaletteStore.openPalette()}
 	>
-		<Search class="size-3.5" aria-hidden="true" />
+		<Search class="size-3.5" strokeWidth={2} aria-hidden="true" />
 		<span class="title-search-label">Search</span>
 		<kbd class="title-search-kbd">Ctrl K</kbd>
 	</button>
 </div>
 
 <style>
+	/* The only translucent material in the product. Content scrolls beneath it;
+	   nothing else earns a blur. */
 	.title-bar {
 		display: flex;
 		align-items: center;
-		height: 48px;
-		padding: 0 8px 0 12px;
-		background: rgba(253, 251, 249, 0.72);
-		backdrop-filter: blur(20px) saturate(180%);
-		-webkit-backdrop-filter: blur(20px) saturate(180%);
-		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+		height: 46px;
+		padding: 0 10px;
+		background: var(--chrome);
+		backdrop-filter: blur(24px) saturate(180%);
+		-webkit-backdrop-filter: blur(24px) saturate(180%);
+		border-bottom: 1px solid var(--chrome-border);
 		user-select: none;
 		-webkit-app-region: drag;
 		position: relative;
 		z-index: 50;
-	}
-
-	:global(.dark) .title-bar {
-		background: rgba(18, 18, 20, 0.72);
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		flex-shrink: 0;
 	}
 
 	@media (prefers-reduced-transparency: reduce) {
@@ -96,43 +95,38 @@
 	.title-nav {
 		display: flex;
 		align-items: center;
-		gap: 2px;
+		gap: 1px;
 		-webkit-app-region: no-drag;
 	}
+
 	.title-nav-link {
 		position: relative;
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		height: 32px;
-		padding: 0 12px;
-		border-radius: 8px;
-		font-size: 13px;
+		height: 30px;
+		padding: 0 10px;
+		border-radius: 7px;
+		font-size: 12.5px;
 		font-weight: 500;
+		letter-spacing: -0.005em;
 		color: var(--color-muted-foreground);
 		text-decoration: none;
-		transition:
-			background-color 150ms ease,
-			color 150ms ease;
 		white-space: nowrap;
+		transition:
+			background-color 140ms ease,
+			color 140ms ease;
 	}
+
 	.title-nav-link:hover {
-		background: color-mix(in oklab, var(--color-surface) 70%, transparent);
+		background: color-mix(in oklab, var(--color-foreground) 5%, transparent);
 		color: var(--color-foreground);
 	}
+
 	.title-nav-link.active {
+		background: color-mix(in oklab, var(--color-foreground) 8%, transparent);
 		color: var(--color-foreground);
 		font-weight: 600;
-	}
-	.title-nav-indicator {
-		position: absolute;
-		bottom: -1px;
-		left: 50%;
-		transform: translateX(-50%);
-		width: 16px;
-		height: 2px;
-		border-radius: 1px;
-		background: var(--color-primary);
 	}
 
 	/* ── Spacer ───────────────────────────────────── */
@@ -145,41 +139,48 @@
 	.title-search {
 		display: flex;
 		align-items: center;
-		gap: 6px;
-		width: 220px;
-		height: 32px;
-		margin-right: 4px;
-		border: 1px solid var(--color-border);
-		border-radius: 8px;
-		background: transparent;
-		padding: 0 10px;
+		gap: 7px;
+		width: 196px;
+		height: 30px;
+		margin-right: 2px;
+		border: 1px solid transparent;
+		border-radius: 7px;
+		background: color-mix(in oklab, var(--color-foreground) 4%, transparent);
+		padding: 0 8px;
 		color: var(--color-muted-foreground);
 		-webkit-app-region: no-drag;
 		transition:
-			background-color 150ms ease,
-			border-color 150ms ease,
-			color 150ms ease;
+			background-color 140ms ease,
+			border-color 140ms ease,
+			color 140ms ease;
 	}
+
 	.title-search:hover {
-		background: color-mix(in oklab, var(--color-surface) 70%, transparent);
-		border-color: color-mix(in oklab, var(--color-primary) 38%, var(--color-border));
+		background: color-mix(in oklab, var(--color-foreground) 7%, transparent);
 		color: var(--color-foreground);
 	}
+
+	.title-search:active {
+		transform: scale(0.99);
+	}
+
 	.title-search-label {
 		flex: 1;
 		text-align: left;
-		font-size: 13px;
+		font-size: 12.5px;
 		white-space: nowrap;
 	}
+
 	.title-search-kbd {
 		flex-shrink: 0;
 		border: 1px solid var(--color-border);
-		border-radius: 5px;
-		background: var(--surface-soft);
+		border-radius: 4px;
+		background: var(--color-card);
 		padding: 1px 5px;
-		font-family: var(--font-mono);
+		font-family: var(--font-sans);
 		font-size: 10px;
 		font-weight: 600;
+		letter-spacing: 0.01em;
 		color: var(--color-muted-foreground);
 	}
 
@@ -188,9 +189,23 @@
 		position: absolute;
 		top: 5px;
 		right: 5px;
-		width: 6px;
-		height: 6px;
+		width: 5px;
+		height: 5px;
 		border-radius: 50%;
-		background: oklch(0.6 0.22 27);
+		background: var(--color-primary);
+	}
+
+	@media (max-width: 900px) {
+		.title-nav-label {
+			display: none;
+		}
+
+		.title-nav-link {
+			padding: 0 8px;
+		}
+
+		.title-search {
+			width: 124px;
+		}
 	}
 </style>

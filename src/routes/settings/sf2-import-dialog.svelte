@@ -60,21 +60,11 @@
 			{#if !validation.hasDiscrepancies}
 				<p>No disagreements. Importing adopts the workbook's roster as-is.</p>
 			{/if}
-			<div class="flex justify-end gap-3">
-				<button
-					type="button"
-					onclick={onCancel}
-					disabled={busy}
-					class="inline-flex items-center gap-2 rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-				>
+			<div class="flex justify-end gap-2 border-t border-border pt-3">
+				<button type="button" onclick={onCancel} disabled={busy} class="btn btn-secondary">
 					Cancel
 				</button>
-				<button
-					type="button"
-					onclick={onProceed}
-					disabled={busy}
-					class="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-				>
+				<button type="button" onclick={onProceed} disabled={busy} class="btn btn-primary">
 					{#if busy}
 						<Spinner />
 					{/if}

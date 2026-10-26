@@ -45,7 +45,7 @@
 
 <Dialog
 	{open}
-	title="SF2 Workbook Details"
+	title="SF2 workbook details"
 	description="Edit the header fields that are written into the SF2 workbook before export."
 	maxWidth="2xl"
 	{onClose}
@@ -58,7 +58,7 @@
 			<input
 				value={reportMonthLabel(draftReportMonth || workbookSettings?.reportMonth || '')}
 				disabled={true}
-				class="h-10 w-full cursor-not-allowed rounded-md border border-border bg-muted/30 px-3 text-sm text-muted-foreground opacity-60"
+				class="field cursor-not-allowed bg-surface text-muted-foreground"
 				title="Use the 'Switch month' button to change the report month"
 			/>
 		</label>
@@ -75,26 +75,20 @@
 
 	<div class="flex flex-wrap items-center justify-between gap-3 pt-2">
 		{#if hasModalDraftChanges}
-			<p class="text-xs text-amber-600">You have unsaved changes.</p>
+			<p class="text-[11.5px] font-medium text-amber-700 dark:text-amber-400">Unsaved changes</p>
 		{:else}
 			<p class="text-xs text-muted-foreground">No changes detected.</p>
 		{/if}
 		<div class="flex gap-2">
-			<button
-				type="button"
-				onclick={onClose}
-				class="control-ring h-10 rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-surface"
-			>
-				Cancel
-			</button>
+			<button type="button" onclick={onClose} class="btn btn-secondary">Cancel</button>
 			<button
 				type="button"
 				onclick={onSave}
 				disabled={!hasModalDraftChanges || modalSaving || savingDetails}
-				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+				class="btn btn-primary"
 			>
-				<Save class="size-4" aria-hidden="true" />
-				{modalSaving ? 'Saving...' : 'Save Details'}
+				<Save class="size-4" aria-hidden="true" strokeWidth={1.9} />
+				{modalSaving ? 'Saving…' : 'Save details'}
 			</button>
 		</div>
 	</div>
@@ -109,7 +103,7 @@
 				onDraftChange?.(field, (event.currentTarget as HTMLInputElement).value);
 			}}
 			disabled={!workbookSettings || modalSaving}
-			class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none disabled:opacity-60"
+			class="field disabled:opacity-60"
 		/>
 	</label>
 {/snippet}

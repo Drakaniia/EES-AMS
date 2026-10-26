@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
-
+	import { animate } from 'motion';
 	import { X } from 'lucide-svelte';
+	import { SPRING, enterPanel, exitPanel, prefersReducedMotion } from '$lib/motion';
 
 	type Props = {
 		open: boolean;
@@ -24,9 +25,14 @@
 	}: Props = $props();
 
 	let panel = $state<HTMLDivElement | null>(null);
+	let scrim = $state<HTMLDivElement | null>(null);
+	/** Held true through the exit animation so the panel can animate out. */
+	let mounted = $state(false);
+	let closing = false;
 	let previousFocus: Element | null = null;
 	let previousBodyOverflow = '';
 	let hasAutoFocused = $state(false);
+
 	const titleId = $derived(
 		`dialog-title-${
 			title
@@ -82,6 +88,38 @@
 		});
 	});
 
+	// Presence: spring in from just below the final position; fade and scale back
+	// out on close. Starting from the live on-screen value is what makes a
+	// re-opened dialog feel grabbable rather than queued.
+	$effect(() => {
+		if (open) {
+			mounted = true;
+			closing = false;
+			tick().then(() => {
+				if (panel) enterPanel(panel, { from: { opacity: 0, scale: 0.97, y: 8 } });
+				if (scrim && !prefersReducedMotion()) {
+					animate(scrim, { opacity: [0, 1] }, { duration: 0.18, ease: 'easeOut' });
+				}
+			});
+			return;
+		}
+
+		if (mounted && !closing) {
+			closing = true;
+			const panelEl = panel;
+			const scrimEl = scrim;
+			Promise.all([
+				panelEl ? exitPanel(panelEl, { to: { opacity: 0, scale: 0.985, y: 4 } }) : null,
+				scrimEl && !prefersReducedMotion()
+					? animate(scrimEl, { opacity: [1, 0] }, { duration: 0.14 }).finished.catch(() => {})
+					: null
+			]).then(() => {
+				mounted = false;
+				closing = false;
+			});
+		}
+	});
+
 	onDestroy(() => {
 		if (typeof document !== 'undefined') document.body.style.overflow = previousBodyOverflow;
 	});
@@ -131,17 +169,18 @@
 	}
 </script>
 
-{#if open}
+{#if mounted}
 	<div
-		class="fixed inset-x-0 top-8 bottom-0 z-40 bg-foreground/45"
+		bind:this={scrim}
+		class="dialog-scrim fixed inset-x-0 top-[46px] bottom-0 z-40"
 		role="presentation"
 		onclick={handleBackdropClick}
 	></div>
 
-	<div class="fixed inset-x-0 top-8 bottom-0 z-50 flex items-center justify-center p-4 sm:p-6">
+	<div class="fixed inset-x-0 top-[46px] bottom-0 z-50 flex items-center justify-center p-4 sm:p-6">
 		<div
 			bind:this={panel}
-			class="surface-panel {widthClass} max-h-[min(86vh,760px)] w-full overflow-hidden"
+			class="dialog-panel {widthClass} max-h-[min(84vh,760px)] w-full overflow-hidden"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby={titleId}
@@ -149,18 +188,18 @@
 			tabindex="-1"
 			onkeydown={handleKeydown}
 		>
-			<div class="panel-header">
+			<div class="dialog-header">
 				<div class="min-w-0 flex-1">
 					<h2
 						id={titleId}
-						class="text-balance-safe text-lg leading-tight font-black text-foreground"
+						class="text-balance-safe text-[17px] leading-tight font-semibold tracking-[-0.018em]"
 					>
 						{title}
 					</h2>
 					{#if description}
 						<p
 							id={descriptionId}
-							class="text-balance-safe mt-1 text-sm leading-5 text-muted-foreground"
+							class="text-balance-safe mt-1 text-[13px] leading-5 text-muted-foreground"
 						>
 							{description}
 						</p>
@@ -170,7 +209,7 @@
 					<button
 						type="button"
 						onclick={handleClose}
-						class="control-ring inline-grid size-9 shrink-0 place-items-center rounded-lg border border-transparent text-muted-foreground hover:border-border hover:bg-surface hover:text-foreground"
+						class="icon-btn shrink-0"
 						aria-label="Close dialog"
 					>
 						<X class="size-4" aria-hidden="true" />
@@ -178,7 +217,7 @@
 				{/if}
 			</div>
 
-			<div class="max-h-[calc(min(86vh,760px)-82px)] overflow-y-auto px-5 py-5">
+			<div class="dialog-body max-h-[calc(min(84vh,760px)-74px)] overflow-y-auto">
 				<div class="space-y-4">
 					{@render children?.()}
 				</div>
@@ -186,3 +225,29 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.dialog-scrim {
+		background: var(--scrim);
+	}
+
+	.dialog-panel {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-2xl);
+		background: var(--color-card);
+		box-shadow: var(--shadow-lifted);
+		transform-origin: center;
+	}
+
+	.dialog-header {
+		display: flex;
+		gap: 12px;
+		align-items: flex-start;
+		justify-content: space-between;
+		padding: 18px 18px 14px;
+	}
+
+	.dialog-body {
+		padding: 0 18px 18px;
+	}
+</style>

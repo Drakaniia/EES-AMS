@@ -119,23 +119,31 @@
 	);
 </script>
 
-<aside class="min-h-0 overflow-y-auto border-t border-border bg-background xl:border-t-0 xl:border-l">
-	<section class="border-b border-border px-5 py-5">
-		<div class="label-mono mb-4 text-primary">Class &amp; month</div>
-		<label class="block text-xs text-muted-foreground" for="reports-class-select">Class</label>
+<aside
+	class="min-h-0 overflow-y-auto border-t border-border bg-background xl:border-t-0 xl:border-l"
+>
+	<section class="border-b border-border px-4 py-4">
+		<p class="label-mono mb-2.5">Class and month</p>
+
+		<label class="block text-[11.5px] font-medium text-muted-foreground" for="reports-class-select">
+			Class
+		</label>
 		<select
 			id="reports-class-select"
 			value={selectedClassId}
 			onchange={(event) => onClassSelect?.(event.currentTarget.value)}
 			disabled={classes.length === 0}
-			class="control-ring mt-1 h-10 w-full rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+			class="field mt-1 font-medium"
 		>
 			{#each classes as item (item.id)}
 				<option value={item.id}>{item.name}</option>
 			{/each}
 		</select>
 
-			<label class="mt-4 block text-xs text-muted-foreground" for="reports-month-switch">
+		<label
+			class="mt-3 block text-[11.5px] font-medium text-muted-foreground"
+			for="reports-month-switch"
+		>
 			Report month
 		</label>
 		<button
@@ -143,17 +151,22 @@
 			type="button"
 			onclick={onSwitchMonth}
 			disabled={!workbookSettings || !activeClassId}
-			class="control-ring mt-1 flex h-12 w-full items-center gap-3 rounded-md border border-border bg-background px-3 text-left transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+			class="control-ring mt-1 flex w-full items-center gap-2.5 rounded-md border border-border bg-card px-3 py-2 text-left transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
 			title="Switch SF2 report month"
 		>
-			<Calendar class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+			<Calendar
+				class="size-3.5 shrink-0 text-muted-foreground"
+				aria-hidden="true"
+				strokeWidth={1.9}
+			/>
 			<span class="min-w-0 flex-1">
-				<span class="block truncate text-sm font-semibold">
-					{reportMonthLabel(reportMonth)}{#if reportYear} {reportYear}{/if}
+				<span class="block truncate text-[13px] font-semibold">
+					{reportMonthLabel(reportMonth)}{#if reportYear}
+						{reportYear}{/if}
 				</span>
-				<span class="block text-xs text-muted-foreground">Tap to switch month</span>
+				<span class="block text-[11px] text-muted-foreground">Change month</span>
 			</span>
-			<ChevronDown class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+			<ChevronDown class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
 		</button>
 
 		<!--
@@ -164,7 +177,7 @@
 		-->
 		{#if needsMonthCreate && createMonthName}
 			<div
-				class="mt-4 rounded-md border border-amber-500/40 bg-amber-50/60 p-3 text-xs leading-5 text-amber-900"
+				class="mt-3 rounded-lg border border-amber-500/30 bg-amber-50/70 p-3 text-[11.5px] leading-5 text-amber-900 dark:border-amber-400/25 dark:bg-amber-950/25 dark:text-amber-200"
 			>
 				<p>
 					Showing {reportMonthLabel(reportMonth)}. Create {reportMonthLabel(createMonthName)} to switch.
@@ -173,51 +186,51 @@
 					type="button"
 					onclick={onCreateMonth}
 					disabled={creatingMonth}
-					class="control-ring mt-2 inline-flex h-8 items-center gap-1.5 rounded-md border border-amber-500/50 bg-background px-2.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+					class="btn btn-secondary btn-sm mt-2"
 				>
 					{#if creatingMonth}
 						<Spinner />
 					{:else}
 						<Plus class="size-3.5" aria-hidden="true" />
 					{/if}
-					{creatingMonth ? 'Creating...' : `Create ${reportMonthLabel(createMonthName)}`}
+					{creatingMonth ? 'Creating…' : `Create ${reportMonthLabel(createMonthName)}`}
 				</button>
 			</div>
 		{/if}
 	</section>
 
-	<section class="border-b border-border px-5 py-5">
+	<section class="border-b border-border px-4 py-4">
 		<button
 			type="button"
 			onclick={onOpenSf2}
 			disabled={!preview?.template || sf2OpenStatus === 'syncing' || !activeClassId}
-			class="control-ring inline-flex h-11 w-full items-center justify-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+			class="btn btn-primary w-full"
 		>
 			{#if sf2OpenStatus === 'syncing'}
 				<Spinner />
-				Opening...
+				Opening…
 			{:else}
-				<ExternalLink class="size-4" aria-hidden="true" />
+				<ExternalLink class="size-4" aria-hidden="true" strokeWidth={1.9} />
 				Open SF2 in Excel
 			{/if}
 		</button>
 	</section>
 
-	<section class="border-b border-border px-5 py-5">
-		<div class="flex items-start justify-between gap-3">
-			<div class="label-mono text-primary">Workbook identity</div>
+	<section class="border-b border-border px-4 py-4">
+		<div class="flex items-center justify-between gap-2">
+			<p class="label-mono">Workbook identity</p>
 			<button
 				type="button"
 				onclick={onEditDetails}
 				disabled={!workbookSettings || savingDetails || !activeClassId}
-				class="control-ring inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+				class="btn btn-ghost btn-sm"
 				title="Edit workbook details"
 			>
-				<Pencil class="size-3.5" aria-hidden="true" />
+				<Pencil class="size-3" aria-hidden="true" />
 				Edit
 			</button>
 		</div>
-		<dl class="mt-4 space-y-3 text-sm">
+		<dl class="mt-2 divide-y divide-border text-[12.5px]">
 			{@render metaRow('Class', preview?.className || selectedClass?.name || 'Unlinked')}
 			{@render metaRow('School ID', draftSchoolId || preview?.template?.schoolId || 'Blank')}
 			{@render metaRow('School Year', draftSchoolYear || preview?.template?.schoolYear || 'Blank')}
@@ -234,27 +247,20 @@
 			)}
 			{@render metaRow('Imported', formatImportedAt(preview?.template?.importedAt))}
 		</dl>
-		<!-- Export readiness badge: pulsing skeleton when the grid is re-reading -->
+
 		{#if gridPending}
-			<div
-				class="mt-4 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs"
-			>
-				<div
-					class="skeleton-pulse size-2 shrink-0 rounded-full bg-muted-foreground/40"
-					aria-hidden="true"
-				></div>
-				<span class="skeleton-pulse text-muted-foreground">Loading preview...</span>
+			<div class="mt-3 flex items-center gap-2 text-[11.5px] text-muted-foreground">
+				<span class="size-1.5 rounded-full bg-muted-foreground/45" aria-hidden="true"></span>
+				Reading the month…
 			</div>
 		{:else if preview?.canExport !== undefined}
-			<div
-				class="mt-4 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs"
-			>
-				<div
-					class="size-2 shrink-0 rounded-full {preview.canExport
+			<div class="mt-3 flex items-center gap-2 text-[11.5px]">
+				<span
+					class="size-1.5 shrink-0 rounded-full {preview.canExport
 						? 'bg-emerald-500'
 						: 'bg-amber-500'}"
 					aria-hidden="true"
-				></div>
+				></span>
 				<span class="text-muted-foreground">
 					{preview.canExport ? 'Ready for export' : 'Needs attention'}
 				</span>
@@ -263,71 +269,56 @@
 
 		<!-- Passive, in place of the old amber recovery panel (spec §12.2). -->
 		{#if !gridPending && preview?.template}
-			<p class="mt-3 text-xs leading-5 text-muted-foreground">
+			<p class="mt-2.5 text-[11px] leading-[1.55] text-muted-foreground">
 				{markCounts.text}{#if markCounts.agrees === false}
-					<span class="block text-amber-700">
+					<span class="mt-1 block font-medium text-amber-700 dark:text-amber-300">
 						The workbook and the app disagree. Nothing will be cleared until they agree.
 					</span>{/if}
 			</p>
 		{/if}
 	</section>
 
-	<section class="px-5 py-5">
+	<section class="px-4 py-4">
 		<div class="flex items-start justify-between gap-3">
 			<div>
-				<div class="label-mono text-primary">Absent list</div>
+				<p class="label-mono">Absent list</p>
 				{#if gridPending}
-					<h2
-						class="skeleton-pulse mt-1 inline-block rounded text-lg font-semibold text-transparent"
-					>
-						&nbsp;&nbsp;&nbsp;entries
-					</h2>
+					<div class="skeleton mt-1.5 h-5 w-24 rounded"></div>
 				{:else}
-					<h2 class="mt-1 text-lg font-semibold">{preview?.absentList.length ?? 0} entries</h2>
+					<h2 class="mt-1 text-[15px] font-semibold tracking-[-0.01em]">
+						{preview?.absentList.length ?? 0}
+						{(preview?.absentList.length ?? 0) === 1 ? 'entry' : 'entries'}
+					</h2>
 				{/if}
 			</div>
-			<UserX class="size-5 text-red-700" aria-hidden="true" />
+			<UserX class="size-4 text-muted-foreground" aria-hidden="true" strokeWidth={1.9} />
 		</div>
 
 		{#if (preview?.absentList.length ?? 0) > 0}
-			<div class="mt-4 max-h-80 space-y-2 overflow-auto pr-1">
+			<ul class="mt-2 max-h-80 divide-y divide-border overflow-auto pr-0.5">
 				{#each preview!.absentList as absence (`${absence.studentId}-${absence.date}`)}
-					<div class="rounded-md border border-border bg-background p-3 text-sm">
-						<div class="font-medium">{absence.studentName}</div>
-						<div class="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+					<li class="py-2">
+						<div class="text-[12.5px] font-medium">{absence.studentName}</div>
+						<div
+							class="mt-0.5 flex items-center justify-between gap-3 text-[11px] text-muted-foreground"
+						>
 							<span>{formatDate(absence.date)}</span>
-							<span>Row {absence.rowIndex}</span>
+							<span class="tabular-nums">Row {absence.rowIndex}</span>
 						</div>
-					</div>
+					</li>
 				{/each}
-			</div>
+			</ul>
 		{:else if showNoAbsences}
-			<p class="mt-4 text-sm leading-6 text-muted-foreground">
-				No absences are currently marked for this report month.
+			<p class="mt-2 text-[12px] leading-5 text-muted-foreground">
+				No absences are marked for this report month.
 			</p>
 		{/if}
 	</section>
 </aside>
 
 {#snippet metaRow(label: string, value: string)}
-	<div class="flex items-center justify-between gap-3">
+	<div class="flex items-center justify-between gap-3 py-1.5">
 		<dt class="text-muted-foreground">{label}</dt>
-		<dd class="font-medium">{value}</dd>
+		<dd class="min-w-0 truncate text-right font-medium">{value}</dd>
 	</div>
 {/snippet}
-
-<style>
-	.skeleton-pulse {
-		animation: skeleton-pulse 1.5s ease-in-out infinite;
-	}
-
-	@keyframes skeleton-pulse {
-		0%,
-		100% {
-			opacity: 0.4;
-		}
-		50% {
-			opacity: 1;
-		}
-	}
-</style>

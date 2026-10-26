@@ -162,31 +162,17 @@
 		<div class="grid gap-4 sm:grid-cols-2">
 			<div class="space-y-2">
 				<label for="edit-date" class="label-mono">Date</label>
-				<input
-					id="edit-date"
-					type="date"
-					bind:value={editDate}
-					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-				/>
+				<input id="edit-date" type="date" bind:value={editDate} class="field" />
 			</div>
 			<div class="space-y-2">
 				<label for="edit-time" class="label-mono">Time</label>
-				<input
-					id="edit-time"
-					type="time"
-					bind:value={editTime}
-					class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-				/>
+				<input id="edit-time" type="time" bind:value={editTime} class="field" />
 			</div>
 		</div>
 
 		<div class="space-y-2">
 			<label for="edit-class" class="label-mono">Class</label>
-			<select
-				id="edit-class"
-				bind:value={editClassId}
-				class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-			>
+			<select id="edit-class" bind:value={editClassId} class="field">
 				<option value="">Unassigned</option>
 				{#each classes as classItem (classItem.id)}
 					<option value={classItem.id}>{classItem.name}</option>
@@ -201,7 +187,7 @@
 				rows="4"
 				bind:value={editReason}
 				placeholder="Example: corrected mistaken tap time..."
-				class="min-h-28 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				class="textarea-field min-h-28 resize-none"
 			></textarea>
 		</div>
 
@@ -210,7 +196,7 @@
 				type="button"
 				disabled={isSavingEdit}
 				onclick={() => (editTarget = null)}
-				class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+				class="btn btn-secondary"
 			>
 				Cancel
 			</button>
@@ -218,7 +204,7 @@
 				type="button"
 				disabled={isSavingEdit || editReason.trim().length < 3}
 				onclick={saveAttendanceEdit}
-				class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+				class="btn btn-primary"
 			>
 				{isSavingEdit ? 'Saving...' : 'Save edit'}
 			</button>
@@ -233,8 +219,8 @@
 	onClose={() => (auditTarget = null)}
 >
 	{#if auditTarget}
-		<div class="rounded-xl border border-border bg-surface/60 p-3">
-			<div class="font-medium">{auditTarget.studentName}</div>
+		<div class="rounded-lg border border-border bg-surface/60 p-3">
+			<div class="text-[13px] font-medium">{auditTarget.studentName}</div>
 			<div class="mt-1 font-mono text-xs text-muted-foreground">{auditTarget.date}</div>
 		</div>
 
@@ -261,9 +247,7 @@
 				{#each auditEntries as entry (entry.id)}
 					<li class="px-4 py-3">
 						<div class="flex flex-wrap items-center justify-between gap-2">
-							<span
-								class="label-mono rounded-pill border border-border bg-surface px-2 py-1 text-[10px]"
-							>
+							<span class="chip capitalize">
 								{entry.action.replace('_', ' ')}
 							</span>
 							<span class="font-mono text-xs text-muted-foreground">
@@ -280,79 +264,38 @@
 </Dialog>
 
 <!-- ── Delete confirmation dialog ────────────────────────────────────────── -->
-{#if deleteTarget}
-	<div
-		class="fixed inset-x-0 top-8 bottom-0 z-40 bg-black/50"
-		role="presentation"
-		onclick={cancelDelete}
-		onkeydown={(e) => {
-			if (e.key === 'Escape') cancelDelete();
-		}}
-	></div>
-
-	<div
-		class="fixed inset-x-0 top-8 bottom-0 z-50 flex items-center justify-center p-4"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="records-delete-dialog-title"
-	>
-		<div class="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-background p-6">
-			<div class="flex flex-col items-center gap-3 text-center">
-				<div class="flex size-12 items-center justify-center rounded-full bg-destructive/10">
-					<svg
-						class="size-6 text-destructive"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<polyline points="3 6 5 6 21 6" />
-						<path
-							d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
-						/>
-					</svg>
-				</div>
-				<div class="w-full text-left">
-					<h2 id="records-delete-dialog-title" class="text-lg font-semibold">
-						Delete attendance records?
-					</h2>
-					<p class="mt-1 text-sm text-muted-foreground">
-						<span class="font-medium text-foreground">{deleteTarget.studentName}</span> attendance
-						on
-						<span class="font-medium text-foreground"> {deleteTarget.date}</span> will be permanently
-						removed.
-					</p>
-				</div>
-			</div>
-
-			<div class="space-y-2">
-				<label for="records-delete-reason" class="label-mono">Reason</label>
-				<textarea
-					id="records-delete-reason"
-					rows="3"
-					bind:value={deleteReason}
-					placeholder="Example: duplicate mistaken tap..."
-					class="min-h-24 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-				></textarea>
-			</div>
-
-			<div class="flex gap-2">
-				<button
-					onclick={cancelDelete}
-					class="flex-1 rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
-				>
-					Cancel
-				</button>
-				<button
-					disabled={deleteReason.trim().length < 3}
-					onclick={confirmDeleteAttendanceRecords}
-					class="flex-1 rounded-pill bg-destructive px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-				>
-					Delete
-				</button>
-			</div>
+<Dialog
+	open={!!deleteTarget}
+	title="Delete attendance records?"
+	description={deleteTarget
+		? `${deleteTarget.studentName} · ${deleteTarget.date} will be permanently removed.`
+		: ''}
+	maxWidth="sm"
+	onClose={cancelDelete}
+>
+	{#if deleteTarget}
+		<div class="space-y-1.5">
+			<label for="records-delete-reason" class="text-[11.5px] font-medium text-muted-foreground">
+				Reason
+			</label>
+			<textarea
+				id="records-delete-reason"
+				rows="3"
+				bind:value={deleteReason}
+				placeholder="Required for the audit log"
+				class="textarea-field min-h-24 resize-none"
+			></textarea>
 		</div>
-	</div>
-{/if}
+
+		<div class="flex justify-end gap-2 border-t border-border pt-3">
+			<button onclick={cancelDelete} class="btn btn-secondary">Cancel</button>
+			<button
+				disabled={deleteReason.trim().length < 3}
+				onclick={confirmDeleteAttendanceRecords}
+				class="btn btn-danger"
+			>
+				Delete records
+			</button>
+		</div>
+	{/if}
+</Dialog>

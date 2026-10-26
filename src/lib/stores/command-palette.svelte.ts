@@ -21,6 +21,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 		keywords: 'sf2 excel deped report monthly matrix',
 		hint: '/reports',
 		group: 'Pages',
+		icon: 'reports',
 		run: () => void goto('/reports')
 	},
 	{
@@ -29,6 +30,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 		keywords: 'take attendance check in mark present',
 		hint: '/attendance',
 		group: 'Pages',
+		icon: 'attendance',
 		run: () => void goto('/attendance')
 	},
 	{
@@ -37,6 +39,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 		keywords: 'today summary dashboard counts',
 		hint: '/attendance/overview',
 		group: 'Pages',
+		icon: 'overview',
 		run: () => void goto('/attendance/overview')
 	},
 	{
@@ -45,6 +48,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 		keywords: 'records audit history entries',
 		hint: '/attendance/logs',
 		group: 'Pages',
+		icon: 'logs',
 		run: () => void goto('/attendance/logs')
 	},
 	{
@@ -53,6 +57,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 		keywords: 'students roster class list',
 		hint: '/students',
 		group: 'Pages',
+		icon: 'students',
 		run: () => void goto('/students')
 	},
 	{
@@ -61,6 +66,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 		keywords: 'configuration preferences options',
 		hint: '/settings',
 		group: 'Pages',
+		icon: 'settings',
 		run: () => void goto('/settings')
 	},
 	{
@@ -69,6 +75,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 		keywords: 'class room sessions schedule',
 		hint: '/settings',
 		group: 'Pages',
+		icon: 'classes',
 		run: () => void goto('/settings#settings-classes')
 	},
 	{
@@ -77,6 +84,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 		keywords: 'sf2 template excel import',
 		hint: '/settings',
 		group: 'Pages',
+		icon: 'workbook',
 		run: () => void goto('/settings#settings-sf2')
 	},
 	{
@@ -85,6 +93,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 		keywords: 'backup restore data google drive',
 		hint: '/settings',
 		group: 'Pages',
+		icon: 'data',
 		run: () => void goto('/settings#settings-backup')
 	},
 	{
@@ -93,6 +102,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 		keywords: 'defaults day start end late time zone',
 		hint: '/settings',
 		group: 'Pages',
+		icon: 'general',
 		run: () => void goto('/settings#settings-global')
 	},
 	{
@@ -101,6 +111,7 @@ const PAGE_ITEMS: PaletteItem[] = [
 		keywords: 'update version upgrade',
 		hint: '/settings',
 		group: 'Pages',
+		icon: 'update',
 		run: () => void goto('/settings#settings-update')
 	}
 ];

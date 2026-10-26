@@ -21,9 +21,7 @@ describe('compareLearnerNames', () => {
 	test('agrees with normalizeLearnerName identity', () => {
 		const names = ['SANTOS, MARIA', 'dela cruz, juan', 'REYES, ANA'];
 		const sorted = [...names].sort(compareLearnerNames);
-		expect(sorted.map(normalizeLearnerName)).toEqual(
-			[...sorted.map(normalizeLearnerName)].sort()
-		);
+		expect(sorted.map(normalizeLearnerName)).toEqual([...sorted.map(normalizeLearnerName)].sort());
 	});
 });
 

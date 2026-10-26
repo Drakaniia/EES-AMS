@@ -60,6 +60,16 @@ async function bindQuitBackup(): Promise<void> {
 			// `destroy()` below must be reached unconditionally: a rejection or a
 			// hang anywhere in the backup used to leave the app unquittable.
 			event.preventDefault();
+			// Leave the screen on the click, not on the backup's completion. The
+			// window used to stay visible for the whole snapshot (up to
+			// QUIT_BACKUP_TIMEOUT_MS), which read as a delayed close. Hiding is
+			// instant and does not stop the webview, so the backup still runs to
+			// completion behind it before `destroy()`.
+			try {
+				await appWindow.hide();
+			} catch (error) {
+				console.warn('could not hide the window before closing', error);
+			}
 			try {
 				// No quit snapshot of throwaway state: it would pose as a real
 				// backup in retention. Manual exports stay available in-session.
@@ -73,7 +83,11 @@ async function bindQuitBackup(): Promise<void> {
 				console.warn('on-quit backup failed; closing anyway', error);
 			}
 			stopScheduledBackups();
-			await appWindow.destroy();
+			try {
+				await appWindow.destroy();
+			} catch (error) {
+				console.warn('could not destroy the window', error);
+			}
 		});
 	} catch (error) {
 		// No window, or the event is unavailable (tests, or a non-Tauri browser

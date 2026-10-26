@@ -45,20 +45,22 @@
 {#if compact}
 	<div
 		role="status"
-		class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-500/40 bg-amber-50 px-4 py-2 text-xs leading-5 text-amber-900"
+		class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-500/30 bg-amber-50 px-4 py-2 text-[12px] leading-5 text-amber-900 dark:border-amber-500/25 dark:bg-amber-950/25 dark:text-amber-200"
 	>
-		<span><strong>Temporary mode</strong> — changes won’t persist after close.</span>
+		<span
+			><strong class="font-semibold">Temporary mode</strong> — changes won’t persist after close.</span
+		>
 		<button
 			type="button"
 			onclick={onRetryDatabase}
 			disabled={databaseStatus.retrying}
-			class="control-ring rounded-pill border border-amber-600/40 bg-background px-3 py-1 text-xs font-semibold hover:bg-surface disabled:opacity-60"
+			class="control-ring rounded-md border border-amber-600/35 bg-background px-2.5 py-1 text-[11.5px] font-semibold hover:bg-surface disabled:opacity-60"
 		>
 			{databaseStatus.retrying ? 'Retrying…' : 'Retry database'}
 		</button>
 		<a
 			href={resolve('/settings')}
-			class="control-ring rounded-pill px-2 py-1 text-xs font-semibold underline underline-offset-2"
+			class="control-ring rounded-md px-2 py-1 text-[11.5px] font-semibold underline underline-offset-2"
 		>
 			Back up now
 		</a>
@@ -66,24 +68,33 @@
 {:else if resolved}
 	<div
 		role="alert"
-		class="mx-auto flex w-full max-w-2xl flex-col gap-4 rounded-2xl border border-border bg-surface p-6 text-left shadow-xl"
+		class="mx-auto flex w-full max-w-2xl flex-col gap-5 rounded-2xl border border-border bg-card p-6 text-left shadow-[var(--shadow-lifted)]"
 	>
 		<div class="flex items-start gap-3">
 			<div
-				class="grid size-10 shrink-0 place-items-center rounded-xl border border-destructive/20 bg-destructive/10 text-destructive"
+				class="grid size-9 shrink-0 place-items-center rounded-full bg-destructive/10 text-destructive"
 				aria-hidden="true"
 			>
-				<TriangleAlert class="size-5" />
+				<TriangleAlert class="size-[18px]" strokeWidth={1.9} />
 			</div>
 			<div class="min-w-0 space-y-1">
-				<h2 class="text-base font-bold text-foreground">Attendance data can’t be opened yet</h2>
-				<p class="text-sm leading-6 text-muted-foreground">{resolved.plain}</p>
+				<h2 class="text-[16px] font-semibold tracking-[-0.015em] text-foreground">
+					Attendance data can’t be opened yet
+				</h2>
+				<p class="text-[13px] leading-5 text-muted-foreground">{resolved.plain}</p>
 			</div>
 		</div>
 
-		<ol class="list-decimal space-y-1 pl-5 text-sm leading-6 text-foreground">
+		<ol class="space-y-1.5 text-[13px] leading-5 text-foreground">
 			{#each resolved.steps as step, index (index)}
-				<li>{step}</li>
+				<li class="flex gap-2.5">
+					<span
+						class="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-surface text-[10px] font-semibold text-muted-foreground"
+					>
+						{index + 1}
+					</span>
+					<span>{step}</span>
+				</li>
 			{/each}
 		</ol>
 
@@ -92,7 +103,7 @@
 				type="button"
 				onclick={() => void databaseStatus.retry()}
 				disabled={databaseStatus.retrying}
-				class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface disabled:opacity-60"
+				class="btn btn-primary"
 			>
 				{databaseStatus.retrying ? 'Retrying…' : 'Retry'}
 			</button>
@@ -100,28 +111,20 @@
 				type="button"
 				onclick={() => void databaseStatus.enterTemporary()}
 				disabled={databaseStatus.retrying}
-				class="control-ring rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-accent disabled:opacity-60"
+				class="btn btn-secondary"
 			>
-				Continue without saving (temporary)
+				Continue without saving
 			</button>
-			<a
-				href={resolve('/settings')}
-				class="control-ring inline-flex items-center rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
-			>
-				Open backup &amp; restore
-			</a>
+			<a href={resolve('/settings')} class="btn btn-secondary">Open backup &amp; restore</a>
 		</div>
 
-		<details class="rounded-xl border border-border bg-background p-3 text-xs">
-			<summary class="cursor-pointer font-semibold text-muted-foreground">Details</summary>
+		<details class="rounded-lg border border-border bg-surface/60 p-3 text-[11.5px]">
+			<summary class="cursor-pointer font-semibold text-muted-foreground">Technical details</summary
+			>
 			<p class="mt-2 font-mono leading-5 break-all whitespace-pre-wrap text-muted-foreground">
 				{resolved.technical}
 			</p>
-			<button
-				type="button"
-				onclick={copyDetails}
-				class="control-ring mt-2 rounded-pill border border-border px-3 py-1 text-xs font-medium hover:bg-surface"
-			>
+			<button type="button" onclick={copyDetails} class="btn btn-secondary btn-sm mt-2">
 				{copied ? 'Copied' : 'Copy details'}
 			</button>
 		</details>

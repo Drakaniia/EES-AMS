@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 const mocks = vi.hoisted(() => ({
 	handler: null as null | ((event: { preventDefault: () => void }) => Promise<void>),
+	hide: vi.fn(async () => {}),
 	destroy: vi.fn(async () => {}),
 	onAppQuit: vi.fn<() => Promise<unknown>>(async () => undefined),
 	stopScheduledBackups: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('@tauri-apps/api/window', () => ({
 			mocks.handler = handler;
 			return () => {};
 		},
+		hide: mocks.hide,
 		destroy: mocks.destroy
 	})
 }));
@@ -54,6 +56,7 @@ async function registerQuitHook(): Promise<
 
 describe('the quit hook', () => {
 	beforeEach(() => {
+		mocks.hide.mockClear();
 		mocks.destroy.mockClear();
 		mocks.stopScheduledBackups.mockClear();
 		mocks.onAppQuit.mockReset().mockResolvedValue(undefined);
@@ -75,6 +78,21 @@ describe('the quit hook', () => {
 
 		expect(mocks.destroy).toHaveBeenCalled();
 		vi.useRealTimers();
+	});
+
+	it('leaves the screen before the quit backup finishes', async () => {
+		let finishBackup: (() => void) | undefined;
+		mocks.onAppQuit.mockImplementation(
+			() => new Promise<void>((resolve) => (finishBackup = resolve))
+		);
+		const handler = await registerQuitHook();
+
+		void handler({ preventDefault: vi.fn() });
+		await vi.waitFor(() => expect(mocks.hide).toHaveBeenCalled());
+		expect(mocks.destroy).not.toHaveBeenCalled();
+
+		finishBackup?.();
+		await vi.waitFor(() => expect(mocks.destroy).toHaveBeenCalled());
 	});
 
 	it('closes the window when the quit backup throws', async () => {

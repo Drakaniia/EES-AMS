@@ -67,7 +67,11 @@ import {
 	resolveFirstSchoolDay,
 	schoolYearStartYear
 } from '$lib/features/sf2/first-school-day';
-import { SF2_ABSENT_MARK, compareLearnerNames, normalizeLearnerName } from '$lib/features/sf2/logic';
+import {
+	SF2_ABSENT_MARK,
+	compareLearnerNames,
+	normalizeLearnerName
+} from '$lib/features/sf2/logic';
 import { monthSheetName } from '$lib/features/sf2/month/workbook-sheets';
 import {
 	matchRosterLearner,

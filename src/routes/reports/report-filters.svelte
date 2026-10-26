@@ -32,16 +32,16 @@
 </script>
 
 {#if fullReview && fullReviewHeaderVisible && preview?.template}
-	<div class="rounded-xl border border-border bg-card p-5 shadow-sm">
+	<div class="rounded-xl border border-border bg-card p-4">
 		<div class="flex flex-wrap items-start justify-between gap-3">
 			<div>
-				<div class="label-mono text-primary">SF2 workbook details</div>
-				<h2 class="mt-1 text-xl font-semibold">
+				<p class="label-mono">SF2 workbook details</p>
+				<h2 class="mt-1 text-[16px] font-semibold tracking-[-0.015em]">
 					{draftSchoolName || preview.template.schoolName || 'Name of School'}
 				</h2>
 			</div>
 		</div>
-		<dl class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+		<dl class="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
 			{@render headerReviewField(
 				'School ID',
 				headerReviewValue(draftSchoolId, preview.template.schoolId, workbookSettings)
@@ -83,8 +83,8 @@
 {/if}
 
 {#snippet headerReviewField(label: string, value: string)}
-	<div class="rounded-md border border-border bg-background px-3 py-2">
-		<dt class="label-mono">{label}</dt>
-		<dd class="mt-1 truncate text-sm font-semibold">{value}</dd>
+	<div class="rounded-md bg-surface/60 px-3 py-2">
+		<dt class="text-[10.5px] font-medium text-muted-foreground">{label}</dt>
+		<dd class="mt-0.5 truncate text-[12.5px] font-semibold">{value}</dd>
 	</div>
 {/snippet}

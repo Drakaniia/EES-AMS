@@ -3,8 +3,8 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import UpdateNotification from '$lib/components/ui/UpdateNotification.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
-	import ClickSpark from '$lib/components/ui/ClickSpark.svelte';
 	import { bootstrapApp } from '$lib/bootstrap';
+	import { themeStore } from '$lib/stores/theme.svelte';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
@@ -14,6 +14,8 @@
 		if (initialLoading) {
 			initialLoading.style.display = 'none';
 		}
+
+		themeStore.init();
 
 		// Fire-and-forget: the bindings above are needed before the first read, but
 		// nothing here blocks paint, and a backend that is not up yet surfaces as a
@@ -28,11 +30,9 @@
 	<div class="content-container">
 		<UpdateNotification />
 
-		<ClickSpark sparkColor="#FF8A4C" sparkSize={8} sparkRadius={12} sparkCount={6} duration={300}>
-			<AppShell>
-				{@render children()}
-			</AppShell>
-		</ClickSpark>
+		<AppShell>
+			{@render children()}
+		</AppShell>
 	</div>
 </div>
 

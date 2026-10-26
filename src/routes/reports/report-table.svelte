@@ -57,26 +57,21 @@
 </script>
 
 <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-	<div class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-		<div>
-			<h2 class="text-xl font-semibold">
-				{previewTemplateGradeLevel} - {previewTemplateSection}
+	<div class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
+		<div class="min-w-0">
+			<p class="label-mono">Report month</p>
+			<h2 class="mt-0.5 truncate text-[15px] leading-tight font-semibold tracking-[-0.015em]">
+				{previewTemplateGradeLevel} — {previewTemplateSection}
 			</h2>
 		</div>
 		<div class="flex flex-wrap items-center gap-2 text-xs">
 			{#if onGenderFilterChange}
-				<div
-					class="flex overflow-hidden rounded-md border border-border bg-surface"
-					role="group"
-					aria-label="Gender filter"
-				>
+				<div class="segmented" role="group" aria-label="Gender filter">
 					<button
 						type="button"
 						aria-pressed={genderFilter === 'all'}
 						onclick={() => onGenderFilterChange('all')}
-						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'all'
-							? 'bg-background text-foreground shadow-sm'
-							: 'text-muted-foreground hover:text-foreground'}"
+						class="segmented-item"
 					>
 						All
 					</button>
@@ -84,9 +79,7 @@
 						type="button"
 						aria-pressed={genderFilter === 'male'}
 						onclick={() => onGenderFilterChange('male')}
-						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'male'
-							? 'bg-background text-foreground shadow-sm'
-							: 'text-muted-foreground hover:text-foreground'}"
+						class="segmented-item"
 					>
 						Male
 					</button>
@@ -94,22 +87,18 @@
 						type="button"
 						aria-pressed={genderFilter === 'female'}
 						onclick={() => onGenderFilterChange('female')}
-						class="px-2.5 py-1.5 text-xs font-medium transition-colors {genderFilter === 'female'
-							? 'bg-background text-foreground shadow-sm'
-							: 'text-muted-foreground hover:text-foreground'}"
+						class="segmented-item"
 					>
 						Female
 					</button>
 				</div>
 			{/if}
 
-			<div class="h-4 w-px bg-border" aria-hidden="true"></div>
-
 			<button
 				type="button"
 				onclick={onPresentAll}
 				disabled={!hasAbsentCells || presentingAll}
-				class="control-ring inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+				class="btn btn-secondary btn-sm"
 				title="Clears all X marks, resetting every cell to Present (empty)"
 			>
 				{#if presentingAll}
@@ -123,7 +112,7 @@
 			<button
 				type="button"
 				onclick={onToggleSidebar}
-				class="control-ring inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-surface"
+				class="btn btn-secondary btn-sm"
 				title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
 			>
 				{#if sidebarCollapsed}

@@ -92,7 +92,7 @@
 	}
 </script>
 
-<Dialog {open} title="Select Date Range" {onClose}>
+<Dialog {open} title="Date range" {onClose}>
 	<div class="relative overflow-hidden">
 		<!-- FROM View -->
 		<div
@@ -105,8 +105,12 @@
 				: 'absolute'}; inset: 0;"
 		>
 			<div class="space-y-4">
-				<div class="text-center">
-					<div class="text-sm font-medium text-muted-foreground">Select FROM date</div>
+				<div class="flex items-center gap-2 text-[12.5px] font-medium text-muted-foreground">
+					<span
+						class="inline-flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground"
+						>1</span
+					>
+					Choose the first day
 				</div>
 
 				<DateCalendarGrid
@@ -122,23 +126,15 @@
 				<!-- Action buttons for FROM -->
 				<div class="flex justify-between gap-2 border-t border-border pt-2">
 					<div class="flex gap-2">
-						<button
-							onclick={handleClear}
-							class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
-						>
-							Clear
-						</button>
-						<button
-							onclick={() => handleToday('from')}
-							class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
-						>
+						<button onclick={handleClear} class="btn btn-secondary btn-sm"> Clear </button>
+						<button onclick={() => handleToday('from')} class="btn btn-secondary btn-sm">
 							Today
 						</button>
 					</div>
 					<button
 						onclick={handleFromConfirm}
 						disabled={!selectedFromDate}
-						class="rounded-pill bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+						class="btn btn-primary btn-sm"
 					>
 						Select
 					</button>
@@ -155,12 +151,16 @@
 				: '0'}; position: {currentView === 'to' ? 'relative' : 'absolute'}; inset: 0;"
 		>
 			<div class="space-y-4">
-				<div class="text-center">
-					<div class="text-sm font-medium text-muted-foreground">Select TO date</div>
+				<div class="flex items-center gap-2 text-[12.5px] font-medium text-muted-foreground">
+					<span
+						class="inline-flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground"
+						>2</span
+					>
+					Choose the last day
 					{#if selectedFromDate}
-						<div class="text-xs text-foreground">
-							From: {new Date(selectedFromDate).toLocaleDateString()}
-						</div>
+						<span class="ml-auto text-[11.5px] text-foreground">
+							From {new Date(selectedFromDate).toLocaleDateString()}
+						</span>
 					{/if}
 				</div>
 
@@ -178,30 +178,17 @@
 				<!-- Action buttons for TO -->
 				<div class="flex justify-between gap-2 border-t border-border pt-2">
 					<div class="flex gap-2">
-						<button
-							onclick={handleClear}
-							class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
-						>
-							Clear
-						</button>
-						<button
-							onclick={() => handleToday('to')}
-							class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
-						>
+						<button onclick={handleClear} class="btn btn-secondary btn-sm"> Clear </button>
+						<button onclick={() => handleToday('to')} class="btn btn-secondary btn-sm">
 							Today
 						</button>
 					</div>
 					<div class="flex gap-2">
-						<button
-							onclick={handlePrevious}
-							class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
-						>
-							Previous
-						</button>
+						<button onclick={handlePrevious} class="btn btn-secondary btn-sm"> Previous </button>
 						<button
 							onclick={handleToConfirm}
 							disabled={!selectedToDate}
-							class="rounded-pill bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+							class="btn btn-primary btn-sm"
 						>
 							Select
 						</button>

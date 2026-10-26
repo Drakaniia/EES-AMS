@@ -14,8 +14,8 @@
 	let { open, currentMonth, activeClassId, onSelect, onClose }: Props = $props();
 </script>
 
-<Dialog {open} title="Switch SF2 Report Month" {onClose}>
-	<div class="grid grid-cols-2 gap-2">
+<Dialog {open} title="Switch SF2 report month" {onClose}>
+	<div class="grid grid-cols-2 gap-1.5">
 		{#each SF2_SCHOOL_MONTHS as month (month.value)}
 			<button
 				type="button"
@@ -24,14 +24,14 @@
 					onSelect(month.value);
 				}}
 				disabled={!activeClassId}
-				class="control-ring flex items-center justify-between gap-2 rounded-md border px-3 py-2.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {month.value ===
+				class="control-ring flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-[12.5px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 {month.value ===
 				currentMonth
-					? 'border-primary bg-primary/10 text-primary'
-					: 'border-border bg-background text-foreground hover:bg-surface'}"
+					? 'border-primary/40 bg-primary/[0.055] text-foreground'
+					: 'border-border bg-card text-foreground hover:bg-surface'}"
 			>
 				<span>{month.label}</span>
 				{#if month.value === currentMonth}
-					<Check class="size-4 shrink-0" aria-hidden="true" />
+					<Check class="size-3.5 shrink-0 text-primary" strokeWidth={2.4} aria-hidden="true" />
 				{/if}
 			</button>
 		{/each}

@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
-	import { AlertCircle, CheckCircle, Download, Info, X } from 'lucide-svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
+	import { AlertCircle, CheckCircle2, Download, Info, X } from 'lucide-svelte';
+	import { enterPanel } from '$lib/motion';
 
 	interface Props {
 		type?: 'info' | 'success' | 'warning' | 'error' | 'update';
@@ -31,27 +32,20 @@
 	}: Props = $props();
 
 	let timeoutId: ReturnType<typeof setTimeout>;
+	let panelEl = $state<HTMLDivElement | null>(null);
 
 	const icons = {
 		info: Info,
-		success: CheckCircle,
+		success: CheckCircle2,
 		warning: AlertCircle,
 		error: AlertCircle,
 		update: Download
 	};
 
-	const colors = {
-		info: 'border-border bg-card text-foreground shadow-xl',
-		success: 'border-primary/25 bg-card text-foreground shadow-xl',
-		warning: 'border-accent/25 bg-card text-foreground shadow-xl',
-		error: 'border-destructive/25 bg-card text-destructive shadow-xl',
-		update: 'border-primary/40 bg-card text-foreground shadow-xl'
-	};
-
-	const iconColors = {
+	const iconTone = {
 		info: 'text-muted-foreground',
 		success: 'text-primary',
-		warning: 'text-accent',
+		warning: 'text-amber-600 dark:text-amber-400',
 		error: 'text-destructive',
 		update: 'text-primary'
 	};
@@ -66,6 +60,11 @@
 		action?.();
 		onAction?.();
 	}
+
+	$effect(() => {
+		if (show)
+			tick().then(() => panelEl && enterPanel(panelEl, { from: { opacity: 0, scale: 1, y: 10 } }));
+	});
 
 	onMount(() => {
 		if (duration > 0) {
@@ -84,38 +83,38 @@
 	onDestroy(cleanup);
 
 	const IconComponent = $derived(icons[type]);
-	const colorClass = $derived(colors[type]);
-	const iconColorClass = $derived(iconColors[type]);
+	const iconColorClass = $derived(iconTone[type]);
 </script>
 
 {#if show}
 	<div
-		class="fixed right-4 bottom-4 z-[70] w-full max-w-sm"
+		class="fixed right-4 bottom-4 z-[70] w-full max-w-[22rem]"
 		role={type === 'error' ? 'alert' : 'status'}
 		aria-live={type === 'error' ? 'assertive' : 'polite'}
 	>
-		<div class="toast-panel flex items-start rounded-lg border p-4 {colorClass}">
-			<div class="shrink-0">
-				{#if actionDisabled && type === 'update'}
-					<span class="mt-2 block size-2 rounded-full bg-orange-600" aria-hidden="true"></span>
-				{:else}
-					<IconComponent class="h-6 w-6 {iconColorClass}" />
-				{/if}
-			</div>
+		<div bind:this={panelEl} class="toast-panel flex items-start gap-3 p-3.5">
+			{#if actionDisabled && type === 'update'}
+				<span class="mt-1.5 block size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true"
+				></span>
+			{:else}
+				<IconComponent class="mt-px size-[18px] shrink-0 {iconColorClass}" strokeWidth={1.9} />
+			{/if}
 
-			<div class="ml-3 flex-1">
+			<div class="min-w-0 flex-1">
 				{#if title}
-					<h3 class="mb-1 text-sm font-semibold">{title}</h3>
+					<h3 class="text-[13px] leading-5 font-semibold tracking-[-0.008em]">{title}</h3>
 				{/if}
 				{#if message}
-					<p class="text-sm leading-5 whitespace-pre-line">{message}</p>
+					<p class="text-[12.5px] leading-[1.5] whitespace-pre-line text-muted-foreground">
+						{message}
+					</p>
 				{/if}
 
 				{#if actionText}
 					<button
 						onclick={handleAction}
 						disabled={actionDisabled}
-						class="mt-3 rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-surface/80 disabled:cursor-not-allowed disabled:opacity-70"
+						class="btn btn-secondary btn-sm mt-2.5"
 					>
 						{actionText}
 					</button>
@@ -123,27 +122,23 @@
 			</div>
 
 			{#if closable}
-				<div class="ml-4 shrink-0">
-					<button
-						onclick={close}
-						class="inline-flex rounded-md p-1.5 transition-colors hover:bg-surface"
-						aria-label="Close notification"
-					>
-						<X class="h-4 w-4" />
-					</button>
-				</div>
+				<button
+					onclick={close}
+					class="icon-btn -mt-1 -mr-1 size-6 shrink-0"
+					aria-label="Close notification"
+				>
+					<X class="size-3.5" aria-hidden="true" />
+				</button>
 			{/if}
 		</div>
 	</div>
 {/if}
 
 <style>
-	/* Opaque panel: Tailwind `bg-card` resolves via CSS vars, but pin a solid
-	   background + real shadow here so the toast never blends with page content. */
 	.toast-panel {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
 		background-color: var(--color-card);
-		box-shadow:
-			var(--shadow-soft),
-			0 1px 2px color-mix(in oklab, var(--color-foreground) 9%, transparent);
+		box-shadow: var(--shadow-lifted);
 	}
 </style>

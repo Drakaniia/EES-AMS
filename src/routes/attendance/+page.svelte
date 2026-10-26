@@ -37,7 +37,7 @@
 				<button
 					type="button"
 					onclick={() => void attendanceState.loadInitial()}
-					class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
+					class="btn btn-secondary"
 				>
 					Retry
 				</button>

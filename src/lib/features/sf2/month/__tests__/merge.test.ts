@@ -681,9 +681,7 @@ describe('a merge of a real bundled template', () => {
 			// A-Z within the male block: CRUZ sorts before DELA CRUZ, so the
 			// added learner takes row 8 and the existing learner moves to 9.
 			expect(getCellText(workbook.getWorksheet(month) as Worksheet, 8, 3)).toBe('CRUZ, PEDRO');
-			expect(getCellText(workbook.getWorksheet(month) as Worksheet, 9, 3)).toBe(
-				'DELA CRUZ, JUAN'
-			);
+			expect(getCellText(workbook.getWorksheet(month) as Worksheet, 9, 3)).toBe('DELA CRUZ, JUAN');
 		}
 		const roster = await db().query<{ student_id: string; row_index: number }>(
 			'SELECT student_id, row_index FROM sf2_month_student_mappings WHERE student_id = ?',

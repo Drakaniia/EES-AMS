@@ -190,28 +190,18 @@
 	>
 		{#snippet actions()}
 			<div class="flex flex-wrap items-center gap-2">
-				<a
-					href={resolve('/reports')}
-					class="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
-				>
-					<FileSpreadsheet class="size-4" />
-					SF2 Workbook
+				<a href={resolve('/attendance/day-overview')} class="btn btn-secondary">
+					<CalendarDays class="size-4" aria-hidden="true" strokeWidth={1.9} />
+					Daily overview
 				</a>
-				<a
-					href={resolve('/attendance/day-overview')}
-					class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
-				>
-					<CalendarDays class="size-4" />
-					Daily Overview
-				</a>
-				<button
-					onclick={onExport}
-					disabled={exportingLogs}
-					class="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-				>
-					<Download class="size-4" />
-					{exportingLogs ? 'Exporting...' : 'Export Logs CSV'}
+				<button onclick={onExport} disabled={exportingLogs} class="btn btn-secondary">
+					<Download class="size-4" aria-hidden="true" strokeWidth={1.9} />
+					{exportingLogs ? 'Exporting…' : 'Export CSV'}
 				</button>
+				<a href={resolve('/reports')} class="btn btn-primary">
+					<FileSpreadsheet class="size-4" aria-hidden="true" strokeWidth={1.9} />
+					SF2 workbook
+				</a>
 			</div>
 		{/snippet}
 	</PageHeader>
@@ -224,13 +214,7 @@
 		<div class="px-4 py-5 md:px-8 lg:px-10">
 			<EmptyState tone="warning" title="Records are unavailable" description={loadError}>
 				{#snippet actions()}
-					<button
-						type="button"
-						onclick={reload}
-						class="control-ring rounded-pill border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-surface"
-					>
-						Retry
-					</button>
+					<button type="button" onclick={reload} class="btn btn-secondary"> Retry </button>
 				{/snippet}
 			</EmptyState>
 		</div>

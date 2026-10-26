@@ -181,28 +181,20 @@
 <PageHeader category="Attendance" title={dynamicTitle} description={dynamicDescription}>
 	{#snippet actions()}
 		<span
-			class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 text-sm font-semibold"
+			class="inline-flex h-9 items-center gap-2 px-1 text-[12.5px] font-medium text-muted-foreground"
 			role="status"
 			title={todayKey}
 		>
-			<CalendarDays class="size-4 text-primary" aria-hidden="true" />
+			<CalendarDays class="size-3.5" aria-hidden="true" strokeWidth={1.9} />
 			<span>{todayLabel}</span>
 		</span>
-		<a href={resolve('/students')} class="btn btn-secondary control-ring">
-			<UsersRound class="size-4" aria-hidden="true" />
+		<a href={resolve('/students')} class="btn btn-secondary">
+			<UsersRound class="size-4" aria-hidden="true" strokeWidth={1.9} />
 			Manage students
 		</a>
-		<a href={resolve(attendanceHref(assignedClass?.id))} class="btn btn-primary control-ring">
-			{#if activeClass}
-				<span class="relative flex h-2 w-2" aria-hidden="true">
-					<span
-						class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"
-					></span>
-					<span class="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
-				</span>
-			{/if}
-			<ScanLine class="size-4" aria-hidden="true" />
-			Take Attendance
+		<a href={resolve(attendanceHref(assignedClass?.id))} class="btn btn-primary">
+			<ScanLine class="size-4" aria-hidden="true" strokeWidth={1.9} />
+			Take attendance
 		</a>
 	{/snippet}
 </PageHeader>
@@ -210,27 +202,29 @@
 <div class="page-frame flex min-h-0 flex-1 flex-col gap-5">
 	{#if sessionSummary}
 		<div
-			class="notice-banner flex flex-col gap-4 p-4 text-primary sm:flex-row sm:items-center sm:justify-between"
+			class="notice-banner flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between"
 			role="status"
 			aria-live="polite"
 		>
-			<div class="flex min-w-0 items-center gap-3">
-				<div
-					class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"
-				>
-					<CheckCircle2 class="size-5" aria-hidden="true" />
-				</div>
+			<div class="flex min-w-0 items-center gap-2.5">
+				<CheckCircle2
+					class="size-[18px] shrink-0 text-primary"
+					aria-hidden="true"
+					strokeWidth={2}
+				/>
 				<div class="min-w-0">
-					<h2 class="text-balance-safe font-semibold">
+					<h2 class="text-balance-safe text-[13px] font-semibold">
 						Session complete: {sessionSummary.className}
 					</h2>
-					<p class="text-balance-safe mt-0.5 text-sm text-primary/80">{sessionSummary.summary}</p>
+					<p class="text-balance-safe mt-0.5 text-[12px] text-muted-foreground">
+						{sessionSummary.summary}
+					</p>
 				</div>
 			</div>
 			<button
 				type="button"
 				onclick={() => (sessionSummary = null)}
-				class="btn btn-secondary control-ring w-fit"
+				class="btn btn-secondary btn-sm w-fit"
 			>
 				Dismiss
 			</button>
@@ -258,11 +252,13 @@
 		<section class="surface-panel p-5" aria-label="Attendance completion">
 			<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 				<div class="min-w-0">
-					<div class="label-mono">Today completion</div>
-					<h2 class="mt-2 text-xl leading-tight font-black text-foreground">
-						{checkedIn.length} present / {absentCount} absent � {pendingCount} pending
+					<p class="label-mono">Today’s completion</p>
+					<h2
+						class="mt-1.5 text-[17px] leading-tight font-semibold tracking-[-0.015em] text-foreground"
+					>
+						{checkedIn.length} present · {absentCount} absent · {pendingCount} pending
 					</h2>
-					<p class="text-balance-safe mt-1 text-sm leading-6 text-muted-foreground">
+					<p class="text-balance-safe mt-1 text-[12.5px] leading-5 text-muted-foreground">
 						{assignedClass
 							? `Tracking ${assignedClass.name} for today.`
 							: 'Tracking all students with attendance activity for today.'}
@@ -286,8 +282,8 @@
 			<aside class="surface-panel flex min-h-0 flex-col">
 				<div class="panel-header">
 					<div class="min-w-0">
-						<h2 class="text-lg font-black">Absent today</h2>
-						<p class="mt-1 text-sm text-muted-foreground">Students explicitly marked absent</p>
+						<h2 class="text-[15px] font-semibold tracking-[-0.012em]">Absent today</h2>
+						<p class="mt-0.5 text-[12px] text-muted-foreground">Explicitly marked absent</p>
 					</div>
 					<span class="chip shrink-0">{absentCount} absent</span>
 				</div>
@@ -332,8 +328,8 @@
 			<aside class="surface-panel flex min-h-0 flex-col">
 				<div class="panel-header">
 					<div>
-						<h2 class="text-lg font-black">Recent activity</h2>
-						<p class="mt-1 text-sm text-muted-foreground">Latest attendance events</p>
+						<h2 class="text-[15px] font-semibold tracking-[-0.012em]">Recent activity</h2>
+						<p class="mt-0.5 text-[12px] text-muted-foreground">Latest attendance events</p>
 					</div>
 					<span class="chip shrink-0">
 						{recentEvents.length} shown
@@ -366,12 +362,12 @@
 										</div>
 									</div>
 									<span
-										class="rounded-pill px-2 py-1 font-mono text-[10px] font-bold {event.type ===
+										class="rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold {event.type ===
 										'absent'
-											? 'bg-destructive text-destructive-foreground'
-											: 'bg-primary text-primary-foreground'}"
+											? 'bg-destructive/10 text-destructive'
+											: 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'}"
 									>
-										{event.type === 'absent' ? 'ABSENT' : 'IN'}
+										{event.type === 'absent' ? 'Absent' : 'Present'}
 									</span>
 								</li>
 							{/each}
@@ -399,24 +395,19 @@
 	<div class="metric-card {accent ? 'metric-card-accent' : ''}">
 		<div class="flex items-start justify-between gap-3">
 			<div class="min-w-0">
-				<div class="label-mono {accent ? 'text-primary-foreground/80!' : ''}">{label}</div>
-				<div class="mt-2 text-4xl leading-none font-semibold tracking-normal">{value}</div>
-				<div class="mt-2 text-sm {accent ? 'text-primary-foreground/80' : 'text-muted-foreground'}">
-					{detail}
-				</div>
+				<p class="text-[11.5px] font-medium text-muted-foreground">{label}</p>
+				<div class="metric-value mt-2">{value}</div>
+				<p class="mt-1.5 text-[11.5px] text-muted-foreground">{detail}</p>
 			</div>
-			<div
-				class="metric-icon {accent ? 'border-primary-foreground/20 bg-primary-foreground/10' : ''}"
-				aria-hidden="true"
-			>
+			<div class="metric-icon" aria-hidden="true">
 				{#if label === 'Students'}
-					<UsersRound class="size-5" />
+					<UsersRound class="size-4" strokeWidth={1.9} />
 				{:else if label === 'Present'}
-					<CheckCircle2 class="size-5" />
+					<CheckCircle2 class="size-4 text-primary" strokeWidth={1.9} />
 				{:else if label === 'Absent'}
-					<CalendarClock class="size-5" />
+					<CalendarClock class="size-4" strokeWidth={1.9} />
 				{:else}
-					<History class="size-5" />
+					<History class="size-4" strokeWidth={1.9} />
 				{/if}
 			</div>
 		</div>

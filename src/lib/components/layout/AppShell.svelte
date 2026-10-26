@@ -39,7 +39,11 @@
 		</div>
 	{/if}
 
-	<main id="main-content" class="min-h-0 min-w-0 flex-1 overflow-auto focus:outline-none" tabindex="-1">
+	<main
+		id="main-content"
+		class="min-h-0 min-w-0 flex-1 overflow-auto focus:outline-none"
+		tabindex="-1"
+	>
 		{@render children()}
 	</main>
 

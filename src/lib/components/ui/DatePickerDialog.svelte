@@ -102,18 +102,17 @@
 		currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + direction, 1);
 	}
 
-	// Generate calendar days
+	// Generate calendar days, week starting Monday.
 	const calendarDays = $derived.by(() => {
 		const daysInMonth = getDaysInMonth(currentMonth);
 		const firstDay = getFirstDayOfMonth(currentMonth);
 		const days: (Date | null)[] = [];
+		const leading = (firstDay + 6) % 7;
 
-		// Empty cells for days before month starts
-		for (let i = 0; i < firstDay; i++) {
+		for (let i = 0; i < leading; i++) {
 			days.push(null);
 		}
 
-		// Days of the month
 		for (let i = 1; i <= daysInMonth; i++) {
 			days.push(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), i));
 		}
@@ -136,47 +135,40 @@
 		'December'
 	];
 
-	const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+	const weekDays = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 </script>
 
-<Dialog {open} title="Select Date" {onClose}>
-	<!-- Month navigation -->
-	<div class="mb-4 flex items-center justify-between">
+<Dialog {open} title="Select date" {onClose}>
+	<div class="mb-3 flex items-center justify-between">
 		<button
 			type="button"
 			onclick={() => navigateMonth(-1)}
-			class="p-1 text-muted-foreground transition-colors hover:text-foreground"
+			class="icon-btn"
 			aria-label="Previous month"
 		>
-			<ChevronLeft class="size-5" aria-hidden="true" />
+			<ChevronLeft class="size-4" aria-hidden="true" />
 		</button>
 
 		<div class="text-center">
-			<div class="font-medium">{monthNames[currentMonth.getMonth()]}</div>
-			<div class="text-sm text-muted-foreground">{currentMonth.getFullYear()}</div>
+			<div class="text-[14px] font-semibold tracking-[-0.01em]">
+				{monthNames[currentMonth.getMonth()]}
+			</div>
+			<div class="text-[11px] font-medium text-muted-foreground">{currentMonth.getFullYear()}</div>
 		</div>
 
-		<button
-			type="button"
-			onclick={() => navigateMonth(1)}
-			class="p-1 text-muted-foreground transition-colors hover:text-foreground"
-			aria-label="Next month"
-		>
-			<ChevronRight class="size-5" aria-hidden="true" />
+		<button type="button" onclick={() => navigateMonth(1)} class="icon-btn" aria-label="Next month">
+			<ChevronRight class="size-4" aria-hidden="true" />
 		</button>
 	</div>
 
-	<!-- Calendar grid -->
-	<div class="mb-4 grid grid-cols-7 gap-1">
-		<!-- Week day headers -->
+	<div class="mb-4 grid grid-cols-7 gap-y-1">
 		{#each weekDays as day, i (`header-${i}`)}
-			<div class="py-2 text-center font-mono text-xs text-muted-foreground">{day}</div>
+			<div class="pb-1 text-center text-[10.5px] font-semibold text-muted-foreground">{day}</div>
 		{/each}
 
-		<!-- Calendar days -->
 		{#each calendarDays as day, i (`day-${i}`)}
 			{#if day === null}
-				<div class="p-2"></div>
+				<div></div>
 			{:else}
 				{@const isDateDisabled = isDisabled(day as Date)}
 				{@const isDateSelected = isSelected(day as Date)}
@@ -185,11 +177,12 @@
 					type="button"
 					onclick={() => handleDateSelect(day as Date)}
 					disabled={isDateDisabled}
-					class="relative rounded-md p-2 text-sm transition-colors
-						{isDateDisabled ? 'cursor-not-allowed text-muted-foreground/30' : ''}
+					class="relative mx-auto grid size-8 place-items-center rounded-md text-[12.5px] font-medium transition-colors
+						{isDateDisabled ? 'cursor-not-allowed text-muted-foreground/35' : ''}
 						{!isDateDisabled && !isDateSelected ? 'cursor-pointer hover:bg-surface' : ''}
-						{isDateSelected ? 'cursor-default bg-primary text-primary-foreground' : ''}
-						{isDateToday && !isDateSelected ? 'border border-border' : ''}"
+						{isDateSelected ? 'cursor-default bg-primary font-semibold text-primary-foreground' : ''}
+						{isDateToday && !isDateSelected ? 'ring-1 ring-border' : ''}"
+					aria-pressed={isDateSelected}
 				>
 					{(day as Date).getDate()}
 				</button>
@@ -197,30 +190,11 @@
 		{/each}
 	</div>
 
-	<!-- Action buttons -->
-	<div class="flex justify-between gap-2 border-t border-border pt-2">
-		<div class="flex gap-2">
-			<button
-				type="button"
-				onclick={handleClear}
-				class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
-			>
-				Clear
-			</button>
-			<button
-				type="button"
-				onclick={handleToday}
-				class="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-surface"
-			>
-				Today
-			</button>
+	<div class="flex items-center justify-between gap-2 border-t border-border pt-3">
+		<div class="flex gap-1.5">
+			<button type="button" onclick={handleClear} class="btn btn-secondary btn-sm">Clear</button>
+			<button type="button" onclick={handleToday} class="btn btn-secondary btn-sm">Today</button>
 		</div>
-		<button
-			type="button"
-			onclick={handleConfirm}
-			class="rounded-pill bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent"
-		>
-			Select
-		</button>
+		<button type="button" onclick={handleConfirm} class="btn btn-primary btn-sm">Select</button>
 	</div>
 </Dialog>

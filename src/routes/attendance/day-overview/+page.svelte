@@ -228,11 +228,8 @@
 			: 'Review attendance for the selected day.'}
 	>
 		{#snippet actions()}
-			<a
-				href={resolve('/attendance/logs')}
-				class="control-ring inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-surface"
-			>
-				<ArrowLeft class="size-4" aria-hidden="true" />
+			<a href={resolve('/attendance/logs')} class="btn btn-secondary">
+				<ArrowLeft class="size-4" aria-hidden="true" strokeWidth={1.9} />
 				Back to logs
 			</a>
 			<button
@@ -240,10 +237,10 @@
 				onclick={() => (datePickerOpen = true)}
 				aria-haspopup="dialog"
 				aria-expanded={datePickerOpen}
-				class="control-ring inline-flex h-10 items-center gap-2 rounded-pill border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-surface"
+				class="btn btn-secondary"
 				title={selectedDate}
 			>
-				<CalendarDays class="size-4 text-primary" aria-hidden="true" />
+				<CalendarDays class="size-4" aria-hidden="true" strokeWidth={1.9} />
 				<span>{selectedDateLabel}</span>
 			</button>
 		{/snippet}
@@ -272,8 +269,8 @@
 				<section class="surface-panel overflow-hidden">
 					<div class="panel-header">
 						<div>
-							<h2 class="text-lg font-black">{selectedDateLabel}</h2>
-							<p class="mt-1 text-sm text-muted-foreground">
+							<h2 class="text-[15px] font-semibold tracking-[-0.012em]">{selectedDateLabel}</h2>
+							<p class="mt-0.5 text-[12px] text-muted-foreground">
 								Mark a learner present or absent for this day without class-hour checks.
 							</p>
 						</div>
@@ -313,9 +310,9 @@
 											type="button"
 											disabled={savingStudentId !== null}
 											onclick={() => (present ? requestAbsent(student) : markPresent(student))}
-											class="control-ring inline-flex h-9 min-w-28 items-center justify-center gap-2 rounded-pill px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60 {present
-												? 'border border-red-500/30 bg-red-50 text-red-700 hover:bg-red-100'
-												: 'bg-primary text-primary-foreground hover:bg-accent'}"
+											class="btn btn-sm min-w-28 disabled:cursor-not-allowed disabled:opacity-60 {present
+												? 'btn-secondary'
+												: 'btn-primary'}"
 										>
 											{#if present}
 												<UserX class="size-3.5" aria-hidden="true" />
@@ -354,25 +351,30 @@
 	}}
 >
 	{#if absentTarget}
-		<div class="rounded-xl border border-border bg-surface p-4">
-			<div class="font-semibold">{absentTarget.name}</div>
-			<div class="mt-1 font-mono text-xs text-muted-foreground">{selectedDate}</div>
+		<div
+			class="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface/60 px-3 py-2"
+		>
+			<span class="text-[13px] font-medium">{absentTarget.name}</span>
+			<span class="font-mono text-[11px] text-muted-foreground tabular-nums">{selectedDate}</span>
 		</div>
-		<div class="space-y-2">
-			<label for="absent-reason" class="label-mono">Reason</label>
+		<div class="space-y-1.5">
+			<label for="absent-reason" class="text-[11.5px] font-medium text-muted-foreground"
+				>Reason</label
+			>
 			<textarea
 				id="absent-reason"
 				rows="4"
 				bind:value={absentReason}
-				class="min-h-28 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+				placeholder="Required for the audit log"
+				class="textarea-field min-h-28 resize-none"
 			></textarea>
 		</div>
-		<div class="flex justify-end gap-2">
+		<div class="flex justify-end gap-2 border-t border-border pt-3">
 			<button
 				type="button"
 				disabled={savingStudentId !== null}
 				onclick={() => (absentTarget = null)}
-				class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+				class="btn btn-secondary"
 			>
 				Cancel
 			</button>
@@ -380,7 +382,7 @@
 				type="button"
 				disabled={savingStudentId !== null || absentReason.trim().length < 3}
 				onclick={confirmAbsent}
-				class="rounded-pill bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+				class="btn btn-primary"
 			>
 				Save absent
 			</button>
@@ -392,10 +394,8 @@
 
 {#snippet totalCard(label: string, value: number, detail: string, accent = false)}
 	<div class="metric-card {accent ? 'metric-card-accent' : ''}">
-		<div class="label-mono {accent ? 'text-primary-foreground/80!' : ''}">{label}</div>
-		<div class="mt-2 text-4xl leading-none font-semibold">{value}</div>
-		<div class="mt-2 text-sm {accent ? 'text-primary-foreground/80' : 'text-muted-foreground'}">
-			{detail}
-		</div>
+		<p class="text-[11.5px] font-medium text-muted-foreground">{label}</p>
+		<div class="metric-value mt-2">{value}</div>
+		<p class="mt-1.5 text-[11.5px] text-muted-foreground">{detail}</p>
 	</div>
 {/snippet}

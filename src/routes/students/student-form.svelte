@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Student, StudentGender } from '$lib/api';
+	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import { genderOptions, entryModeTabs, type EntryMode } from './student-state.svelte';
 
 	let {
@@ -47,203 +48,149 @@
 	} = $props();
 </script>
 
-{#if open}
-	<div
-		class="fixed inset-x-0 top-8 bottom-0 z-40 bg-black/50"
-		role="presentation"
-		onclick={onClose}
-		onkeydown={(e) => e.key === 'Escape' && onClose()}
-	></div>
-
-	<div
-		class="fixed inset-x-0 top-8 bottom-0 z-50 flex items-center justify-center p-4"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="dialog-title"
-	>
-		<div class="w-full max-w-3xl rounded-2xl border border-border bg-background">
-			<div class="border-b border-border px-6 pt-6 pb-5">
-				<h2 id="dialog-title" class="text-lg font-semibold">
-					{editing ? 'Edit student' : 'Add student'}
-				</h2>
-				<p class="mt-1 text-sm text-muted-foreground">
-					{editing
-						? 'Update the student profile and class assignment.'
-						: 'Add one student manually or paste a class list in one pass.'}
-				</p>
-			</div>
-
-			<form onsubmit={onSubmit} class="space-y-5 p-6">
-				{#if !editing}
-					<div
-						class="add-student-entry-tabs relative grid overflow-hidden rounded-lg border border-border bg-surface p-1 sm:grid-cols-2"
-						data-mode={entryMode}
-						role="tablist"
-						aria-label="Student entry mode"
-					>
-						<span class="add-student-tab-indicator" aria-hidden="true"></span>
-						{#each entryModeTabs as tab (tab.value)}
-							<button
-								id={`add-student-${tab.value}-tab`}
-								type="button"
-								role="tab"
-								aria-selected={entryMode === tab.value}
-								aria-controls={`add-student-${tab.value}-panel`}
-								onclick={() => onSetEntryMode(tab.value)}
-								class="relative z-10 rounded-md px-4 py-2 text-sm font-medium transition-colors {entryMode ===
-								tab.value
-									? 'text-foreground'
-									: 'text-muted-foreground hover:text-foreground'}"
-							>
-								{tab.label}
-							</button>
-						{/each}
-					</div>
-				{/if}
-
-				<div class="space-y-1.5">
-					<label for="field-class" class="label-mono">Class / Section</label>
-					<div
-						id="field-class"
-						class="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium"
-					>
-						{assignedClassLabel}
-					</div>
-				</div>
-
-				{#key entryMode}
-					<div
-						id={!editing ? `add-student-${entryMode}-panel` : undefined}
-						role={!editing ? 'tabpanel' : undefined}
-						aria-labelledby={!editing ? `add-student-${entryMode}-tab` : undefined}
-					>
-						{#if !editing && entryMode === 'bulk'}
-							<div class="space-y-2">
-								<div class="flex items-center justify-between gap-3">
-									<div class="label-mono">Student names</div>
-									<span class="font-mono text-xs text-muted-foreground">
-										{bulkStudentCount}
-										{bulkStudentCount === 1 ? 'student' : 'students'}
-									</span>
-								</div>
-								<div class="grid gap-4 sm:grid-cols-2">
-									<div class="space-y-2">
-										<div class="flex items-center justify-between gap-2">
-											<label for="bulk-male-students" class="label-mono">Male</label>
-											<span class="font-mono text-xs text-muted-foreground"
-												>{bulkMaleNames.length}</span
-											>
-										</div>
-										<textarea
-											id="bulk-male-students"
-											value={bulkMaleStudentNames}
-											oninput={(e) =>
-												onBulkMaleChange((e.currentTarget as HTMLTextAreaElement).value)}
-											rows="10"
-											placeholder="CRUZ, JUAN M.&#10;REYES, MARCO A."
-											class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
-										></textarea>
-									</div>
-									<div class="space-y-2">
-										<div class="flex items-center justify-between gap-2">
-											<label for="bulk-female-students" class="label-mono">Female</label>
-											<span class="font-mono text-xs text-muted-foreground"
-												>{bulkFemaleNames.length}</span
-											>
-										</div>
-										<textarea
-											id="bulk-female-students"
-											value={bulkFemaleStudentNames}
-											oninput={(e) =>
-												onBulkFemaleChange((e.currentTarget as HTMLTextAreaElement).value)}
-											rows="10"
-											placeholder="DELA CRUZ, MARIA R.&#10;SANTOS, ANA L."
-											class="min-h-64 w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 focus:ring-2 focus:ring-primary focus:outline-none"
-										></textarea>
-									</div>
-								</div>
-								<p class="text-xs text-muted-foreground">
-									Each new line creates one student in the matching SF2 roster block.
-								</p>
-							</div>
-						{:else}
-							<div class="space-y-2">
-								<div class="label-mono">Gender</div>
-								<div class="grid rounded-lg border border-border bg-surface p-1 sm:grid-cols-2">
-									{#each genderOptions as option (option.value)}
-										<button
-											type="button"
-											onclick={() => onFormGenderChange(option.value)}
-											aria-pressed={formGender === option.value}
-											class="rounded-md px-4 py-2 text-sm font-medium transition-colors {formGender ===
-											option.value
-												? 'bg-background text-foreground shadow-sm'
-												: 'text-muted-foreground hover:text-foreground'}"
-										>
-											{option.label}
-										</button>
-									{/each}
-								</div>
-							</div>
-							<div class="space-y-1.5">
-								<label for="field-name" class="label-mono">Full name</label>
-								<input
-									id="field-name"
-									value={formName}
-									oninput={(e) => onFormNameChange((e.currentTarget as HTMLInputElement).value)}
-									required
-									placeholder="LASTNAME, FIRSTNAME M."
-									class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-								/>
-							</div>
-						{/if}
-					</div>
-				{/key}
-
-				<div
-					class="flex flex-col-reverse gap-2 border-t border-border pt-5 sm:flex-row sm:justify-end"
-				>
+<Dialog
+	{open}
+	title={editing ? 'Edit student' : 'Add student'}
+	description={editing
+		? 'Update the student profile and class assignment.'
+		: 'Add one student manually, or paste the class list in one pass.'}
+	maxWidth="3xl"
+	{onClose}
+>
+	<form onsubmit={onSubmit} class="space-y-4" data-mode={entryMode}>
+		{#if !editing}
+			<div class="segmented w-full" role="group" aria-label="Student entry mode">
+				{#each entryModeTabs as tab (tab.value)}
 					<button
 						type="button"
-						onclick={onClose}
-						class="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
+						aria-pressed={entryMode === tab.value}
+						onclick={() => onSetEntryMode(tab.value)}
+						class="segmented-item flex-1"
 					>
-						Cancel
+						{tab.label}
 					</button>
-					<button
-						type="submit"
-						disabled={savingStudent ||
-							(!editing &&
-								(!canCreateStudents || (entryMode === 'bulk' && bulkStudentCount === 0)))}
-						class="rounded-pill bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						{#if savingStudent}
-							Saving...
-						{:else if editing}
-							Save Changes
-						{:else if entryMode === 'bulk'}
-							Add {bulkStudentCount || ''} Students
-						{:else}
-							Add Student
-						{/if}
-					</button>
-				</div>
-			</form>
+				{/each}
+			</div>
+		{/if}
+
+		<div
+			class="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface/60 px-3 py-2"
+		>
+			<span class="text-[11.5px] font-medium text-muted-foreground">Class / Section</span>
+			<span class="text-[12.5px] font-medium">{assignedClassLabel}</span>
 		</div>
-	</div>
-{/if}
 
-<style>
-	.add-student-tab-indicator {
-		position: absolute;
-		inset: 0.25rem auto 0.25rem 0.25rem;
-		width: calc(50% - 0.25rem);
-		border-radius: 0.375rem;
-		background: var(--color-background);
-		border: 1px solid var(--color-border);
-	}
+		{#key entryMode}
+			{#if !editing && entryMode === 'bulk'}
+				<div class="space-y-2.5">
+					<div class="flex items-baseline justify-between gap-3">
+						<p class="text-[12.5px] font-medium">Student names</p>
+						<span class="text-[11.5px] text-muted-foreground tabular-nums">
+							{bulkStudentCount}
+							{bulkStudentCount === 1 ? 'student' : 'students'}
+						</span>
+					</div>
 
-	.add-student-entry-tabs[data-mode='bulk'] .add-student-tab-indicator {
-		transform: translateX(100%);
-	}
-</style>
+					<div class="grid gap-3 sm:grid-cols-2">
+						<div class="space-y-1.5">
+							<div class="flex items-center justify-between gap-2">
+								<label
+									for="bulk-male-students"
+									class="text-[11.5px] font-medium text-muted-foreground"
+								>
+									Male
+								</label>
+								<span class="text-[11px] text-muted-foreground tabular-nums"
+									>{bulkMaleNames.length}</span
+								>
+							</div>
+							<textarea
+								id="bulk-male-students"
+								value={bulkMaleStudentNames}
+								oninput={(e) => onBulkMaleChange((e.currentTarget as HTMLTextAreaElement).value)}
+								rows="9"
+								placeholder="CRUZ, JUAN M.&#10;REYES, MARCO A."
+								class="textarea-field min-h-56 font-mono text-[12px]"
+							></textarea>
+						</div>
+						<div class="space-y-1.5">
+							<div class="flex items-center justify-between gap-2">
+								<label
+									for="bulk-female-students"
+									class="text-[11.5px] font-medium text-muted-foreground"
+								>
+									Female
+								</label>
+								<span class="text-[11px] text-muted-foreground tabular-nums"
+									>{bulkFemaleNames.length}</span
+								>
+							</div>
+							<textarea
+								id="bulk-female-students"
+								value={bulkFemaleStudentNames}
+								oninput={(e) => onBulkFemaleChange((e.currentTarget as HTMLTextAreaElement).value)}
+								rows="9"
+								placeholder="DELA CRUZ, MARIA R.&#10;SANTOS, ANA L."
+								class="textarea-field min-h-56 font-mono text-[12px]"
+							></textarea>
+						</div>
+					</div>
+					<p class="text-[11.5px] leading-5 text-muted-foreground">
+						Each line creates one student in the matching SF2 roster block.
+					</p>
+				</div>
+			{:else}
+				<div class="space-y-3">
+					<div class="space-y-1.5">
+						<span class="text-[11.5px] font-medium text-muted-foreground">Gender</span>
+						<div class="segmented w-full">
+							{#each genderOptions as option (option.value)}
+								<button
+									type="button"
+									onclick={() => onFormGenderChange(option.value)}
+									aria-pressed={formGender === option.value}
+									class="segmented-item flex-1"
+								>
+									{option.label}
+								</button>
+							{/each}
+						</div>
+					</div>
+					<div class="space-y-1.5">
+						<label for="field-name" class="text-[11.5px] font-medium text-muted-foreground">
+							Full name
+						</label>
+						<input
+							id="field-name"
+							value={formName}
+							oninput={(e) => onFormNameChange((e.currentTarget as HTMLInputElement).value)}
+							required
+							placeholder="LASTNAME, FIRSTNAME M."
+							class="field"
+						/>
+					</div>
+				</div>
+			{/if}
+		{/key}
+
+		<div class="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
+			<button type="button" onclick={onClose} class="btn btn-secondary">Cancel</button>
+			<button
+				type="submit"
+				disabled={savingStudent ||
+					(!editing && (!canCreateStudents || (entryMode === 'bulk' && bulkStudentCount === 0)))}
+				class="btn btn-primary min-w-28"
+			>
+				{#if savingStudent}
+					Saving…
+				{:else if editing}
+					Save changes
+				{:else if entryMode === 'bulk'}
+					Add {bulkStudentCount || ''} students
+				{:else}
+					Add student
+				{/if}
+			</button>
+		</div>
+	</form>
+</Dialog>

@@ -123,16 +123,16 @@
 					draftGradeLevel={page.draft.gradeLevel}
 					draftSection={page.draft.section}
 					draftAdviserName={page.draft.adviserName}
-				draftSchoolHeadName={page.draft.schoolHeadName}
-				reportYear={page.activeReportYear}
-				sf2OpenStatus={page.sf2Open.status}
+					draftSchoolHeadName={page.draft.schoolHeadName}
+					reportYear={page.activeReportYear}
+					sf2OpenStatus={page.sf2Open.status}
 					workbookSettings={page.workbookSettings}
 					savingDetails={page.savingDetails}
 					activeClassId={page.activeClassId}
 					onOpenSf2={page.onOpenSf2}
 					onClassSelect={page.onClassSelect}
-				onCreateMonth={() => page.onCreateMonth()}
-				onEditDetails={() => (page.workbookDetailsOpen = true)}
+					onCreateMonth={() => page.onCreateMonth()}
+					onEditDetails={() => (page.workbookDetailsOpen = true)}
 					onSwitchMonth={() => (page.monthPickerOpen = true)}
 				/>
 			{/if}

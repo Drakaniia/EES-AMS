@@ -7,12 +7,32 @@ import { bestMatchScore } from '$lib/fuzzy';
 
 export type PaletteGroup = 'Pages' | 'Actions' | 'Students';
 
+/**
+ * Which glyph a result row shows. A name rather than a component so this module
+ * stays free of UI imports and testable without a renderer; the palette maps it
+ * to an icon.
+ */
+export type PaletteIcon =
+	| 'reports'
+	| 'attendance'
+	| 'overview'
+	| 'logs'
+	| 'students'
+	| 'settings'
+	| 'classes'
+	| 'workbook'
+	| 'data'
+	| 'general'
+	| 'update';
+
 export interface PaletteItem {
 	id: string;
 	label: string;
 	keywords: string;
 	hint: string;
 	group: PaletteGroup;
+	/** Falls back to the group's icon when omitted. */
+	icon?: PaletteIcon;
 	run: () => void;
 }
 

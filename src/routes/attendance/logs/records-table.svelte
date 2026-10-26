@@ -28,79 +28,87 @@
 </script>
 
 <section
-	class="flex min-h-0 flex-1 flex-col px-4 pb-20 md:px-8 lg:px-10"
+	class="flex min-h-0 flex-1 flex-col px-5 pb-20 md:px-8 lg:px-10"
 	bind:clientHeight={availableHeight}
 >
 	<div class="table-wrap min-h-0 flex-1">
-		<table class="min-w-[720px] text-sm">
-			<thead class="bg-surface text-left">
+		<table class="min-w-[720px] text-[13px]">
+			<thead class="text-left">
 				<tr>
-					<th class="label-mono px-4 py-3">Date</th>
-					<th class="label-mono px-4 py-3">Student</th>
-					<th class="label-mono px-4 py-3">Class</th>
-					<th class="label-mono px-4 py-3">Check In</th>
-					<th class="label-mono w-36 px-4 py-3 text-right">Actions</th>
+					<th class="w-28 px-4 py-2.5">Date</th>
+					<th class="px-4 py-2.5">Student</th>
+					<th class="w-32 px-4 py-2.5">Class</th>
+					<th class="w-40 px-4 py-2.5">Check in</th>
+					<th class="w-28 px-4 py-2.5 text-right">Actions</th>
 				</tr>
 			</thead>
-			<tbody class="divide-y divide-border">
+			<tbody>
 				{#if groupedAttendance.length === 0}
 					<tr>
-						<td colspan={5} class="px-4 py-12 text-center text-muted-foreground">
-							No attendance records match the filters.
+						<td colspan={5} class="px-4 py-14 text-center">
+							<p class="text-[13px] font-medium">No attendance records match these filters</p>
+							<p class="mt-1 text-[12px] text-muted-foreground">
+								Widen the date range, or switch the class back to All.
+							</p>
 						</td>
 					</tr>
 				{:else}
 					{#each paginatedRecords as record (record.studentId + record.date)}
-						<tr class="transition-colors hover:bg-surface/40">
-							<td class="px-4 py-3 align-top font-mono">{record.date}</td>
-							<td class="px-4 py-3 align-top">
+						<tr>
+							<td
+								class="px-4 py-2.5 align-middle font-mono text-[12px] text-muted-foreground tabular-nums"
+							>
+								{record.date}
+							</td>
+							<td class="px-4 py-2.5 align-middle">
 								<div class="text-balance-safe font-medium">{record.studentName}</div>
 							</td>
-							<td class="px-4 py-3 align-top">
-								<span class="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10px]">
-									{record.className}
-								</span>
+							<td class="px-4 py-2.5 align-middle">
+								<span class="chip">{record.className}</span>
 							</td>
-							<td class="px-4 py-3 align-top">
+							<td class="px-4 py-2.5 align-middle">
 								{#if record.checkInTime}
 									<div class="flex flex-col items-start gap-1">
 										{@render checkInPill(record.checkInTime, record.isLate)}
 										{#if primaryEvent(record)?.overrideReason}
-											<span class="max-w-56 text-xs leading-5 text-muted-foreground">
+											<span class="max-w-56 text-[11px] leading-4 text-muted-foreground">
 												{primaryEvent(record)?.overrideReason}
 											</span>
 										{/if}
 									</div>
 								{:else}
-									<span class="font-mono text-xs text-muted-foreground">—</span>
+									<span class="text-[12px] text-muted-foreground">—</span>
 								{/if}
 							</td>
-							<td class="px-4 py-3 text-right align-top">
+							<td class="px-4 py-2.5 align-middle">
 								{#if record.events.length > 0}
-									<div class="inline-flex items-center gap-1">
+									<div class="flex items-center justify-end gap-0.5">
 										<button
 											type="button"
 											onclick={() => onEdit(record)}
 											aria-label="Edit attendance record"
-											class="inline-flex size-8 items-center justify-center rounded-md border border-border text-primary transition-colors hover:bg-primary/10"
+											class="icon-btn size-7"
+											title="Edit record"
 										>
-											<Pencil class="size-3.5" aria-hidden="true" />
+											<Pencil class="size-3.5" strokeWidth={1.9} aria-hidden="true" />
 										</button>
 										<button
 											type="button"
 											onclick={() => onAudit(record)}
 											aria-label="View audit history"
-											class="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-surface"
+											class="icon-btn size-7"
+											title="Audit history"
 										>
-											<History class="size-3.5" aria-hidden="true" />
+											<History class="size-3.5" strokeWidth={1.9} aria-hidden="true" />
 										</button>
 										<button
 											type="button"
 											onclick={(event) => onDelete(event, record)}
 											aria-label="Delete attendance record"
-											class="inline-flex size-8 items-center justify-center rounded-md border border-border text-destructive transition-colors hover:bg-destructive/10"
+											class="icon-btn size-7 hover:bg-destructive/10 hover:text-destructive"
+											title="Delete record"
 										>
-											<Trash2 class="size-3.5" aria-hidden="true" />
+											<Trash2 class="size-3.5" strokeWidth={1.9} aria-hidden="true" />
 										</button>
 									</div>
 								{/if}
@@ -119,11 +127,11 @@
 
 {#snippet checkInPill(time: string, isLate?: boolean)}
 	<span
-		class="rounded-pill px-2 py-1 font-mono text-xs
-					{isLate ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'}"
+		class="inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums
+			{isLate
+			? 'bg-destructive/10 text-destructive'
+			: 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'}"
 	>
-		{time}
-		{#if isLate}
-			(LATE){/if}
+		{time}{#if isLate}<span class="ml-1 font-sans text-[10px]">Late</span>{/if}
 	</span>
 {/snippet}

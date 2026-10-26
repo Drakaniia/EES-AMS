@@ -92,19 +92,16 @@
 {#if lastResult}
 	<div class="pointer-events-none fixed inset-x-0 bottom-10 z-50 flex justify-center px-4">
 		<div
-			class="pointer-events-auto flex max-w-[min(34rem,calc(100vw-2rem))] items-center gap-4 rounded-2xl border px-5 py-4 md:px-8 md:py-5
-				{lastResult.ok
-				? 'border-border bg-background text-foreground'
-				: 'border-destructive bg-destructive text-destructive-foreground'}"
+			class="pointer-events-auto flex max-w-[min(28rem,calc(100vw-2rem))] items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-[var(--shadow-lifted)]"
 			role="status"
 			aria-live="assertive"
 		>
 			<div
-				class="grid size-12 place-items-center rounded-full
-				{lastResult.isLate ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'}"
+				class="grid size-8 place-items-center rounded-full
+				{lastResult.isLate ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary'}"
 			>
 				<svg
-					class="size-6"
+					class="size-4"
 					viewBox="0 0 24 24"
 					fill="none"
 					stroke="currentColor"
@@ -117,14 +114,13 @@
 				</svg>
 			</div>
 			<div class="min-w-0">
-				<div class="text-balance-safe text-lg leading-tight font-bold md:text-xl">
+				<div class="text-balance-safe text-[13px] leading-tight font-semibold">
 					{lastResult.name}
 				</div>
-				<div class="label-mono flex gap-2">
-					<span class={lastResult.isLate ? 'font-bold text-destructive' : ''}>
-						{lastResult.isLate ? 'LATE' : 'IN'}
+				<div class="mt-0.5 flex gap-1.5 text-[11px] font-medium">
+					<span class={lastResult.isLate ? 'text-destructive' : 'text-primary'}>
+						{lastResult.isLate ? 'Marked late' : 'Marked present'}
 					</span>
-					<span class="text-muted-foreground">-</span>
 					<span class="text-muted-foreground">{fmtTime(lastResult.time)}</span>
 				</div>
 			</div>

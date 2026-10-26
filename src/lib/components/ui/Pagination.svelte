@@ -62,29 +62,29 @@
 {#if totalPages > 1}
 	<nav aria-label="Pagination" class="flex justify-center">
 		<div
-			class="inline-flex max-w-[calc(100vw-2rem)] items-center gap-1 overflow-x-auto rounded-xl border border-border bg-background p-1"
+			class="inline-flex max-w-[calc(100vw-2rem)] items-center gap-0.5 overflow-x-auto rounded-lg border border-border bg-card p-1 shadow-[var(--shadow-soft)]"
 		>
 			<button
 				onclick={prevPage}
 				disabled={currentPage === 1}
-				class="control-ring inline-flex h-9 items-center gap-1.5 rounded-md border border-transparent px-3 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-45"
+				class="control-ring inline-flex h-7 items-center gap-1 rounded-md border border-transparent px-2.5 text-xs font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
 				aria-label="Previous page"
 			>
-				<ChevronLeft class="size-4" aria-hidden="true" />
+				<ChevronLeft class="size-3.5" aria-hidden="true" />
 				<span class="hidden sm:inline">Previous</span>
 			</button>
 
-			<div class="flex items-center gap-1">
+			<div class="flex items-center gap-0.5">
 				{#each pages as p, i (i)}
 					{#if p === 'ellipsis'}
-						<span class="grid size-9 place-items-center text-sm text-muted-foreground">...</span>
+						<span class="grid size-7 place-items-center text-xs text-muted-foreground">…</span>
 					{:else}
 						{@const isCurrent = p === currentPage}
 						<button
 							onclick={() => goToPage(p)}
-							class="control-ring grid size-9 shrink-0 place-items-center rounded-md border border-transparent text-sm font-medium transition-colors
+							class="control-ring grid size-7 shrink-0 place-items-center rounded-md border border-transparent text-xs font-medium transition-colors
 								{isCurrent
-								? 'bg-primary text-primary-foreground shadow-sm'
+								? 'bg-fill font-semibold text-foreground'
 								: 'text-muted-foreground hover:bg-surface hover:text-foreground'}"
 							aria-label="Go to page {p}"
 							aria-current={isCurrent ? 'page' : undefined}
@@ -99,11 +99,11 @@
 			<button
 				onclick={nextPage}
 				disabled={currentPage === totalPages}
-				class="control-ring inline-flex h-9 items-center gap-1.5 rounded-md border border-transparent px-3 text-sm font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-45"
+				class="control-ring inline-flex h-7 items-center gap-1 rounded-md border border-transparent px-2.5 text-xs font-medium transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
 				aria-label="Next page"
 			>
 				<span class="hidden sm:inline">Next</span>
-				<ChevronRight class="size-4" aria-hidden="true" />
+				<ChevronRight class="size-3.5" aria-hidden="true" />
 			</button>
 		</div>
 	</nav>

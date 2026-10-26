@@ -63,7 +63,8 @@
 		}
 		if (canH) {
 			const max = el.scrollWidth - el.clientWidth;
-			const x = max > 0 ? (Math.min(Math.max(left, 0), max) / max) * (travelOf(el, false) - hLen) : 0;
+			const x =
+				max > 0 ? (Math.min(Math.max(left, 0), max) / max) * (travelOf(el, false) - hLen) : 0;
 			hThumb.style.transform = `translateX(${x}px)`;
 		}
 	}

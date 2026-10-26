@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { classState } from './settings-state.svelte';
 	import { classDaysLabel as getDaysLabel } from '$lib/features/settings/class-schedule';
+	import SettingsSection from './settings-section.svelte';
+	import SettingsGroup from './settings-group.svelte';
+	import SettingRow from './setting-row.svelte';
 </script>
 
 <!--
@@ -12,56 +15,55 @@
 	edit and delete controls that only ever operated on the single row the app
 	already had, behind a dialog, on a screen nobody opens.
 
-	So this states the record and nothing else. The data it shows is the same data
-	every other screen reads; the absence of buttons here is the decision, and it
-	is a decision with a cost — see the note under the record.
+	So this states the record and nothing else.
 -->
-<section class="overflow-hidden rounded-2xl border border-border bg-card">
-	<div class="p-6 pb-4">
-		<h3 class="text-lg font-medium">Class</h3>
-		<p class="mt-1 text-sm text-muted-foreground">
-			The class this app keeps attendance for. Every SF2 workbook belongs to it.
-		</p>
-	</div>
 
-	<div class="border-t border-border pt-5">
-		{#if classState.classes.length === 0}
-			<div class="p-12 text-center text-sm text-muted-foreground">
-				No class on record yet. One is created for you the first time you add students.
-			</div>
-		{:else}
-			{#each classState.classes as c (c.id)}
-				<div class="p-6">
-					<div class="space-y-1">
-						<div class="flex items-center gap-3">
-							<div class="font-medium">{c.name}</div>
-							{#if c.days}
-								<span
-									class="rounded-md bg-accent/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-accent uppercase"
-								>
-									{getDaysLabel(c.days)}
-								</span>
-							{/if}
-						</div>
-						<div class="label-mono flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-							{#if c.room}
-								<span>Room {c.room}</span>
-							{/if}
-							{#if c.sessions && c.sessions.length > 0}
-								{#each c.sessions as s (s.name)}
-									<span class="inline-flex items-center gap-1">
-										<span class="font-medium text-foreground">{s.name}:</span>
-										{s.startTime}–{s.endTime}
-									</span>
-								{/each}
-							{:else}
-								<span>{c.dayStart} – {c.dayEnd}</span>
-								<span class="text-accent">Late after {c.lateAfter}</span>
-							{/if}
-						</div>
-					</div>
-				</div>
-			{/each}
-		{/if}
-	</div>
-</section>
+<SettingsSection
+	title="Class"
+	description="The class this app keeps attendance for. Every SF2 workbook belongs to it."
+>
+	{#if classState.classes.length === 0}
+		<SettingsGroup>
+			<SettingRow
+				label="No class on record yet"
+				description="One is created for you the first time you add students."
+			/>
+		</SettingsGroup>
+	{:else}
+		{#each classState.classes as c (c.id)}
+			<SettingsGroup>
+				<SettingRow label="Name">
+					<span class="text-sm">{c.name}</span>
+				</SettingRow>
+
+				{#if c.room}
+					<SettingRow label="Room">
+						<span class="font-mono text-sm">{c.room}</span>
+					</SettingRow>
+				{/if}
+
+				{#if c.days}
+					<SettingRow label="School days">
+						<span class="text-sm">{getDaysLabel(c.days)}</span>
+					</SettingRow>
+				{/if}
+
+				{#if c.sessions && c.sessions.length > 0}
+					{#each c.sessions as s (s.name)}
+						<SettingRow label={s.name}>
+							<span class="font-mono text-sm">{s.startTime}–{s.endTime}</span>
+						</SettingRow>
+					{/each}
+				{:else}
+					<SettingRow label="School hours">
+						<span class="font-mono text-sm">{c.dayStart} – {c.dayEnd}</span>
+					</SettingRow>
+				{/if}
+
+				<SettingRow label="Late after">
+					<span class="font-mono text-sm text-accent">{c.lateAfter}</span>
+				</SettingRow>
+			</SettingsGroup>
+		{/each}
+	{/if}
+</SettingsSection>
